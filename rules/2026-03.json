@@ -1,0 +1,56 @@
+{
+  "version": "2026-03",
+  "effectiveFrom": "2026-03-01",
+  "baseRate": 0.042,
+  "loanTermMonths": 360,
+  "stressDSR": { "stage": 3, "surcharge": 0.015 },
+  "safetyStressSurcharge": 0.02,
+  "ltv": { "default": 0.7, "firstTimeBuyer": 0.8 },
+  "absoluteCap": 600000000,
+  "dsrLimit": 0.4,
+  "safetyThreshold": { "safe": 0.25, "caution": 0.35, "stressedDanger": 0.4 },
+  "acquisitionTax": {
+    "lowRate": 0.01,
+    "highRate": 0.03,
+    "lowerBound": 600000000,
+    "upperBound": 900000000,
+    "localEducationTaxRatio": 0.1,
+    "ruralTaxRate": 0.002,
+    "ruralTaxAreaThresholdSqm": 85,
+    "firstTimeBuyerReliefCap": 2000000,
+    "firstTimeBuyerReliefPriceCap": 1200000000
+  },
+  "brokerageFee": [
+    { "upTo": 50000000, "rate": 0.006, "cap": 250000 },
+    { "upTo": 200000000, "rate": 0.005, "cap": 800000 },
+    { "upTo": 900000000, "rate": 0.004, "cap": null },
+    { "upTo": 1200000000, "rate": 0.005, "cap": null },
+    { "upTo": 1500000000, "rate": 0.006, "cap": null },
+    { "upTo": null, "rate": 0.007, "cap": null }
+  ],
+  "legalFee": 600000,
+  "movingCost": 1500000,
+  "policyLoans": [
+    {
+      "id": "디딤돌",
+      "eligibility": {
+        "requiresNoHome": true,
+        "maxAnnualIncome": 60000000,
+        "maxHousePrice": 500000000,
+        "maxAreaSqm": 85
+      },
+      "maxAmount": 250000000,
+      "rate": 0.032
+    },
+    {
+      "id": "보금자리론",
+      "eligibility": {
+        "requiresNoHome": true,
+        "maxAnnualIncome": 70000000,
+        "maxHousePrice": 600000000
+      },
+      "maxAmount": 360000000,
+      "rate": 0.042
+    }
+  ]
+}
