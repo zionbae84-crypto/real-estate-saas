@@ -34,6 +34,7 @@ describe("calcAvailableCash", () => {
       }),
     );
     expect(result.amount).toBe(430_000_000);
+    expect(result.warnings).toEqual([]);
   });
 
   it("양도세 미입력이면 경고를 남긴다", () => {
@@ -66,6 +67,7 @@ describe("calcAvailableCash", () => {
       }),
     );
     expect(result.amount).toBe(100_000_000);
+    expect(result.warnings).toEqual([]);
   });
 
   it("가용현금은 음수가 되지 않는다", () => {
@@ -81,6 +83,7 @@ describe("calcAvailableCash", () => {
       }),
     );
     expect(result.amount).toBe(0);
+    expect(result.warnings).toEqual([]);
   });
 
   it("갈아타기인데 기존 주택 정보가 없으면 경고를 남긴다", () => {
