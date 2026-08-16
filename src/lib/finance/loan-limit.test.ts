@@ -25,13 +25,24 @@ describe("calcMaxLoan", () => {
     expect(result.amount).toBe(210_000_000);
   });
 
-  it("생애최초는 LTV 80%가 적용된다", () => {
-    const result = calcMaxLoan(
+  // 2025-06-27 가계부채 관리 강화방안(금융위원회 보도자료 no010107/84834)으로
+  // 수도권·규제지역 생애최초 주담대 LTV가 80%에서 70%로 조정되어, 이 앱이
+  // 모델링하는 수도권 범위에서는 더 이상 생애최초 우대가 적용되지 않는다.
+  // 향후 "80%로 복원" 시도를 막기 위해, 생애최초와 일반 매수자가 동일한
+  // LTV 상한을 받는다는 사실 자체를 고정해 둔다(단순 금액 재현이 아님).
+  it("수도권에서는 생애최초도 일반과 동일한 LTV 70%가 적용된다", () => {
+    const firstTime = calcMaxLoan(
       profile({ isFirstTimeBuyer: true }),
       rules,
       300_000_000,
     );
-    expect(result.amount).toBe(240_000_000);
+    const notFirstTime = calcMaxLoan(
+      profile({ isFirstTimeBuyer: false }),
+      rules,
+      300_000_000,
+    );
+    expect(firstTime.amount).toBe(210_000_000);
+    expect(firstTime.amount).toBe(notFirstTime.amount);
   });
 
   it("소득이 낮으면 DSR에 걸린다", () => {

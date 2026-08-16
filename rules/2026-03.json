@@ -5,7 +5,7 @@
   "loanTermMonths": 360,
   "stressDSR": { "stage": 3, "surcharge": 0.015 },
   "safetyStressSurcharge": 0.02,
-  "ltv": { "default": 0.7, "firstTimeBuyer": 0.8 },
+  "ltv": { "default": 0.7, "firstTimeBuyer": 0.7 },
   "absoluteCap": 600000000,
   "dsrLimit": 0.4,
   "safetyThreshold": { "safe": 0.25, "caution": 0.35, "stressedDanger": 0.4 },
