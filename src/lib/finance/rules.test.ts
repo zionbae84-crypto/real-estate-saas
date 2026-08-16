@@ -9,6 +9,17 @@ describe("parseRules", () => {
     expect(rules.absoluteCap).toBe(600_000_000);
   });
 
+  // 이 룰셋의 수치는 수도권·규제지역 전용이다. 전국 값이 아니라는 사실을
+  // 파일 자체가 들고 다니게 한다(Rules 인터페이스 주석 참고).
+  it("실제 룰셋은 적용 범위(_scope)를 문장으로 들고 있다", () => {
+    const rules = parseRules(rawRules);
+    expect(rules._scope).toMatch(/수도권/);
+  });
+
+  it("_scope가 문자열이 아니면 실패한다", () => {
+    expect(() => parseRules({ ...rawRules, _scope: 123 })).toThrow(/_scope/);
+  });
+
   it("필수 필드가 없으면 어느 필드인지 알려주며 실패한다", () => {
     const broken = { ...rawRules, dsrLimit: undefined };
     expect(() => parseRules(broken)).toThrow(/dsrLimit/);

@@ -68,6 +68,10 @@ export function parseRules(raw: unknown): Rules {
   if (typeof r.effectiveFrom !== "string") {
     throw new Error("룰셋 필드 누락 또는 타입 오류: effectiveFrom");
   }
+  // 적용 범위 메모(수도권·규제지역 기준). 선택 필드이지만 있으면 문자열이어야 한다.
+  if (r._scope !== undefined && typeof r._scope !== "string") {
+    throw new Error("룰셋 필드 누락 또는 타입 오류: _scope");
+  }
   for (const field of REQUIRED_NUMBER_FIELDS) {
     assertNumberField(r, field, field);
   }

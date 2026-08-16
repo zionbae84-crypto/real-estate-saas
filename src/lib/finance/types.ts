@@ -77,11 +77,21 @@ export type SafetyLevel = "safe" | "caution" | "danger";
 export interface SafetyScore {
   /** 기본 시나리오 월 상환액(원) */
   monthlyPayment: number;
-  /** 기본 시나리오 상환부담률 (0.28 = 28%) */
+  /**
+   * 기본 시나리오 상환부담률 (0.28 = 28%).
+   *
+   * **분모는 세전(gross) 월 소득이다 — 가처분소득이 아니다.** 한국의
+   * DSR류 기준선은 관례적으로 세전 소득에 대해 고시되므로,
+   * rules.safetyThreshold의 25% / 35% 임계값도 세전과 짝을 이룰 때만
+   * 의미가 맞는다. 분모를 가처분소득으로 바꾸면 같은 임계값이 훨씬
+   * 엄격해져 등급 체계 전체가 어긋난다. 설계 문서 6절에는 한때
+   * "가처분소득"으로 적혀 있었으나 세전으로 확정했다(문서도 수정됨).
+   * safety.test.ts의 분모 고정 테스트가 이 결정을 지킨다.
+   */
   burdenRatio: number;
   /** 금리 스트레스 시나리오 월 상환액(원) */
   stressedMonthlyPayment: number;
-  /** 금리 스트레스 시나리오 상환부담률 */
+  /** 금리 스트레스 시나리오 상환부담률. 분모는 위와 동일하게 세전 월 소득 */
   stressedBurdenRatio: number;
   level: SafetyLevel;
 }
@@ -103,10 +113,26 @@ export interface PolicyLoanRule {
   rate: number;
 }
 
-/** 버전이 찍힌 규제 룰셋 */
+/**
+ * 버전이 찍힌 규제 룰셋.
+ *
+ * ⚠ **적용 범위: 수도권·규제지역 기준.** 전국에 통용되는 값이 아니다.
+ *
+ * 실제 규제에서 `ltv`, `absoluteCap`, `stressDSR.surcharge`는 모두 지역에
+ * 따라 달라진다(비규제지역은 LTV가 더 높고 절대 상한이 없으며 스트레스
+ * 가산금리도 다르다). 이 인터페이스는 MVP 범위가 수도권 한정이라는 전제
+ * 아래 지역 축을 평평하게 눌러 스칼라로 들고 있다. 그래서 룰셋만 보면
+ * 전국 어디에나 쓸 수 있는 것처럼 보이지만, 그렇지 않다.
+ *
+ * 다른 지역을 지원하려면 값을 바꿔 끼우는 것으로는 안 되고, 위 세 필드에
+ * 지역 축을 도입해야 한다(예: `ltv: { 수도권: {...}, 비규제: {...} }`)
+ * — 즉 프로필에 지역을 받고 룰셋 스키마를 바꾸는 별도 작업이다.
+ */
 export interface Rules {
   version: string;
   effectiveFrom: string;
+  /** 이 룰셋이 적용되는 범위를 사람이 읽는 문장으로 적어 둔 것 */
+  _scope?: string;
   /** 대출 심사에 쓰는 기준 금리(연이율) */
   baseRate: number;
   /** 상환 개월수 (30년 = 360) */
