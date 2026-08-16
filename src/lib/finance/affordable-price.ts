@@ -2,6 +2,7 @@ import { calcAcquisitionCosts } from "./acquisition-cost";
 import { calcAvailableCash } from "./available-cash";
 import { calcMaxLoan } from "./loan-limit";
 import { matchPolicyLoans } from "./policy-loans";
+import { assertValidProfile } from "./profile";
 import type { BuyerProfile, CostBreakdown, LoanLimit, Rules } from "./types";
 
 export interface AffordableResult {
@@ -42,6 +43,8 @@ export function calcAffordablePrice(
   profile: BuyerProfile,
   rules: Rules,
 ): AffordableResult {
+  assertValidProfile(profile);
+
   const cash = calcAvailableCash(profile);
 
   if (ownFundsRequired(0, profile, rules) > cash.amount) {

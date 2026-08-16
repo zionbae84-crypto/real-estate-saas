@@ -13,7 +13,11 @@ export function monthlyPayment(
   if (months <= 0) {
     throw new RangeError(`months는 1 이상이어야 합니다: ${months}`);
   }
-  if (principal <= 0) return 0;
+  if (!(principal >= 0)) {
+    // 음수·NaN을 조용히 0으로 만들면 호출자의 계산 오류가 그대로 묻힌다
+    throw new RangeError(`principal은 0 이상이어야 합니다: ${principal}`);
+  }
+  if (principal === 0) return 0;
   if (annualRate === 0) return principal / months;
 
   const r = annualRate / 12;
@@ -35,7 +39,11 @@ export function maxPrincipal(
   if (months <= 0) {
     throw new RangeError(`months는 1 이상이어야 합니다: ${months}`);
   }
-  if (payment <= 0) return 0;
+  if (!(payment >= 0)) {
+    // 음수·NaN을 조용히 0으로 만들면 호출자의 계산 오류가 그대로 묻힌다
+    throw new RangeError(`payment는 0 이상이어야 합니다: ${payment}`);
+  }
+  if (payment === 0) return 0;
   if (annualRate === 0) return payment * months;
 
   const r = annualRate / 12;

@@ -18,6 +18,80 @@ describe("parseRules", () => {
     expect(() => parseRules(null)).toThrow(/객체/);
   });
 
+  // NaN·Infinity는 typeof가 "number"라 타입 검사만으로는 통과한다.
+  // 통과시키면 하위 계산에서 제약이 조용히 사라지므로 여기서 끊어야 한다.
+  it("최상위 숫자 필드가 NaN이면 실패한다", () => {
+    expect(() => parseRules({ ...rawRules, dsrLimit: NaN })).toThrow(
+      /dsrLimit/,
+    );
+  });
+
+  it("최상위 숫자 필드가 Infinity면 실패한다", () => {
+    expect(() =>
+      parseRules({ ...rawRules, absoluteCap: Number.POSITIVE_INFINITY }),
+    ).toThrow(/absoluteCap/);
+  });
+
+  it("중첩 숫자 필드가 NaN이면 전체 경로를 알려주며 실패한다", () => {
+    const broken = {
+      ...rawRules,
+      acquisitionTax: { ...rawRules.acquisitionTax, lowRate: NaN },
+    };
+    expect(() => parseRules(broken)).toThrow(/acquisitionTax\.lowRate/);
+  });
+
+  it("policyLoans 항목의 숫자 필드가 NaN이면 실패한다", () => {
+    const policyLoans = rawRules.policyLoans as Array<Record<string, unknown>>;
+    const first = policyLoans[0]!;
+    const broken = {
+      ...rawRules,
+      policyLoans: [{ ...first, maxAmount: NaN }, ...policyLoans.slice(1)],
+    };
+    expect(() => parseRules(broken)).toThrow(/policyLoans\[0\]\.maxAmount/);
+  });
+
+  it("policyLoans 항목의 eligibility 숫자가 NaN이면 실패한다", () => {
+    const policyLoans = rawRules.policyLoans as Array<Record<string, unknown>>;
+    const first = policyLoans[0]!;
+    const eligibility = first.eligibility as Record<string, unknown>;
+    const broken = {
+      ...rawRules,
+      policyLoans: [
+        { ...first, eligibility: { ...eligibility, maxHousePrice: NaN } },
+        ...policyLoans.slice(1),
+      ],
+    };
+    expect(() => parseRules(broken)).toThrow(
+      /policyLoans\[0\]\.eligibility\.maxHousePrice/,
+    );
+  });
+
+  it("brokerageFee 항목의 숫자가 NaN이면 실패한다", () => {
+    const brokenRate = {
+      ...rawRules,
+      brokerageFee: rawRules.brokerageFee.map((bracket, index) =>
+        index === 2 ? { ...bracket, rate: NaN } : bracket,
+      ),
+    };
+    expect(() => parseRules(brokenRate)).toThrow(/brokerageFee\[2\]\.rate/);
+
+    const brokenCap = {
+      ...rawRules,
+      brokerageFee: rawRules.brokerageFee.map((bracket, index) =>
+        index === 0 ? { ...bracket, cap: NaN } : bracket,
+      ),
+    };
+    expect(() => parseRules(brokenCap)).toThrow(/brokerageFee\[0\]\.cap/);
+
+    const brokenUpTo = {
+      ...rawRules,
+      brokerageFee: rawRules.brokerageFee.map((bracket, index) =>
+        index === 0 ? { ...bracket, upTo: NaN } : bracket,
+      ),
+    };
+    expect(() => parseRules(brokenUpTo)).toThrow(/upTo/);
+  });
+
   it("중개보수 구간이 오름차순이 아니면 실패한다", () => {
     const broken = {
       ...rawRules,

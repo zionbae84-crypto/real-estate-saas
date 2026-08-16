@@ -105,12 +105,17 @@ function assertPlainObject(
   return value as Record<string, unknown>;
 }
 
+/**
+ * 숫자 필드 검사. NaN·Infinity는 숫자가 아닌 것으로 취급한다.
+ * NaN은 모든 비교가 false라 하위 계산에서 조용히 제약을 무력화하므로,
+ * 경계에서 반드시 걸러야 한다.
+ */
 function assertNumberField(
   container: Record<string, unknown>,
   key: string,
   path: string,
 ): void {
-  if (typeof container[key] !== "number") {
+  if (!Number.isFinite(container[key])) {
     throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}`);
   }
 }
@@ -152,7 +157,7 @@ function validateEligibility(
   }
   for (const key of ELIGIBILITY_NUMBER_FIELDS) {
     const value = eligibility[key];
-    if (value !== undefined && typeof value !== "number") {
+    if (value !== undefined && !Number.isFinite(value)) {
       throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}.${key}`);
     }
   }
@@ -163,7 +168,7 @@ function validateBrokerageBrackets(brackets: unknown[]): void {
     const path = `brokerageFee[${index}]`;
     const obj = assertPlainObject(bracket, path);
     assertNumberField(obj, "rate", `${path}.rate`);
-    if (obj.cap !== null && typeof obj.cap !== "number") {
+    if (obj.cap !== null && !Number.isFinite(obj.cap)) {
       throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}.cap`);
     }
   });
@@ -176,7 +181,7 @@ function validateBrokerageBrackets(brackets: unknown[]): void {
   let previous = 0;
   for (const bracket of brackets.slice(0, -1)) {
     const { upTo } = bracket as { upTo: unknown };
-    if (typeof upTo !== "number") {
+    if (typeof upTo !== "number" || !Number.isFinite(upTo)) {
       throw new Error("중개보수 구간의 upTo는 숫자 또는 null이어야 합니다");
     }
     if (upTo <= previous) {

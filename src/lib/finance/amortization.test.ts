@@ -25,6 +25,14 @@ describe("monthlyPayment", () => {
   it("개월수가 0 이하면 예외를 던진다", () => {
     expect(() => monthlyPayment(100_000_000, 0.04, 0)).toThrow(RangeError);
   });
+
+  it("원금이 음수면 조용히 0을 주지 않고 예외를 던진다", () => {
+    expect(() => monthlyPayment(-1, 0.04, 360)).toThrow(RangeError);
+  });
+
+  it("원금이 NaN이면 예외를 던진다", () => {
+    expect(() => monthlyPayment(NaN, 0.04, 360)).toThrow(RangeError);
+  });
 });
 
 describe("maxPrincipal", () => {
@@ -40,5 +48,13 @@ describe("maxPrincipal", () => {
 
   it("상환 여력이 0이면 대출 가능액도 0이다", () => {
     expect(maxPrincipal(0, 0.04, 360)).toBe(0);
+  });
+
+  it("상환 여력이 음수면 조용히 0을 주지 않고 예외를 던진다", () => {
+    expect(() => maxPrincipal(-1, 0.04, 360)).toThrow(RangeError);
+  });
+
+  it("상환 여력이 NaN이면 예외를 던진다", () => {
+    expect(() => maxPrincipal(NaN, 0.04, 360)).toThrow(RangeError);
   });
 });

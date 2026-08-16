@@ -6,6 +6,7 @@ export { calcAvailableCash } from "./available-cash";
 export type { AvailableCash } from "./available-cash";
 export { calcMaxLoan } from "./loan-limit";
 export { matchPolicyLoans } from "./policy-loans";
+export { assertValidProfile } from "./profile";
 export { parseRules } from "./rules";
 export { calcSafetyScore } from "./safety";
 export type {

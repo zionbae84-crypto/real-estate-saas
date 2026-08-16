@@ -1,4 +1,5 @@
 import { maxPrincipal } from "./amortization";
+import { assertValidProfile } from "./profile";
 import type { BindingConstraint, BuyerProfile, LoanLimit, Rules } from "./types";
 
 /**
@@ -14,12 +15,18 @@ export function calcMaxLoan(
   price: number,
   policyLimit = Number.POSITIVE_INFINITY,
 ): LoanLimit {
+  assertValidProfile(profile);
+
   const breakdown: Record<BindingConstraint, number> = {
     LTV: Math.floor(calcLtvLimit(profile, rules, price)),
     DSR: Math.floor(calcDsrLimit(profile, rules)),
     CAP: Math.floor(rules.absoluteCap),
     POLICY: Math.floor(policyLimit),
   };
+
+  // NaN은 어떤 비교에도 false를 돌려주므로 아래 최소값 스캔에서 조용히
+  // 건너뛰어진다 = 제약이 사라진다. 답을 내지 말고 여기서 끊는다.
+  assertNoNaN(breakdown);
 
   let binding: BindingConstraint = "LTV";
   for (const key of ["LTV", "DSR", "CAP", "POLICY"] as const) {
@@ -31,6 +38,17 @@ export function calcMaxLoan(
     binding,
     breakdown,
   };
+}
+
+/** breakdown 어느 하나라도 NaN이면 그 제약이 무력화된 것이므로 계산을 중단한다 */
+function assertNoNaN(breakdown: Record<BindingConstraint, number>): void {
+  for (const [key, value] of Object.entries(breakdown)) {
+    if (Number.isNaN(value)) {
+      throw new RangeError(
+        `대출 한도 계산에서 NaN이 발생했습니다: ${key}. 프로필 또는 룰셋 값을 확인하세요.`,
+      );
+    }
+  }
 }
 
 function calcLtvLimit(
