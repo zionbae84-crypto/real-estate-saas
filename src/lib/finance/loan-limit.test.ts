@@ -115,4 +115,37 @@ describe("calcMaxLoan", () => {
     );
     expect(Number.isInteger(result.amount)).toBe(true);
   });
+
+  it("breakdown의 모든 값은 정수다 (POLICY가 Infinity인 경우 제외)", () => {
+    const result = calcMaxLoan(
+      profile({ annualIncome: 40_000_000 }),
+      rules,
+      1_000_000_000,
+    );
+    expect(Number.isInteger(result.breakdown.LTV)).toBe(true);
+    expect(Number.isInteger(result.breakdown.DSR)).toBe(true);
+    expect(Number.isInteger(result.breakdown.CAP)).toBe(true);
+    // POLICY는 Infinity일 수 있으므로 따로 처리
+    if (Number.isFinite(result.breakdown.POLICY)) {
+      expect(Number.isInteger(result.breakdown.POLICY)).toBe(true);
+    }
+  });
+
+  it("amount는 breakdown[binding]과 정확히 같다", () => {
+    const result = calcMaxLoan(
+      profile({ annualIncome: 40_000_000 }),
+      rules,
+      1_000_000_000,
+    );
+    expect(result.amount).toBe(result.breakdown[result.binding]);
+  });
+
+  it("정책대출 한도가 없을 때 breakdown.POLICY는 Infinity다", () => {
+    const result = calcMaxLoan(
+      profile(),
+      rules,
+      300_000_000,
+    );
+    expect(result.breakdown.POLICY).toBe(Number.POSITIVE_INFINITY);
+  });
 });

@@ -15,10 +15,10 @@ export function calcMaxLoan(
   policyLimit = Number.POSITIVE_INFINITY,
 ): LoanLimit {
   const breakdown: Record<BindingConstraint, number> = {
-    LTV: calcLtvLimit(profile, rules, price),
-    DSR: calcDsrLimit(profile, rules),
-    CAP: rules.absoluteCap,
-    POLICY: policyLimit,
+    LTV: Math.floor(calcLtvLimit(profile, rules, price)),
+    DSR: Math.floor(calcDsrLimit(profile, rules)),
+    CAP: Math.floor(rules.absoluteCap),
+    POLICY: Math.floor(policyLimit),
   };
 
   let binding: BindingConstraint = "LTV";
@@ -27,7 +27,7 @@ export function calcMaxLoan(
   }
 
   return {
-    amount: Math.floor(breakdown[binding]),
+    amount: breakdown[binding],
     binding,
     breakdown,
   };
