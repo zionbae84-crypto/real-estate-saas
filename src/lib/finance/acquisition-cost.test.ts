@@ -91,13 +91,31 @@ describe("calcAcquisitionCosts", () => {
     expect(brokerageFee).toBe(2_000_000);
   });
 
-  it("중개보수 상한이 있는 구간은 상한을 넘지 않는다", () => {
+  it("중개보수가 상한보다 낮으면 계산된 금액을 그대로 청구한다", () => {
     const { brokerageFee } = calcAcquisitionCosts(
       150_000_000,
       profile(),
       rules,
     );
     expect(brokerageFee).toBe(750_000);
+  });
+
+  it("중개보수가 상한을 초과하면 상한으로 제한된다", () => {
+    const { brokerageFee } = calcAcquisitionCosts(
+      180_000_000,
+      profile(),
+      rules,
+    );
+    expect(brokerageFee).toBe(800_000);
+  });
+
+  it("상한이 없는 구간은 계산된 요금을 그대로 청구한다", () => {
+    const { brokerageFee } = calcAcquisitionCosts(
+      250_000_000,
+      profile(),
+      rules,
+    );
+    expect(brokerageFee).toBe(1_000_000);
   });
 
   it("total은 모든 항목의 합이다", () => {
