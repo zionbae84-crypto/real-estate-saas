@@ -172,13 +172,24 @@ function searchSegment(
     }
   }
 
-  const candidate = Math.floor(low / PRICE_STEP) * PRICE_STEP;
-  if (candidate < 0) return null;
+  // 이분 탐색은 high를 좁히기만 하고 low에 대입하지 않으므로, 구간 전체를
+  // 감당할 수 있어도 low는 segHigh에 무한히 가까워질 뿐 도달하지 못한다.
+  // 그대로 내림하면 답이 한 스텝(PRICE_STEP) 낮게 나온다 — 구간 상단
+  // 자체도 후보로 함께 검증한다.
+  const candidates = [
+    Math.floor(low / PRICE_STEP) * PRICE_STEP,
+    Math.floor(segHigh / PRICE_STEP) * PRICE_STEP,
+  ];
 
-  // 구간 가정에 기대지 않고, 실제 가격에서 정직하게 재계산해 검증한다.
-  if (ownFundsRequired(candidate, profile, rules) > cashAmount) return null;
+  let best: number | null = null;
+  for (const candidate of candidates) {
+    if (candidate < segLow) continue;
+    // 구간 가정에 기대지 않고, 실제 가격에서 정직하게 재계산해 검증한다.
+    if (ownFundsRequired(candidate, profile, rules) > cashAmount) continue;
+    if (best === null || candidate > best) best = candidate;
+  }
 
-  return candidate;
+  return best;
 }
 
 /**

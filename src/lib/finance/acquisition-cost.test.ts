@@ -134,4 +134,28 @@ describe("calcAcquisitionCosts", () => {
       expect(Number.isInteger(value)).toBe(true);
     }
   });
+
+  // legalFee·movingCost·total은 예전에 내림 없이 그대로 흘러나갔다.
+  // 지금 룰셋의 값이 마침 정수라 드러나지 않았을 뿐, 소수 값이 들어오면
+  // "반환 금액은 정수 원"이라는 계약이 깨진다.
+  it("룰셋의 정액 항목이 소수여도 반환 금액은 정수다", () => {
+    const fractionalRules = {
+      ...rules,
+      legalFee: 600_000.7,
+      movingCost: 1_500_000.3,
+    };
+    const costs = calcAcquisitionCosts(500_000_000, profile(), fractionalRules);
+
+    expect(costs.legalFee).toBe(600_000);
+    expect(costs.movingCost).toBe(1_500_000);
+    for (const value of Object.values(costs)) {
+      expect(Number.isInteger(value)).toBe(true);
+    }
+    expect(costs.total).toBe(
+      costs.acquisitionTax +
+        costs.brokerageFee +
+        costs.legalFee +
+        costs.movingCost,
+    );
+  });
 });

@@ -233,3 +233,68 @@ describe("parseRules", () => {
     );
   });
 });
+
+// 타입은 맞지만 말이 안 되는 값들. 룰셋은 사람이 손으로 고치는 데이터이므로,
+// 싸게 잡을 수 있는 의미 오류는 파싱 시점에 잡는다.
+describe("parseRules — 의미 불변식", () => {
+  it("취득세 하한이 상한보다 크면 실패한다", () => {
+    const broken = {
+      ...rawRules,
+      acquisitionTax: {
+        ...rawRules.acquisitionTax,
+        lowerBound: 900_000_000,
+        upperBound: 600_000_000,
+      },
+    };
+    expect(() => parseRules(broken)).toThrow(/acquisitionTax\.lowerBound/);
+  });
+
+  it("취득세 하한과 상한이 같으면 실패한다 (0으로 나누기)", () => {
+    const broken = {
+      ...rawRules,
+      acquisitionTax: {
+        ...rawRules.acquisitionTax,
+        lowerBound: 600_000_000,
+        upperBound: 600_000_000,
+      },
+    };
+    expect(() => parseRules(broken)).toThrow(/acquisitionTax\.lowerBound/);
+  });
+
+  it("safe 임계가 caution보다 크면 실패한다", () => {
+    const broken = {
+      ...rawRules,
+      safetyThreshold: { safe: 0.5, caution: 0.35, stressedDanger: 0.4 },
+    };
+    expect(() => parseRules(broken)).toThrow(/safetyThreshold\.safe/);
+  });
+
+  it.each([
+    ["ltv.default", { ltv: { default: 0, firstTimeBuyer: 0.7 } }],
+    ["ltv.default", { ltv: { default: 1.2, firstTimeBuyer: 0.7 } }],
+    ["ltv.firstTimeBuyer", { ltv: { default: 0.7, firstTimeBuyer: -0.1 } }],
+    ["dsrLimit", { dsrLimit: 0 }],
+    ["dsrLimit", { dsrLimit: 1.5 }],
+  ])("비율 필드 %s가 (0, 1] 밖이면 실패한다", (path, override) => {
+    expect(() => parseRules({ ...rawRules, ...override })).toThrow(
+      new RegExp(path.replace(".", "\\.")),
+    );
+  });
+
+  it("정책대출 maxAmount가 음수면 인덱스를 알려주며 실패한다", () => {
+    const policyLoans = rawRules.policyLoans as Array<Record<string, unknown>>;
+    const first = policyLoans[0]!;
+    const broken = {
+      ...rawRules,
+      policyLoans: [
+        { ...first, maxAmount: -1 },
+        ...policyLoans.slice(1),
+      ],
+    };
+    expect(() => parseRules(broken)).toThrow(/policyLoans\[0\]\.maxAmount/);
+  });
+
+  it("실제 룰셋은 모든 불변식을 만족한다", () => {
+    expect(() => parseRules(rawRules)).not.toThrow();
+  });
+});

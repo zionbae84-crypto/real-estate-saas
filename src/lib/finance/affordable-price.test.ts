@@ -213,7 +213,16 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     (_label, p) => {
       const result = calcAffordablePrice(p, rules);
       const cashAmount = calcAvailableCash(p).amount;
-      const trueMax = bruteForceMax(p, rules, cashAmount, 0, 900_000_000);
+      const trueMax = bruteForceMax(
+        p,
+        rules,
+        cashAmount,
+        0,
+        BRUTE_FORCE_CEILING,
+      );
+      // 스캔 상한에 잘린 "진짜 최대가"는 진짜가 아니다. 더 부유한 프로필이
+      // 추가되면 이 단언이 먼저 깨져 상한을 올리도록 알려준다.
+      expect(trueMax).toBeLessThan(BRUTE_FORCE_CEILING);
       expect(result.affordablePrice).toBe(trueMax);
     },
   );
@@ -232,12 +241,12 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     "한 스텝(PRICE_STEP) 위 가격은 예산을 넘는다: %s",
     (_label, p) => {
       const result = calcAffordablePrice(p, rules);
-      if (
-        result.affordablePrice === 0 ||
-        result.affordablePrice >= SEARCH_UPPER_BOUND
-      ) {
-        return;
-      }
+      // 예전에는 0이면 early return이라, 실구매력이 0으로 무너지는 회귀가
+      // 이 테스트를 조용히 통과했다. 이 프로필들은 모두 현금 2.2억을
+      // 들고 있으므로 0이어서는 안 된다 — 단언으로 바꾼다.
+      expect(result.affordablePrice).toBeGreaterThan(0);
+      expect(result.affordablePrice).toBeLessThan(SEARCH_UPPER_BOUND);
+
       const overPrice = result.affordablePrice + PRICE_STEP;
       const overOwnFunds = ownFundsAt(overPrice, p, rules);
       expect(overOwnFunds).toBeGreaterThan(result.availableCash);
@@ -269,5 +278,44 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     expect(result.warnings).toContain(
       "고정 부대비용(법무비·이사비)만으로도 보유 현금을 초과합니다.",
     );
+  });
+
+  // 이분 탐색은 high를 좁히기만 하고 low에 대입하지 않으므로, 구간 전체를
+  // 감당할 수 있어도 low는 구간 상단 B에 도달하지 못한다. 예전에는 그대로
+  // 내림해 답이 정확히 한 스텝 낮게(B − PRICE_STEP) 나왔다.
+  //
+  // 아래 픽스처는 그 상황을 정확히 만든다: 정책대출 상한 5억이 구간 경계를
+  // 만들고, 구간 [0, 5억]은 전부 감당 가능하며, 5억을 넘는 순간 정책대출
+  // 선택지를 잃어 자기부담금이 급등한다. 따라서 정답은 정확히 5억이다.
+  // 수정 전에는 499,900,000이 나왔다.
+  it("구간 상단이 정답이면 한 스텝 낮은 값이 아니라 상단 그대로를 반환한다", () => {
+    const boundary = 500_000_000;
+    const fixtureRules: Rules = {
+      ...rules,
+      policyLoans: [
+        {
+          id: "구간경계픽스처",
+          eligibility: { maxHousePrice: boundary },
+          maxAmount: 400_000_000,
+          rate: 0.03,
+        },
+      ],
+    };
+    // 연소득을 크게 잡아 DSR이 개입하지 않게 하고, 정책대출 400,000,000이
+    // 은행 경로(LTV 70% = 350,000,000)를 이기도록 만든다.
+    const buyer = profile({
+      cash: 109_600_000,
+      annualIncome: 300_000_000,
+    });
+
+    // 경계에서의 자기부담금이 정확히 가용현금과 같음을 먼저 확인한다.
+    expect(ownFundsAt(boundary, buyer, fixtureRules)).toBe(109_600_000);
+    // 한 스텝 위는 정책대출 선택지를 잃어 예산을 넘는다.
+    expect(
+      ownFundsAt(boundary + PRICE_STEP, buyer, fixtureRules),
+    ).toBeGreaterThan(109_600_000);
+
+    const result = calcAffordablePrice(buyer, fixtureRules);
+    expect(result.affordablePrice).toBe(boundary);
   });
 });

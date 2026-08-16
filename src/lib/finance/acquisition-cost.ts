@@ -11,14 +11,17 @@ export function calcAcquisitionCosts(
 ): CostBreakdown {
   const acquisitionTax = calcAcquisitionTax(price, profile, rules);
   const brokerageFee = calcBrokerageFee(price, rules);
-  const { legalFee, movingCost } = rules;
+  // 룰셋의 정액 항목은 소수일 수 있다. 반환 금액은 모두 정수 원이라는
+  // 계약이 있으므로, 지금 값이 마침 정수라는 사실에 기대지 않고 내림한다.
+  const legalFee = Math.floor(rules.legalFee);
+  const movingCost = Math.floor(rules.movingCost);
 
   return {
     acquisitionTax,
     brokerageFee,
     legalFee,
     movingCost,
-    total: acquisitionTax + brokerageFee + legalFee + movingCost,
+    total: Math.floor(acquisitionTax + brokerageFee + legalFee + movingCost),
   };
 }
 

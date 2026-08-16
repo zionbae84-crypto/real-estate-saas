@@ -106,7 +106,53 @@ export function parseRules(raw: unknown): Rules {
   }
   validateBrokerageBrackets(r.brokerageFee);
 
+  validateSemanticInvariants(raw as Rules);
+
   return raw as Rules;
+}
+
+/**
+ * 타입은 맞지만 말이 안 되는 값을 걸러낸다.
+ *
+ * 룰셋은 사람이 손으로 고치는 데이터다. 값을 잘못 넣어도 타입 검사는
+ * 통과하고, 계산은 조용히 이상한 답을 낸다(예: 취득세 상·하한이 뒤집히면
+ * 누진 구간의 기울기가 음수가 된다). 싸게 잡을 수 있는 것은 여기서 잡는다.
+ */
+function validateSemanticInvariants(rules: Rules): void {
+  const t = rules.acquisitionTax;
+  if (!(t.lowerBound < t.upperBound)) {
+    throw new Error(
+      `룰셋 값 오류: acquisitionTax.lowerBound는 upperBound보다 작아야 합니다 (${t.lowerBound} / ${t.upperBound})`,
+    );
+  }
+
+  const s = rules.safetyThreshold;
+  if (!(s.safe <= s.caution)) {
+    throw new Error(
+      `룰셋 값 오류: safetyThreshold.safe는 caution 이하여야 합니다 (${s.safe} / ${s.caution})`,
+    );
+  }
+
+  assertRatio(rules.ltv.default, "ltv.default");
+  assertRatio(rules.ltv.firstTimeBuyer, "ltv.firstTimeBuyer");
+  assertRatio(rules.dsrLimit, "dsrLimit");
+
+  rules.policyLoans.forEach((loan, index) => {
+    if (!(loan.maxAmount >= 0)) {
+      throw new Error(
+        `룰셋 값 오류: policyLoans[${index}].maxAmount는 0 이상이어야 합니다 (${loan.maxAmount})`,
+      );
+    }
+  });
+}
+
+/** LTV·DSR처럼 "소득·가격의 몇 %"를 뜻하는 비율은 (0, 1] 범위여야 한다 */
+function assertRatio(value: number, path: string): void {
+  if (!(value > 0 && value <= 1)) {
+    throw new Error(
+      `룰셋 값 오류: ${path}는 0 초과 1 이하여야 합니다 (${value})`,
+    );
+  }
 }
 
 /** 배열이 아닌 순수 객체인지 검사한다. 배열은 typeof가 "object"라 별도로 걸러야 한다 */
