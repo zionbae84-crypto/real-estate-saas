@@ -1,6 +1,6 @@
 import { calcAcquisitionCosts } from "./acquisition-cost";
 import { calcAvailableCash } from "./available-cash";
-import { calcMaxLoan } from "./loan-limit";
+import { calcMaxLoan, NO_POLICY_LIMIT } from "./loan-limit";
 import { matchPolicyLoans } from "./policy-loans";
 import { assertValidProfile } from "./profile";
 import type { BuyerProfile, CostBreakdown, LoanLimit, Rules } from "./types";
@@ -32,12 +32,18 @@ const INSUFFICIENT_CASH_WARNING =
  * 닫힌 식으로 풀 수 없다. 자기부담금 f(price) = price − 대출한도 + 취득부대비용은
  * 매매가에 대해 대체로 증가하므로 이분 탐색으로 수렴시킨다.
  *
- * 다만 정책대출은 eligibility.maxHousePrice를 "상한"으로 취급하므로,
- * 매매가가 그 상한을 넘는 순간 정책대출 자격을 잃어 대출한도가 오히려
- * "상승"하고 자기부담금은 "하락"한다 — f는 그 지점에서 불연속적으로
- * 꺾이며 전체 구간에서 단조 증가하지 않는다. 정책대출 상품 집합이 바뀌지
- * 않는 구간(=절벽 사이) 안에서는 단조성이 성립하므로, 절벽을 기준으로
- * 탐색 구간을 나누어 각각 이분 탐색하고 가장 유리한 결과를 취한다.
+ * 정책대출을 "선택지"로 보는 최대값 의미론(loan-limit.ts 참고)에서는
+ * eligibility.maxHousePrice를 넘는 순간 그 선택지가 사라져 대출한도가
+ * "하락"하고 자기부담금 f는 그 지점에서 위로 튄다. 즉 절벽은 f를 낮추는
+ * 것이 아니라 높이는 방향으로 작용하며, f는 전 구간에서 다시 단조 증가에
+ * 가깝다 — 단순 이분 탐색으로도 대체로 맞는다.
+ *
+ * 그럼에도 구간 분할을 유지한다. 단조성은 현재 룰셋의 형태에 기대는
+ * 성질이고(예: 정책대출 금리·한도 축이 늘거나 취득세 구간이 계단이 되면
+ * 다시 깨진다), 분할은 절벽의 방향과 무관하게 안전하기 때문이다.
+ * 정책대출 상품 집합이 바뀌지 않는 구간 안에서는 단조성이 성립하므로,
+ * 절벽을 기준으로 탐색 구간을 나누어 각각 이분 탐색하고 가장 유리한
+ * 결과를 취한다.
  */
 export function calcAffordablePrice(
   profile: BuyerProfile,
@@ -167,7 +173,8 @@ function loanAt(
 
 /**
  * 자격이 되는 정책대출 중 가장 큰 한도.
- * 자격 상품이 없으면 제약이 없는 것이므로 무한대를 반환한다.
+ * 자격 상품이 없으면 정책대출이라는 선택지가 없는 것이므로 0을 반환한다
+ * (LoanLimit.breakdown 문서 참고).
  */
 function policyLimitAt(
   price: number,
@@ -175,6 +182,6 @@ function policyLimitAt(
   rules: Rules,
 ): number {
   const matched = matchPolicyLoans(profile, rules, price);
-  if (matched.length === 0) return Number.POSITIVE_INFINITY;
+  if (matched.length === 0) return NO_POLICY_LIMIT;
   return Math.max(...matched.map((loan) => loan.maxAmount));
 }

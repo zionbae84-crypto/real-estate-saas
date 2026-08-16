@@ -28,16 +28,31 @@ export interface BuyerProfile {
   existingHome?: ExistingHome;
 }
 
-/** 대출 한도를 결정지은 제약 */
+/**
+ * 대출 한도를 결정지은 제약.
+ *
+ * LTV·DSR·CAP은 은행 경로에서 "걸린 상한"을 뜻하지만, POLICY만은 의미가
+ * 다르다. 정책대출은 강제되는 상한이 아니라 구매자가 택할 수 있는
+ * 선택지이므로, binding이 POLICY라는 것은 "정책대출을 택할 때의 한도가
+ * 당신의 최대치"라는 뜻이다.
+ */
 export type BindingConstraint = "LTV" | "DSR" | "CAP" | "POLICY";
 
 /** 대출 한도 계산 결과 */
 export interface LoanLimit {
-  /** 최종 대출 가능액(원) */
+  /** 최종 대출 가능액(원). max( min(LTV, DSR, CAP), POLICY ) */
   amount: number;
-  /** 어느 제약에 걸려 이 금액이 되었는가 */
+  /** 어느 제약이 이 금액을 만들었는가 */
   binding: BindingConstraint;
-  /** 각 제약별 한도(원). 사용자에게 근거를 보여줄 때 쓴다 */
+  /**
+   * 각 제약별 한도(원, 정수). 사용자에게 근거를 보여줄 때 쓴다.
+   *
+   * LTV·DSR·CAP은 은행 경로의 상한이고, POLICY는 정책대출을 택했을 때의
+   * 한도다. 자격이 되는 정책대출 상품이 없으면 POLICY는 **0**이며,
+   * 이는 "정책대출이라는 선택지 자체가 없음"을 뜻한다(최대값 의미론에서
+   * 0은 어떤 은행 한도도 이기지 못하므로 자연스러운 부재 표현이다).
+   * 모든 값은 유한한 정수이며 Infinity가 들어가지 않는다.
+   */
   breakdown: Record<BindingConstraint, number>;
 }
 

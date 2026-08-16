@@ -64,10 +64,30 @@ describe("calcMaxLoan", () => {
     expect(result.amount).toBe(600_000_000);
   });
 
-  it("정책대출 한도가 가장 작으면 POLICY에 걸린다", () => {
-    const result = calcMaxLoan(profile(), rules, 300_000_000, 100_000_000);
+  // 의미론 변경(2026-08-17): 정책대출은 반드시 따라야 하는 상한이 아니라
+  // 구매자가 택할 수 있는 선택지다. 따라서 은행 한도보다 "작은" 정책대출은
+  // 결과에 아무 영향이 없고, "큰" 정책대출만 최대치를 끌어올린다.
+  it("정책대출 한도가 은행 한도보다 크면 POLICY가 최대치가 된다", () => {
+    const result = calcMaxLoan(profile(), rules, 300_000_000, 300_000_000);
     expect(result.binding).toBe("POLICY");
-    expect(result.amount).toBe(100_000_000);
+    expect(result.amount).toBe(300_000_000);
+  });
+
+  // 변경 전에는 min()이라 amount가 100,000,000(POLICY)이었다. 정책대출을
+  // 택하지 않으면 그만인데도 한도가 깎이던 것이 결함이었다.
+  it("정책대출 한도가 은행 한도보다 작으면 한도를 깎지 않는다", () => {
+    const result = calcMaxLoan(profile(), rules, 300_000_000, 100_000_000);
+    expect(result.binding).toBe("LTV");
+    expect(result.amount).toBe(210_000_000);
+    expect(result.breakdown.POLICY).toBe(100_000_000);
+  });
+
+  // 이 결함의 실제 관측 사례: 자격이 있다는 이유만으로 무주택 구매자가
+  // 동일 조건의 갈아타기 구매자보다 덜 빌릴 수 있다고 답하던 문제.
+  it("정책대출 자격이 있다고 해서 한도가 줄어들지 않는다", () => {
+    const withoutPolicy = calcMaxLoan(profile(), rules, 600_000_000);
+    const withPolicy = calcMaxLoan(profile(), rules, 600_000_000, 360_000_000);
+    expect(withPolicy.amount).toBeGreaterThanOrEqual(withoutPolicy.amount);
   });
 
   it("DSR 계산에 스트레스 가산금리를 적용한다", () => {
@@ -127,18 +147,16 @@ describe("calcMaxLoan", () => {
     expect(Number.isInteger(result.amount)).toBe(true);
   });
 
-  it("breakdown의 모든 값은 정수다 (POLICY가 Infinity인 경우 제외)", () => {
+  // 변경 전에는 POLICY가 Infinity일 수 있어 예외 처리가 필요했다.
+  // 이제 "선택지 없음"을 0으로 표현하므로 네 값 모두 유한한 정수다.
+  it("breakdown의 모든 값은 유한한 정수다", () => {
     const result = calcMaxLoan(
       profile({ annualIncome: 40_000_000 }),
       rules,
       1_000_000_000,
     );
-    expect(Number.isInteger(result.breakdown.LTV)).toBe(true);
-    expect(Number.isInteger(result.breakdown.DSR)).toBe(true);
-    expect(Number.isInteger(result.breakdown.CAP)).toBe(true);
-    // POLICY는 Infinity일 수 있으므로 따로 처리
-    if (Number.isFinite(result.breakdown.POLICY)) {
-      expect(Number.isInteger(result.breakdown.POLICY)).toBe(true);
+    for (const value of Object.values(result.breakdown)) {
+      expect(Number.isInteger(value)).toBe(true);
     }
   });
 
@@ -151,12 +169,11 @@ describe("calcMaxLoan", () => {
     expect(result.amount).toBe(result.breakdown[result.binding]);
   });
 
-  it("정책대출 한도가 없을 때 breakdown.POLICY는 Infinity다", () => {
-    const result = calcMaxLoan(
-      profile(),
-      rules,
-      300_000_000,
-    );
-    expect(result.breakdown.POLICY).toBe(Number.POSITIVE_INFINITY);
+  // 변경 전에는 "제약 없음"을 Infinity로 표현했다. 최대값 의미론에서
+  // Infinity는 "무조건 정책대출이 이긴다"가 되어버리므로, 부재는 0이다.
+  it("정책대출 선택지가 없을 때 breakdown.POLICY는 0이다", () => {
+    const result = calcMaxLoan(profile(), rules, 300_000_000);
+    expect(result.breakdown.POLICY).toBe(0);
+    expect(result.binding).not.toBe("POLICY");
   });
 });
