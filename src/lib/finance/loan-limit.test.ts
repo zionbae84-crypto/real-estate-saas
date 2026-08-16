@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import rawRules from "../../../rules/2026-03.json";
-import { calcMaxLoan } from "./loan-limit";
+import { calcMaxLoan, calcPolicyLimit } from "./loan-limit";
 import { parseRules } from "./rules";
-import type { BuyerProfile } from "./types";
+import type { BuyerProfile, PolicyLoanRule, Rules } from "./types";
 
 const rules = parseRules(rawRules);
 
@@ -16,6 +16,19 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
     exclusiveAreaSqm: 84,
     ...overrides,
   };
+}
+
+/**
+ * 정책대출 한도는 이제 calcMaxLoan이 가격에서 직접 도출하므로(인자가 아님),
+ * 특정 정책 한도를 만들려면 룰셋 쪽을 바꿔야 한다. 조건 없는 상품 하나만
+ * 남긴 픽스처 룰셋을 만든다.
+ */
+function withPolicyLimit(maxAmount: number | null): Rules {
+  const policyLoans: PolicyLoanRule[] =
+    maxAmount === null
+      ? []
+      : [{ id: "픽스처상품", eligibility: {}, maxAmount, rate: 0.03 }];
+  return { ...rules, policyLoans };
 }
 
 describe("calcMaxLoan", () => {
@@ -68,7 +81,11 @@ describe("calcMaxLoan", () => {
   // 구매자가 택할 수 있는 선택지다. 따라서 은행 한도보다 "작은" 정책대출은
   // 결과에 아무 영향이 없고, "큰" 정책대출만 최대치를 끌어올린다.
   it("정책대출 한도가 은행 한도보다 크면 POLICY가 최대치가 된다", () => {
-    const result = calcMaxLoan(profile(), rules, 300_000_000, 300_000_000);
+    const result = calcMaxLoan(
+      profile(),
+      withPolicyLimit(300_000_000),
+      300_000_000,
+    );
     expect(result.binding).toBe("POLICY");
     expect(result.amount).toBe(300_000_000);
   });
@@ -76,7 +93,11 @@ describe("calcMaxLoan", () => {
   // 변경 전에는 min()이라 amount가 100,000,000(POLICY)이었다. 정책대출을
   // 택하지 않으면 그만인데도 한도가 깎이던 것이 결함이었다.
   it("정책대출 한도가 은행 한도보다 작으면 한도를 깎지 않는다", () => {
-    const result = calcMaxLoan(profile(), rules, 300_000_000, 100_000_000);
+    const result = calcMaxLoan(
+      profile(),
+      withPolicyLimit(100_000_000),
+      300_000_000,
+    );
     expect(result.binding).toBe("LTV");
     expect(result.amount).toBe(210_000_000);
     expect(result.breakdown.POLICY).toBe(100_000_000);
@@ -85,9 +106,29 @@ describe("calcMaxLoan", () => {
   // 이 결함의 실제 관측 사례: 자격이 있다는 이유만으로 무주택 구매자가
   // 동일 조건의 갈아타기 구매자보다 덜 빌릴 수 있다고 답하던 문제.
   it("정책대출 자격이 있다고 해서 한도가 줄어들지 않는다", () => {
-    const withoutPolicy = calcMaxLoan(profile(), rules, 600_000_000);
-    const withPolicy = calcMaxLoan(profile(), rules, 600_000_000, 360_000_000);
+    const withoutPolicy = calcMaxLoan(
+      profile(),
+      withPolicyLimit(null),
+      600_000_000,
+    );
+    const withPolicy = calcMaxLoan(
+      profile(),
+      withPolicyLimit(360_000_000),
+      600_000_000,
+    );
     expect(withPolicy.amount).toBeGreaterThanOrEqual(withoutPolicy.amount);
+  });
+
+  // 공개 API 오용 방지: 정책대출 한도를 호출자가 넘기는 선택적 인자로
+  // 두었을 때, 그 값을 구하는 함수가 공개되지 않아 UI가 엔진과 다른
+  // 답을 냈다. 이제 calcMaxLoan이 가격에서 직접 도출한다.
+  it("정책대출 한도를 호출자가 넘기지 않아도 엔진이 직접 도출한다", () => {
+    const p = profile({ annualIncome: 50_000_000 });
+    const result = calcMaxLoan(p, rules, 500_000_000);
+    expect(result.breakdown.POLICY).toBe(
+      calcPolicyLimit(p, rules, 500_000_000),
+    );
+    expect(result.breakdown.POLICY).toBeGreaterThan(0);
   });
 
   it("DSR 계산에 스트레스 가산금리를 적용한다", () => {
@@ -118,10 +159,15 @@ describe("calcMaxLoan", () => {
     expect(indebted.amount).toBeLessThan(clean.amount);
   });
 
-  it("기존 부채가 소득 한도를 이미 넘으면 대출이 0이다", () => {
+  // 룰셋 변경(2026-08-17, 정책대출 최대값 의미론 도입): 실제 룰셋으로는
+  // 이 구매자(무주택·연소득 5천만)가 보금자리론 자격을 만족해 amount가
+  // 360,000,000이 된다. DSR은 은행 경로만 제약하므로 정책대출 경로를
+  // 누르지 못한다. 이 테스트가 고정하려는 것은 "DSR 여력이 없으면 은행
+  // 경로가 0"이라는 성질이므로, 정책대출이 없는 픽스처 룰셋으로 격리한다.
+  it("기존 부채가 소득 한도를 이미 넘으면 은행 경로 대출이 0이다", () => {
     const result = calcMaxLoan(
       profile({ annualIncome: 50_000_000, existingDebtAnnualPayment: 30_000_000 }),
-      rules,
+      withPolicyLimit(null),
       500_000_000,
     );
     expect(result.amount).toBe(0);

@@ -1,18 +1,19 @@
 import { describe, expect, it } from "vitest";
 import rawRules from "../../../rules/2026-03.json";
 import { calcAcquisitionCosts } from "./acquisition-cost";
-import { calcAffordablePrice } from "./affordable-price";
+import { calcAffordablePrice, PRICE_STEP } from "./affordable-price";
 import { calcAvailableCash } from "./available-cash";
 import { calcMaxLoan } from "./loan-limit";
-import { matchPolicyLoans } from "./policy-loans";
 import { parseRules } from "./rules";
 import type { BuyerProfile, Rules } from "./types";
 
 const rules = parseRules(rawRules);
 
-// affordable-price.ts의 내부 상수와 동일한 값. export되지 않으므로 여기서 동일 값을 복제한다.
-const PRICE_STEP = 100_000;
+// affordable-price.ts의 내부 상수와 동일한 값. 탐색 상한은 공개 계약이
+// 아니므로 export하지 않고 여기서만 복제한다.
 const SEARCH_UPPER_BOUND = 10_000_000_000;
+/** 브루트포스 스캔의 상한. 아래 테스트가 이 값에 잘리지 않음을 검증한다 */
+const BRUTE_FORCE_CEILING = 900_000_000;
 
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
@@ -26,16 +27,13 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   };
 }
 
-/** 자격이 되는 정책대출 중 가장 큰 한도. 없으면 0(정책대출이라는 선택지 없음). */
-function policyLimitAt(price: number, p: BuyerProfile, r: Rules): number {
-  const matched = matchPolicyLoans(p, r, price);
-  if (matched.length === 0) return 0;
-  return Math.max(...matched.map((loan) => loan.maxAmount));
-}
-
-/** 해당 매매가에서 사용자가 현금으로 내야 하는 총액. 매 가격마다 정직하게 재계산한다. */
+/**
+ * 해당 매매가에서 사용자가 현금으로 내야 하는 총액. 매 가격마다 정직하게
+ * 재계산한다. 정책대출 한도는 calcMaxLoan이 가격에서 직접 도출하므로
+ * 이 헬퍼가 따로 넘길 값이 없다 — 엔진과 같은 모델을 쓰게 된다.
+ */
 function ownFundsAt(price: number, p: BuyerProfile, r: Rules): number {
-  const loan = calcMaxLoan(p, r, price, policyLimitAt(price, p, r));
+  const loan = calcMaxLoan(p, r, price);
   const costs = calcAcquisitionCosts(price, p, r);
   return price - loan.amount + costs.total;
 }
@@ -79,19 +77,20 @@ const cliffSpanningProfiles: Array<[string, BuyerProfile]> = [
 ];
 
 describe("calcAffordablePrice", () => {
+  // 두 테스트 모두 ownFundsAt(=엔진과 동일한 모델)로 재계산한다.
+  // 예전에는 정책대출 한도를 빠뜨린 calcMaxLoan 호출로 검증해, 엔진이
+  // 실제로 쓰는 숫자와 다른 값을 확인하고 있었다.
   it("결과 가격에서 자기부담금이 가용현금을 넘지 않는다", () => {
     const result = calcAffordablePrice(profile(), rules);
-    const ownFunds =
-      result.affordablePrice - result.loanLimit.amount + result.costs.total;
-    expect(ownFunds).toBeLessThanOrEqual(result.availableCash);
+    expect(ownFundsAt(result.affordablePrice, profile(), rules)).toBeLessThanOrEqual(
+      result.availableCash,
+    );
   });
 
   it("백만원만 더 비싸도 예산을 넘는 경계값을 찾는다", () => {
     const result = calcAffordablePrice(profile(), rules);
     const overPrice = result.affordablePrice + 1_000_000;
-    const loan = calcMaxLoan(profile(), rules, overPrice);
-    const costs = calcAcquisitionCosts(overPrice, profile(), rules);
-    expect(overPrice - loan.amount + costs.total).toBeGreaterThan(
+    expect(ownFundsAt(overPrice, profile(), rules)).toBeGreaterThan(
       result.availableCash,
     );
   });

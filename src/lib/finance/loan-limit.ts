@@ -1,4 +1,5 @@
 import { maxPrincipal } from "./amortization";
+import { matchPolicyLoans } from "./policy-loans";
 import { assertValidProfile } from "./profile";
 import type { BindingConstraint, BuyerProfile, LoanLimit, Rules } from "./types";
 
@@ -7,6 +8,23 @@ const BANK_CONSTRAINTS = ["LTV", "DSR", "CAP"] as const;
 
 /** 자격이 되는 정책대출이 없을 때의 POLICY 값. "선택지 없음"을 뜻한다 */
 export const NO_POLICY_LIMIT = 0;
+
+/**
+ * 이 매매가에서 택할 수 있는 정책대출 중 가장 큰 한도.
+ * 자격 상품이 없으면 NO_POLICY_LIMIT(0) — 정책대출이라는 선택지가 없다.
+ *
+ * 정책대출 자격은 매매가에 의존하므로(주택가격 상한) 가격 없이는 구할 수
+ * 없다. calcMaxLoan이 직접 호출하므로 호출자가 따로 신경 쓸 필요는 없다.
+ */
+export function calcPolicyLimit(
+  profile: BuyerProfile,
+  rules: Rules,
+  price: number,
+): number {
+  const matched = matchPolicyLoans(profile, rules, price);
+  if (matched.length === 0) return NO_POLICY_LIMIT;
+  return Math.max(...matched.map((loan) => loan.maxAmount));
+}
 
 /**
  * 주어진 매매가에 대해 받을 수 있는 최대 대출액을 구한다.
@@ -21,15 +39,19 @@ export const NO_POLICY_LIMIT = 0;
  * 한도가 오히려 줄어든다 — 무주택·연소득 7천만 구매자가 동일 조건의
  * 갈아타기 구매자보다 4,200만원 덜 빌릴 수 있다고 답하던 결함이다.
  *
- * @param policyLimit 정책대출 한도(원). 자격 상품이 없으면 NO_POLICY_LIMIT(0).
+ * 정책대출 한도는 이 함수가 직접 도출한다. 예전에는 호출자가 넘기는
+ * 선택적 인자였는데, 그 값을 구하는 함수가 공개되어 있지도 않아서
+ * "이 매물을 이 구매자 기준으로 채점" 같은 자연스러운 호출이 엔진 내부
+ * 계산과 다른 답(🟡 vs 🔴)을 내놓았다. 빠뜨릴 수 있는 인자를 없애는
+ * 편이 옳은 호출을 쉬운 호출로 만든다.
  */
 export function calcMaxLoan(
   profile: BuyerProfile,
   rules: Rules,
   price: number,
-  policyLimit: number = NO_POLICY_LIMIT,
 ): LoanLimit {
   assertValidProfile(profile);
+  const policyLimit = calcPolicyLimit(profile, rules, price);
 
   const breakdown: Record<BindingConstraint, number> = {
     LTV: Math.floor(calcLtvLimit(profile, rules, price)),

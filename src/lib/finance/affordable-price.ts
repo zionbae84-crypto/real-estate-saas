@@ -1,12 +1,18 @@
 import { calcAcquisitionCosts } from "./acquisition-cost";
 import { calcAvailableCash } from "./available-cash";
-import { calcMaxLoan, NO_POLICY_LIMIT } from "./loan-limit";
+import { calcMaxLoan } from "./loan-limit";
 import { matchPolicyLoans } from "./policy-loans";
 import { assertValidProfile } from "./profile";
-import type { BuyerProfile, CostBreakdown, LoanLimit, Rules } from "./types";
+import type {
+  BuyerProfile,
+  CostBreakdown,
+  LoanLimit,
+  PolicyLoanRule,
+  Rules,
+} from "./types";
 
 export interface AffordableResult {
-  /** 실구매 가능 최대 매매가(원). 10만원 단위로 내림 */
+  /** 실구매 가능 최대 매매가(원). PRICE_STEP 단위로 내림 */
   affordablePrice: number;
   /** 그 가격에서의 대출 한도와 걸린 제약 */
   loanLimit: LoanLimit;
@@ -14,13 +20,22 @@ export interface AffordableResult {
   costs: CostBreakdown;
   /** 계산에 사용된 가용현금(원) */
   availableCash: number;
+  /**
+   * 그 가격에서 자격이 되는 정책대출 상품 전부.
+   * UI가 같은 판정을 다시 유도하지 않도록 계산 결과에 함께 실어 보낸다.
+   * 비어 있으면 정책대출 선택지가 없다는 뜻이다.
+   */
+  matchedPolicyLoans: PolicyLoanRule[];
   warnings: string[];
 }
 
 /** 탐색 상한. 수도권 주거용 상한으로 충분한 값 */
 const SEARCH_UPPER_BOUND = 10_000_000_000;
-/** 결과를 내림할 단위 */
-const PRICE_STEP = 100_000;
+/**
+ * 결과를 내림할 단위(원). "10만원 단위로 내림"은 문서화된 계약이므로
+ * UI도 같은 값을 써야 한다. 복제하지 말고 이 상수를 import할 것.
+ */
+export const PRICE_STEP = 100_000;
 /** price = 0에서도 부과되는 법무비 + 이사비만으로 예산을 초과할 때의 경고 */
 const INSUFFICIENT_CASH_WARNING =
   "고정 부대비용(법무비·이사비)만으로도 보유 현금을 초과합니다.";
@@ -54,13 +69,10 @@ export function calcAffordablePrice(
   const cash = calcAvailableCash(profile);
 
   if (ownFundsRequired(0, profile, rules) > cash.amount) {
-    return {
-      affordablePrice: 0,
-      loanLimit: loanAt(0, profile, rules),
-      costs: calcAcquisitionCosts(0, profile, rules),
-      availableCash: cash.amount,
-      warnings: [...cash.warnings, INSUFFICIENT_CASH_WARNING],
-    };
+    return resultAt(0, profile, rules, cash.amount, [
+      ...cash.warnings,
+      INSUFFICIENT_CASH_WARNING,
+    ]);
   }
 
   let affordablePrice = 0;
@@ -71,12 +83,30 @@ export function calcAffordablePrice(
     }
   }
 
-  return {
+  return resultAt(
     affordablePrice,
-    loanLimit: loanAt(affordablePrice, profile, rules),
-    costs: calcAcquisitionCosts(affordablePrice, profile, rules),
-    availableCash: cash.amount,
-    warnings: cash.warnings,
+    profile,
+    rules,
+    cash.amount,
+    cash.warnings,
+  );
+}
+
+/** 확정된 매매가를 기준으로 결과 객체를 한 번에 조립한다 */
+function resultAt(
+  price: number,
+  profile: BuyerProfile,
+  rules: Rules,
+  availableCash: number,
+  warnings: string[],
+): AffordableResult {
+  return {
+    affordablePrice: price,
+    loanLimit: calcMaxLoan(profile, rules, price),
+    costs: calcAcquisitionCosts(price, profile, rules),
+    availableCash,
+    matchedPolicyLoans: matchPolicyLoans(profile, rules, price),
+    warnings,
   };
 }
 
@@ -151,37 +181,17 @@ function searchSegment(
   return candidate;
 }
 
-/** 해당 매매가에서 사용자가 현금으로 내야 하는 총액 */
+/**
+ * 해당 매매가에서 사용자가 현금으로 내야 하는 총액.
+ * 정책대출 한도는 calcMaxLoan이 가격에서 직접 도출하므로, 탐색 중에
+ * 별도로 넘겨줄 값이 없다 — 엔진 안팎이 같은 숫자를 쓰게 된다.
+ */
 function ownFundsRequired(
   price: number,
   profile: BuyerProfile,
   rules: Rules,
 ): number {
-  const loan = loanAt(price, profile, rules);
+  const loan = calcMaxLoan(profile, rules, price);
   const costs = calcAcquisitionCosts(price, profile, rules);
   return price - loan.amount + costs.total;
-}
-
-function loanAt(
-  price: number,
-  profile: BuyerProfile,
-  rules: Rules,
-): LoanLimit {
-  const policyLimit = policyLimitAt(price, profile, rules);
-  return calcMaxLoan(profile, rules, price, policyLimit);
-}
-
-/**
- * 자격이 되는 정책대출 중 가장 큰 한도.
- * 자격 상품이 없으면 정책대출이라는 선택지가 없는 것이므로 0을 반환한다
- * (LoanLimit.breakdown 문서 참고).
- */
-function policyLimitAt(
-  price: number,
-  profile: BuyerProfile,
-  rules: Rules,
-): number {
-  const matched = matchPolicyLoans(profile, rules, price);
-  if (matched.length === 0) return NO_POLICY_LIMIT;
-  return Math.max(...matched.map((loan) => loan.maxAmount));
 }
