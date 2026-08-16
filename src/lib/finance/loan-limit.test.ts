@@ -1,0 +1,118 @@
+import { describe, expect, it } from "vitest";
+import rawRules from "../../../rules/2026-03.json";
+import { calcMaxLoan } from "./loan-limit";
+import { parseRules } from "./rules";
+import type { BuyerProfile } from "./types";
+
+const rules = parseRules(rawRules);
+
+function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
+  return {
+    status: "무주택",
+    cash: 200_000_000,
+    annualIncome: 100_000_000,
+    existingDebtAnnualPayment: 0,
+    isFirstTimeBuyer: false,
+    exclusiveAreaSqm: 84,
+    ...overrides,
+  };
+}
+
+describe("calcMaxLoan", () => {
+  it("고소득·저가주택이면 LTV에 걸린다", () => {
+    const result = calcMaxLoan(profile(), rules, 300_000_000);
+    expect(result.binding).toBe("LTV");
+    expect(result.amount).toBe(210_000_000);
+  });
+
+  it("생애최초는 LTV 80%가 적용된다", () => {
+    const result = calcMaxLoan(
+      profile({ isFirstTimeBuyer: true }),
+      rules,
+      300_000_000,
+    );
+    expect(result.amount).toBe(240_000_000);
+  });
+
+  it("소득이 낮으면 DSR에 걸린다", () => {
+    const result = calcMaxLoan(
+      profile({ annualIncome: 40_000_000 }),
+      rules,
+      1_000_000_000,
+    );
+    expect(result.binding).toBe("DSR");
+  });
+
+  it("고가주택·고소득이면 6억 절대캡에 걸린다", () => {
+    const result = calcMaxLoan(
+      profile({ annualIncome: 300_000_000 }),
+      rules,
+      1_500_000_000,
+    );
+    expect(result.binding).toBe("CAP");
+    expect(result.amount).toBe(600_000_000);
+  });
+
+  it("정책대출 한도가 가장 작으면 POLICY에 걸린다", () => {
+    const result = calcMaxLoan(profile(), rules, 300_000_000, 100_000_000);
+    expect(result.binding).toBe("POLICY");
+    expect(result.amount).toBe(100_000_000);
+  });
+
+  it("DSR 계산에 스트레스 가산금리를 적용한다", () => {
+    const stressed = calcMaxLoan(
+      profile({ annualIncome: 40_000_000 }),
+      rules,
+      1_000_000_000,
+    );
+    const noStress = calcMaxLoan(
+      profile({ annualIncome: 40_000_000 }),
+      { ...rules, stressDSR: { stage: 0, surcharge: 0 } },
+      1_000_000_000,
+    );
+    expect(stressed.amount).toBeLessThan(noStress.amount);
+  });
+
+  it("기존 부채가 DSR 여력을 잠식한다", () => {
+    const clean = calcMaxLoan(
+      profile({ annualIncome: 50_000_000 }),
+      rules,
+      1_000_000_000,
+    );
+    const indebted = calcMaxLoan(
+      profile({ annualIncome: 50_000_000, existingDebtAnnualPayment: 10_000_000 }),
+      rules,
+      1_000_000_000,
+    );
+    expect(indebted.amount).toBeLessThan(clean.amount);
+  });
+
+  it("기존 부채가 소득 한도를 이미 넘으면 대출이 0이다", () => {
+    const result = calcMaxLoan(
+      profile({ annualIncome: 50_000_000, existingDebtAnnualPayment: 30_000_000 }),
+      rules,
+      500_000_000,
+    );
+    expect(result.amount).toBe(0);
+    expect(result.binding).toBe("DSR");
+  });
+
+  it("모든 제약의 한도를 breakdown에 담는다", () => {
+    const result = calcMaxLoan(profile(), rules, 300_000_000);
+    expect(Object.keys(result.breakdown).sort()).toEqual([
+      "CAP",
+      "DSR",
+      "LTV",
+      "POLICY",
+    ]);
+  });
+
+  it("반환 금액은 정수다", () => {
+    const result = calcMaxLoan(
+      profile({ annualIncome: 63_000_000 }),
+      rules,
+      777_000_000,
+    );
+    expect(Number.isInteger(result.amount)).toBe(true);
+  });
+});
