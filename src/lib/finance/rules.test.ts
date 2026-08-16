@@ -184,4 +184,41 @@ describe("parseRules", () => {
       /policyLoans\[0\]\.eligibility\.maxAnnualIncome/,
     );
   });
+
+  // 모르는 키를 통과시키면 isEligible이 그 조건을 무시한다.
+  // 실제로 관측된 실패: 신생아특례를 { minChildren: 1 }로 추가하면
+  // 룰셋 파싱도 테스트도 전부 통과한 채 무자녀 구매자에게 매칭되었다.
+  it("엔진이 모르는 eligibility 키는 전체 경로를 알려주며 실패한다", () => {
+    const policyLoans = rawRules.policyLoans as Array<Record<string, unknown>>;
+    const first = policyLoans[0]!;
+    const eligibility = first.eligibility as Record<string, unknown>;
+    const broken = {
+      ...rawRules,
+      policyLoans: [
+        { ...first, eligibility: { ...eligibility, minChildren: 1 } },
+        ...policyLoans.slice(1),
+      ],
+    };
+    expect(() => parseRules(broken)).toThrow(
+      /policyLoans\[0\]\.eligibility\.minChildren/,
+    );
+  });
+
+  // 오타는 조건을 통째로 없앤다(maxAnnualIncomes는 소득 상한이 아니다)
+  it("오타난 eligibility 키도 전체 경로를 알려주며 실패한다", () => {
+    const policyLoans = rawRules.policyLoans as Array<Record<string, unknown>>;
+    const first = policyLoans[0]!;
+    const eligibility = first.eligibility as Record<string, unknown>;
+    const { maxAnnualIncome: income, ...rest } = eligibility;
+    const broken = {
+      ...rawRules,
+      policyLoans: [
+        { ...first, eligibility: { ...rest, maxAnnualIncomes: income } },
+        ...policyLoans.slice(1),
+      ],
+    };
+    expect(() => parseRules(broken)).toThrow(
+      /policyLoans\[0\]\.eligibility\.maxAnnualIncomes/,
+    );
+  });
 });

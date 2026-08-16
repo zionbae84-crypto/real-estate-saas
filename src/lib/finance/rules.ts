@@ -1,4 +1,4 @@
-import type { Rules } from "./types";
+import type { PolicyLoanRule, Rules } from "./types";
 
 const REQUIRED_NUMBER_FIELDS = [
   "baseRate",
@@ -29,17 +29,28 @@ const ACQUISITION_TAX_NUMBER_FIELDS = [
   "firstTimeBuyerReliefPriceCap",
 ] as const;
 
-/** eligibility의 boolean 필드. 존재할 때만 타입을 검사한다 (모두 선택적) */
-const ELIGIBILITY_BOOLEAN_FIELDS = [
-  "requiresNoHome",
-  "requiresFirstTimeBuyer",
-] as const;
-/** eligibility의 number 필드. 존재할 때만 타입을 검사한다 (모두 선택적) */
-const ELIGIBILITY_NUMBER_FIELDS = [
-  "maxAnnualIncome",
-  "maxHousePrice",
-  "maxAreaSqm",
-] as const;
+/**
+ * 엔진이 실제로 평가할 줄 아는 eligibility 조건의 전부.
+ *
+ * 이 목록이 곧 화이트리스트다. 여기에 없는 키는 isEligible이 무시하므로,
+ * 통과시키면 "조건이 있는 척하지만 아무나 통과하는" 정책대출 상품이
+ * 만들어진다(예: `{ minChildren: 1 }`이 무자녀 구매자에게도 매칭). 오타
+ * 하나(`maxAnnualIncomes`)로 소득 상한이 통째로 사라지는 것도 같은 경로다.
+ *
+ * 조건을 추가할 때 손댈 곳은 이 상수 하나와 policy-loans.ts의 평가 로직뿐이다.
+ * Record의 키가 PolicyLoanRule["eligibility"]에 묶여 있어, 타입에 필드를
+ * 추가하면 여기도 채우도록 컴파일러가 강제한다.
+ */
+const ELIGIBILITY_FIELD_TYPES: Record<
+  keyof PolicyLoanRule["eligibility"],
+  "boolean" | "number"
+> = {
+  requiresNoHome: "boolean",
+  requiresFirstTimeBuyer: "boolean",
+  maxAnnualIncome: "number",
+  maxHousePrice: "number",
+  maxAreaSqm: "number",
+};
 
 /**
  * 룰셋 JSON을 검증해 Rules로 변환한다.
@@ -144,20 +155,30 @@ function validatePolicyLoan(item: unknown, index: number): void {
   validateEligibility(eligibility, `${path}.eligibility`);
 }
 
-/** eligibility의 모든 키는 선택적이다. 존재하는 키만 타입을 검사한다 */
+/**
+ * eligibility의 모든 키는 선택적이다. 존재하는 키만 타입을 검사하되,
+ * 엔진이 모르는 키는 조용히 무시되면 안 되므로 즉시 실패시킨다.
+ */
 function validateEligibility(
   eligibility: Record<string, unknown>,
   path: string,
 ): void {
-  for (const key of ELIGIBILITY_BOOLEAN_FIELDS) {
-    const value = eligibility[key];
-    if (value !== undefined && typeof value !== "boolean") {
-      throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}.${key}`);
+  for (const key of Object.keys(eligibility)) {
+    if (!(key in ELIGIBILITY_FIELD_TYPES)) {
+      throw new Error(
+        `엔진이 알지 못하는 정책대출 조건입니다(무시되면 조건 없는 상품이 됩니다): ${path}.${key}`,
+      );
     }
   }
-  for (const key of ELIGIBILITY_NUMBER_FIELDS) {
+
+  for (const [key, expected] of Object.entries(ELIGIBILITY_FIELD_TYPES)) {
     const value = eligibility[key];
-    if (value !== undefined && !Number.isFinite(value)) {
+    if (value === undefined) continue;
+    const ok =
+      expected === "boolean"
+        ? typeof value === "boolean"
+        : Number.isFinite(value);
+    if (!ok) {
       throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}.${key}`);
     }
   }
