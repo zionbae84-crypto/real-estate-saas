@@ -40,17 +40,31 @@ export type BindingConstraint = "LTV" | "DSR" | "CAP" | "POLICY";
 
 /** 대출 한도 계산 결과 */
 export interface LoanLimit {
-  /** 최종 대출 가능액(원). max( min(LTV, DSR, CAP), POLICY ) */
+  /**
+   * 최종 대출 가능액(원).
+   * max( min(LTV, DSR@시중금리, CAP), POLICY )
+   */
   amount: number;
   /** 어느 제약이 이 금액을 만들었는가 */
   binding: BindingConstraint;
   /**
    * 각 제약별 한도(원, 정수). 사용자에게 근거를 보여줄 때 쓴다.
    *
-   * LTV·DSR·CAP은 은행 경로의 상한이고, POLICY는 정책대출을 택했을 때의
-   * 한도다. 자격이 되는 정책대출 상품이 없으면 POLICY는 **0**이며,
-   * 이는 "정책대출이라는 선택지 자체가 없음"을 뜻한다(최대값 의미론에서
-   * 0은 어떤 은행 한도도 이기지 못하므로 자연스러운 부재 표현이다).
+   * LTV·DSR·CAP은 은행 경로의 상한이다(DSR은 시중금리 기준).
+   *
+   * POLICY는 정책대출을 택했을 때 **실제로 받을 수 있는** 한도이지, 상품
+   * 고시 한도(`PolicyLoanRule.maxAmount`)가 아니다. 정책대출도 상환능력과
+   * 담보가치의 제약을 받으므로, 자격 상품마다
+   * `min(maxAmount, LTV한도, DSR한도@상품금리)`를 구한 뒤 그중 최대값이
+   * 들어간다. DSR을 상품 금리로 계산하는 이유는 정책대출의 혜택이 심사
+   * 면제가 아니라 낮은 금리이기 때문이다 — 금리가 낮으면 같은 원금의 월
+   * 상환액이 작아 상환능력 기준 한도가 정당하게 더 크다.
+   *
+   * 따라서 `POLICY <= max(자격 상품들의 maxAmount)`가 항상 성립하며,
+   * 자격 상품이 있어도 소득이 없으면 POLICY는 0이 될 수 있다.
+   * 자격이 되는 정책대출 상품이 아예 없을 때도 POLICY는 **0**이며, 이는
+   * "정책대출이라는 선택지 자체가 없음"을 뜻한다(최대값 의미론에서 0은
+   * 어떤 은행 한도도 이기지 못하므로 자연스러운 부재 표현이다).
    * 모든 값은 유한한 정수이며 Infinity가 들어가지 않는다.
    */
   breakdown: Record<BindingConstraint, number>;

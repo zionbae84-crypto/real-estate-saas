@@ -103,6 +103,13 @@ describe("통합: 실구매력 → 안전성 등급", () => {
     );
   });
 
+  // 단언 변경(2026-08-17, 정책 경로에 DSR·LTV 제약 도입): 이전에는
+  // `max(matchedPolicyLoans.maxAmount) === breakdown.POLICY`를 요구했다.
+  // 이제 breakdown.POLICY는 상품 고시 한도가 아니라 상환능력·담보가치까지
+  // 반영한 "실제로 받을 수 있는" 정책 한도이므로 그 등식은 성립하지 않는다
+  // (예: 연소득 5천만·현금 2.2억은 고시 360,000,000 → 실제 287,158,070).
+  // 남는 계약은 두 가지다: 고시 한도를 넘지 않는다는 상한 관계와,
+  // 자격 상품이 없으면 정확히 0이라는 부재 표현.
   it.each(buyers)(
     "결과에 실린 정책대출 목록이 그 가격에서 실제로 자격이 되는 상품이다: %s",
     (_label, p) => {
@@ -111,8 +118,10 @@ describe("통합: 실구매력 → 안전성 등급", () => {
         (max, loan) => Math.max(max, loan.maxAmount),
         0,
       );
-      // UI가 다시 도출할 필요 없이, breakdown.POLICY와 같은 숫자여야 한다
-      expect(policyMax).toBe(result.loanLimit.breakdown.POLICY);
+      expect(result.loanLimit.breakdown.POLICY).toBeLessThanOrEqual(policyMax);
+      if (result.matchedPolicyLoans.length === 0) {
+        expect(result.loanLimit.breakdown.POLICY).toBe(0);
+      }
     },
   );
 });
@@ -140,8 +149,15 @@ describe("통합: 룰셋 데이터 변경이 결과에 반영된다", () => {
     policyLoans: [...rules.policyLoans, 신생아특례],
   };
 
+  // 프로필 변경(2026-08-17, 정책 경로에 DSR·LTV 제약 도입): 이전 구매자
+  // (현금 2억 · 연소득 9천만)는 은행 경로가 LTV에 걸려 있었다. 정책 경로도
+  // 같은 LTV를 쓰게 된 지금, LTV에 걸린 구매자에게는 어떤 정책 상품도
+  // 도움이 될 수 없다(before·after 모두 624,600,000 · binding LTV).
+  // 상품 추가가 관측 가능한 효과를 내려면 은행 경로가 DSR에 걸려야 한다.
+  // 현금 3억 · 연소득 6천만: before 631,500,000(DSR 344,589,684) →
+  // after 701,100,000(POLICY 418,922,480 = 신생아특례 2.5%의 DSR 한도).
   it("자격이 되는 구매자는 상품이 늘면 실구매력이 커진다", () => {
-    const buyer = profile({ cash: 200_000_000, annualIncome: 90_000_000 });
+    const buyer = profile({ cash: 300_000_000, annualIncome: 60_000_000 });
 
     const before = calcAffordablePrice(buyer, rules);
     const after = calcAffordablePrice(buyer, withExtraProduct);
