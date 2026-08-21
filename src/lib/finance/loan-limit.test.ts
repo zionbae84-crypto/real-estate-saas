@@ -424,3 +424,50 @@ describe("calcPolicyLoanAvailability", () => {
     expect(entries).toEqual([]);
   });
 });
+
+/**
+ * 결함(코드 리뷰 발견): assertValidProfile은 profile을 검증하지만 price는
+ * 공개 경계에서 그대로 흘러들어갔다. assertNoNaN이 NaN은 잡아도
+ * Infinity는 NaN이 아니므로 통과시킨다.
+ *
+ * 실측: calcMaxLoan(profile, rules, Infinity)는 예외 없이
+ * { amount: 574,316,140, binding: "DSR" } 같은 자신만만한 숫자를
+ * 반환했다. price: -1은 breakdown.LTV가 음수인 답을 낳았다.
+ * 이 제품의 정체성("빌릴 수 없다고 말해야 할 때 말한다")과 정반대
+ * 방향의 오답이므로, price도 profile과 동일한 기준(유한·비음수)으로
+ * 경계에서 끊는다.
+ */
+describe("calcMaxLoan — price 경계 검증", () => {
+  it.each([Infinity, -Infinity, -1, NaN])(
+    "price가 %s이면 예외를 던진다",
+    (price) => {
+      expect(() => calcMaxLoan(profile(), rules, price)).toThrow(RangeError);
+      expect(() => calcMaxLoan(profile(), rules, price)).toThrow(/price/);
+    },
+  );
+
+  it("정상적인 price는 그대로 통과한다", () => {
+    expect(() => calcMaxLoan(profile(), rules, 500_000_000)).not.toThrow();
+    expect(() => calcMaxLoan(profile(), rules, 0)).not.toThrow();
+  });
+});
+
+describe("calcPolicyLimit — price 경계 검증", () => {
+  it.each([Infinity, -Infinity, -1, NaN])(
+    "price가 %s이면 예외를 던진다",
+    (price) => {
+      expect(() => calcPolicyLimit(profile(), rules, price)).toThrow(
+        RangeError,
+      );
+      expect(() => calcPolicyLimit(profile(), rules, price)).toThrow(
+        /price/,
+      );
+    },
+  );
+
+  it("정상적인 price는 그대로 통과한다", () => {
+    expect(() =>
+      calcPolicyLimit(profile(), rules, 500_000_000),
+    ).not.toThrow();
+  });
+});

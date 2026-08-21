@@ -377,6 +377,38 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     const result = calcAffordablePrice(buyer, fixtureRules);
     expect(result.affordablePrice).toBe(boundary);
   });
+
+  // 결함(코드 리뷰 발견): 참 임계값 T*가 구간 "내부"에서 정확히
+  // PRICE_STEP의 배수와 일치할 때, 이분 탐색의 low는 부동소수점 오차로
+  // T* 바로 아래에서 수렴한다. floor(low / PRICE_STEP) * PRICE_STEP은
+  // 그 순간 n-1단계로 내려가 결과가 T* - PRICE_STEP이 되어 버린다.
+  // segHigh 후보는 "구간 상단이 정답인" 경우만 구제하므로, 구간 내부의
+  // 같은 사각은 구제되지 않았다. cash를 ownFundsAt(T)로 정확히 맞춰
+  // T 자체가 임계값이 되도록 픽스처를 구성한다.
+  it.each([
+    [300_000_000, profile({ annualIncome: 80_000_000 })],
+    [
+      200_000_000,
+      profile({ annualIncome: 60_000_000, isFirstTimeBuyer: true }),
+    ],
+    [450_000_000, profile({ annualIncome: 120_000_000 })],
+    [750_000_000, profile({ annualIncome: 300_000_000 })],
+  ] as Array<[number, BuyerProfile]>)(
+    "T=%i가 구간 내부의 정확한 그리드 경계일 때 T-PRICE_STEP이 아니라 T를 반환한다",
+    (T, p) => {
+      const requiredCash = ownFundsAt(T, p, rules);
+      const buyer = { ...p, cash: requiredCash };
+
+      // 전제 확인: T가 실제 임계값이며(한 스텝 위는 예산 초과), 구간
+      // 상단이 아니라 내부에 있다(SEARCH_UPPER_BOUND나 절벽 경계가 아님).
+      expect(
+        ownFundsAt(T + PRICE_STEP, buyer, rules),
+      ).toBeGreaterThan(requiredCash);
+
+      const result = calcAffordablePrice(buyer, rules);
+      expect(result.affordablePrice).toBe(T);
+    },
+  );
 });
 
 /**

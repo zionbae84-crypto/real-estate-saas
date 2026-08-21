@@ -304,7 +304,7 @@ function validateEligibility(
   path: string,
 ): void {
   for (const key of Object.keys(eligibility)) {
-    if (!(key in ELIGIBILITY_FIELD_TYPES)) {
+    if (!Object.hasOwn(ELIGIBILITY_FIELD_TYPES, key)) {
       throw new Error(
         `엔진이 알지 못하는 정책대출 조건입니다(무시되면 조건 없는 상품이 됩니다): ${path}.${key}`,
       );

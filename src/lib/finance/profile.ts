@@ -43,15 +43,21 @@ export function assertValidProfile(profile: BuyerProfile): void {
   }
 }
 
-function assertNonNegativeFinite(value: number, path: string): void {
+/**
+ * 값이 유한하고 0 이상인 숫자인지 검사하는 공용 헬퍼.
+ *
+ * 프로필 필드 검증에서 시작했지만 이름이 뜻하는 성질 자체(유한·비음수)는
+ * 프로필에 국한되지 않는다 — calcMaxLoan 등 공개 진입점의 price 인자도
+ * 같은 성질을 요구하므로(loan-limit.ts, acquisition-cost.ts 참고),
+ * 같은 검사를 복제하는 대신 이 헬퍼를 그대로 재사용한다.
+ */
+export function assertNonNegativeFinite(value: number, path: string): void {
   if (!Number.isFinite(value)) {
     throw new RangeError(
-      `프로필 필드가 유효한 숫자가 아닙니다: ${path} (${String(value)})`,
+      `유효한 숫자가 아닙니다: ${path} (${String(value)})`,
     );
   }
   if (value < 0) {
-    throw new RangeError(
-      `프로필 필드는 0 이상이어야 합니다: ${path} (${String(value)})`,
-    );
+    throw new RangeError(`0 이상이어야 합니다: ${path} (${String(value)})`);
   }
 }

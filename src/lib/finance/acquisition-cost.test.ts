@@ -159,3 +159,29 @@ describe("calcAcquisitionCosts", () => {
     );
   });
 });
+
+/**
+ * 결함(코드 리뷰 발견): price가 검증 없이 흘러들어가, price: -1이
+ * calcAcquisitionCosts에서 음수 중개보수를 만들어냈다. price는 profile과
+ * 동일한 기준(유한·비음수)으로 공개 경계에서 검증되어야 한다.
+ */
+describe("calcAcquisitionCosts — price 경계 검증", () => {
+  it.each([Infinity, -Infinity, -1, NaN])(
+    "price가 %s이면 예외를 던진다",
+    (price) => {
+      expect(() => calcAcquisitionCosts(price, profile(), rules)).toThrow(
+        RangeError,
+      );
+      expect(() => calcAcquisitionCosts(price, profile(), rules)).toThrow(
+        /price/,
+      );
+    },
+  );
+
+  it("정상적인 price는 그대로 통과한다", () => {
+    expect(() =>
+      calcAcquisitionCosts(500_000_000, profile(), rules),
+    ).not.toThrow();
+    expect(() => calcAcquisitionCosts(0, profile(), rules)).not.toThrow();
+  });
+});

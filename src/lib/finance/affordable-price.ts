@@ -180,8 +180,15 @@ function searchSegment(
   // 감당할 수 있어도 low는 segHigh에 무한히 가까워질 뿐 도달하지 못한다.
   // 그대로 내림하면 답이 한 스텝(PRICE_STEP) 낮게 나온다 — 구간 상단
   // 자체도 후보로 함께 검증한다.
+  //
+  // 같은 이유로, 참 임계값이 구간 "내부"에서 정확히 PRICE_STEP의 배수와
+  // 일치할 때도 low는 부동소수점 오차로 그 값 바로 아래에서 수렴한다.
+  // floored는 그 순간 한 단계 아래로 내려가므로, floored + PRICE_STEP도
+  // 후보에 넣어 같은 사각을 구제한다.
+  const floored = Math.floor(low / PRICE_STEP) * PRICE_STEP;
   const candidates = [
-    Math.floor(low / PRICE_STEP) * PRICE_STEP,
+    floored,
+    floored + PRICE_STEP,
     Math.floor(segHigh / PRICE_STEP) * PRICE_STEP,
   ];
 

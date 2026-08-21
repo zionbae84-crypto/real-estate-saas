@@ -232,6 +232,32 @@ describe("parseRules", () => {
       /policyLoans\[0\]\.eligibility\.maxAnnualIncomes/,
     );
   });
+
+  // 결함(코드 리뷰 발견): `key in ELIGIBILITY_FIELD_TYPES`는 프로토타입
+  // 체인을 타므로 toString·constructor 같은 Object.prototype의 이름이
+  // "알려진 키"로 오인된다. 뒤이은 타입 검사 루프는 own key만 순회하므로
+  // 이런 키는 타입 검사도 받지 않고 조용히 통과한 뒤 isEligible에서
+  // 무시된다 — 화이트리스트가 막으려는 바로 그 상황이다.
+  it.each(["toString", "constructor", "valueOf", "hasOwnProperty"])(
+    "Object.prototype에 있는 이름(%s)도 알지 못하는 키로 실패한다",
+    (key) => {
+      const policyLoans = rawRules.policyLoans as Array<
+        Record<string, unknown>
+      >;
+      const first = policyLoans[0]!;
+      const eligibility = first.eligibility as Record<string, unknown>;
+      const broken = {
+        ...rawRules,
+        policyLoans: [
+          { ...first, eligibility: { ...eligibility, [key]: 1 } },
+          ...policyLoans.slice(1),
+        ],
+      };
+      expect(() => parseRules(broken)).toThrow(
+        new RegExp(`policyLoans\\[0\\]\\.eligibility\\.${key}`),
+      );
+    },
+  );
 });
 
 // 타입은 맞지만 말이 안 되는 값들. 룰셋은 사람이 손으로 고치는 데이터이므로,

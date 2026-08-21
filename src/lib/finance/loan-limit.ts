@@ -1,6 +1,6 @@
 import { maxPrincipal } from "./amortization";
 import { matchPolicyLoans } from "./policy-loans";
-import { assertValidProfile } from "./profile";
+import { assertNonNegativeFinite, assertValidProfile } from "./profile";
 import type {
   BindingConstraint,
   BuyerProfile,
@@ -92,6 +92,7 @@ export function calcPolicyLimit(
   rules: Rules,
   price: number,
 ): number {
+  assertNonNegativeFinite(price, "price");
   const entries = calcPolicyLoanAvailability(profile, rules, price);
 
   let best = NO_POLICY_LIMIT;
@@ -131,6 +132,7 @@ export function calcMaxLoan(
   price: number,
 ): LoanLimit {
   assertValidProfile(profile);
+  assertNonNegativeFinite(price, "price");
   const policyLimit = calcPolicyLimit(profile, rules, price);
 
   const breakdown: Record<BindingConstraint, number> = {

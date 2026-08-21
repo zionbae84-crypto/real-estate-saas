@@ -1,3 +1,4 @@
+import { assertNonNegativeFinite } from "./profile";
 import type { BuyerProfile, CostBreakdown, Rules } from "./types";
 
 /**
@@ -9,6 +10,7 @@ export function calcAcquisitionCosts(
   profile: BuyerProfile,
   rules: Rules,
 ): CostBreakdown {
+  assertNonNegativeFinite(price, "price");
   const acquisitionTax = calcAcquisitionTax(price, profile, rules);
   const brokerageFee = calcBrokerageFee(price, rules);
   // 룰셋의 정액 항목은 소수일 수 있다. 반환 금액은 모두 정수 원이라는
