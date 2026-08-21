@@ -93,4 +93,17 @@ describe("calcAvailableCash", () => {
       "기존 주택 정보가 없어 매도 대금이 반영되지 않았습니다.",
     );
   });
+
+  // 코드 리뷰 결함: calcAvailableCash는 index.ts가 직접 export하는
+  // 진입점인데 assertValidProfile을 호출하지 않아, calcAffordablePrice를
+  // 거치지 않고 단독 호출하면 유효하지 않은 프로필(cash: NaN)이
+  // amount를 NaN으로 만든 채 조용히 반환했다.
+  it("유효하지 않은 프로필이면 계산 전에 실패한다", () => {
+    expect(() => calcAvailableCash(profile({ cash: NaN }))).toThrow(
+      RangeError,
+    );
+    expect(() => calcAvailableCash(profile({ annualIncome: -1 }))).toThrow(
+      RangeError,
+    );
+  });
 });

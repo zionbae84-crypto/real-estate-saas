@@ -1,3 +1,4 @@
+import { assertValidProfile } from "./profile";
 import type { BuyerProfile } from "./types";
 
 export interface AvailableCash {
@@ -13,8 +14,14 @@ export interface AvailableCash {
  *
  * 양도세는 보유·거주 기간, 조정지역, 일시적 2주택 등 변수가 과다해
  * 자동 계산하지 않는다. 사용자가 입력하지 않으면 경고로 알린다.
+ *
+ * index.ts가 직접 export하는 공개 진입점이므로 calcAffordablePrice를
+ * 거치지 않고도 단독으로 호출될 수 있다. assertValidProfile을 스스로
+ * 호출하지 않으면 유효하지 않은 프로필(NaN 등)이 amount를 NaN으로
+ * 만들고도 조용히 반환한다.
  */
 export function calcAvailableCash(profile: BuyerProfile): AvailableCash {
+  assertValidProfile(profile);
   const warnings: string[] = [];
 
   if (profile.status !== "갈아타기") {

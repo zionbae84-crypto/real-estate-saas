@@ -117,4 +117,29 @@ describe("calcSafetyScore", () => {
     expect(score.burdenRatio).toBe(Number.POSITIVE_INFINITY);
     expect(score.level).toBe("danger");
   });
+
+  // 코드 리뷰 결함: calcSafetyScore는 index.ts가 직접 export하는 진입점인데
+  // assertValidProfile을 호출하지 않아, calcAffordablePrice를 거치지 않고
+  // 단독 호출하면 유효하지 않은 프로필이 burdenRatio를 NaN으로 만든
+  // 채 조용히 반환했다. level은 danger로 떨어져 안전하지 않은 방향은
+  // 아니지만, burdenRatio는 추천 목록의 정렬 키(design §8: 상환부담률
+  // 오름차순)라 NaN이 섞이면 정렬이 조용히 뒤섞인다.
+  it("유효하지 않은 프로필이면 계산 전에 실패한다", () => {
+    expect(() =>
+      calcSafetyScore(profile({ annualIncome: NaN }), rules, 300_000_000),
+    ).toThrow(RangeError);
+    expect(() =>
+      calcSafetyScore(profile({ cash: -1 }), rules, 300_000_000),
+    ).toThrow(RangeError);
+  });
+
+  // amortization.ts의 monthlyPayment/maxPrincipal과 동일한 기준(0 이상의
+  // 유한수)을 loanAmount에도 적용한다.
+  it("loanAmount가 유한하지 않거나 음수면 실패한다", () => {
+    expect(() => calcSafetyScore(profile(), rules, NaN)).toThrow(RangeError);
+    expect(() =>
+      calcSafetyScore(profile(), rules, Number.POSITIVE_INFINITY),
+    ).toThrow(RangeError);
+    expect(() => calcSafetyScore(profile(), rules, -1)).toThrow(RangeError);
+  });
 });

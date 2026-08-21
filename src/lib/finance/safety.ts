@@ -1,4 +1,5 @@
 import { monthlyPayment } from "./amortization";
+import { assertValidProfile } from "./profile";
 import type { BuyerProfile, Rules, SafetyLevel, SafetyScore } from "./types";
 
 /**
@@ -12,12 +13,26 @@ import type { BuyerProfile, Rules, SafetyLevel, SafetyScore } from "./types";
  * loanAmount만 결과를 좌우해 자리 바꿔치기 사고를 부르는 모양이었다).
  *
  * 분모는 세전 월 소득이다 — SafetyScore.burdenRatio 문서 참고.
+ *
+ * 이 함수는 index.ts가 직접 export하는 공개 진입점이라 calcAffordablePrice를
+ * 거치지 않고도 호출될 수 있다(예: "이 매물을 이 구매자 기준으로 채점"하는
+ * UI 경로). assertValidProfile을 스스로 호출하지 않으면 유효하지 않은
+ * 프로필(NaN 등)이 burdenRatio를 NaN으로 만들고, level은 danger로
+ * 떨어져 안전하지 않은 방향은 아니지만 NaN이 정렬 키(design §8:
+ * 상환부담률 오름차순)로 쓰이면 추천 목록이 조용히 뒤섞인다.
  */
 export function calcSafetyScore(
   profile: BuyerProfile,
   rules: Rules,
   loanAmount: number,
 ): SafetyScore {
+  assertValidProfile(profile);
+  if (!Number.isFinite(loanAmount) || loanAmount < 0) {
+    // amortization.ts의 monthlyPayment/maxPrincipal과 동일한 기준(0 이상의
+    // 유한수)이다. 조용히 0으로 만들면 호출자의 계산 오류가 그대로 묻힌다.
+    throw new RangeError(`loanAmount는 0 이상의 유한수여야 합니다: ${loanAmount}`);
+  }
+
   const monthlyIncome = profile.annualIncome / 12;
   const existingMonthly = profile.existingDebtAnnualPayment / 12;
 
