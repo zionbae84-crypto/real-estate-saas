@@ -455,8 +455,18 @@ describe("calcAffordablePrice — 안전하지 않은 방향 스윕", () => {
         // 0원은 "이 조건으로는 살 수 없다"는 답이므로 안전한 방향이다.
         // 고정 부대비용(법무비·이사비)조차 못 내는 구매자는 여기로 떨어지며,
         // 이때 costs.total은 성사되지 않는 거래의 가상 비용이라 위 부등식의
-        // 대상이 아니다. 대신 엔진이 아무 대출도 권하지 않음을 못 박는다.
-        expect(result.loanLimit.amount, label).toBe(0);
+        // 대상이 아니다.
+        //
+        // (코드 리뷰 지적) 예전 단언 `expect(result.loanLimit.amount).toBe(0)`은
+        // price = 0에서 항상 참이다 — calcLtvLimit이 프로필과 무관하게
+        // 0 × rate = 0을 반환해 LTV가 항상 은행 경로 최소값을 만들기
+        // 때문이다. 즉 이 카브아웃 자체를 검증하지 못했다. 이 케이스가
+        // 실제로 뜻하는 바("그리드에서 가장 싼 가격조차 감당할 수 없다")를
+        // 직접 검증한다.
+        expect(
+          ownFundsAt(PRICE_STEP, p, rules),
+          label,
+        ).toBeGreaterThan(result.availableCash);
       }
     }
   });

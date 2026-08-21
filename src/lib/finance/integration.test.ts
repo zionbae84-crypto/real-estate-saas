@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import rawRules from "../../../rules/2026-03.json";
 import { calcAffordablePrice } from "./affordable-price";
-import { calcMaxLoan } from "./loan-limit";
+import { calcMaxLoan, calcPolicyLimit } from "./loan-limit";
 import { parseRules } from "./rules";
 import { calcSafetyScore } from "./safety";
 import type { BuyerProfile, PolicyLoanRule, Rules, SafetyLevel } from "./types";
@@ -123,6 +123,20 @@ describe("통합: 실구매력 → 안전성 등급", () => {
       expect(result.loanLimit.breakdown.POLICY).toBe(policyMax);
       if (result.matchedPolicyLoans.length === 0) {
         expect(result.loanLimit.breakdown.POLICY).toBe(0);
+      }
+
+      // (코드 리뷰 지적) 위 두 단언은 matchedPolicyLoans와 breakdown.POLICY가
+      // 둘 다 같은 calcPolicyLoanAvailability 호출 경로를 공유하므로,
+      // 그 경로 자체가 죽어 항상 0을 반환해도 자기 자신과는 일치해
+      // 조용히 통과한다 — "정책 경로가 죽었다"는 실패 양상을 잡지 못한다.
+      // calcPolicyLimit을 독립적으로 다시 호출해 오라클로 삼고, 자격
+      // 상품이 있고 소득이 있으면 실제로 양수가 나옴을 단언해 그 사각을
+      // 메운다.
+      expect(result.loanLimit.breakdown.POLICY).toBe(
+        calcPolicyLimit(p, rules, result.affordablePrice),
+      );
+      if (result.matchedPolicyLoans.length > 0 && p.annualIncome > 0) {
+        expect(result.loanLimit.breakdown.POLICY).toBeGreaterThan(0);
       }
     },
   );
