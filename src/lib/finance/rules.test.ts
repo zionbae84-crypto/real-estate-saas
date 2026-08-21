@@ -297,4 +297,146 @@ describe("parseRules — 의미 불변식", () => {
   it("실제 룰셋은 모든 불변식을 만족한다", () => {
     expect(() => parseRules(rawRules)).not.toThrow();
   });
+
+  // 코드 리뷰 결함: 금리·가산금리·수수료·세율 등 대부분의 필드가 부호·범위
+  // 검사 없이 통과했다. 음수 가산금리(스트레스가 한도를 오히려 늘림),
+  // 음수 수수료율(원가를 깎음) 같은 손으로 친 오타가 조용히 파싱을
+  // 통과해 안전하지 않은 방향(더 많이 빌릴 수 있다)으로 답을 부풀렸다.
+  it.each([
+    ["stressDSR.surcharge", { stressDSR: { ...rawRules.stressDSR, surcharge: -0.015 } }],
+    ["safetyStressSurcharge", { safetyStressSurcharge: -0.02 }],
+    ["absoluteCap", { absoluteCap: -1 }],
+    ["legalFee", { legalFee: -1 }],
+    ["movingCost", { movingCost: -1 }],
+    [
+      "acquisitionTax.lowRate",
+      { acquisitionTax: { ...rawRules.acquisitionTax, lowRate: -1 } },
+    ],
+    [
+      "acquisitionTax.highRate",
+      { acquisitionTax: { ...rawRules.acquisitionTax, highRate: -1 } },
+    ],
+    [
+      "acquisitionTax.localEducationTaxRatio",
+      {
+        acquisitionTax: {
+          ...rawRules.acquisitionTax,
+          localEducationTaxRatio: -1,
+        },
+      },
+    ],
+    [
+      "acquisitionTax.ruralTaxRate",
+      { acquisitionTax: { ...rawRules.acquisitionTax, ruralTaxRate: -1 } },
+    ],
+    [
+      "acquisitionTax.firstTimeBuyerReliefCap",
+      {
+        acquisitionTax: {
+          ...rawRules.acquisitionTax,
+          firstTimeBuyerReliefCap: -1,
+        },
+      },
+    ],
+    [
+      "acquisitionTax.firstTimeBuyerReliefPriceCap",
+      {
+        acquisitionTax: {
+          ...rawRules.acquisitionTax,
+          firstTimeBuyerReliefPriceCap: -1,
+        },
+      },
+    ],
+    [
+      "acquisitionTax.ruralTaxAreaThresholdSqm",
+      {
+        acquisitionTax: {
+          ...rawRules.acquisitionTax,
+          ruralTaxAreaThresholdSqm: -1,
+        },
+      },
+    ],
+  ])("음수 불가 필드 %s가 음수면 실패한다", (path, override) => {
+    expect(() => parseRules({ ...rawRules, ...override })).toThrow(
+      new RegExp(path.replace(".", "\\.")),
+    );
+  });
+
+  it("brokerageFee[i].rate가 음수면 인덱스를 알려주며 실패한다", () => {
+    const broken = {
+      ...rawRules,
+      brokerageFee: rawRules.brokerageFee.map((bracket, index) =>
+        index === 2 ? { ...bracket, rate: -0.004 } : bracket,
+      ),
+    };
+    expect(() => parseRules(broken)).toThrow(/brokerageFee\[2\]\.rate/);
+  });
+
+  it("brokerageFee[i].cap이 음수면 인덱스를 알려주며 실패한다", () => {
+    const broken = {
+      ...rawRules,
+      brokerageFee: rawRules.brokerageFee.map((bracket, index) =>
+        index === 0 ? { ...bracket, cap: -1 } : bracket,
+      ),
+    };
+    expect(() => parseRules(broken)).toThrow(/brokerageFee\[0\]\.cap/);
+  });
+
+  it.each([
+    ["baseRate", { baseRate: -0.01 }],
+    ["baseRate", { baseRate: 1 }],
+  ])("금리 필드 %s가 [0, 1) 밖이면 실패한다", (path, override) => {
+    expect(() => parseRules({ ...rawRules, ...override })).toThrow(
+      new RegExp(path),
+    );
+  });
+
+  it("policyLoans[i].rate가 음수면 인덱스를 알려주며 실패한다", () => {
+    const policyLoans = rawRules.policyLoans as Array<Record<string, unknown>>;
+    const first = policyLoans[0]!;
+    const broken = {
+      ...rawRules,
+      policyLoans: [{ ...first, rate: -0.032 }, ...policyLoans.slice(1)],
+    };
+    expect(() => parseRules(broken)).toThrow(/policyLoans\[0\]\.rate/);
+  });
+
+  it("policyLoans[i].rate가 1 이상이면 인덱스를 알려주며 실패한다", () => {
+    const policyLoans = rawRules.policyLoans as Array<Record<string, unknown>>;
+    const first = policyLoans[0]!;
+    const broken = {
+      ...rawRules,
+      policyLoans: [{ ...first, rate: 1 }, ...policyLoans.slice(1)],
+    };
+    expect(() => parseRules(broken)).toThrow(/policyLoans\[0\]\.rate/);
+  });
+
+  it("acquisitionTax.lowRate가 highRate보다 크면 실패한다", () => {
+    const broken = {
+      ...rawRules,
+      acquisitionTax: {
+        ...rawRules.acquisitionTax,
+        lowRate: 0.05,
+        highRate: 0.03,
+      },
+    };
+    expect(() => parseRules(broken)).toThrow(/acquisitionTax\.lowRate/);
+  });
+
+  // 정책대출 경로는 absoluteCap을 걸지 않는다. 그 예외는 상품 고시 한도가
+  // 캡보다 한참 아래라는 데이터 가정에 기대고 있으므로, 그 가정 자체를
+  // 파싱 시점에 강제한다. 이 값을 통과시키면 캡을 우회하는 9억짜리
+  // 정책대출이 조용히 만들어진다.
+  it("policyLoans[i].maxAmount가 absoluteCap을 넘으면 인덱스를 알려주며 실패한다", () => {
+    const policyLoans = rawRules.policyLoans as Array<Record<string, unknown>>;
+    const first = policyLoans[0]!;
+    const broken = {
+      ...rawRules,
+      policyLoans: [
+        { ...first, maxAmount: 900_000_000 },
+        ...policyLoans.slice(1),
+      ],
+    };
+    expect(() => parseRules(broken)).toThrow(/policyLoans\[0\]\.maxAmount/);
+  });
 });

@@ -125,6 +125,23 @@ function validateSemanticInvariants(rules: Rules): void {
       `룰셋 값 오류: acquisitionTax.lowerBound는 upperBound보다 작아야 합니다 (${t.lowerBound} / ${t.upperBound})`,
     );
   }
+  assertNonNegative(t.lowRate, "acquisitionTax.lowRate");
+  assertNonNegative(t.highRate, "acquisitionTax.highRate");
+  assertNonNegative(t.localEducationTaxRatio, "acquisitionTax.localEducationTaxRatio");
+  assertNonNegative(t.ruralTaxRate, "acquisitionTax.ruralTaxRate");
+  assertNonNegative(t.ruralTaxAreaThresholdSqm, "acquisitionTax.ruralTaxAreaThresholdSqm");
+  assertNonNegative(t.firstTimeBuyerReliefCap, "acquisitionTax.firstTimeBuyerReliefCap");
+  assertNonNegative(
+    t.firstTimeBuyerReliefPriceCap,
+    "acquisitionTax.firstTimeBuyerReliefPriceCap",
+  );
+  // 부호가 먼저 걸러진 뒤에야 대소 비교가 의미를 갖는다(음수 highRate는
+  // 위에서 이미 실패하므로, 이 비교는 두 값이 0 이상일 때만 도달한다).
+  if (!(t.lowRate <= t.highRate)) {
+    throw new Error(
+      `룰셋 값 오류: acquisitionTax.lowRate는 highRate 이하여야 합니다 (${t.lowRate} / ${t.highRate})`,
+    );
+  }
 
   const s = rules.safetyThreshold;
   if (!(s.safe <= s.caution)) {
@@ -137,22 +154,95 @@ function validateSemanticInvariants(rules: Rules): void {
   assertRatio(rules.ltv.firstTimeBuyer, "ltv.firstTimeBuyer");
   assertRatio(rules.dsrLimit, "dsrLimit");
 
+  // baseRate가 자릿수 하나만 빠져도(0.042 → 0.0042) DSR 한도가 몇 배로
+  // 뛴다. 이자율은 0(무이자)부터 시작할 수 있지만 100% 이상은 데이터
+  // 오류이므로 LTV·DSR과 대칭적인 [0, 1) 범위로 잡는다.
+  assertRate(rules.baseRate, "baseRate");
+
+  // 가산금리가 음수면 "스트레스"가 오히려 한도를 늘리는 방향으로 뒤집힌다.
+  assertNonNegative(rules.stressDSR.surcharge, "stressDSR.surcharge");
+  assertNonNegative(rules.safetyStressSurcharge, "safetyStressSurcharge");
+
+  assertNonNegative(rules.absoluteCap, "absoluteCap");
+  assertNonNegative(rules.legalFee, "legalFee");
+  assertNonNegative(rules.movingCost, "movingCost");
+
   rules.policyLoans.forEach((loan, index) => {
-    if (!(loan.maxAmount >= 0)) {
+    const path = `policyLoans[${index}]`;
+    assertNonNegative(loan.maxAmount, `${path}.maxAmount`);
+    assertRate(loan.rate, `${path}.rate`);
+
+    // 정책대출 경로는 absoluteCap을 걸지 않는다(calcPolicyLimit 참고) —
+    // 그 예외는 상품 고시 한도가 이미 지역 절대캡보다 한참 아래라는
+    // 데이터 가정 위에 서 있다. 그 가정을 여기서 강제하지 않으면, 고시
+    // 한도를 캡 이상으로 잘못 입력한 상품이 캡을 그대로 우회해 버린다.
+    if (!(loan.maxAmount <= rules.absoluteCap)) {
       throw new Error(
-        `룰셋 값 오류: policyLoans[${index}].maxAmount는 0 이상이어야 합니다 (${loan.maxAmount})`,
+        `룰셋 값 오류: ${path}.maxAmount는 absoluteCap(${rules.absoluteCap}) 이하여야 합니다 (${loan.maxAmount})`,
       );
+    }
+  });
+
+  rules.brokerageFee.forEach((bracket, index) => {
+    const path = `brokerageFee[${index}]`;
+    assertNonNegative(bracket.rate, `${path}.rate`);
+    if (bracket.cap !== null) {
+      assertNonNegative(bracket.cap, `${path}.cap`);
     }
   });
 }
 
-/** LTV·DSR처럼 "소득·가격의 몇 %"를 뜻하는 비율은 (0, 1] 범위여야 한다 */
-function assertRatio(value: number, path: string): void {
-  if (!(value > 0 && value <= 1)) {
+/** 값이 반드시 0 이상이어야 하는 금액·비율 필드에 쓰는 공용 검사 */
+function assertNonNegative(value: number, path: string): void {
+  if (!(value >= 0)) {
+    throw new Error(`룰셋 값 오류: ${path}는 0 이상이어야 합니다 (${value})`);
+  }
+}
+
+/**
+ * "몇 %"를 뜻하는 비율 필드가 지정한 구간 안에 있는지 검사하는 공용 헬퍼.
+ * 경계 포함 여부를 필드별로 다르게 줄 수 있다(LTV·DSR은 0을 허용하지
+ * 않는 (0, 1], 금리는 0을 허용하는 [0, 1)).
+ */
+function assertRange(
+  value: number,
+  path: string,
+  bounds: { min: number; max: number; minInclusive: boolean; maxInclusive: boolean },
+): void {
+  const { min, max, minInclusive, maxInclusive } = bounds;
+  const okMin = minInclusive ? value >= min : value > min;
+  const okMax = maxInclusive ? value <= max : value < max;
+  if (!(okMin && okMax)) {
+    const minPart = minInclusive ? `${min} 이상` : `${min} 초과`;
+    const maxPart = maxInclusive ? `${max} 이하` : `${max} 미만`;
     throw new Error(
-      `룰셋 값 오류: ${path}는 0 초과 1 이하여야 합니다 (${value})`,
+      `룰셋 값 오류: ${path}는 ${minPart} ${maxPart}여야 합니다 (${value})`,
     );
   }
+}
+
+/** LTV·DSR처럼 "소득·가격의 몇 %"를 뜻하는 비율은 (0, 1] 범위여야 한다 */
+function assertRatio(value: number, path: string): void {
+  assertRange(value, path, {
+    min: 0,
+    max: 1,
+    minInclusive: false,
+    maxInclusive: true,
+  });
+}
+
+/**
+ * 금리 필드는 [0, 1) 범위여야 한다. 0(무이자)은 유효하지만, 자릿수 하나가
+ * 빠지거나(0.042 → 0.0042) 부호가 뒤집히는(0.015 → -0.015) 흔한 오타를
+ * 모두 여기서 잡는다. 100% 이상 금리는 데이터 오류로 본다.
+ */
+function assertRate(value: number, path: string): void {
+  assertRange(value, path, {
+    min: 0,
+    max: 1,
+    minInclusive: true,
+    maxInclusive: false,
+  });
 }
 
 /** 배열이 아닌 순수 객체인지 검사한다. 배열은 typeof가 "object"라 별도로 걸러야 한다 */
