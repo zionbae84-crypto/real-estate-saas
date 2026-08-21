@@ -103,22 +103,24 @@ describe("통합: 실구매력 → 안전성 등급", () => {
     );
   });
 
-  // 단언 변경(2026-08-17, 정책 경로에 DSR·LTV 제약 도입): 이전에는
-  // `max(matchedPolicyLoans.maxAmount) === breakdown.POLICY`를 요구했다.
-  // 이제 breakdown.POLICY는 상품 고시 한도가 아니라 상환능력·담보가치까지
-  // 반영한 "실제로 받을 수 있는" 정책 한도이므로 그 등식은 성립하지 않는다
-  // (예: 연소득 5천만·현금 2.2억은 고시 360,000,000 → 실제 287,158,070).
-  // 남는 계약은 두 가지다: 고시 한도를 넘지 않는다는 상한 관계와,
-  // 자격 상품이 없으면 정확히 0이라는 부재 표현.
+  // 단언 변경(코드 리뷰 대응, matchedPolicyLoans가 availableAmount를 실어 나름):
+  // 이전에는 `max(matchedPolicyLoans.maxAmount) === breakdown.POLICY`를
+  // 기대할 수 없었다 — matchedPolicyLoans가 상품 고시 한도(maxAmount)만
+  // 담고 있어서, breakdown.POLICY(상환능력·담보가치 반영값)와는 상한
+  // 관계만 성립했다(예: 연소득 5천만·현금 2.2억은 고시 360,000,000 →
+  // 실제 287,158,070). 이제 각 항목이 실제 수령 가능액(availableAmount)을
+  // 함께 실어 나르므로, 그 최대값이 breakdown.POLICY와 정확히 같아야
+  // 한다 — 두 계산이 loan-limit.ts의 calcPolicyLoanAvailability 하나를
+  // 공유하기 때문이다.
   it.each(buyers)(
     "결과에 실린 정책대출 목록이 그 가격에서 실제로 자격이 되는 상품이다: %s",
     (_label, p) => {
       const result = calcAffordablePrice(p, rules);
       const policyMax = result.matchedPolicyLoans.reduce(
-        (max, loan) => Math.max(max, loan.maxAmount),
+        (max, entry) => Math.max(max, entry.availableAmount),
         0,
       );
-      expect(result.loanLimit.breakdown.POLICY).toBeLessThanOrEqual(policyMax);
+      expect(result.loanLimit.breakdown.POLICY).toBe(policyMax);
       if (result.matchedPolicyLoans.length === 0) {
         expect(result.loanLimit.breakdown.POLICY).toBe(0);
       }
@@ -164,7 +166,7 @@ describe("통합: 룰셋 데이터 변경이 결과에 반영된다", () => {
 
     expect(after.affordablePrice).toBeGreaterThan(before.affordablePrice);
     expect(after.loanLimit.binding).toBe("POLICY");
-    expect(after.matchedPolicyLoans.map((l) => l.id)).toContain(
+    expect(after.matchedPolicyLoans.map((entry) => entry.loan.id)).toContain(
       "신생아특례(픽스처)",
     );
   });

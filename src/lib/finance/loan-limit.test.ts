@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import rawRules from "../../../rules/2026-03.json";
-import { calcMaxLoan, calcPolicyLimit } from "./loan-limit";
+import {
+  calcMaxLoan,
+  calcPolicyLimit,
+  calcPolicyLoanAvailability,
+} from "./loan-limit";
 import { matchPolicyLoans } from "./policy-loans";
 import { parseRules } from "./rules";
 import type { BuyerProfile, PolicyLoanRule, Rules } from "./types";
@@ -372,5 +376,51 @@ describe("calcMaxLoan — 정책대출 경로의 DSR·LTV 제약", () => {
     expect(result.breakdown.POLICY).toBe(
       calcPolicyLimit(buyer, rules, 500_000_000),
     );
+  });
+});
+
+// 코드 리뷰 결함(Critical, 재발): affordable-price.ts가 matchedPolicyLoans에
+// PolicyLoanRule을 그대로 실어 보내, UI가 maxAmount를 "받을 수 있는 금액"으로
+// 렌더링하면 연소득 0원 구매자에게 3.6억을 준다고 답하는 문제가 있었다.
+// calcPolicyLoanAvailability는 그 결과 객체가 실제로 실어야 하는 값
+// (availableAmount)을 만드는 단일 지점이다 — calcPolicyLimit과 여기서
+// 같은 공식을 공유한다.
+describe("calcPolicyLoanAvailability", () => {
+  it("무소득 구매자는 자격 상품이 있어도 모든 availableAmount가 0이다", () => {
+    const 무소득 = profile({ annualIncome: 0, isFirstTimeBuyer: true });
+    const price = 350_000_000;
+
+    const entries = calcPolicyLoanAvailability(무소득, rules, price);
+
+    expect(entries.length).toBeGreaterThan(0);
+    for (const entry of entries) {
+      // 고시 한도(maxAmount)는 여전히 0이 아니다 — 이 상품 자체는 존재한다.
+      expect(entry.loan.maxAmount).toBeGreaterThan(0);
+      // 하지만 상환능력이 0이므로 실제로 받을 수 있는 금액은 0이어야 한다.
+      expect(entry.availableAmount).toBe(0);
+    }
+
+    const maxAvailable = Math.max(...entries.map((e) => e.availableAmount));
+    expect(maxAvailable).toBe(calcPolicyLimit(무소득, rules, price));
+    expect(maxAvailable).toBe(0);
+  });
+
+  it("availableAmount의 최댓값이 항상 calcPolicyLimit과 같다", () => {
+    const buyer = profile({ annualIncome: 40_000_000 });
+    const price = 500_000_000;
+
+    const entries = calcPolicyLoanAvailability(buyer, rules, price);
+    const maxAvailable = entries.reduce(
+      (max, e) => Math.max(max, e.availableAmount),
+      0,
+    );
+
+    expect(maxAvailable).toBe(calcPolicyLimit(buyer, rules, price));
+  });
+
+  it("자격 상품이 없으면 빈 배열을 반환한다", () => {
+    const 갈아타기 = profile({ status: "갈아타기", annualIncome: 100_000_000 });
+    const entries = calcPolicyLoanAvailability(갈아타기, rules, 300_000_000);
+    expect(entries).toEqual([]);
   });
 });

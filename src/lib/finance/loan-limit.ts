@@ -1,7 +1,13 @@
 import { maxPrincipal } from "./amortization";
 import { matchPolicyLoans } from "./policy-loans";
 import { assertValidProfile } from "./profile";
-import type { BindingConstraint, BuyerProfile, LoanLimit, Rules } from "./types";
+import type {
+  BindingConstraint,
+  BuyerProfile,
+  LoanLimit,
+  PolicyLoanRule,
+  Rules,
+} from "./types";
 
 /** 은행 주담대에 동시에 걸리는 제약. 이 셋의 최소값이 은행 경로의 한도다 */
 const BANK_CONSTRAINTS = ["LTV", "DSR", "CAP"] as const;
@@ -10,38 +16,44 @@ const BANK_CONSTRAINTS = ["LTV", "DSR", "CAP"] as const;
 export const NO_POLICY_LIMIT = 0;
 
 /**
- * 이 매매가에서 택할 수 있는 정책대출 중 가장 유리한 한도.
- * 자격 상품이 없으면 NO_POLICY_LIMIT(0) — 정책대출이라는 선택지가 없다.
+ * 자격이 되는 정책대출 상품 하나와, 그 상품을 택했을 때 **실제로 받을 수
+ * 있는** 한도(원, 정수).
+ *
+ * `loan.maxAmount`는 상품의 고시 한도일 뿐 이 구매자가 받는 금액이 아니다.
+ * `availableAmount`가 실제로 받을 수 있는 금액이며, 상환능력(DSR)과
+ * 담보가치(LTV)까지 반영한 뒤의 값이다. 연소득 0원인 구매자에게도
+ * `loan.maxAmount`는 상품 고시액 그대로 찍히지만 `availableAmount`는 0이다.
+ */
+export interface MatchedPolicyLoan {
+  loan: PolicyLoanRule;
+  availableAmount: number;
+}
+
+/**
+ * 자격이 되는 정책대출 상품별로 실제로 받을 수 있는 한도를 구한다.
+ * calcPolicyLimit과 UI 노출용 목록(affordable-price.ts의 matchedPolicyLoans)이
+ * 같은 계산을 공유하도록 이 함수 하나로 모은다 — 공식을 두 곳에 복제하면
+ * 한쪽만 고치는 사고가 난다.
  *
  * **정책대출도 상환능력(DSR)과 담보가치(LTV)의 제약을 받는다.** 정책대출은
  * 은행 심사를 면제받는 제도가 아니라 더 낮은 금리를 주는 제도다. 상품
  * 고시 한도(maxAmount)를 그대로 쓰면 연소득 0원인 구매자에게 3.6억을
  * 빌려줄 수 있다고 답하게 된다 — 이 제품이 막으려는 바로 그 방향의 오답이다.
  *
- * 그래서 상품별로 min(maxAmount, LTV한도, DSR한도@상품금리)를 구하고 그중
- * 최대를 택한다. DSR을 **상품 금리로** 계산하는 것이 핵심이다: 정책대출의
- * 실질 혜택은 낮은 금리이고(디딤돌 3.2% vs 시중 4.2%), 같은 원금에 대해
- * 월 상환액이 작아지므로 상환능력 기준 한도가 정당하게 더 크게 나온다.
- * 상품별로 먼저 제약을 건 뒤 최대를 취한다 — 한도가 큰 상품과 금리가 낮은
- * 상품이 다를 수 있으므로, maxAmount만으로 먼저 고르면 틀린다.
- *
- * 정책대출 경로에는 absoluteCap을 걸지 않는다. 그 상한은 수도권 주담대에
- * 대한 규제이고, 상품 고시 한도는 이미 그보다 한참 아래에 있다.
- *
- * 정책대출 자격은 매매가에 의존하므로(주택가격 상한) 가격 없이는 구할 수
- * 없다. calcMaxLoan이 직접 호출하므로 호출자가 따로 신경 쓸 필요는 없다.
+ * 그래서 상품별로 min(maxAmount, LTV한도, DSR한도@상품금리)를 구한다.
+ * DSR을 **상품 금리로** 계산하는 것이 핵심이다: 정책대출의 실질 혜택은
+ * 낮은 금리이고(디딤돌 3.2% vs 시중 4.2%), 같은 원금에 대해 월 상환액이
+ * 작아지므로 상환능력 기준 한도가 정당하게 더 크게 나온다.
  */
-export function calcPolicyLimit(
+export function calcPolicyLoanAvailability(
   profile: BuyerProfile,
   rules: Rules,
   price: number,
-): number {
+): MatchedPolicyLoan[] {
   const matched = matchPolicyLoans(profile, rules, price);
-  if (matched.length === 0) return NO_POLICY_LIMIT;
-
   const ltvLimit = calcLtvLimit(profile, rules, price);
-  let best = NO_POLICY_LIMIT;
-  for (const loan of matched) {
+
+  return matched.map((loan) => {
     // 스트레스 가산금리는 은행 경로가 baseRate에 얹는 것과 동일하게
     // 상품 금리에도 얹는다. 두 경로가 같은 보수성 기준을 쓰도록 맞춘
     // 의도적 결정이다(정책대출을 스트레스 DSR에서 빼려면 룰셋에 그
@@ -51,12 +63,42 @@ export function calcPolicyLimit(
       rules,
       loan.rate + rules.stressDSR.surcharge,
     );
-    const limit = Math.min(loan.maxAmount, ltvLimit, dsrLimit);
-    if (limit > best) best = limit;
+    // 공개 API가 돌려주는 금액은 원 단위 정수다.
+    const availableAmount = Math.floor(
+      Math.min(loan.maxAmount, ltvLimit, dsrLimit),
+    );
+    return { loan, availableAmount };
+  });
+}
+
+/**
+ * 이 매매가에서 택할 수 있는 정책대출 중 가장 유리한 한도.
+ * 자격 상품이 없으면 NO_POLICY_LIMIT(0) — 정책대출이라는 선택지가 없다.
+ *
+ * 상품별로 먼저 제약을 건 뒤 최대를 취한다(calcPolicyLoanAvailability) —
+ * 한도가 큰 상품과 금리가 낮은 상품이 다를 수 있으므로, maxAmount만으로
+ * 먼저 고르면 틀린다.
+ *
+ * 정책대출 경로에는 absoluteCap을 걸지 않는다. 그 상한은 수도권 주담대에
+ * 대한 규제이고, 상품 고시 한도는 이미 그보다 한참 아래에 있다(rules.ts의
+ * `policyLoans[i].maxAmount <= absoluteCap` 불변식이 이를 데이터 단에서
+ * 보장한다).
+ *
+ * 정책대출 자격은 매매가에 의존하므로(주택가격 상한) 가격 없이는 구할 수
+ * 없다. calcMaxLoan이 직접 호출하므로 호출자가 따로 신경 쓸 필요는 없다.
+ */
+export function calcPolicyLimit(
+  profile: BuyerProfile,
+  rules: Rules,
+  price: number,
+): number {
+  const entries = calcPolicyLoanAvailability(profile, rules, price);
+
+  let best = NO_POLICY_LIMIT;
+  for (const { availableAmount } of entries) {
+    if (availableAmount > best) best = availableAmount;
   }
-  // 공개 API가 돌려주는 금액은 원 단위 정수다. DSR 한도가 실수이므로
-  // 여기서 내림하지 않으면 calcMaxLoan의 breakdown과 값이 어긋난다.
-  return Math.floor(best);
+  return best;
 }
 
 /**

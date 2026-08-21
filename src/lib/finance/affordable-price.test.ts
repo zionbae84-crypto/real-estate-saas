@@ -189,6 +189,36 @@ describe("calcAffordablePrice", () => {
     const result = calcAffordablePrice(profile(), rules);
     expect(result.affordablePrice % 100_000).toBe(0);
   });
+
+  // 코드 리뷰 결함(Critical, 재발): 이 결과 객체가 matchedPolicyLoans에
+  // PolicyLoanRule을 그대로 실어 보내던 시절에는, UI가 loan.maxAmount를
+  // "받을 수 있는 정책대출"로 렌더링할 경우 연소득 0원·현금 0원·무주택·
+  // 생애최초 구매자에게 보금자리론 한도 360,000,000원을 받을 수 있다고
+  // 답하게 되었다 — 이 엔진이 막으려는 바로 그 오답이다. 이제
+  // matchedPolicyLoans의 각 항목은 availableAmount(실제 수령 가능액)를
+  // 함께 실어 나른다.
+  it("무소득·무현금 구매자의 matchedPolicyLoans는 maxAmount는 그대로, availableAmount는 0이다", () => {
+    const 무소득 = profile({
+      cash: 0,
+      annualIncome: 0,
+      isFirstTimeBuyer: true,
+    });
+    const result = calcAffordablePrice(무소득, rules);
+
+    // 자격 판정 자체는 여전히 성립한다 — 상품이 존재하지 않는 게 아니다.
+    expect(result.matchedPolicyLoans.length).toBeGreaterThan(0);
+
+    for (const entry of result.matchedPolicyLoans) {
+      expect(entry.loan.maxAmount).toBeGreaterThan(0);
+      expect(entry.availableAmount).toBe(0);
+    }
+
+    const maxAvailable = Math.max(
+      ...result.matchedPolicyLoans.map((e) => e.availableAmount),
+    );
+    expect(maxAvailable).toBe(result.loanLimit.breakdown.POLICY);
+    expect(maxAvailable).toBe(0);
+  });
 });
 
 describe("calcAffordablePrice — 정책대출 절벽 구간", () => {

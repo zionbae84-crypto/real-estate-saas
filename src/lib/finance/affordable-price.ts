@@ -1,15 +1,9 @@
 import { calcAcquisitionCosts } from "./acquisition-cost";
 import { calcAvailableCash } from "./available-cash";
-import { calcMaxLoan } from "./loan-limit";
-import { matchPolicyLoans } from "./policy-loans";
+import { calcMaxLoan, calcPolicyLoanAvailability } from "./loan-limit";
 import { assertValidProfile } from "./profile";
-import type {
-  BuyerProfile,
-  CostBreakdown,
-  LoanLimit,
-  PolicyLoanRule,
-  Rules,
-} from "./types";
+import type { BuyerProfile, CostBreakdown, LoanLimit, Rules } from "./types";
+import type { MatchedPolicyLoan } from "./loan-limit";
 
 export interface AffordableResult {
   /** 실구매 가능 최대 매매가(원). PRICE_STEP 단위로 내림 */
@@ -21,11 +15,19 @@ export interface AffordableResult {
   /** 계산에 사용된 가용현금(원) */
   availableCash: number;
   /**
-   * 그 가격에서 자격이 되는 정책대출 상품 전부.
+   * 그 가격에서 자격이 되는 정책대출 상품과, 상품별 실제 수령 가능액.
    * UI가 같은 판정을 다시 유도하지 않도록 계산 결과에 함께 실어 보낸다.
    * 비어 있으면 정책대출 선택지가 없다는 뜻이다.
+   *
+   * **`loan.maxAmount`는 상품의 고시 한도이지, 이 구매자가 받을 수 있는
+   * 금액이 아니다.** 실제로 받을 수 있는 금액은 `availableAmount`이며,
+   * 이 값들의 최대가 `loanLimit.breakdown.POLICY`와 같다. `maxAmount`를
+   * 기준으로 "받을 수 있는 정책대출"을 렌더링하면 상환능력을 무시한
+   * 숫자가 나온다 — 연소득 0원 구매자에게 보금자리론 한도 3.6억을
+   * 받을 수 있다고 표시하는 식이다. UI가 금액을 보여줄 때는 반드시
+   * `availableAmount`를 써야 한다.
    */
-  matchedPolicyLoans: PolicyLoanRule[];
+  matchedPolicyLoans: MatchedPolicyLoan[];
   warnings: string[];
 }
 
@@ -107,7 +109,7 @@ function resultAt(
     loanLimit: calcMaxLoan(profile, rules, price),
     costs: calcAcquisitionCosts(price, profile, rules),
     availableCash,
-    matchedPolicyLoans: matchPolicyLoans(profile, rules, price),
+    matchedPolicyLoans: calcPolicyLoanAvailability(profile, rules, price),
     warnings,
   };
 }
