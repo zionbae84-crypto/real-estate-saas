@@ -33,4 +33,49 @@ describe("formatWon", () => {
   it("음수는 앞에 마이너스를 붙인다", () => {
     expect(formatWon(-50_000_000)).toBe("-5,000만원");
   });
+
+  // New test cases for non-finite input and rounding edge cases
+  it("NaN은 RangeError를 던진다", () => {
+    expect(() => formatWon(NaN)).toThrow(RangeError);
+  });
+
+  it("Infinity는 RangeError를 던진다", () => {
+    expect(() => formatWon(Infinity)).toThrow(RangeError);
+  });
+
+  it("-Infinity는 RangeError를 던진다", () => {
+    expect(() => formatWon(-Infinity)).toThrow(RangeError);
+  });
+
+  it("음수로 반올림되는 값은 0원이다", () => {
+    expect(formatWon(-0.5)).toBe("0원");
+  });
+
+  it("정확히 1만은 1만원이다", () => {
+    expect(formatWon(10_000)).toBe("1만원");
+  });
+
+  it("1만 미만인 9999는 9,999원이다", () => {
+    expect(formatWon(9_999)).toBe("9,999원");
+  });
+
+  it("정확히 1억은 1억원이다", () => {
+    expect(formatWon(100_000_000)).toBe("1억원");
+  });
+
+  it("1억 미만인 99999999는 9,999만 9,999원이다", () => {
+    expect(formatWon(99_999_999)).toBe("9,999만 9,999원");
+  });
+
+  it("억이 있고 만이 0인 경우 만을 생략한다", () => {
+    expect(formatWon(100_009_999)).toBe("1억 9,999원");
+  });
+
+  it("더 큰 규모의 억이 있고 만이 0인 경우", () => {
+    expect(formatWon(600_001_234)).toBe("6억 1,234원");
+  });
+
+  it("소수점 양수는 반올림한다", () => {
+    expect(formatWon(10_000.4)).toBe("1만원");
+  });
 });

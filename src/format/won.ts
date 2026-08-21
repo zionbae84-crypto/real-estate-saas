@@ -4,12 +4,21 @@ const MAN = 10_000;
 /**
  * 원 단위 정수를 한국식 표기 문자열로 바꾼다.
  * 640_000_000 → "6억 4,000만원"
+ *
+ * @throws RangeError NaN, Infinity, -Infinity에 대해 던진다.
  */
 export function formatWon(won: number): string {
-  if (won === 0) return "0원";
+  if (!Number.isFinite(won)) {
+    throw new RangeError(
+      `유효한 숫자가 아닙니다: formatWon 인자 (${String(won)})`,
+    );
+  }
 
-  const sign = won < 0 ? "-" : "";
-  const abs = Math.abs(Math.round(won));
+  const rounded = Math.round(won);
+  if (rounded === 0) return "0원";
+
+  const sign = rounded < 0 ? "-" : "";
+  const abs = Math.abs(rounded);
 
   const eok = Math.floor(abs / EOK);
   const man = Math.floor((abs % EOK) / MAN);
