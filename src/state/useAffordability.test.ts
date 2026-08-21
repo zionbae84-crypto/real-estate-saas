@@ -67,7 +67,9 @@ describe("useAffordability", () => {
     expect(result.current!.loanAtPrice.amount).toBeLessThanOrEqual(
       300_000_000,
     );
-    expect(result.current!.loanAtPrice.binding).toBeDefined();
+    expect(["LTV", "DSR", "CAP", "POLICY"]).toContain(
+      result.current!.loanAtPrice.binding,
+    );
   });
 
   it("소득이 0이면 실구매력이 0이다", () => {
@@ -75,5 +77,59 @@ describe("useAffordability", () => {
       useAffordability(profile({ cash: 0, annualIncome: 0 })),
     );
     expect(result.current?.result.affordablePrice).toBe(0);
+  });
+
+  it("override가 null이면 프로필 변경 시 가격이 새로운 실구매력을 따라간다", () => {
+    const profileA = profile({ cash: 200_000_000, annualIncome: 100_000_000 });
+    const profileB = profile({ cash: 100_000_000, annualIncome: 150_000_000 });
+
+    const { result, rerender } = renderHook(
+      (p) => useAffordability(p),
+      { initialProps: profileA },
+    );
+
+    const priceA = result.current!.price;
+    const affordableA = result.current!.result.affordablePrice;
+
+    expect(priceA).toBe(affordableA);
+
+    rerender(profileB);
+
+    const priceB = result.current!.price;
+    const affordableB = result.current!.result.affordablePrice;
+
+    expect(priceB).toBe(affordableB);
+    expect(affordableA).not.toBe(affordableB);
+  });
+
+  it("override가 설정되면 프로필 변경 후에도 유지된다", () => {
+    const profileA = profile({ cash: 200_000_000 });
+    const profileB = profile({ cash: 100_000_000, annualIncome: 150_000_000 });
+
+    const { result, rerender } = renderHook(
+      (p) => useAffordability(p),
+      { initialProps: profileA },
+    );
+
+    const overridePrice = 150_000_000;
+    act(() => result.current!.setPrice(overridePrice));
+
+    expect(result.current!.price).toBe(overridePrice);
+
+    rerender(profileB);
+
+    expect(result.current!.price).toBe(overridePrice);
+  });
+
+  it("NaN을 setPrice하면 0으로 조인다", () => {
+    const { result } = renderHook(() => useAffordability(profile()));
+    act(() => result.current!.setPrice(NaN));
+    expect(result.current!.price).toBe(0);
+  });
+
+  it("Infinity를 setPrice하면 0으로 조인다", () => {
+    const { result } = renderHook(() => useAffordability(profile()));
+    act(() => result.current!.setPrice(Infinity));
+    expect(result.current!.price).toBe(0);
   });
 });
