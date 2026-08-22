@@ -191,5 +191,96 @@ describe("BindingExplainer", () => {
       expect(runnerUp).toHaveTextContent("담보 가치(LTV)");
       expect(runnerUp).toHaveTextContent("5,000만원");
     });
+
+    // POLICY는 상한이 아니라 선택지다(loan-limit.ts: amount = max(min(은행 셋), POLICY)).
+    // 아래 케이스들은 POLICY가 0이 아닌 값을 가지면서 은행 제약이 binding인
+    // 상황을 다룬다 — 리뷰가 지적한 대로, 기존 픽스처는 전부 POLICY: 0만
+    // 써서 이 경로가 네 차례 리뷰를 통과해 살아남았다.
+
+    it("POLICY가 binding과 2순위 은행 제약 사이에 있어도 2순위는 은행 제약을 가리킨다", () => {
+      const loanLimit: LoanLimit = {
+        amount: 100_000_000,
+        binding: "LTV",
+        breakdown: {
+          LTV: 100_000_000,
+          DSR: 250_000_000,
+          CAP: 300_000_000,
+          POLICY: 200_000_000,
+        },
+      };
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const runnerUp = container.querySelector(".runner-up");
+      expect(runnerUp).toHaveTextContent("상환 능력(DSR)");
+      expect(runnerUp).not.toHaveTextContent("정책대출");
+      expect(runnerUp).toHaveTextContent("1억 5,000만원");
+      expect(container.querySelector(".runner-up-tied")).not.toBeInTheDocument();
+    });
+
+    it("POLICY가 binding과 같은 값이어도 동률 안내를 내지 않고 은행 2순위를 가리킨다", () => {
+      // Group 1 결함 재현 (a): 무주택·현금 1억·소득 6,500만 프로필의 실제
+      // calcAffordablePrice 출력. binding은 LTV인데 POLICY가 우연히 같은
+      // 값이다 — 정책 경로 자체가 LTV에 걸려 있기 때문(디딤돌: min(maxAmount,
+      // LTV한도, DSR한도@3.2%)). 고친 전에는 이것이 "정책대출도 같은 금액에서
+      // 다시 걸린다"는 동률 안내를 냈는데, 실제로는 진짜 DSR 여유가 있다.
+      const loanLimit: LoanLimit = {
+        amount: 217_490_000,
+        binding: "LTV",
+        breakdown: {
+          LTV: 217_490_000,
+          DSR: 373_305_491,
+          CAP: 600_000_000,
+          POLICY: 217_490_000,
+        },
+      };
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      expect(container.querySelector(".runner-up-tied")).not.toBeInTheDocument();
+      const runnerUp = container.querySelector(".runner-up");
+      expect(runnerUp).toHaveTextContent("상환 능력(DSR)");
+      expect(runnerUp).not.toHaveTextContent("정책대출");
+      // 여유액 = 373,305,491 - 217,490,000 = 155,815,491
+      expect(runnerUp).toHaveTextContent("1억 5,581만 5,491원");
+    });
+
+    it("POLICY가 은행 제약 전부보다 커도(엔진상 불가능한 방어 케이스) 은행 2순위를 그대로 가리킨다", () => {
+      const loanLimit: LoanLimit = {
+        amount: 100_000_000,
+        binding: "LTV",
+        breakdown: {
+          LTV: 100_000_000,
+          DSR: 150_000_000,
+          CAP: 200_000_000,
+          POLICY: 500_000_000,
+        },
+      };
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const runnerUp = container.querySelector(".runner-up");
+      expect(runnerUp).toHaveTextContent("상환 능력(DSR)");
+      expect(runnerUp).toHaveTextContent("5,000만원");
+    });
+
+    it("결함 재현 (b): POLICY가 binding보다 작아도 실제 은행 2순위 여유가 사라지지 않는다", () => {
+      // Group 1 결함 재현 (b): 무주택·소득 6,500만, 현금 2억 지점의 실제
+      // calcAffordablePrice 출력. binding은 DSR이고 LTV에 2,058만원의
+      // 진짜 여유가 있는데, 고친 전에는 POLICY(3.6억)가 DSR(3.733억)보다
+      // 작아 음수 headroom으로 계산되어 2순위 라인 자체가 사라졌다.
+      const loanLimit: LoanLimit = {
+        amount: 373_305_491,
+        binding: "DSR",
+        breakdown: {
+          LTV: 393_890_000,
+          DSR: 373_305_491,
+          CAP: 600_000_000,
+          POLICY: 360_000_000,
+        },
+      };
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const runnerUp = container.querySelector(".runner-up");
+      expect(runnerUp).not.toBeNull();
+      expect(runnerUp).toHaveTextContent("담보 가치(LTV)");
+      expect(runnerUp).not.toHaveTextContent("정책대출");
+      // 여유액 = 393,890,000 - 373,305,491 = 20,584,509
+      expect(runnerUp).toHaveTextContent("2,058만 4,509원");
+      expect(container.querySelector(".runner-up-tied")).not.toBeInTheDocument();
+    });
   });
 });

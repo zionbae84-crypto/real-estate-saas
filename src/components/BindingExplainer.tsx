@@ -42,43 +42,50 @@ const LABELS: Record<BindingConstraint, string> = {
 
 const ORDER: BindingConstraint[] = ["LTV", "DSR", "CAP", "POLICY"];
 
+/** 은행 주담대에 동시에 걸리는 제약. loan-limit.ts의 BANK_CONSTRAINTS와 동일한 개념이다 */
+const BANK_CONSTRAINTS = ["LTV", "DSR", "CAP"] as const;
+
 function findRunnerUp(
   binding: BindingConstraint,
   breakdown: Record<BindingConstraint, number>,
 ): { constraint: BindingConstraint; headroom: number } | null {
-  // BindingConstraint는 LTV/DSR/CAP/POLICY 4개 고정 멤버 유니온이다. binding
-  // 하나를 제외하고, POLICY가 0(선택지 없음)이라 추가로 빠지더라도 최소 2개가
-  // 남으므로 candidates가 빈 배열이 되는 경우는 없다.
-  const candidates = ORDER.filter((key) => key !== binding).filter(
-    (key) => !(key === "POLICY" && breakdown[key] === 0),
-  );
+  // POLICY는 상한이 아니라 구매자가 택할 수 있는 대안 경로다
+  // (loan-limit.ts: amount = max(min(LTV, DSR, CAP), POLICY)). binding이
+  // POLICY라는 것은 "정책대출을 택하는 편이 최대치"라는 뜻일 뿐, 다음으로
+  // 걸릴 은행 제약이라는 개념 자체가 없으므로 2순위를 찾지 않는다.
+  if (binding === "POLICY") {
+    return null;
+  }
 
-  // 배열 구조분해에서도 첫 요소는 noUncheckedIndexedAccess의 대상이라
-  // BindingConstraint | undefined로 추론된다 (rest는 배열이라 그대로 무관).
-  // 위 주석대로 candidates.length는 항상 2 이상이므로 이 분기는 도달
-  // 불가능하지만, 타입 체커를 만족시키는 유일한 방법이므로 비-null 단언
-  // 대신 실제 undefined 검사로 남겨 둔다.
+  // 2순위 후보는 은행 제약(LTV·DSR·CAP)뿐이다. POLICY를 후보에 넣으면 두 가지
+  // 거짓 안내가 나온다: POLICY가 binding과 같은 값이면 "정책대출도 같은
+  // 금액에서 다시 걸린다"는 동률 안내가 뜨지만 실제로는 정책 경로가 은행
+  // 경로보다 못하다는 뜻일 뿐이고, POLICY가 binding보다 작으면 진짜
+  // 여유(예: LTV)가 있는데도 음수 headroom으로 계산돼 2순위 라인 자체가
+  // 사라진다. binding이 은행 제약일 때 breakdown.POLICY <= breakdown[binding]가
+  // 항상 성립하므로(그렇지 않았다면 calcMaxLoan이 이미 binding을 POLICY로
+  // 골랐을 것이다) POLICY는 애초에 "다음 순위"가 될 수 없다.
+  const candidates = BANK_CONSTRAINTS.filter((key) => key !== binding);
+
+  // binding이 은행 제약 하나이므로 후보는 항상 정확히 2개 남는다. 배열
+  // 구조분해에서도 첫 요소는 noUncheckedIndexedAccess의 대상이라
+  // BindingConstraint | undefined로 추론되므로, 비-null 단언 대신 실제
+  // undefined 검사로 남겨 둔다(도달 불가능하지만 타입 체커를 만족시킨다).
   const [first, ...rest] = candidates;
   if (first === undefined) {
     return null;
   }
 
-  let smallest = first;
+  let smallest: BindingConstraint = first;
   for (const key of rest) {
     if (breakdown[key] < breakdown[smallest]) {
       smallest = key;
     }
   }
 
+  // amount(=breakdown[binding])는 세 은행 제약 중 최솟값이므로, 남은 둘의
+  // 최솟값은 항상 그 이상이다 — headroom은 이 경로에서 결코 음수가 될 수 없다.
   const headroom = breakdown[smallest] - breakdown[binding];
-
-  // POLICY가 binding일 때는 엔진 불변식(src/lib/finance/loan-limit.ts)상
-  // breakdown.POLICY가 min(LTV, DSR, CAP)보다 엄격히 클 때만 그렇게 되므로,
-  // 2순위 탐색이 찾아낸 최솟값은 항상 amount보다 작다 — headroom은 이 경로에서
-  // 반드시 음수이며, 이는 방어 코드가 아니라 그 불변식을 반영한 분기다.
-  if (headroom < 0) {
-    return null;
-  }
 
   return { constraint: smallest, headroom };
 }
