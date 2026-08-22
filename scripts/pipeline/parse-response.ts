@@ -6,8 +6,11 @@ import type { ParseResult, RawTrade } from "./types";
  * 계약 조건:
  * - 레코드 하나가 망가져도 예외를 던지지 않는다. 그 건만 버리고 failures를
  *   올린다 — 한 건 때문에 시군구·월 전체를 잃지 않기 위해서다.
- * - 해제(취소)된 거래(`cdealType`이 공백이 아님)는 trades에서 제외하고
+ * - 해제(취소)된 거래(`cdealType`이 공백이 아닌 문자열)는 trades에서 제외하고
  *   cancelled로 따로 센다. 형식이 멀쩡한 정상 레코드이므로 failures가 아니다.
+ * - `cdealType`이 문자열이 아니면(필드 없음/undefined/null/숫자 등) 해제
+ *   여부를 판정할 수 없다 — 정상 거래로 관대하게 봐주지 않고 failures로 센다.
+ *   (아래 classifyDealStatus 참고)
  * - 응답 자체가 파싱 불가하면 { trades: [], failures: 0, cancelled: 0 }을
  *   돌려주고 호출자가 판단하게 한다.
  */
@@ -22,8 +25,13 @@ export function parseResponse(body: string): ParseResult {
   let cancelled = 0;
 
   for (const item of items) {
-    if (isCancelled(item)) {
+    const dealStatus = classifyDealStatus(item);
+    if (dealStatus === "cancelled") {
       cancelled += 1;
+      continue;
+    }
+    if (dealStatus === "unknown") {
+      failures += 1;
       continue;
     }
     const trade = parseItem(item);
@@ -74,11 +82,27 @@ function getPath(obj: unknown, keys: readonly string[]): unknown {
   return cur;
 }
 
-/** cdealType이 공백이 아니면 해제(취소)된 거래다. */
-function isCancelled(item: unknown): boolean {
-  if (typeof item !== "object" || item === null) return false;
+/**
+ * cdealType으로 거래 해제 여부를 판정한다.
+ *
+ * 이 제품의 방침은 "사지 말아야 할 때를 말해주는 것"이다 — 해제된 거래가
+ * 조용히 시세에 섞이는 쪽(안전하지 않은 방향)이 데이터가 줄어드는 쪽(안전한
+ * 방향)보다 훨씬 나쁘다. 그래서 cdealType이 문자열이 아니면(필드 없음,
+ * undefined, null, 숫자 등) "공백이니까 정상 거래"로 관대하게 봐주지 않고
+ * "판정 불가"로 분류해 failures로 드러낸다. 실제 API는 항상 이 필드를
+ * 채우므로 지금은 이론적 위험이지만, 그렇다고 판정 함수가 조용히 포함
+ * 쪽으로 실패하게 두지 않는다. 나중에 "관대하게" 되돌리지 말 것.
+ */
+function classifyDealStatus(item: unknown): "active" | "cancelled" | "unknown" {
+  if (typeof item !== "object" || item === null) {
+    // item 자체가 레코드가 아니면 cdealType을 볼 수 없다 — 판정 불가로 취급한다.
+    // (parseItem도 어차피 이런 item은 null을 돌려주지만, 여기서 먼저 걸러도
+    // 결과는 같다: failures가 하나 늘고 trades/cancelled에는 영향이 없다.)
+    return "unknown";
+  }
   const cdealType = (item as Record<string, unknown>).cdealType;
-  return typeof cdealType === "string" && cdealType.trim() !== "";
+  if (typeof cdealType !== "string") return "unknown";
+  return cdealType.trim() === "" ? "active" : "cancelled";
 }
 
 /** 레코드 하나를 RawTrade로 바꾼다. 형식이 안 맞으면 예외 대신 null. */

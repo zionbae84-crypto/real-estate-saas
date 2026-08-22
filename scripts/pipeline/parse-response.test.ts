@@ -107,6 +107,32 @@ describe("parseResponse", () => {
     expect(trades.length).toBe(19);
   });
 
+  it("cdealType 필드 자체가 없으면(=값이 undefined) 정상 거래로 보지 않고 failures로 센다", () => {
+    // JSON에는 undefined가 없어 "필드 없음"과 "값이 undefined"는 파싱 후 동일하게
+    // item.cdealType === undefined 로 관측된다 — 두 케이스를 하나로 검증한다.
+    const missingField = SAMPLE.replace('"cdealType":" ",', "");
+    const { trades, failures, cancelled } = parseResponse(missingField);
+    expect(failures).toBe(1);
+    expect(cancelled).toBe(0);
+    expect(trades.length).toBe(19);
+  });
+
+  it("cdealType이 null이면 정상 거래로 보지 않고 failures로 센다", () => {
+    const nullType = SAMPLE.replace('"cdealType":" "', '"cdealType":null');
+    const { trades, failures, cancelled } = parseResponse(nullType);
+    expect(failures).toBe(1);
+    expect(cancelled).toBe(0);
+    expect(trades.length).toBe(19);
+  });
+
+  it("cdealType이 문자열이 아닌 숫자면 정상 거래로 보지 않고 failures로 센다", () => {
+    const numericType = SAMPLE.replace('"cdealType":" "', '"cdealType":0');
+    const { trades, failures, cancelled } = parseResponse(numericType);
+    expect(failures).toBe(1);
+    expect(cancelled).toBe(0);
+    expect(trades.length).toBe(19);
+  });
+
   it("파싱 불가한 본문에도 예외를 던지지 않고 빈 결과를 돌려준다", () => {
     expect(() => parseResponse("전혀 응답이 아님")).not.toThrow();
     const result = parseResponse("전혀 응답이 아님");
