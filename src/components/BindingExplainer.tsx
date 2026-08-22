@@ -42,14 +42,77 @@ const LABELS: Record<BindingConstraint, string> = {
 
 const ORDER: BindingConstraint[] = ["LTV", "DSR", "CAP", "POLICY"];
 
+function findRunnerUp(
+  binding: BindingConstraint,
+  breakdown: Record<BindingConstraint, number>,
+): { constraint: BindingConstraint; headroom: number } | null {
+  // Get all non-binding constraints
+  const candidates = ORDER.filter((key) => key !== binding);
+
+  // Filter out POLICY if it's 0 (means this option doesn't exist)
+  const filtered = candidates.filter((key) => {
+    const value = breakdown[key];
+    if (value !== undefined && key === "POLICY" && value === 0) {
+      return false;
+    }
+    return true;
+  });
+
+  if (filtered.length === 0) {
+    return null;
+  }
+
+  // Find the smallest ceiling
+  let smallest = filtered[0]!; // We know filtered[0] exists due to length check above
+  let smallestValue = breakdown[smallest];
+
+  for (let i = 1; i < filtered.length; i++) {
+    const key = filtered[i];
+    if (key !== undefined) {
+      const keyValue = breakdown[key];
+      if (
+        keyValue !== undefined &&
+        smallestValue !== undefined &&
+        keyValue < smallestValue
+      ) {
+        smallest = key;
+        smallestValue = keyValue;
+      }
+    }
+  }
+
+  const bindingValue = breakdown[binding];
+
+  if (smallestValue === undefined || bindingValue === undefined) {
+    return null;
+  }
+
+  const headroom = smallestValue - bindingValue;
+
+  // Only render if there's positive headroom
+  if (headroom <= 0) {
+    return null;
+  }
+
+  return { constraint: smallest, headroom };
+}
+
 export function BindingExplainer({ loanLimit }: BindingExplainerProps) {
   const explanation = EXPLANATIONS[loanLimit.binding];
+  const runnerUp = findRunnerUp(loanLimit.binding, loanLimit.breakdown);
 
   return (
     <section className="binding-explainer">
       <h3>{explanation.title}</h3>
       <p className="binding-amount">{formatWon(loanLimit.amount)}</p>
       <p className="binding-advice">{explanation.advice}</p>
+
+      {runnerUp && (
+        <p className="runner-up">
+          {LABELS[runnerUp.constraint]}은 {formatWon(runnerUp.headroom)} 여유가
+          있습니다.
+        </p>
+      )}
 
       <details>
         <summary>네 가지 한도 모두 보기</summary>
