@@ -1,10 +1,10 @@
+import { calcAbsoluteCap } from "./loan-limit";
 import type { PolicyLoanRule, Rules } from "./types";
 
 const REQUIRED_NUMBER_FIELDS = [
   "baseRate",
   "loanTermMonths",
   "safetyStressSurcharge",
-  "absoluteCap",
   "dsrLimit",
   "legalFee",
   "movingCost",
@@ -112,6 +112,16 @@ export function parseRules(raw: unknown): Rules {
     housingBond.brackets,
     "housingBond.brackets",
     (obj, path) => assertNumberField(obj, "perThousand", `${path}.perThousand`),
+  );
+
+  const absoluteCap = assertPlainObject(r.absoluteCap, "absoluteCap");
+  if (!Array.isArray(absoluteCap.brackets) || absoluteCap.brackets.length === 0) {
+    throw new Error("룰셋 필드 누락 또는 타입 오류: absoluteCap.brackets");
+  }
+  validateAscendingBrackets(
+    absoluteCap.brackets,
+    "absoluteCap.brackets",
+    (obj, path) => assertNumberField(obj, "amount", `${path}.amount`),
   );
 
   const safetyThreshold = assertPlainObject(r.safetyThreshold, "safetyThreshold");
@@ -247,9 +257,12 @@ function validateSemanticInvariants(rules: Rules): void {
   assertNonNegative(rules.stressDSR.surcharge, "stressDSR.surcharge");
   assertNonNegative(rules.safetyStressSurcharge, "safetyStressSurcharge");
 
-  assertNonNegative(rules.absoluteCap, "absoluteCap");
   assertNonNegative(rules.legalFee, "legalFee");
   assertNonNegative(rules.movingCost, "movingCost");
+
+  rules.absoluteCap.brackets.forEach((bracket, index) => {
+    assertNonNegative(bracket.amount, `absoluteCap.brackets[${index}].amount`);
+  });
 
   rules.policyLoans.forEach((loan, index) => {
     const path = `policyLoans[${index}]`;
@@ -260,9 +273,16 @@ function validateSemanticInvariants(rules: Rules): void {
     // 그 예외는 상품 고시 한도가 이미 지역 절대캡보다 한참 아래라는
     // 데이터 가정 위에 서 있다. 그 가정을 여기서 강제하지 않으면, 고시
     // 한도를 캡 이상으로 잘못 입력한 상품이 캡을 그대로 우회해 버린다.
-    if (!(loan.maxAmount <= rules.absoluteCap)) {
+    //
+    // 캡이 주택가격 구간 함수가 되면서 "어느 구간의 캡과 비교할 것인가"가
+    // 생겼다. 답은 **그 상품이 자격을 유지하는 최고 가격에서의 캡**이다.
+    // 그보다 비싼 집에서는 애초에 그 상품을 받을 수 없으므로 우회가
+    // 성립하지 않는다. 가격 상한이 없는 상품은 어떤 가격에서도 자격이
+    // 있으므로 가장 낮은(=가장 엄격한) 구간의 캡과 비교한다.
+    const capForLoan = capAtHighestEligiblePrice(rules, loan);
+    if (!(loan.maxAmount <= capForLoan)) {
       throw new Error(
-        `룰셋 값 오류: ${path}.maxAmount는 absoluteCap(${rules.absoluteCap}) 이하여야 합니다 (${loan.maxAmount})`,
+        `룰셋 값 오류: ${path}.maxAmount는 자격 최고가에서의 absoluteCap(${capForLoan}) 이하여야 합니다 (${loan.maxAmount})`,
       );
     }
   });
@@ -406,6 +426,28 @@ function validateEligibility(
       throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}.${key}`);
     }
   }
+}
+
+/**
+ * 정책대출 상품 하나가 자격을 유지할 수 있는 최고 주택가격에서의 절대캡.
+ *
+ * `eligibility.maxHousePrice`가 있으면 그 가격에서의 캡이다. 없으면 어떤
+ * 가격에서도 자격이 있다는 뜻이므로, 구간 중 가장 작은 캡을 쓴다 — 캡이
+ * 가격에 따라 단조 감소한다는 보장이 스키마에 없으므로 최소값을 직접 구한다.
+ *
+ * 가격→캡 조회는 `loan-limit.ts`의 `calcAbsoluteCap` 하나만 쓴다. 검증과
+ * 계산이 다른 규칙을 쓰면 조용히 어긋나므로 복제하지 않는다.
+ */
+function capAtHighestEligiblePrice(rules: Rules, loan: PolicyLoanRule): number {
+  const maxPrice = loan.eligibility.maxHousePrice;
+  if (maxPrice !== undefined) {
+    return calcAbsoluteCap(rules, maxPrice);
+  }
+  let smallest = Number.POSITIVE_INFINITY;
+  for (const bracket of rules.absoluteCap.brackets) {
+    if (bracket.amount < smallest) smallest = bracket.amount;
+  }
+  return smallest;
 }
 
 /**

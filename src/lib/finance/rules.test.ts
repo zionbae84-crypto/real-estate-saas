@@ -6,7 +6,13 @@ describe("parseRules", () => {
   it("실제 룰셋 파일을 통과시킨다", () => {
     const rules = parseRules(rawRules);
     expect(rules.version).toBe("2026-03");
-    expect(rules.absoluteCap).toBe(600_000_000);
+    // 구간이 하나뿐이고, 그 값이 6억이며, 상한이 무한대(upTo: null)라는
+    // 세 사실을 한 번에 고정한다 — "실제 룰셋이 파싱되면 절대캡은
+    // (가격과 무관하게) 6억이다"라는 원래 단언의 의도를 그대로 보존한다.
+    expect(rules.absoluteCap).toEqual({
+      _note: expect.any(String),
+      brackets: [{ upTo: null, amount: 600_000_000 }],
+    });
   });
 
   // 이 룰셋의 수치는 수도권·규제지역 전용이다. 전국 값이 아니라는 사실을
@@ -578,6 +584,84 @@ describe("확장된 룰셋 검증", () => {
 
   it("실제 룰셋은 통과한다", () => {
     expect(() => parseRules(rawRules)).not.toThrow();
+  });
+});
+
+describe("정책대출 maxAmount와 구간별 absoluteCap 불변식", () => {
+  const tieredCap = {
+    brackets: [
+      { upTo: 1_500_000_000, amount: 600_000_000 },
+      { upTo: null, amount: 200_000_000 },
+    ],
+  };
+
+  it("자격 최고가에서의 캡을 넘는 상품은 거부된다", () => {
+    expect(() =>
+      parseRules({
+        ...rawRules,
+        absoluteCap: tieredCap,
+        policyLoans: [
+          {
+            id: "테스트",
+            // 자격 최고가 20억 → 그 구간의 캡은 2억인데 한도가 3억이다
+            eligibility: { maxHousePrice: 2_000_000_000 },
+            maxAmount: 300_000_000,
+            rate: 0.04,
+          },
+        ],
+      }),
+    ).toThrow(/absoluteCap/);
+  });
+
+  it("자격 최고가에서의 캡 이하인 상품은 통과한다", () => {
+    expect(() =>
+      parseRules({
+        ...rawRules,
+        absoluteCap: tieredCap,
+        policyLoans: [
+          {
+            id: "테스트",
+            // 자격 최고가 6억 → 그 구간의 캡은 6억이고 한도는 3.6억이다
+            eligibility: { maxHousePrice: 600_000_000 },
+            maxAmount: 360_000_000,
+            rate: 0.04,
+          },
+        ],
+      }),
+    ).not.toThrow();
+  });
+
+  it("가격 상한이 없는 상품은 가장 낮은 구간의 캡과 비교된다", () => {
+    expect(() =>
+      parseRules({
+        ...rawRules,
+        absoluteCap: tieredCap,
+        policyLoans: [
+          {
+            id: "테스트",
+            eligibility: {},
+            // 가장 낮은 구간 캡 2억을 넘는다
+            maxAmount: 250_000_000,
+            rate: 0.04,
+          },
+        ],
+      }),
+    ).toThrow(/absoluteCap/);
+  });
+
+  it("absoluteCap.brackets가 비어 있으면 거부된다", () => {
+    expect(() =>
+      parseRules({ ...rawRules, absoluteCap: { brackets: [] } }),
+    ).toThrow(/absoluteCap.brackets/);
+  });
+
+  it("absoluteCap.brackets의 마지막 upTo가 null이 아니면 거부된다", () => {
+    expect(() =>
+      parseRules({
+        ...rawRules,
+        absoluteCap: { brackets: [{ upTo: 1_000_000_000, amount: 600_000_000 }] },
+      }),
+    ).toThrow(/upTo는 null/);
   });
 });
 

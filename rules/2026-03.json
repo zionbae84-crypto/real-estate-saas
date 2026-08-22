@@ -25,7 +25,10 @@
       { "upTo": null,       "perThousand": 31 }
     ]
   },
-  "absoluteCap": 600000000,
+  "absoluteCap": {
+    "_note": "2026-03 시점에는 주택가격과 무관하게 6억 단일이었다. 스키마가 구간 배열로 바뀌면서 형식만 옮긴 것이며, 값의 의미는 바뀌지 않았다. 이 파일을 쓰는 기존 테스트가 전부 그대로 통과하는 것이 그 증거다.",
+    "brackets": [{ "upTo": null, "amount": 600000000 }]
+  },
   "dsrLimit": 0.4,
   "safetyThreshold": { "safe": 0.25, "caution": 0.35, "stressedDanger": 0.4 },
   "acquisitionTax": {

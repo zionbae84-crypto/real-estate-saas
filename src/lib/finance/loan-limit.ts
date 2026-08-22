@@ -126,6 +126,27 @@ export function calcPolicyLimit(
  * 계산과 다른 답(🟡 vs 🔴)을 내놓았다. 빠뜨릴 수 있는 인자를 없애는
  * 편이 옳은 호출을 쉬운 호출로 만든다.
  */
+/**
+ * 주택가격에 해당하는 주담대 절대 상한(원).
+ *
+ * ⚠ **`upTo`는 포함(이하)이다.** 규제 원문이 "15억 원 이하 → 6억"으로
+ * 쓰기 때문이다. 이 저장소의 다른 구간 조회(`acquisition-cost.ts`의
+ * 취득세·채권 구간)는 전부 배타(`price < upTo`)이므로 여기만 다르다.
+ * 배타로 통일하고 싶어지더라도 그러지 말 것 — 가격이 정확히 15억일 때
+ * 한도를 6억이 아닌 4억으로 계산하게 되고, 15억은 실제로 나오는 호가다.
+ *
+ * 이 규칙은 여기 한 곳에만 있다. 룰셋 검증(`rules.ts`)도 이 함수를
+ * import해서 쓴다 — 복제하면 검증과 계산이 조용히 어긋난다.
+ */
+export function calcAbsoluteCap(rules: Rules, price: number): number {
+  for (const bracket of rules.absoluteCap.brackets) {
+    if (bracket.upTo === null || price <= bracket.upTo) return bracket.amount;
+  }
+  // parseRules가 마지막 구간의 upTo === null을 강제하므로 여기 도달하지
+  // 않는다. 그래도 조용히 undefined를 흘리지 않도록 끊는다.
+  throw new Error("룰셋 값 오류: absoluteCap.brackets의 마지막 upTo가 null이 아닙니다");
+}
+
 export function calcMaxLoan(
   profile: BuyerProfile,
   rules: Rules,
@@ -140,7 +161,7 @@ export function calcMaxLoan(
     DSR: Math.floor(
       calcDsrLimit(profile, rules, rules.baseRate + rules.stressDSR.surcharge),
     ),
-    CAP: Math.floor(rules.absoluteCap),
+    CAP: Math.floor(calcAbsoluteCap(rules, price)),
     POLICY: Math.floor(policyLimit),
   };
 

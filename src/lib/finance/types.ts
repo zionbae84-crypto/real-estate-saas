@@ -197,8 +197,19 @@ export interface Rules {
     /** 시가표준액 1,000원당 매입액(원). upTo 오름차순, 마지막은 null */
     brackets: Array<{ upTo: number | null; perThousand: number }>;
   };
-  /** 수도권 주택구입 목적 주담대 절대 상한(원) */
-  absoluteCap: number;
+  /**
+   * 수도권 주택구입 목적 주담대 절대 상한(원). 주택가격 구간별로 다르다.
+   *
+   * ⚠ **`upTo`는 포함(이하)이다.** 이 파일의 다른 구간 배열
+   * (`housingBond.brackets`, `brokerageFee`)과 취득세 구간은 전부
+   * 배타(미만)이므로 여기만 다르다. 규제 원문이 "15억 원 이하 → 6억"으로
+   * 쓰기 때문이며, 배타로 읽으면 가격이 정확히 15억일 때 한도를 2억
+   * 과소 계상한다. 조회는 반드시 `calcAbsoluteCap`을 쓴다.
+   */
+  absoluteCap: {
+    /** upTo 오름차순, 마지막은 null(무한대). upTo는 포함 */
+    brackets: Array<{ upTo: number | null; amount: number }>;
+  };
   /** DSR 한도 (0.4 = 40%) */
   dsrLimit: number;
   safetyThreshold: {

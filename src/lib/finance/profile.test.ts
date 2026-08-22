@@ -139,7 +139,13 @@ describe("공개 진입점의 비유한 입력 방어", () => {
   it("룰셋에서 유입된 NaN도 최소값 스캔에 도달하기 전에 걸린다", () => {
     // 프로필 검증을 통과한 뒤에도 룰셋 쪽에서 NaN이 들어올 수 있다.
     // parseRules를 우회해 직접 만든 룰셋으로 최후 방어선을 검증한다.
-    const brokenRules = { ...rules, absoluteCap: NaN };
+    // NaN 주입 지점은 구간별 캡 스키마에 맞춰 bracket.amount로 옮겼다 —
+    // calcAbsoluteCap이 이 NaN을 그대로 반환하고, Math.floor(NaN)이
+    // breakdown.CAP에 실려 assertNoNaN에 잡히는 경로는 그대로다.
+    const brokenRules = {
+      ...rules,
+      absoluteCap: { brackets: [{ upTo: null, amount: NaN }] },
+    };
     expect(() => calcMaxLoan(profile(), brokenRules, 600_000_000)).toThrow(
       /NaN/,
     );
