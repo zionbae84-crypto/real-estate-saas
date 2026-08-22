@@ -296,6 +296,224 @@ describe("runFetch", () => {
   });
 });
 
+function pageBody(itemCount: number, totalCount: number | string): unknown {
+  const item =
+    itemCount === 0
+      ? ""
+      : itemCount === 1
+        ? SAMPLE_ITEM
+        : Array.from({ length: itemCount }, () => SAMPLE_ITEM);
+  return { response: { body: { totalCount, items: itemCount === 0 ? "" : { item } } } };
+}
+
+describe("runFetch — 페이지네이션·캐시 견고성", () => {
+  let rawDir: string;
+  let dataDir: string;
+
+  beforeEach(() => {
+    const root = mkdtempSync(join(tmpdir(), "fetch-pipeline-test-"));
+    rawDir = join(root, "raw");
+    dataDir = root;
+  });
+
+  afterEach(() => {
+    rmSync(dataDir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+  });
+
+  const now = new Date("2026-08-22T00:00:00Z");
+
+  it("totalCount가 numOfRows보다 크면 다음 페이지를 받아 합산한다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(pageBody(1000, 1500)))
+      .mockResolvedValueOnce(jsonResponse(pageBody(500, 1500)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const firstUrl = fetchMock.mock.calls[0]?.[0] as URL;
+    const secondUrl = fetchMock.mock.calls[1]?.[0] as URL;
+    expect(firstUrl.searchParams.get("pageNo")).toBe("1");
+    expect(secondUrl.searchParams.get("pageNo")).toBe("2");
+    expect(log[0]).toMatchObject({ status: "fetched", tradeCount: 1500, failures: 0 });
+    expect(log[0]?.truncated).toBeUndefined();
+    const written = JSON.parse(readFileSync(join(rawDir, "11680-202608.json"), "utf8"));
+    expect(written).toHaveLength(1500);
+  });
+
+  it("totalCount가 문자열이어도 페이지네이션이 동작한다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(pageBody(1000, "1500")))
+      .mockResolvedValueOnce(jsonResponse(pageBody(500, "1500")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(log[0]).toMatchObject({ status: "fetched", tradeCount: 1500 });
+  });
+
+  it("페이지 상한에 걸리면 조용히 통과시키지 않고 잘림 신호를 남긴다", async () => {
+    // Response 본문은 한 번만 읽을 수 있으므로 호출마다 새 Response를 만들어야 한다.
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(pageBody(1000, 100_000)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(50);
+    expect(log[0]?.truncated).toBe(true);
+    expect(log[0]?.status).not.toBe("failed");
+  });
+
+  it("페이지에 새 거래가 0건인데 목표에 못 미치면 진전없음으로 멈추고 잘림 신호를 남긴다", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(pageBody(0, 1500)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(log[0]?.truncated).toBe(true);
+  });
+
+  it("중간 페이지가 실패하면 해당 시군구·월 전체가 실패로 기록되고 캐시가 남지 않는다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(pageBody(1000, 1500)))
+      .mockResolvedValue(new Response("등록되지 않은 서비스키", { status: 403 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(log[0]).toMatchObject({ status: "failed", tradeCount: 0 });
+    expect(existsSync(join(rawDir, "11680-202608.json"))).toBe(false);
+  });
+
+  it("캐시 파일이 깨진 JSON이면 캐시 없음으로 취급해 재수집하고 그 사실을 로그에 남긴다", async () => {
+    mkdirSync(rawDir, { recursive: true });
+    writeFileSync(join(rawDir, "11680-202607.json"), "{not valid json");
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(1)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now: new Date("2026-08-01T00:00:00Z"),
+      months: 2,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry?.status).not.toBe("cached");
+    expect(entry?.cacheCorrupted).toBe(true);
+    // 예외가 새어나가지 않고 fetch-log.json이 정상적으로 쓰였는지도 확인한다.
+    expect(existsSync(join(dataDir, "fetch-log.json"))).toBe(true);
+  });
+
+  it("JSON.parse 결과가 배열이 아닌 캐시도 손상으로 취급한다", async () => {
+    mkdirSync(rawDir, { recursive: true });
+    writeFileSync(join(rawDir, "11680-202607.json"), JSON.stringify({ not: "an array" }));
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(1)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now: new Date("2026-08-01T00:00:00Z"),
+      months: 2,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry?.cacheCorrupted).toBe(true);
+  });
+
+  it("한 대상이 예상 못한 예외를 던져도 나머지 대상의 로그가 fetch-log.json에 남는다", async () => {
+    // 11680의 캐시 경로 자리에 디렉터리를 만들어 원자적 쓰기(rename)가 실패하게 한다 —
+    // fetchOne/parseResponse가 아닌, 전혀 다른 종류의 예상 못한 예외를 시뮬레이션한다.
+    mkdirSync(join(rawDir, "11680-202608.json"), { recursive: true });
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(1)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680", "11650"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(log).toHaveLength(2);
+    const badEntry = log.find((e) => e.regionCode === "11680");
+    const goodEntry = log.find((e) => e.regionCode === "11650");
+    expect(badEntry?.status).toBe("failed");
+    expect(badEntry?.error).toBeDefined();
+    expect(goodEntry).toMatchObject({ status: "fetched", tradeCount: 1 });
+    const logPath = join(dataDir, "fetch-log.json");
+    expect(existsSync(logPath)).toBe(true);
+    const parsed = JSON.parse(readFileSync(logPath, "utf8")) as unknown[];
+    expect(parsed).toHaveLength(2);
+  });
+});
+
 function mkdtempCache(rawDir: string, filename: string, data: unknown): void {
   mkdirSync(rawDir, { recursive: true });
   writeFileSync(join(rawDir, filename), JSON.stringify(data));
