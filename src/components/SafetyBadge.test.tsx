@@ -65,4 +65,16 @@ describe("SafetyBadge", () => {
     );
     expect(screen.getByText("소득 없음")).toBeInTheDocument();
   });
+
+  it("소득이 0인 경우에도 금리 스트레스 시나리오의 월 상환액을 보여준다", () => {
+    render(
+      <SafetyBadge
+        safety={score({
+          burdenRatio: Number.POSITIVE_INFINITY,
+          stressedBurdenRatio: Number.POSITIVE_INFINITY,
+        })}
+      />,
+    );
+    expect(screen.getByText("183만 7,407원")).toBeInTheDocument();
+  });
 });

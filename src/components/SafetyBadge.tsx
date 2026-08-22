@@ -27,18 +27,13 @@ export function SafetyBadge({ safety }: SafetyBadgeProps) {
         </div>
       </dl>
 
-      {Number.isFinite(safety.stressedBurdenRatio) && (
-        <p className="safety-stress">
-          금리가 2%p 오르면 월{" "}
-          <span className="stressed-payment">
-            {formatWon(safety.stressedMonthlyPayment)}
-          </span>
-          , 부담률{" "}
-          <span className="stressed-ratio">
-            {formatRatio(safety.stressedBurdenRatio)}
-          </span>
-        </p>
-      )}
+      <p className="safety-stress">
+        금리가 2%p 오르면 월{" "}
+        <span className="stressed-payment">
+          {formatWon(safety.stressedMonthlyPayment)}
+        </span>
+        , 부담률 {formatRatio(safety.stressedBurdenRatio)}
+      </p>
     </section>
   );
 }
