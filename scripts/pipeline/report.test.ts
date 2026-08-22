@@ -276,8 +276,16 @@ describe("findSplitAreaSuspects 경계값 — lowConfidenceMinTrades", () => {
 
 describe("buildReport", () => {
   const log: FetchLogEntry[] = [
-    { regionCode: "11680", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0 },
-    { regionCode: "11650", yearMonth: "202608", status: "failed", tradeCount: 0, failures: 0, error: "HTTP 500" },
+    { regionCode: "11680", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },
+    {
+      regionCode: "11650",
+      yearMonth: "202608",
+      status: "failed",
+      tradeCount: 0,
+      failures: 0,
+      cancelled: 0,
+      error: "HTTP 500",
+    },
   ];
 
   it("수집 실패를 담는다 — normalized.json만으로는 알 수 없는 정보다", () => {
@@ -308,6 +316,7 @@ describe("buildReport", () => {
         status: "fetched",
         tradeCount: 20000,
         failures: 0,
+        cancelled: 0,
         truncated: true,
       },
     ];
@@ -324,6 +333,7 @@ describe("buildReport", () => {
         status: "fetched",
         tradeCount: 5,
         failures: 0,
+        cancelled: 0,
         cacheCorrupted: true,
       },
     ];
@@ -332,9 +342,25 @@ describe("buildReport", () => {
     expect(md).toMatch(/캐시 손상/);
   });
 
+  it("해제(취소)된 거래 총계를 요약에 담는다 — I5", () => {
+    // I5: cancelled는 세어지고 문서화까지 됐지만 리포트에는 전혀 드러나지
+    // 않았다. fetch 로그의 cancelled를 합산해 요약에 노출해야 한다.
+    const logWithCancelled: FetchLogEntry[] = [
+      { regionCode: "11680", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 4 },
+      { regionCode: "11650", yearMonth: "202607", status: "cached", tradeCount: 5, failures: 0, cancelled: 2 },
+    ];
+    const md = buildReport([unit()], logWithCancelled, config);
+    expect(md).toMatch(/해제.*6건/);
+  });
+
+  it("해제 건수가 0이어도 요약에 0건으로 명시한다", () => {
+    const md = buildReport([unit()], log, config);
+    expect(md).toMatch(/해제.*0건/);
+  });
+
   it("실패·잘림·캐시손상이 없으면 각 절에 '없음'을 명시한다", () => {
     const cleanLog: FetchLogEntry[] = [
-      { regionCode: "11680", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0 },
+      { regionCode: "11680", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },
     ];
     const md = buildReport([unit()], cleanLog, config);
     const sections = md.split(/^## /m);

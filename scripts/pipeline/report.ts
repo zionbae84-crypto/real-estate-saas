@@ -142,6 +142,18 @@ function splitFetchIssues(log: FetchLogEntry[]): {
 }
 
 /**
+ * fetch 로그 전체의 해제(취소) 거래 총계.
+ *
+ * I5: cancelled는 parseResponse부터 fetch-log·캐시 봉투까지 세어지고
+ * 문서화까지 됐지만, 이 리포트에는 전혀 드러나지 않았다 — 주석이 "따로
+ * 센다"고 약속한 신호가 소비처가 없어 사실상 죽은 필드였다. 특정 단지·월의
+ * 해제 급증은 그 자체로 시장 이상 신호이므로, 요약에서라도 드러낸다.
+ */
+function totalCancelled(log: FetchLogEntry[]): number {
+  return log.reduce((sum, e) => sum + e.cancelled, 0);
+}
+
+/**
  * 목록형 절(과소·과대병합, 평형 분할, 수집 실패류) 공통 렌더러.
  * 각 절이 각자 표를 그리면 같은 코드가 여섯 번 반복되므로 하나로 모은다.
  */
@@ -187,7 +199,7 @@ function renderSummary(
   units: ComplexUnit[],
   config: ReportConfig,
   counts: { underMerge: number; overMerge: number; splitArea: number; lowConfidence: number },
-  issues: { failed: number; truncated: number; cacheCorrupted: number },
+  issues: { failed: number; truncated: number; cacheCorrupted: number; cancelled: number },
 ): string[] {
   const ratio = units.length === 0 ? 0 : (counts.lowConfidence / units.length) * 100;
   return [
@@ -213,6 +225,7 @@ function renderSummary(
     `- 수집 실패: ${issues.failed}건`,
     `- 데이터 잘림 위험: ${issues.truncated}건`,
     `- 캐시 손상(재수집됨): ${issues.cacheCorrupted}건`,
+    `- 해제(취소)된 거래: ${issues.cancelled}건`,
     "",
   ];
 }
@@ -227,13 +240,14 @@ export function buildReport(
   const splitArea = findSplitAreaSuspects(units, config);
   const lowConfidence = units.filter((u) => u.lowConfidence).length;
   const { failed, truncated, cacheCorrupted } = splitFetchIssues(log);
+  const cancelled = totalCancelled(log);
 
   const lines: string[] = [
     ...renderSummary(
       units,
       config,
       { underMerge: underMerge.length, overMerge: overMerge.length, splitArea: splitArea.length, lowConfidence },
-      { failed: failed.length, truncated: truncated.length, cacheCorrupted: cacheCorrupted.length },
+      { failed: failed.length, truncated: truncated.length, cacheCorrupted: cacheCorrupted.length, cancelled },
     ),
     ...renderListSection(
       "과소병합 후보",

@@ -20,9 +20,16 @@ const RULES_PATH = join(DATA_DIR, "..", "rules", "2026-03.json");
 interface CacheEnvelope {
   trades: RawTrade[];
   failures: number;
+  cancelled: number;
   truncated?: boolean;
 }
 
+/**
+ * 판정 기준은 fetch.ts의 readCache와 정확히 일치해야 한다: trades가 배열이면
+ * 봉투로 본다. failures/cancelled는 없으면 0으로 취급하는 하위호환이 양쪽
+ * 다 있으므로(readCache 참고) 여기서 존재를 강제하지 않는다 — 강제하면 옛
+ * 캐시 파일이 한쪽에서만 손상으로 갈리게 된다.
+ */
 function isCacheEnvelope(value: unknown): value is CacheEnvelope {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
   return Array.isArray((value as Record<string, unknown>).trades);

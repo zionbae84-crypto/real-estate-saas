@@ -209,6 +209,7 @@ describe("runFetch", () => {
       status: "cached",
       tradeCount: 2,
       failures: 0,
+      cancelled: 0,
     });
   });
 
@@ -687,6 +688,7 @@ describe("runFetch — 캐시 봉투와 잘림 표시 영속화", () => {
       status: "cached",
       tradeCount: 1,
       failures: 0,
+      cancelled: 0,
       truncated: true,
     });
   });
@@ -718,6 +720,7 @@ describe("runFetch — 캐시 봉투와 잘림 표시 영속화", () => {
       status: "cached",
       tradeCount: 1,
       failures: 0,
+      cancelled: 0,
     });
   });
 
@@ -761,6 +764,117 @@ describe("runFetch — 캐시 봉투와 잘림 표시 영속화", () => {
 
     const entry = log.find((e) => e.yearMonth === "202607");
     expect(entry?.cacheCorrupted).toBe(true);
+  });
+});
+
+describe("runFetch — I5: cancelled(해제 거래)이 로그·캐시 봉투에 남는다", () => {
+  let rawDir: string;
+  let dataDir: string;
+
+  beforeEach(() => {
+    const root = mkdtempSync(join(tmpdir(), "fetch-pipeline-test-"));
+    rawDir = join(root, "raw");
+    dataDir = root;
+  });
+
+  afterEach(() => {
+    rmSync(dataDir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+  });
+
+  const now = new Date("2026-08-22T00:00:00Z");
+
+  function cancelledBody(): unknown {
+    return {
+      response: {
+        header: { resultCode: "000", resultMsg: "OK" },
+        body: { items: { item: [{ ...SAMPLE_ITEM, cdealType: "O" }, SAMPLE_ITEM] } },
+      },
+    };
+  }
+
+  it("해제된 거래는 fetch-log에 cancelled로 남는다 — I5", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(cancelledBody()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(log[0]).toMatchObject({ status: "fetched", tradeCount: 1, cancelled: 1 });
+  });
+
+  it("해제 건수가 캐시 봉투에도 저장된다 — I5", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(cancelledBody()));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    const written = JSON.parse(readFileSync(join(rawDir, "11680-202608.json"), "utf8"));
+    expect(written.cancelled).toBe(1);
+  });
+
+  it("캐시 적중 시에도 캐시 봉투의 cancelled가 로그로 이어진다 — I5", async () => {
+    mkdtempCache(rawDir, "11680-202607.json", {
+      trades: [{ dummy: true }],
+      failures: 0,
+      cancelled: 3,
+    });
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(0)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 2,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry?.cancelled).toBe(3);
+  });
+
+  it("cancelled 필드가 없는 옛 캐시 봉투는 0으로 취급한다(하위호환)", async () => {
+    mkdtempCache(rawDir, "11680-202607.json", {
+      trades: [{ dummy: true }],
+      failures: 0,
+    });
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(0)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 2,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry?.cancelled).toBe(0);
   });
 });
 

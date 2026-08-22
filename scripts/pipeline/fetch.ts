@@ -12,6 +12,14 @@ export interface FetchLogEntry {
   status: "fetched" | "cached" | "empty" | "failed";
   tradeCount: number;
   failures: number;
+  /**
+   * 해제(취소)된 거래 건수. failures와 다른 신호다 — 형식이 멀쩡한 정상
+   * 레코드가 나중에 취소된 것이지, 이번 수집이 실패한 게 아니다(parseResponse
+   * 참고). 특정 시군구·월의 해제 급증은 그 자체로 시장 이상 신호일 수 있어
+   * 리포트가 드러내야 한다. status: "failed"일 때는 항상 0이다(아무것도
+   * 파싱하지 못했으므로).
+   */
+  cancelled: number;
   error?: string;
   /**
    * 페이지네이션 중 데이터 손실 위험이 감지되면 true.
@@ -167,6 +175,7 @@ function parseTotalCount(body: string): number | null {
 interface PageAccumulator {
   trades: RawTrade[];
   failures: number;
+  cancelled: number;
   truncated: boolean;
 }
 
@@ -192,6 +201,7 @@ async function fetchAllPages(
 ): Promise<PageAccumulator> {
   const trades: RawTrade[] = [];
   let failures = 0;
+  let cancelled = 0;
   let cumulativeItems = 0;
   let truncated = false;
 
@@ -208,6 +218,7 @@ async function fetchAllPages(
     }
     trades.push(...parsed.trades);
     failures += parsed.failures;
+    cancelled += parsed.cancelled;
 
     const itemsThisPage = parsed.trades.length + parsed.failures + parsed.cancelled;
     cumulativeItems += itemsThisPage;
@@ -232,7 +243,7 @@ async function fetchAllPages(
     }
   }
 
-  return { trades, failures, truncated };
+  return { trades, failures, cancelled, truncated };
 }
 
 /**
@@ -289,6 +300,10 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
             status: "cached",
             tradeCount: cached.trades.length,
             failures: cached.failures,
+            // cancelled도 truncated와 같은 이유로 봉투에서 그대로 이어받는다 —
+            // 캐시 적중 경로는 다시 fetch하지 않으므로 봉투에 없으면 영영
+            // 사라진다(I5).
+            cancelled: cached.cancelled,
             // 잘린 채 캐시된 달은 이번 실행에서 다시 fetch하지 않으므로, 봉투에
             // 저장해 둔 truncated를 그대로 이어받아야 report(Task 6)가 계속
             // 알 수 있다 — 그렇지 않으면 캐시 적중 다음 실행부터 잘림이 사라진다.
@@ -301,7 +316,7 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
         }
       }
 
-      const { trades, failures, truncated } = await fetchAllPages(
+      const { trades, failures, cancelled, truncated } = await fetchAllPages(
         regionCode,
         yearMonth,
         deps.key,
@@ -310,6 +325,7 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
       const envelope: CacheEnvelope = {
         trades,
         failures,
+        cancelled,
         ...(truncated ? { truncated: true } : {}),
       };
       writeFileAtomic(path, JSON.stringify(envelope, null, 2));
@@ -319,10 +335,11 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
         status: trades.length === 0 ? "empty" : "fetched",
         tradeCount: trades.length,
         failures,
+        cancelled,
         ...(truncated ? { truncated: true } : {}),
         ...(cacheCorrupted ? { cacheCorrupted: true } : {}),
       });
-      console.log(`${regionCode} ${yearMonth}: ${trades.length}건 (파싱실패 ${failures})`);
+      console.log(`${regionCode} ${yearMonth}: ${trades.length}건 (파싱실패 ${failures}, 해제 ${cancelled})`);
     } catch (e) {
       // 이 달만 건너뛴다. 기존 캐시가 있어도 실패 시에는 덮어쓰지 않는다.
       // 예상하지 못한 예외(예: 디스크 쓰기 오류)도 여기서 잡혀 이 대상만
@@ -334,6 +351,7 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
         status: "failed",
         tradeCount: 0,
         failures: 0,
+        cancelled: 0,
         error: message,
         ...(cacheCorrupted ? { cacheCorrupted: true } : {}),
       });
@@ -349,22 +367,27 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
 
 /**
  * 캐시 파일의 봉투 형식. 최상위가 RawTrade[]였던 옛 형식과 달리, 거래 배열과
- * 함께 수집 메타데이터(failures, truncated)를 담아 캐시 적중 시에도
- * FetchLogEntry를 정확히 재구성할 수 있게 한다 — 특히 truncated는 캐시
- * 적중 경로가 다시 fetch를 부르지 않으므로 봉투에 없으면 영영 사라진다.
- * 필드명은 FetchLogEntry의 대응 필드와 맞춘다.
+ * 함께 수집 메타데이터(failures, cancelled, truncated)를 담아 캐시 적중
+ * 시에도 FetchLogEntry를 정확히 재구성할 수 있게 한다 — 특히 truncated·
+ * cancelled는 캐시 적중 경로가 다시 fetch를 부르지 않으므로 봉투에 없으면
+ * 영영 사라진다. 필드명은 FetchLogEntry의 대응 필드와 맞춘다.
  */
 interface CacheEnvelope {
   trades: RawTrade[];
   failures: number;
+  cancelled: number;
   truncated?: boolean;
 }
 
 /**
- * 캐시 파일을 읽어 CacheEnvelope로 반환한다. 아직 실제 캐시 파일이 만들어진
- * 적이 없으므로(실제 수집은 Task 7에서 처음 돈다) 옛 배열 형식과의 호환은
- * 다루지 않는다 — 봉투(객체)가 아니거나 trades가 배열이 아니면 손상으로
- * 보고 throw한다. 호출자가 캐시 없음 취급으로 다시 받는다.
+ * 캐시 파일을 읽어 CacheEnvelope로 반환한다. 봉투(객체)가 아니거나 trades가
+ * 배열이 아니면 손상으로 보고 throw한다 — 호출자가 캐시 없음 취급으로 다시
+ * 받는다. 이 판정 기준(trades가 배열인지)은 run.ts의 isCacheEnvelope와
+ * 정확히 일치해야 한다 — 어긋나면 한쪽은 손상으로 보는 파일을 다른 쪽은
+ * 정상으로 읽어 데이터가 조용히 갈라진다.
+ *
+ * cancelled 필드는 없으면(I5 이전에 쓰인 캐시 파일) 0으로 기본값을 준다 —
+ * failures가 이미 같은 방식으로 하위호환을 다루고 있다.
  */
 function readCache(path: string): CacheEnvelope {
   const raw = readFileSync(path, "utf8");
@@ -377,9 +400,11 @@ function readCache(path: string): CacheEnvelope {
     throw new Error("캐시 봉투의 trades 필드가 배열이 아닙니다");
   }
   const failures = typeof obj.failures === "number" ? obj.failures : 0;
+  const cancelled = typeof obj.cancelled === "number" ? obj.cancelled : 0;
   return {
     trades: obj.trades as RawTrade[],
     failures,
+    cancelled,
     ...(obj.truncated === true ? { truncated: true } : {}),
   };
 }
