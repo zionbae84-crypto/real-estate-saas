@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
+import type { ComplexUnit } from "./aggregate";
 import { aggregate } from "./aggregate";
 import { DATA_DIR, RAW_DIR, loadReportConfig } from "./config";
 import { emit } from "./emit";
@@ -58,7 +59,9 @@ export function loadRawTrades(dir: string = RAW_DIR): RawTrade[] {
         `${file}: 캐시 파일이 봉투(객체 { trades, failures }) 형식이 아니거나 ` +
           `trades 필드가 배열이 아닙니다. 디스크 손상이거나 옛 배열 형식일 수 ` +
           `있습니다. 이 파일을 건너뛰면 거래가 조용히 빠진 채 파이프라인이 ` +
-          `정상 종료된 것처럼 보이므로, 건너뛰는 대신 여기서 멈춥니다.`,
+          `정상 종료된 것처럼 보이므로, 건너뛰는 대신 여기서 멈춥니다. ` +
+          `${file}을 지우고 그 파일명에 담긴 시군구·연월 데이터를 ` +
+          `npm run pipeline:fetch 로 다시 받으세요.`,
       );
     }
     trades.push(...parsed.trades);
@@ -97,18 +100,75 @@ export function currentRulesVersion(path: string = RULES_PATH): string {
 }
 
 /**
+ * raw 거래가 0건이면 산출물을 쓰지 않고 던진다.
+ *
+ * data/raw/의 캐시 파일들은 봉투 형식으로 멀쩡한데 trades가 전부 []인 경우가
+ * 있다 — 예를 들어 API 호출 파라미터가 미묘하게 틀리면 fetch.ts는 매번 200과
+ * 함께 빈 응답만 받아 에러 없이 status: "empty"로 정상 종료하고, 봉투도
+ * 정상적으로 쓴다. loadRawTrades는 봉투 "형식"만 검증하므로 이 경우를 잡지
+ * 못한다. 이걸 걸러내지 않으면 complexes.json이 빈 배열인 채로, dataAsOf가
+ * 빈 문자열인 채로 "성공"처럼 보이는 매니페스트가 나간다 — 이 제품의 방침은
+ * "사지 말아야 할 때를 말해주는 것"이므로, 성공한 척 비어 있는 것보다 크래시가
+ * 낫다.
+ *
+ * 새벽 2시에 이 에러를 보는 사람에게: raw 캐시 파일 자체는 있는데 그 안의
+ * 거래가 0건이라는 뜻이다. data/raw/ 안의 파일 몇 개를 열어 trades가 정말
+ * 비어 있는지 확인하고, 의심 가는 파일을 지운 뒤 npm run pipeline:fetch 를
+ * 다시 실행하라.
+ */
+export function assertRawNonEmpty(raw: RawTrade[]): void {
+  if (raw.length === 0) {
+    throw new Error(
+      "raw 거래가 0건입니다. data/raw/의 캐시 파일들은 봉투 형식은 정상이지만 " +
+        "trades가 모두 비어 있습니다 — API 호출 파라미터가 미묘하게 틀려 200과 " +
+        "함께 빈 응답만 계속 받았을 수 있습니다. data/raw/ 안의 파일 몇 개를 " +
+        "열어 trades가 정말 비어 있는지 확인하고, 의심 가는 파일을 지운 뒤 " +
+        "npm run pipeline:fetch 를 다시 실행하세요.",
+    );
+  }
+}
+
+/**
+ * raw 거래는 있지만 집계 결과(units)가 0개면 산출물을 쓰지 않고 던진다.
+ *
+ * aggregate는 asOf 기준 최근 6개월 안에 거래가 없는 그룹을 조용히 걸러낸다
+ * (대표 시세를 낼 근거가 없다는 이유로). raw 거래 전체가 이 창 밖에
+ * 있으면 — 예를 들어 파이프라인에 넘긴 asOf가 잘못됐거나 캐시가 아주 오래된
+ * 월 데이터만 담고 있으면 — units가 통째로 비면서 assertRawNonEmpty로는
+ * 못 잡는 방식으로 같은 "빈 성공"이 재현된다.
+ *
+ * 새벽 2시에 이 에러를 보는 사람에게: raw 거래는 있는데 집계 결과가 0개라는
+ * 뜻이다. raw 거래들의 contractDate 분포와 파이프라인에 넘긴 asOf 값을
+ * 확인하라.
+ */
+export function assertUnitsNonEmpty(raw: RawTrade[], units: ComplexUnit[]): void {
+  if (units.length === 0) {
+    throw new Error(
+      `raw 거래 ${raw.length}건은 있지만 집계 결과가 0개입니다. asOf 기준 ` +
+        "최근 6개월 안에 거래가 없는 그룹은 aggregate가 걸러냅니다 — raw " +
+        "거래들의 contractDate 분포와 파이프라인에 넘긴 asOf 값을 확인하세요.",
+    );
+  }
+}
+
+/**
  * fetch를 제외한 나머지 전 단계(parse는 fetch가 이미 끝냈으므로 normalize
  * 부터)를 잇는다. asOf는 호출자가 한 번 만든 값을 그대로 받는다 — 이 함수
  * 자신은 시각을 읽지 않는다.
+ *
+ * rawDir은 테스트에서 raw 캐시 위치를 주입하기 위한 것으로, 기본값은 실제
+ * RAW_DIR이다 — 진입점(`runPipeline(new Date())`)의 동작은 그대로다.
  */
-export function runPipeline(asOf: Date): void {
+export function runPipeline(asOf: Date, rawDir: string = RAW_DIR): void {
   const config = loadReportConfig();
 
-  const raw = loadRawTrades();
+  const raw = loadRawTrades(rawDir);
   console.log(`raw 거래 ${raw.length}건`);
+  assertRawNonEmpty(raw);
 
   const normalized = normalizeAll(raw);
   const units = aggregate(normalized, asOf, config);
+  assertUnitsNonEmpty(raw, units);
   console.log(
     `단지 ${new Set(units.map((u) => u.complexKey)).size}개 / 평형 ${units.length}개`,
   );

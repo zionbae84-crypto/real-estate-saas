@@ -1,12 +1,17 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { ComplexUnit } from "./aggregate";
+import { DATA_DIR } from "./config";
 import {
+  assertRawNonEmpty,
+  assertUnitsNonEmpty,
   currentRulesVersion,
   latestContractMonth,
   loadFetchLog,
   loadRawTrades,
+  runPipeline,
 } from "./run";
 import type { RawTrade } from "./types";
 
@@ -161,5 +166,110 @@ describe("currentRulesVersion", () => {
     const path = join(root, "rules.json");
     writeFileSync(path, JSON.stringify({ version: 42 }));
     expect(currentRulesVersion(path)).toBe("unknown");
+  });
+});
+
+function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
+  return {
+    complexKey: "11680|대치동|1979|은마",
+    complexName: "은마",
+    regionCode: "11680",
+    legalDongName: "대치동",
+    builtYear: 1979,
+    areaBucket: 84,
+    medianPrice: 2_000_000_000,
+    tradeCount: 5,
+    minPrice: 1_900_000_000,
+    maxPrice: 2_100_000_000,
+    changeRate3m: 0.02,
+    changeRate12m: 0.1,
+    lowConfidence: false,
+    ...overrides,
+  };
+}
+
+describe("assertRawNonEmpty", () => {
+  it("raw 거래가 0건이면 무엇이 잘못됐는지와 무엇을 해야 하는지를 말하며 던진다", () => {
+    // 이 케이스가 리뷰에서 지적된 핵심 위험이다: 모든 raw 캐시 파일이 형식은
+    // 멀쩡한 봉투인데 trades가 전부 []이면(예: API가 파라미터 오류로 200 + 빈
+    // 응답만 계속 돌려주면) 지금까지는 파이프라인이 그대로 성공 종료했다.
+    expect(() => assertRawNonEmpty([])).toThrow(/거래.*0건/);
+    expect(() => assertRawNonEmpty([])).toThrow(/pipeline:fetch/);
+  });
+
+  it("raw 거래가 있으면 던지지 않는다", () => {
+    expect(() => assertRawNonEmpty([trade()])).not.toThrow();
+  });
+});
+
+describe("assertUnitsNonEmpty", () => {
+  it("raw 거래는 있지만 집계 결과가 0개면 던진다", () => {
+    // 예: raw 전체가 asOf 기준 최근 6개월 창 밖에 있으면 aggregate가 전부
+    // 걸러내 units가 빈 배열이 된다. raw만 보는 assertRawNonEmpty로는 못 잡는다.
+    expect(() => assertUnitsNonEmpty([trade()], [])).toThrow(/집계 결과가 0개/);
+  });
+
+  it("집계 결과가 있으면 던지지 않는다 (회귀 방지: 정상 데이터 경로는 막지 않는다)", () => {
+    expect(() => assertUnitsNonEmpty([trade()], [unit()])).not.toThrow();
+  });
+});
+
+describe("runPipeline: 빈 데이터 가드 (통합)", () => {
+  let root: string;
+  let rawDir: string;
+
+  const OUTPUT_FILES = ["complexes.json", "regions.json", "manifest.json", "report.md"];
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "run-pipeline-integration-"));
+    rawDir = join(root, "raw");
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  /**
+   * 실제 data/ 아래 산출물 파일들의 mtime을 스냅샷한다.
+   *
+   * 이 스위트는 "가드가 emit() 도달 전에 멈춰서 실제 산출물을 절대 건드리지
+   * 않는다"는 것을 증명해야 한다. emit()은 DATA_DIR을 하드코딩해서 쓰므로,
+   * 진짜로 안 쓰였는지 확인하는 유일한 방법은 실제 data/ 파일의 mtime이
+   * runPipeline 호출 전후로 그대로인지 보는 것이다.
+   */
+  function snapshotOutputMtimes(): Record<string, number> {
+    const snapshot: Record<string, number> = {};
+    for (const name of OUTPUT_FILES) {
+      snapshot[name] = statSync(join(DATA_DIR, name)).mtimeMs;
+    }
+    return snapshot;
+  }
+
+  it("모든 raw 파일이 trades: [] 봉투이면 실패하고 실제 산출물 파일을 하나도 건드리지 않는다", () => {
+    writeCache(rawDir, "11680-202607.json", { trades: [], failures: 0 });
+    writeCache(rawDir, "11650-202608.json", { trades: [], failures: 0 });
+
+    const before = snapshotOutputMtimes();
+
+    expect(() => runPipeline(new Date("2026-08-22T00:00:00Z"), rawDir)).toThrow(
+      /거래.*0건/,
+    );
+
+    expect(snapshotOutputMtimes()).toEqual(before);
+  });
+
+  it("raw 거래는 있지만 asOf 기준 6개월 밖이라 집계가 비면 실패하고 실제 산출물을 건드리지 않는다", () => {
+    writeCache(rawDir, "11680-202001.json", {
+      trades: [trade({ contractDate: "2020-01-15" })],
+      failures: 0,
+    });
+
+    const before = snapshotOutputMtimes();
+
+    expect(() => runPipeline(new Date("2026-08-22T00:00:00Z"), rawDir)).toThrow(
+      /집계 결과가 0개/,
+    );
+
+    expect(snapshotOutputMtimes()).toEqual(before);
   });
 });
