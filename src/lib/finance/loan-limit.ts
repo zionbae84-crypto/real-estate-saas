@@ -137,8 +137,17 @@ export function calcPolicyLimit(
  *
  * 이 규칙은 여기 한 곳에만 있다. 룰셋 검증(`rules.ts`)도 이 함수를
  * import해서 쓴다 — 복제하면 검증과 계산이 조용히 어긋난다.
+ *
+ * `price`는 이 함수 자신이 검증한다. 지금은 유일한 호출부인
+ * `calcMaxLoan`이 먼저 `assertNonNegativeFinite`를 부르므로 사실상
+ * 도달 불가능하지만, 이 함수는 공개 API다. `NaN <= upTo`는 모든 구간에서
+ * `false`이므로 검증 없이 두면 루프가 끝까지 흘러 마지막(무한대) 구간의
+ * 금액을 조용히 정답인 양 반환한다 — 이 제품이 막으려는 바로 그 방향의
+ * 오답이다. 새 검사를 만들지 않고 profile.ts의 `assertNonNegativeFinite`를
+ * 재사용한다.
  */
 export function calcAbsoluteCap(rules: Rules, price: number): number {
+  assertNonNegativeFinite(price, "price");
   for (const bracket of rules.absoluteCap.brackets) {
     if (bracket.upTo === null || price <= bracket.upTo) return bracket.amount;
   }

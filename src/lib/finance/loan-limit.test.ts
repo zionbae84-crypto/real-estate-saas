@@ -582,4 +582,18 @@ describe("calcAbsoluteCap — 주택가격 구간별 대출 절대한도", () =>
     expect(calcAbsoluteCap(flat, 0)).toBe(600_000_000);
     expect(calcAbsoluteCap(flat, 10_000_000_000)).toBe(600_000_000);
   });
+
+  // 코드 리뷰 결함: calcAbsoluteCap이 price를 스스로 검증하지 않아,
+  // NaN <= upTo가 모든 구간에서 false가 되어 루프가 끝까지 흘러 마지막
+  // (무한대) 구간의 금액을 조용히 정답인 양 반환했다(price: NaN →
+  // 600,000,000). 음수도 검사 없이 첫 구간으로 떨어졌다. 지금은
+  // calcMaxLoan이 호출 전에 검증해 도달 불가능하지만, 이 함수는 공개
+  // API이므로 가격을 미리 검증하지 않는 호출자가 생기면 다시 뚫린다.
+  // calcAbsoluteCap 자신이 경계를 지켜야 한다.
+  it.each([NaN, Infinity, -Infinity, -1])(
+    "price가 %s이면 예외를 던진다",
+    (price) => {
+      expect(() => calcAbsoluteCap(tiered, price)).toThrow(RangeError);
+    },
+  );
 });

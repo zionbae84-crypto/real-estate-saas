@@ -207,6 +207,8 @@ export interface Rules {
    * 과소 계상한다. 조회는 반드시 `calcAbsoluteCap`을 쓴다.
    */
   absoluteCap: {
+    /** 이 값들의 검증 상태를 설명하는 인간이 읽을 수 있는 주석 */
+    _note?: string;
     /** upTo 오름차순, 마지막은 null(무한대). upTo는 포함 */
     brackets: Array<{ upTo: number | null; amount: number }>;
   };
