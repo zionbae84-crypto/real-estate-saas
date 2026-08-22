@@ -46,6 +46,11 @@ describe("median", () => {
   it("정수를 반환한다", () => {
     expect(Number.isInteger(median([100, 101]))).toBe(true);
   });
+
+  it("짝수 개 평균을 반올림이 아니라 내림한다", () => {
+    // (100+201)/2 = 150.5 — Math.round면 151, Math.floor면 150
+    expect(median([100, 201])).toBe(150);
+  });
 });
 
 describe("areaBucket", () => {
@@ -145,5 +150,117 @@ describe("aggregate", () => {
     );
     expect(units).toHaveLength(1);
     expect(["은마 아파트", "은마아파트"]).toContain(units[0]?.complexName);
+  });
+
+  it("asOf 이후 거래는 제외한다 — 미래 거래가 중위값을 오염시키지 않는다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ price: 1_000_000_000, contractDate: "2026-07-01" }),
+        // asOf(2026-08-22) 이후 거래 — 상한 없이는 최근 6개월에 섞여 들어간다
+        trade({ price: 100_000_000_000, contractDate: "2026-09-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.medianPrice).toBe(1_000_000_000);
+    expect(units[0]?.tradeCount).toBe(1);
+  });
+
+  it("asOf 당일 거래는 포함한다 — 상한은 포함(inclusive) 경계다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ price: 1_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 2_000_000_000, contractDate: "2026-08-22" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.tradeCount).toBe(2);
+  });
+
+  it("월말 asOf에서 6개월 경계가 밀리지 않는다 — 2026-08-31의 6개월 전은 2026-02-28이다", () => {
+    const monthEndAsOf = new Date("2026-08-31T00:00:00Z");
+    const units = aggregate(
+      normalizeAll([
+        // 경계(2026-02-28) 하루 전 — 제외돼야 한다
+        trade({ price: 1_000_000_000, contractDate: "2026-02-27" }),
+        // 경계 이후 — 포함돼야 한다
+        trade({ price: 2_000_000_000, contractDate: "2026-03-01" }),
+      ]),
+      monthEndAsOf,
+      config,
+    );
+    expect(units[0]?.tradeCount).toBe(1);
+    expect(units[0]?.medianPrice).toBe(2_000_000_000);
+  });
+
+  it("changeRate3m: 최근 3개월이 그 이전 3개월보다 오르면 양수다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 최근 3개월(2026-05-22 ~ 2026-08-22): 중위값 3,000,000,000
+        trade({ price: 2_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 4_000_000_000, contractDate: "2026-08-01" }),
+        // 그 이전 3개월(2026-02-22 ~ 2026-05-22): 중위값 2,000,000,000
+        trade({ price: 1_000_000_000, contractDate: "2026-04-01" }),
+        trade({ price: 3_000_000_000, contractDate: "2026-03-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate3m).toBe(0.5);
+  });
+
+  it("changeRate3m: 최근 3개월이 그 이전 3개월보다 내리면 음수다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 최근 3개월: 중위값 2,000,000,000
+        trade({ price: 1_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 3_000_000_000, contractDate: "2026-08-01" }),
+        // 그 이전 3개월: 중위값 4,000,000,000
+        trade({ price: 3_000_000_000, contractDate: "2026-04-01" }),
+        trade({ price: 5_000_000_000, contractDate: "2026-03-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate3m).toBe(-0.5);
+  });
+
+  it("changeRate3m: 이전 3개월 거래가 없으면 null이다", () => {
+    const units = aggregate(
+      normalizeAll([trade({ price: 1_000_000_000, contractDate: "2026-07-01" })]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate3m).toBeNull();
+  });
+
+  it("changeRate3m: 이전 3개월 중위값이 0이면 null이다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ price: 1_000_000_000, contractDate: "2026-07-01" }),
+        // 그 이전 3개월 — 중위값 0
+        trade({ price: 0, contractDate: "2026-04-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate3m).toBeNull();
+  });
+
+  it("changeRate12m: 최근 6개월 대비 그 이전 6개월 변동률을 계산한다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 최근 6개월(2026-02-22 ~ 2026-08-22): 중위값 6,000,000,000
+        trade({ price: 5_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 7_000_000_000, contractDate: "2026-08-01" }),
+        // 그 이전 6개월(2025-08-22 ~ 2026-02-22): 중위값 3,000,000,000
+        trade({ price: 2_000_000_000, contractDate: "2025-10-01" }),
+        trade({ price: 4_000_000_000, contractDate: "2025-12-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate12m).toBe(1);
   });
 });
