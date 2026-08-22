@@ -1,5 +1,5 @@
 import { useCallback, useMemo, useState } from "react";
-import rawRules from "../../rules/2026-03.json";
+import rawRules from "../../rules/2026-08.json";
 import {
   calcAffordablePrice,
   calcMaxLoan,

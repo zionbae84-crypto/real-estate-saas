@@ -22,7 +22,7 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
 
 describe("rules", () => {
   it("번들된 룰셋이 파싱되어 있다", () => {
-    expect(rules.version).toBe("2026-03");
+    expect(rules.version).toBe("2026-08");
   });
 });
 
