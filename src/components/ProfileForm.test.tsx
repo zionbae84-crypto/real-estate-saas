@@ -1,20 +1,72 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
 import {
   DEFAULT_FORM_STATE,
   type AssumableField,
-  type ExistingHomeFormState,
   type ProfileFormState,
 } from "../state/useProfileForm";
 import { rules } from "../state/useAffordability";
 import { isExplicitlyChecked, ProfileForm } from "./ProfileForm";
 
 /**
- * 실제 useProfileForm 훅과 같은 모양의 setField/setExistingHomeField를
- * 로컬 state로 재현한다. ProfileForm은 이 두 콜백의 구현을 모르므로,
- * 훅 전체를 마운트하지 않고도 실제와 같은 상태 갱신 흐름을 검증할 수 있다.
+ * 리뷰 수정(Important 4): 아래 "indeterminate" 테스트는 지금까지
+ * `isExplicitlyChecked`를 직접 호출해서만 확인했다 — 실제 프로덕션
+ * 콜사이트인 `ProfileForm.tsx`의
+ * `onCheckedChange={(checked) => setField("isFirstTimeBuyer", isExplicitlyChecked(checked))}`
+ * 그 줄을 지나가지 않았다. 그래서 그 줄을 `!!checked`로 되돌려도 아무
+ * 테스트도 실패하지 않는다는 게 리뷰의 지적이었다.
+ *
+ * 이 프로젝트가 물고 있는 @seed-design/react-checkbox@2.0.1의
+ * `onCheckedChange`는 boolean으로만 좁혀져 있어(useCheckbox.ts 소스
+ * 확인), 렌더된 SEED 컴포넌트를 클릭하는 경로로는 "indeterminate"가
+ * 애초에 만들어지지 않는다. 그래서 `seed-design/ui/checkbox` 모듈 자체를
+ * 가짜로 바꿔, `ProfileForm.tsx`가 실제로 넘기는 `onCheckedChange` 함수
+ * 참조를 붙잡아 뒀다가 "indeterminate"로 직접 호출한다 — 우회해서
+ * `isExplicitlyChecked`를 부르는 게 아니라, `ProfileForm.tsx`의 그 줄이
+ * 만드는 바로 그 클로저를 실행하는 것이다.
+ */
+const { capturedOnCheckedChange } = vi.hoisted(() => ({
+  capturedOnCheckedChange: new Map<
+    string,
+    (checked: boolean | "indeterminate") => void
+  >(),
+}));
+
+interface FakeCheckboxProps {
+  inputProps?: { id?: string };
+  label?: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean | "indeterminate") => void;
+}
+
+vi.mock("seed-design/ui/checkbox", () => ({
+  Checkbox: ({ inputProps, label, checked, onCheckedChange }: FakeCheckboxProps) => {
+    const id = inputProps?.id;
+    if (id) capturedOnCheckedChange.set(id, onCheckedChange);
+    return (
+      <label>
+        <input
+          type="checkbox"
+          id={id}
+          checked={checked}
+          onChange={(e) => onCheckedChange(e.target.checked)}
+        />
+        {label}
+      </label>
+    );
+  },
+}));
+
+/**
+ * 실제 useProfileForm 훅과 같은 모양의 setField를 로컬 state로 재현한다.
+ * ProfileForm은 이 콜백의 구현을 모르므로, 훅 전체를 마운트하지 않고도
+ * 실제와 같은 상태 갱신 흐름을 검증할 수 있다.
+ *
+ * setExistingHomeField는 더 이상 ProfileForm이 받지 않는다 — 리뷰 수정으로
+ * status/existingHome 편집 UI가 되살아나지 않기로 결정하면서(ProfileForm.tsx
+ * 주석 참고) 죽은 배선을 걷어냈다.
  */
 function renderForm(
   overrides: {
@@ -43,21 +95,10 @@ function renderForm(
       }
     }
 
-    function setExistingHomeField<K extends keyof ExistingHomeFormState>(
-      key: K,
-      value: ExistingHomeFormState[K],
-    ) {
-      setState((prev) => ({
-        ...prev,
-        existingHome: { ...prev.existingHome, [key]: value },
-      }));
-    }
-
     return (
       <ProfileForm
         state={state}
         setField={setField}
-        setExistingHomeField={setExistingHomeField}
         openField={overrides.openField ?? null}
       />
     );
@@ -84,13 +125,24 @@ describe("ProfileForm", () => {
   });
 
   it("첫 화면에는 입력이 셋뿐이다", () => {
+    // 리뷰 수정: 예전 버전은 존재한 적 없는 라벨(/기존 부채/)을 조회해
+    // "없다"만 확인했다 — 실제로는 어떤 조건에서도 그 문구가 없으므로
+    // 이 단언은 공허했다(항상 통과했다). 이름과 달리 개수도 세지 않았다.
+    // 지금은 실제 렌더된 입력 요소 개수(textbox 2개 + checkbox 1개 = 3개)를
+    // 직접 세고, 사라져야 하는 요소는 실제로 열었을 때 나타나는 라벨로
+    // 조회한다.
     renderForm();
+    expect(screen.getAllByRole("textbox")).toHaveLength(2);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+
     expect(screen.getByLabelText(/보유 현금/)).toBeInTheDocument();
     expect(screen.getByLabelText(/연 소득/)).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /생애최초/ })).toBeInTheDocument();
 
-    // 사라져야 하는 것들
-    expect(screen.queryByLabelText(/기존 부채/)).not.toBeInTheDocument();
+    // 사라져야 하는 것들 — openField로 열었을 때만 나타나는 실제 라벨로 조회한다
+    expect(
+      screen.queryByLabelText(/매달 나가는 대출금/),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText(/전용면적/)).not.toBeInTheDocument();
     expect(
       screen.queryByRole("checkbox", { name: /규제지역/ }),
@@ -115,6 +167,34 @@ describe("ProfileForm", () => {
     expect(isExplicitlyChecked("indeterminate")).toBe(false);
     expect(isExplicitlyChecked(true)).toBe(true);
     expect(isExplicitlyChecked(false)).toBe(false);
+  });
+
+  it('리뷰 수정(Important 4): 실제 onCheckedChange 콜사이트가 "indeterminate"를 걸러낸다', () => {
+    // 위 테스트는 isExplicitlyChecked를 직접 호출할 뿐, ProfileForm.tsx의
+    // `onCheckedChange={(checked) => setField("isFirstTimeBuyer",
+    // isExplicitlyChecked(checked))}` 그 줄 자체를 지나가지 않는다 — 그
+    // 줄을 `!!checked`로 되돌려도 이전에는 어떤 테스트도 실패하지
+    // 않았다. 이 테스트는 seed-design/ui/checkbox를 가짜로 바꿔 붙잡아 둔
+    // 실제 onCheckedChange 클로저를 직접 "indeterminate"로 호출해 그
+    // 줄을 실제로 태운다.
+    renderForm();
+    const checkbox = screen.getByRole("checkbox", { name: /생애최초/ });
+
+    // 먼저 실제로 켠다(native boolean true) — 그래야 "indeterminate"가
+    // true로 잘못 좁혀지는 경우(`!!checked`)와 원래부터 false인 경우를
+    // 구별할 수 있다: 이미 true인 상태에서 "indeterminate"를 흘려보내
+    // false로 떨어지는지 봐야 가드가 실제로 동작했다는 증거가 된다.
+    fireEvent.click(checkbox);
+    expect(checkbox).toBeChecked();
+
+    const onCheckedChange = capturedOnCheckedChange.get("first-time");
+    expect(onCheckedChange).toBeDefined();
+    act(() => onCheckedChange?.("indeterminate"));
+
+    // 가드가 살아 있으면(checked === true로 좁힘) "indeterminate"는 false로
+    // 떨어져 체크가 풀린다. `!!checked`로 되돌리면 `!!"indeterminate"`가
+    // true이므로 체크된 채로 남아 이 단언이 실패한다.
+    expect(checkbox).not.toBeChecked();
   });
 
   describe("기존 부채 — 매달 나가는 대출금", () => {

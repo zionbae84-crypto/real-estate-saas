@@ -8,8 +8,7 @@ import { rules, useAffordability } from "./state/useAffordability";
 import { useProfileForm } from "./state/useProfileForm";
 
 export function App() {
-  const { state, setField, setExistingHomeField, reset, profile } =
-    useProfileForm();
+  const { state, setField, reset, profile } = useProfileForm();
   const affordability = useAffordability(profile);
 
   return (
@@ -21,11 +20,7 @@ export function App() {
       </p>
 
       <ErrorBoundary onReset={reset}>
-        <ProfileForm
-          state={state}
-          setField={setField}
-          setExistingHomeField={setExistingHomeField}
-        />
+        <ProfileForm state={state} setField={setField} />
 
         {affordability === null ? (
           <p className="prompt">

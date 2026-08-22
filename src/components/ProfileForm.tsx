@@ -1,10 +1,6 @@
 import { useEffect, useState } from "react";
 import { Checkbox } from "seed-design/ui/checkbox";
-import type {
-  AssumableField,
-  ExistingHomeFormState,
-  ProfileFormState,
-} from "../state/useProfileForm";
+import type { AssumableField, ProfileFormState } from "../state/useProfileForm";
 import { MoneyInput } from "./MoneyInput";
 
 const MONTHS_PER_YEAR = 12;
@@ -46,15 +42,20 @@ export function isExplicitlyChecked(
   return checked === true;
 }
 
+/**
+ * 리뷰 수정: 이 인터페이스는 예전에 `setExistingHomeField`도 받았다.
+ * status(주택 보유 상황)·existingHome(갈아타기 매도 정보) 편집 UI가
+ * ProfileForm에서 완전히 빠지면서 그 prop을 어디서도 호출하지 않는
+ * 죽은 배선이 됐다. 옛 갈아타기 상태를 화면 없이 조용히 반영하지
+ * 않기로 한 결정(useProfileForm.ts의 loadStoredState 주석 참고)에 따라
+ * 이 편집 UI는 되살아나지 않으므로 prop 자체를 지웠다 — App.tsx의
+ * 호출부도 함께 정리했다.
+ */
 export interface ProfileFormProps {
   state: ProfileFormState;
   setField: <K extends keyof ProfileFormState>(
     key: K,
     value: ProfileFormState[K],
-  ) => void;
-  setExistingHomeField: <K extends keyof ExistingHomeFormState>(
-    key: K,
-    value: ExistingHomeFormState[K],
   ) => void;
   /**
    * 지금 펼쳐서 편집 중인 가정 항목. 미지정이거나 null이면 첫 화면의
