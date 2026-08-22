@@ -111,7 +111,7 @@ describe("BindingExplainer", () => {
       expect(runnerUp).toHaveTextContent("2,000만원");
     });
 
-    it("여유액이 0이면 2순위 라인을 표시하지 않는다", () => {
+    it("여유액이 0이면 일반 라인 대신 동일 금액 재걸림을 알린다", () => {
       const loanLimit: LoanLimit = {
         amount: 100_000_000,
         binding: "DSR",
@@ -123,7 +123,54 @@ describe("BindingExplainer", () => {
         },
       };
       const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      // 여유가 0이면 "여유가 있다"는 일반 문구는 거짓이므로 표시하지 않는다.
       expect(container.querySelector(".runner-up")).not.toBeInTheDocument();
+      // 대신 같은 금액에서 다른 제약이 다시 걸린다는, 별도 클래스의 문구를 보여준다 —
+      // 조언을 따라도 한도가 늘지 않는다는 정보이므로 숨기면 안 된다.
+      const tied = container.querySelector(".runner-up-tied");
+      expect(tied).toHaveTextContent("담보 가치(LTV)");
+      expect(tied).toHaveTextContent("늘어나지 않습니다");
+    });
+
+    it("2순위 라인은 조사 없이 라벨 뒤에 '입니다'가 오는 문장 전체를 정확히 렌더링한다", () => {
+      const loanLimit: LoanLimit = {
+        amount: 172_290_000,
+        binding: "DSR",
+        breakdown: {
+          LTV: 350_000_000,
+          DSR: 172_290_000,
+          CAP: 600_000_000,
+          POLICY: 0,
+        },
+      };
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const runnerUp = container.querySelector(".runner-up");
+      // "담보 가치(LTV)" 뒤에 은/는/이/가 같은 조사가 붙지 않고 '입니다'가
+      // 바로 이어지므로, 받침 유무와 무관하게 항상 문법적으로 안전하다.
+      expect(runnerUp?.textContent).toBe(
+        "다음으로 가까운 한도는 담보 가치(LTV)입니다. 1억 7,771만원 여유가 있습니다.",
+      );
+    });
+
+    it("binding이 POLICY이면 2순위 라인도 동률 라인도 렌더링하지 않는다", () => {
+      // 엔진 불변식(src/lib/finance/loan-limit.ts): binding은 breakdown.POLICY가
+      // min(LTV, DSR, CAP)보다 "엄격히 클" 때만 POLICY가 된다. 즉 2순위 탐색이
+      // 찾는 값(=그 min)은 항상 amount(=breakdown.POLICY)보다 작으므로 여유는
+      // 항상 음수다 — 이 상태에서 아무 라인도 뜨지 않는 것은 우연이 아니라
+      // 엔진 불변식으로 보장되는 것이다.
+      const loanLimit: LoanLimit = {
+        amount: 200_000_000,
+        binding: "POLICY",
+        breakdown: {
+          LTV: 100_000_000,
+          DSR: 120_000_000,
+          CAP: 150_000_000,
+          POLICY: 200_000_000,
+        },
+      };
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      expect(container.querySelector(".runner-up")).not.toBeInTheDocument();
+      expect(container.querySelector(".runner-up-tied")).not.toBeInTheDocument();
     });
 
     it("POLICY가 0이면 제외하고 2순위를 선택한다", () => {
