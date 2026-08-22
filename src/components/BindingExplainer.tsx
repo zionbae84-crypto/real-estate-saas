@@ -120,6 +120,13 @@ export function BindingExplainer({
   return (
     <section className="binding-explainer">
       {showTitle && <h3>{explanation.title}</h3>}
+      {/*
+        리뷰 수정(Minor 5): 라벨 없이 숫자만 두면, 이 컴포넌트가 4단(접힌
+        상세 설명)에 다시 배치될 때 바로 위 CostBreakdown의 부대비용
+        숫자와 나란히 놓여 어느 금액인지 구분이 안 된다 — 순수 대출
+        가능액(loanLimit.amount)이지 1단의 실구매 가능 가격이 아니다.
+      */}
+      <span className="binding-amount-label">대출 한도</span>
       <p className="binding-amount">{formatWon(loanLimit.amount)}</p>
       <p className="binding-advice">{explanation.advice}</p>
 

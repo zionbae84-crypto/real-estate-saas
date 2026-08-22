@@ -261,19 +261,6 @@ export function useProfileForm() {
     [],
   );
 
-  const setExistingHomeField = useCallback(
-    <K extends keyof ExistingHomeFormState>(
-      key: K,
-      value: ExistingHomeFormState[K],
-    ) => {
-      setState((prev) => ({
-        ...prev,
-        existingHome: { ...prev.existingHome, [key]: value },
-      }));
-    },
-    [],
-  );
-
   const reset = useCallback(() => setState(DEFAULT_FORM_STATE), []);
 
   // toProfile(state)가 매 렌더마다 새 객체를 만들면, useAffordability의
@@ -282,5 +269,5 @@ export function useProfileForm() {
   // state가 실제로 바뀔 때만 새 profile을 만들도록 메모이즈한다.
   const profile = useMemo(() => toProfile(state), [state]);
 
-  return { state, setField, setExistingHomeField, reset, profile };
+  return { state, setField, reset, profile };
 }

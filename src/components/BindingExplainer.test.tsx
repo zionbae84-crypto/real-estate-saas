@@ -46,6 +46,11 @@ describe("BindingExplainer", () => {
     );
   });
 
+  it("리뷰 수정(Minor 5): 한도 금액에 '대출 한도' 라벨이 붙는다 — 접힌 영역에서 부대비용 옆 맨 숫자로 보이지 않는다", () => {
+    render(<BindingExplainer loanLimit={limit("LTV")} />);
+    expect(screen.getByText("대출 한도")).toBeInTheDocument();
+  });
+
   it("네 제약의 한도를 모두 펼쳐 보여준다", () => {
     render(<BindingExplainer loanLimit={limit("LTV")} />);
     expect(screen.getByText("5억 7,431만 6,140원")).toBeInTheDocument();
