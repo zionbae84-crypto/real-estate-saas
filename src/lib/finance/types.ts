@@ -124,6 +124,8 @@ export interface SafetyScore {
 
 /** 정책대출 상품 정의 */
 export interface PolicyLoanRule {
+  /** 이 상품의 금리·한도 선택 근거를 설명하는 인간이 읽을 수 있는 주석 */
+  _note?: string;
   id: string;
   /** 조건 키-값. 엔진이 일반적으로 평가한다 */
   eligibility: {
@@ -146,10 +148,11 @@ export interface PolicyLoanRule {
  *
  * `ltv`는 규제지역/비규제지역 축을 이미 갖고 있다(`ltv.regulated` /
  * `ltv.unregulated`) — 규제지역은 LTV가 더 낮다는 사실이 반영돼 있다.
- * 하지만 `absoluteCap`, `stressDSR.surcharge`는 여전히 스칼라다. 실제
- * 규제에서는 이 값들도 지역에 따라 달라지는데(비규제지역은 절대 상한이
- * 없고 스트레스 가산금리도 다르다), 이 인터페이스는 그 축을 아직 담지
- * 못한다.
+ * `absoluteCap`은 주택가격 축을 갖게 됐다(구간 배열). 하지만 그것은
+ * **가격** 축이지 **지역** 축이 아니다 — `absoluteCap`도 `stressDSR.surcharge`도
+ * 지역에 따라 달라지는데(비규제지역은 절대 상한이 없고 스트레스 가산금리도
+ * 다르다), 이 인터페이스는 그 축을 아직 담지 못한다. `stressDSR.surcharge`는
+ * 여전히 스칼라다.
  *
  * 그리고 `ltv`가 가진 축은 "규제/비규제" 구분일 뿐 "수도권/비수도권"
  * 구분이 아니다 — 이 룰셋 자체가 수도권 값만 담고 있다. 비수도권을
@@ -197,8 +200,23 @@ export interface Rules {
     /** 시가표준액 1,000원당 매입액(원). upTo 오름차순, 마지막은 null */
     brackets: Array<{ upTo: number | null; perThousand: number }>;
   };
-  /** 수도권 주택구입 목적 주담대 절대 상한(원) */
-  absoluteCap: number;
+  /**
+   * 수도권 주택구입 목적 주담대 절대 상한(원). 주택가격 구간별로 다르다.
+   *
+   * ⚠ **`upTo`는 포함(이하)이다.** 이 저장소의 구간 조회는 배타가
+   * 기본이 아니다 — 각 조회는 자기 고시 원문의 표현을 그대로 따른다.
+   * `housingBond.brackets`와 `brokerageFee`는 원문이 "미만"이라
+   * 배타(미만)이고, 여기와 취득세 구간은 원문이 "이하"라 포함이다 —
+   * 모순이 아니라 각자 원문에 맞춘 것이다. 규제 원문이 "15억 원 이하
+   * → 6억"으로 쓰기 때문이며, 배타로 읽으면 가격이 정확히 15억일 때
+   * 한도를 2억 과소 계상한다. 조회는 반드시 `calcAbsoluteCap`을 쓴다.
+   */
+  absoluteCap: {
+    /** 이 값들의 검증 상태를 설명하는 인간이 읽을 수 있는 주석 */
+    _note?: string;
+    /** upTo 오름차순, 마지막은 null(무한대). upTo는 포함 */
+    brackets: Array<{ upTo: number | null; amount: number }>;
+  };
   /** DSR 한도 (0.4 = 40%) */
   dsrLimit: number;
   safetyThreshold: {

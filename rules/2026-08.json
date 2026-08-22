@@ -1,10 +1,10 @@
 {
-  "version": "2026-03",
-  "effectiveFrom": "2026-03-01",
-  "_scope": "수도권 기준, 2026-03 시점 값. ltv는 규제지역/비규제지역 축을 이미 갖고 있다(ltv.regulated/ltv.unregulated). absoluteCap은 형식만 주택가격 구간 배열로 바뀌었을 뿐(2026-08) 이 파일이 담는 값 자체는 여전히 2026-03 시점의 6억 단일 값이다(absoluteCap._note 참고). stressDSR.surcharge는 아직 스칼라이며 실제 규제에서는 지역별로 다르다. 이 파일 전체가 수도권 값만 담으며 수도권/비수도권 축은 어디에도 없다. 다른 지역을 지원하려면 값 교체가 아니라 스키마에 수도권/비수도권 축을 추가해야 한다.",
-  "baseRate": 0.042,
+  "version": "2026-08",
+  "effectiveFrom": "2026-08-01",
+  "_scope": "수도권 기준. 10·15 대책상 스트레스 금리 하한 3%와 주택가격 구간별 대출한도(absoluteCap)는 원래 '수도권·규제지역'에 한정된 규제인데, 계산 엔진은 이 둘을 규제 여부와 무관하게 무조건 적용한다 — calcDsrLimit은 지역을 보지 않고, calcAbsoluteCap은 프로필 자체를 받지 않는다. 그 결과 비규제 수도권 구매자에게는 스트레스 금리와 절대캡이 모두 과대 적용되어 실구매력이 과소 계상된다(안전한 방향). ltv는 규제지역/비규제지역 축을 이미 갖고 있어 이 둘과 다르게 취급된다. stressDSR·absoluteCap에 지역(수도권·규제지역) 축을 도입하는 것은 별도 과제다. 수도권/비수도권 축도 어디에도 없으므로, 다른 지역을 지원하려면 값 교체가 아니라 스키마에 축을 추가해야 한다.",
+  "baseRate": 0.0453,
   "loanTermMonths": 360,
-  "stressDSR": { "stage": 3, "surcharge": 0.015 },
+  "stressDSR": { "stage": 3, "surcharge": 0.03 },
   "safetyStressSurcharge": 0.02,
   "ltv": {
     "regulated":   { "default": 0.4, "firstTimeBuyer": 0.7 },
@@ -26,8 +26,12 @@
     ]
   },
   "absoluteCap": {
-    "_note": "2026-03 시점에는 주택가격과 무관하게 6억 단일이었다. 스키마가 구간 배열로 바뀌면서 형식만 옮긴 것이며, 값의 의미는 바뀌지 않았다. 이 파일을 쓰는 기존 테스트가 전부 그대로 통과하는 것이 그 증거다.",
-    "brackets": [{ "upTo": null, "amount": 600000000 }]
+    "_note": "10·15 대책(2025-10-16 시행). 수도권·규제지역 주택구입 목적 주담대 한도를 주택가격 구간별로 나눈다. upTo는 포함(이하)이다 — 규제 원문이 '15억 원 이하'로 쓰기 때문이다. 이 저장소의 구간 조회는 배타가 기본이 아니다: housingBond.brackets·brokerageFee는 원문이 '미만'이라 배타이고, 여기와 취득세는 원문이 '이하'라 포함이다 — 각자 자기 고시 원문을 따른 것뿐 모순이 아니다. 조회는 반드시 calcAbsoluteCap을 쓴다.",
+    "brackets": [
+      { "upTo": 1500000000, "amount": 600000000 },
+      { "upTo": 2500000000, "amount": 400000000 },
+      { "upTo": null,       "amount": 200000000 }
+    ]
   },
   "dsrLimit": 0.4,
   "safetyThreshold": { "safe": 0.25, "caution": 0.35, "stressedDanger": 0.4 },
@@ -54,6 +58,7 @@
   "movingCost": 1500000,
   "policyLoans": [
     {
+      "_note": "디딤돌대출. 고시 금리 범위 2.45~3.55%의 상단을 쓴다 — 우대금리는 사람마다 달라 보장할 수 없고, 높은 금리는 한도를 낮춰 안전한 방향으로 틀린다. maxAmount는 일반 기준 2.5억이다. 생애최초 3억·신혼 4억 축은 아직 스키마에 없어 과소 계상되지만, 그 방향은 안전하다.",
       "id": "디딤돌",
       "eligibility": {
         "requiresNoHome": true,
@@ -62,9 +67,10 @@
         "maxAreaSqm": 85
       },
       "maxAmount": 250000000,
-      "rate": 0.032
+      "rate": 0.0355
     },
     {
+      "_note": "보금자리론. 주금공 2026-08-01 공시의 u-보금자리론 30년 만기 금리 5.20%를 쓴다. 아낌e는 5.10%로 더 낮지만, 높은 쪽이 한도를 낮춰 안전한 방향으로 틀린다. loanTermMonths(360 = 30년)와 만기를 맞춘 값이다.",
       "id": "보금자리론",
       "eligibility": {
         "requiresNoHome": true,
@@ -72,7 +78,7 @@
         "maxHousePrice": 600000000
       },
       "maxAmount": 360000000,
-      "rate": 0.042
+      "rate": 0.052
     }
   ]
 }

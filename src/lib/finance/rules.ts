@@ -1,10 +1,10 @@
+import { calcAbsoluteCap } from "./loan-limit";
 import type { PolicyLoanRule, Rules } from "./types";
 
 const REQUIRED_NUMBER_FIELDS = [
   "baseRate",
   "loanTermMonths",
   "safetyStressSurcharge",
-  "absoluteCap",
   "dsrLimit",
   "legalFee",
   "movingCost",
@@ -112,6 +112,16 @@ export function parseRules(raw: unknown): Rules {
     housingBond.brackets,
     "housingBond.brackets",
     (obj, path) => assertNumberField(obj, "perThousand", `${path}.perThousand`),
+  );
+
+  const absoluteCap = assertPlainObject(r.absoluteCap, "absoluteCap");
+  if (!Array.isArray(absoluteCap.brackets) || absoluteCap.brackets.length === 0) {
+    throw new Error("룰셋 필드 누락 또는 타입 오류: absoluteCap.brackets");
+  }
+  validateAscendingBrackets(
+    absoluteCap.brackets,
+    "absoluteCap.brackets",
+    (obj, path) => assertNumberField(obj, "amount", `${path}.amount`),
   );
 
   const safetyThreshold = assertPlainObject(r.safetyThreshold, "safetyThreshold");
@@ -247,9 +257,37 @@ function validateSemanticInvariants(rules: Rules): void {
   assertNonNegative(rules.stressDSR.surcharge, "stressDSR.surcharge");
   assertNonNegative(rules.safetyStressSurcharge, "safetyStressSurcharge");
 
-  assertNonNegative(rules.absoluteCap, "absoluteCap");
   assertNonNegative(rules.legalFee, "legalFee");
   assertNonNegative(rules.movingCost, "movingCost");
+
+  rules.absoluteCap.brackets.forEach((bracket, index) => {
+    assertNonNegative(bracket.amount, `absoluteCap.brackets[${index}].amount`);
+  });
+
+  // absoluteCap은 가격이 올라갈수록 낮아지거나 같아야지, 높아지면 안 된다
+  // (비증가). 실제 규제에서 주담대 절대 상한은 고가주택일수록 강하게
+  // 죄지, 완화되지 않는다(예: "15억 이하 6억 → 15억 초과 4억"은 있어도
+  // 그 반대는 없다). 올라가는 캡은 오타이거나 값 오입력이다.
+  //
+  // 이 불변식이 없으면 buildSearchSegments(affordable-price.ts)가 절벽에서
+  // 나눈 구간 하나가 실제로는 "선택지 상실 → 한도 하락"이 아니라 "한도
+  // 상승"이 되어, ownFunds가 그 경계에서 오히려 떨어진다. 그러면 감당
+  // 가능한 가격 집합이 두 덩어리로 갈라지고, 분할되지 않은 이분 탐색은
+  // 낮은 쪽 덩어리에 수렴해 실구매력을 조용히 과소 계상한다(억 단위로
+  // 틀릴 수 있음이 리뷰에서 실측됨). 데이터 오류를 계산에 흘리지 않고
+  // 여기, 파싱 단계에서 시끄럽게 끊는다.
+  //
+  // 같은 값이 반복되는 평평한 구간(비증가의 등호 쪽)은 오류가 아니므로
+  // 허용한다.
+  let previousCapAmount: number | null = null;
+  rules.absoluteCap.brackets.forEach((bracket, index) => {
+    if (previousCapAmount !== null && bracket.amount > previousCapAmount) {
+      throw new Error(
+        `룰셋 값 오류: absoluteCap.brackets의 amount는 가격이 올라갈수록 커지면 안 됩니다 (구간 ${index - 1}: ${previousCapAmount} → 구간 ${index}: ${bracket.amount})`,
+      );
+    }
+    previousCapAmount = bracket.amount;
+  });
 
   rules.policyLoans.forEach((loan, index) => {
     const path = `policyLoans[${index}]`;
@@ -260,9 +298,16 @@ function validateSemanticInvariants(rules: Rules): void {
     // 그 예외는 상품 고시 한도가 이미 지역 절대캡보다 한참 아래라는
     // 데이터 가정 위에 서 있다. 그 가정을 여기서 강제하지 않으면, 고시
     // 한도를 캡 이상으로 잘못 입력한 상품이 캡을 그대로 우회해 버린다.
-    if (!(loan.maxAmount <= rules.absoluteCap)) {
+    //
+    // 캡이 주택가격 구간 함수가 되면서 "어느 구간의 캡과 비교할 것인가"가
+    // 생겼다. 답은 **그 상품이 자격을 유지하는 최고 가격에서의 캡**이다.
+    // 그보다 비싼 집에서는 애초에 그 상품을 받을 수 없으므로 우회가
+    // 성립하지 않는다. 가격 상한이 없는 상품은 어떤 가격에서도 자격이
+    // 있으므로 가장 낮은(=가장 엄격한) 구간의 캡과 비교한다.
+    const capForLoan = capAtHighestEligiblePrice(rules, loan);
+    if (!(loan.maxAmount <= capForLoan)) {
       throw new Error(
-        `룰셋 값 오류: ${path}.maxAmount는 absoluteCap(${rules.absoluteCap}) 이하여야 합니다 (${loan.maxAmount})`,
+        `룰셋 값 오류: ${path}.maxAmount는 자격 최고가에서의 absoluteCap(${capForLoan}) 이하여야 합니다 (${loan.maxAmount})`,
       );
     }
   });
@@ -409,11 +454,36 @@ function validateEligibility(
 }
 
 /**
+ * 정책대출 상품 하나가 자격을 유지할 수 있는 최고 주택가격에서의 절대캡.
+ *
+ * `eligibility.maxHousePrice`가 있으면 그 가격에서의 캡이다. 없으면 어떤
+ * 가격에서도 자격이 있다는 뜻이므로, 구간 중 가장 작은 캡을 쓴다 — 캡이
+ * 가격에 따라 단조 비증가라는 사실은 validateSemanticInvariants가 이
+ * 호출보다 먼저 강제하지만(위 absoluteCap.brackets 비증가 검사), 그래도
+ * 최소값을 직접 스캔해 어떤 구간 배치에도 맞는 값을 구한다.
+ *
+ * 가격→캡 조회는 `loan-limit.ts`의 `calcAbsoluteCap` 하나만 쓴다. 검증과
+ * 계산이 다른 규칙을 쓰면 조용히 어긋나므로 복제하지 않는다.
+ */
+function capAtHighestEligiblePrice(rules: Rules, loan: PolicyLoanRule): number {
+  const maxPrice = loan.eligibility.maxHousePrice;
+  if (maxPrice !== undefined) {
+    return calcAbsoluteCap(rules, maxPrice);
+  }
+  let smallest = Number.POSITIVE_INFINITY;
+  for (const bracket of rules.absoluteCap.brackets) {
+    if (bracket.amount < smallest) smallest = bracket.amount;
+  }
+  return smallest;
+}
+
+/**
  * "upTo 오름차순, 마지막 구간만 upTo가 null" 형태의 구간 배열을 검증하는
- * 공용 헬퍼. brokerageFee와 housingBond.brackets가 정확히 같은 모양이라
- * (오름차순 상한 + 마지막 구간만 무한대) 여기 하나로 묶었다 — 복붙하면
- * 한쪽만 고치고 다른 쪽을 잊는 결함이 반복된다. 상한(upTo) 이외의 나머지
- * 필드(rate/cap 또는 perThousand) 검증은 호출자가 validateItem으로 넘긴다.
+ * 공용 헬퍼. brokerageFee·housingBond.brackets·absoluteCap.brackets가
+ * 정확히 같은 모양이라(오름차순 상한 + 마지막 구간만 무한대) 여기 하나로
+ * 묶었다 — 복붙하면 한쪽만 고치고 다른 쪽을 잊는 결함이 반복된다.
+ * 상한(upTo) 이외의 나머지 필드(rate/cap 또는 perThousand 또는 amount)
+ * 검증은 호출자가 validateItem으로 넘긴다.
  */
 function validateAscendingBrackets(
   brackets: unknown[],

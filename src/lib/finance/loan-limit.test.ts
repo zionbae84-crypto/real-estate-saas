@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import rawRules from "../../../rules/2026-03.json";
 import {
+  calcAbsoluteCap,
   calcMaxLoan,
   calcPolicyLimit,
   calcPolicyLoanAvailability,
@@ -542,4 +543,57 @@ describe("calcPolicyLimit — price 경계 검증", () => {
       calcPolicyLimit(profile(), rules, 500_000_000),
     ).not.toThrow();
   });
+});
+
+describe("calcAbsoluteCap — 주택가격 구간별 대출 절대한도", () => {
+  const tiered = parseRules({
+    ...rawRules,
+    absoluteCap: {
+      brackets: [
+        { upTo: 1_500_000_000, amount: 600_000_000 },
+        { upTo: 2_500_000_000, amount: 400_000_000 },
+        { upTo: null, amount: 200_000_000 },
+      ],
+    },
+  });
+
+  // 규제 원문이 "15억 원 이하 → 6억"이므로 상한은 포함이다.
+  // 배타로 읽으면 정확히 15억일 때 2억을 과소 계상한다.
+  it.each([
+    [1_499_999_999, 600_000_000],
+    [1_500_000_000, 600_000_000],
+    [1_500_000_001, 400_000_000],
+    [2_499_999_999, 400_000_000],
+    [2_500_000_000, 400_000_000],
+    [2_500_000_001, 200_000_000],
+  ])("가격 %d원에서 캡은 %d원이다", (price, expected) => {
+    expect(calcAbsoluteCap(tiered, price)).toBe(expected);
+  });
+
+  it("가격 0원에서는 첫 구간의 캡이다", () => {
+    expect(calcAbsoluteCap(tiered, 0)).toBe(600_000_000);
+  });
+
+  it("구간이 하나뿐이면 모든 가격에서 같은 캡이다", () => {
+    const flat = parseRules({
+      ...rawRules,
+      absoluteCap: { brackets: [{ upTo: null, amount: 600_000_000 }] },
+    });
+    expect(calcAbsoluteCap(flat, 0)).toBe(600_000_000);
+    expect(calcAbsoluteCap(flat, 10_000_000_000)).toBe(600_000_000);
+  });
+
+  // 코드 리뷰 결함: calcAbsoluteCap이 price를 스스로 검증하지 않아,
+  // NaN <= upTo가 모든 구간에서 false가 되어 루프가 끝까지 흘러 마지막
+  // (무한대) 구간의 금액을 조용히 정답인 양 반환했다(price: NaN →
+  // 600,000,000). 음수도 검사 없이 첫 구간으로 떨어졌다. 지금은
+  // calcMaxLoan이 호출 전에 검증해 도달 불가능하지만, 이 함수는 공개
+  // API이므로 가격을 미리 검증하지 않는 호출자가 생기면 다시 뚫린다.
+  // calcAbsoluteCap 자신이 경계를 지켜야 한다.
+  it.each([NaN, Infinity, -Infinity, -1])(
+    "price가 %s이면 예외를 던진다",
+    (price) => {
+      expect(() => calcAbsoluteCap(tiered, price)).toThrow(RangeError);
+    },
+  );
 });

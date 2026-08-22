@@ -103,6 +103,39 @@ export function calcPolicyLimit(
 }
 
 /**
+ * 주택가격에 해당하는 주담대 절대 상한(원).
+ *
+ * ⚠ **`upTo`는 포함(이하)이다.** 규제 원문이 "15억 원 이하 → 6억"으로
+ * 쓰기 때문이다. 이 저장소의 구간 조회는 배타가 기본이 아니다 — **각
+ * 조회는 자기 고시 원문의 표현을 그대로 따른다.** `housingBond.brackets`와
+ * `brokerageFee`는 원문이 "미만"이라 배타(`price < upTo`)이고, 여기와
+ * `acquisition-cost.ts`의 취득세 구간은 원문이 "이하"라 포함이다 —
+ * 모순이 아니라 각자 원문에 맞춘 것이다. 포함/배타를 통일하고 싶어지더라도
+ * 여기를 배타로 바꾸지 말 것 — 가격이 정확히 15억일 때 한도를 6억이
+ * 아닌 4억으로 계산하게 되고, 15억은 실제로 나오는 호가다.
+ *
+ * 이 규칙은 여기 한 곳에만 있다. 룰셋 검증(`rules.ts`)과 `calcMaxLoan`
+ * 둘 다 이 함수를 호출한다 — 복제하면 검증과 계산이 조용히 어긋난다.
+ *
+ * `price`는 이 함수 자신이 검증한다. 호출부인 `calcMaxLoan`이 먼저
+ * `assertNonNegativeFinite`를 부르므로 그 경로에서는 사실상 도달
+ * 불가능하지만, 이 함수는 공개 API다. `NaN <= upTo`는 모든 구간에서
+ * `false`이므로 검증 없이 두면 루프가 끝까지 흘러 마지막(무한대) 구간의
+ * 금액을 조용히 정답인 양 반환한다 — 이 제품이 막으려는 바로 그 방향의
+ * 오답이다. 새 검사를 만들지 않고 profile.ts의 `assertNonNegativeFinite`를
+ * 재사용한다.
+ */
+export function calcAbsoluteCap(rules: Rules, price: number): number {
+  assertNonNegativeFinite(price, "price");
+  for (const bracket of rules.absoluteCap.brackets) {
+    if (bracket.upTo === null || price <= bracket.upTo) return bracket.amount;
+  }
+  // parseRules가 마지막 구간의 upTo === null을 강제하므로 여기 도달하지
+  // 않는다. 그래도 조용히 undefined를 흘리지 않도록 끊는다.
+  throw new Error("룰셋 값 오류: absoluteCap.brackets의 마지막 upTo가 null이 아닙니다");
+}
+
+/**
  * 주어진 매매가에 대해 받을 수 있는 최대 대출액을 구한다.
  *
  * 은행 경로의 한도는 LTV · DSR · 지역 절대캡을 동시에 만족해야 하므로
@@ -140,7 +173,7 @@ export function calcMaxLoan(
     DSR: Math.floor(
       calcDsrLimit(profile, rules, rules.baseRate + rules.stressDSR.surcharge),
     ),
-    CAP: Math.floor(rules.absoluteCap),
+    CAP: Math.floor(calcAbsoluteCap(rules, price)),
     POLICY: Math.floor(policyLimit),
   };
 

@@ -313,8 +313,7 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     "결과 가격에서 자기부담금이 가용현금을 넘지 않는다: %s",
     (_label, p) => {
       const result = calcAffordablePrice(p, rules);
-      const ownFunds =
-        result.affordablePrice - result.loanLimit.amount + result.costs.total;
+      const ownFunds = ownFundsAt(result.affordablePrice, p, rules);
       expect(ownFunds).toBeLessThanOrEqual(result.availableCash);
     },
   );
@@ -497,8 +496,7 @@ describe("calcAffordablePrice — 안전하지 않은 방향 스윕", () => {
 
     for (const [label, p] of grid) {
       const result = calcAffordablePrice(p, rules);
-      const ownFunds =
-        result.affordablePrice - result.loanLimit.amount + result.costs.total;
+      const ownFunds = ownFundsAt(result.affordablePrice, p, rules);
 
       if (result.affordablePrice > 0) {
         expect(
@@ -571,5 +569,168 @@ describe("calcAffordablePrice — 안전하지 않은 방향 스윕", () => {
     expect(at(0)).toBeLessThan(150_000_000);
     expect(at(30_000_000)).toBeGreaterThan(at(0));
     expect(at(60_000_000)).toBeGreaterThan(at(30_000_000));
+  });
+});
+
+// 이 블록의 세 테스트는 buildSearchSegments를 고치지 않은 상태에서도
+// 전부 통과한다(직접 확인함) — 그래서 "버그를 잡는" RED 테스트가 아니라
+// 회귀 고정용이다. 이유: 절대캡 절벽은 정책대출 자격 상실 절벽과 같은
+// 방향으로만 움직인다 — 가격이 경계를 넘으면 캡이 "떨어져" 대출한도가
+// 아래로 튀고 자기부담금은 위로 점프한다. 이 방향은 이제 우연이 아니라
+// rules.ts의 parseRules(validateSemanticInvariants)가 강제하는 사실이다
+// — absoluteCap.brackets의 amount는 가격이 오를수록 커질 수 없다(비증가).
+// 올라가는 캡을 넣은 룰셋은 parseRules 단계에서 이미 거부되므로(아래
+// "캡이 올라가는 구간에서 분할이 실제로 안전망 역할을 한다" 블록 참고),
+// 여기 tiered처럼 parseRules를 통과하는 룰셋에서는 절벽이 항상 이 방향으로만
+// 움직인다. affordable-price.ts 상단 주석이 정책대출 절벽에 대해 설명하는
+// 논리(절벽은 f를 단조 증가에서 벗어나게 하지 않는다)가 캡 절벽에도 그대로
+// 적용되고, searchSegment의 "구간 내부 그리드 정렬 임계값" 구제 후보가
+// 분할되지 않은 큰 구간 안의 절벽에서도 정답을 우연히 구제해 준다. cash를
+// 900M~1.3B(5M 간격), 두 절벽(15억·25억) 경계 ±2M을 PRICE_STEP 그리드로
+// 훑으며 소득·규제지역·생애최초 전 조합, 그리고 0~100억 전 구간에 대한
+// 무작위 퍼징 60회로 확인했고 전부 브루트포스와 일치했다(Task 2 보고서
+// 참고). 그래도 구간 분할은 유지한다 — 위 불변식은 amount 축만 잡을 뿐
+// upTo 배치나 구간 개수의 형태까지 강제하지 않으므로, 분할은 그 나머지
+// 여지에 대한 안전장치로 남긴다.
+describe("캡 구간 절벽을 넘나드는 탐색", () => {
+  // 15억에서 캡이 6억 → 4억으로 떨어지는 룰셋
+  const tiered = parseRules({
+    ...rawRules,
+    absoluteCap: {
+      brackets: [
+        { upTo: 1_500_000_000, amount: 600_000_000 },
+        { upTo: 2_500_000_000, amount: 400_000_000 },
+        { upTo: null, amount: 200_000_000 },
+      ],
+    },
+  });
+
+  // 절벽 근처에 답이 놓이도록 현금·소득을 크게 잡는다.
+  const wealthy: BuyerProfile = {
+    status: "무주택",
+    cash: 1_100_000_000,
+    annualIncome: 300_000_000,
+    existingDebtAnnualPayment: 0,
+    isFirstTimeBuyer: false,
+    exclusiveAreaSqm: 84,
+    isRegulatedArea: false,
+  };
+
+  it("엔진이 찾은 최대가가 브루트포스와 일치한다", () => {
+    const result = calcAffordablePrice(wealthy, tiered);
+    const cashAmount = calcAvailableCash(wealthy).amount;
+    const brute = bruteForceMax(
+      wealthy,
+      tiered,
+      cashAmount,
+      1_400_000_000,
+      1_700_000_000,
+    );
+    expect(result.affordablePrice).toBe(brute);
+  });
+
+  it("찾은 가격이 실제로 감당 가능하다", () => {
+    const result = calcAffordablePrice(wealthy, tiered);
+    const loan = calcMaxLoan(wealthy, tiered, result.affordablePrice);
+    const costs = calcAcquisitionCosts(result.affordablePrice, wealthy, tiered);
+    const ownFunds = result.affordablePrice - loan.amount + costs.total;
+    expect(ownFunds).toBeLessThanOrEqual(wealthy.cash);
+  });
+
+  it("한 스텝 위는 감당 불가능하다 — 진짜 최대다", () => {
+    const result = calcAffordablePrice(wealthy, tiered);
+    const next = result.affordablePrice + PRICE_STEP;
+    const loan = calcMaxLoan(wealthy, tiered, next);
+    const costs = calcAcquisitionCosts(next, wealthy, tiered);
+    const ownFunds = next - loan.amount + costs.total;
+    expect(ownFunds).toBeGreaterThan(wealthy.cash);
+  });
+});
+
+// 코드 리뷰 결함(재발 잠금): buildSearchSegments의 캡 절벽 분할을 되돌려도
+// 위 "캡 구간 절벽을 넘나드는 탐색" 블록은 전부 통과한다 — 그 픽스처는
+// 캡이 내려가는(하락하는) 방향이라 분할 없이도 이분 탐색이 우연히 정답을
+// 찾기 때문이다(위 블록 설명 참고). 캡이 **올라가는** 방향일 때만 분할이
+// 실제로 답을 바꾼다: ownFunds가 경계에서 떨어져 감당 가능한 가격 집합이
+// 두 덩어리로 갈라지고, 분할 없는 이분 탐색은 낮은 쪽 덩어리에 갇힌다.
+//
+// rules.ts의 parseRules는 이제 이런 룰셋을 파싱 단계에서 거부한다
+// (validateSemanticInvariants의 absoluteCap 비증가 불변식 — 위
+// "absoluteCap.brackets는 가격이 오를수록 커지면 안 된다" 관련 테스트는
+// rules.test.ts에 있다). 그래서 이 테스트는 **의도적으로 parseRules를
+// 우회해 Rules 객체를 직접 구성한다** — 파싱이 막는 데이터이지만, 탐색
+// 분할 자체가 없으면 어떤 일이 벌어지는지를 여기서 고정해 둔다. 이렇게
+// 하지 않으면 "파싱이 이미 막잖아"라는 이유로 캡 절벽 분할 코드 자체가
+// 나중에 아무 검증 없이 삭제될 수 있다. 이 테스트는 buildSearchSegments가
+// absoluteCap.brackets[].upTo를 절벽으로 넣지 않으면 반드시 실패한다
+// (직접 확인함 — buildSearchSegments에서 capCliffs를 제거하고 돌려 보면
+// 아래 "브루트포스와 일치한다" 단언이 1,265,500,000 vs 1,515,000,000으로
+// 갈라지며 실패하는 것으로 확인했다).
+describe("캡이 올라가는 구간에서 분할이 실제로 안전망 역할을 한다", () => {
+  // 15억까지는 캡 6억, 15억 초과는 캡 30억(=사실상 무제한) — parseRules라면
+  // 거부할 룰셋이다. 값은 리뷰가 제시한 예시(1_500_000_000 / 600_000_000,
+  // null / 3_000_000_000) 그대로다.
+  const ascendingCapRules: Rules = {
+    ...rules,
+    absoluteCap: {
+      brackets: [
+        { upTo: 1_500_000_000, amount: 600_000_000 },
+        { upTo: null, amount: 3_000_000_000 },
+      ],
+    },
+  };
+
+  // 연소득 150,000,000 · 무주택 · 생애최초 아님 · 비규제지역.
+  // 15억에서: CAP(6억) < DSR(861,474,210)이라 CAP이 binding → 대출 6억.
+  // 15억 + 10만원(절벽 통과 직후): CAP이 30억으로 뛰어 더 이상 binding이
+  // 아니게 되고 DSR(861,474,210)이 binding → 대출이 6억에서 8.6억대로
+  // 불연속으로 뛴다. 즉 가격이 오르는데 대출한도가 더 크게 뛰어 ownFunds가
+  // 오히려 떨어진다("절벽에서 ownFunds가 떨어진다"는 리뷰 지적 그대로).
+  //
+  // cash를 720,000,000으로 두면: 절벽 이전 구간(대출 6억 고정)에서 ownFunds가
+  // cash를 넘는 지점이 15억보다 한참 낮은 곳(~12.66억)에 생기고, 절벽
+  // 직후에는 대출이 커진 덕에 ownFunds가 다시 cash 밑으로 내려갔다가 가격이
+  // 더 오르면서 다시 올라 15.15억 부근에서 cash를 넘는다. 그 사이
+  // (~12.66억, 15억]는 감당 불가능한 "구멍"이다 — 감당 가능한 가격 집합이
+  // 두 덩어리로 갈라진 것이다. 진짜 최대는 구멍 너머의 15.15억 쪽인데,
+  // 분할 없는 단일 이분 탐색은 첫 덩어리(~12.66억)에 갇힌다.
+  const buyer: BuyerProfile = {
+    status: "무주택",
+    cash: 720_000_000,
+    annualIncome: 150_000_000,
+    existingDebtAnnualPayment: 0,
+    isFirstTimeBuyer: false,
+    exclusiveAreaSqm: 84,
+    isRegulatedArea: false,
+  };
+
+  it("엔진이 찾은 최대가가 브루트포스와 일치한다 — 구멍 너머(절벽 이후) 최대치를 놓치지 않는다", () => {
+    const result = calcAffordablePrice(buyer, ascendingCapRules);
+    const cashAmount = calcAvailableCash(buyer).amount;
+    // 절벽(15억)을 한참 넘는 범위까지 훑어야 구멍 너머의 진짜 최대를 잡는다.
+    const brute = bruteForceMax(buyer, ascendingCapRules, cashAmount, 0, 2_000_000_000);
+
+    expect(brute).toBeLessThan(2_000_000_000);
+    // 실측값(직접 확인함): 브루트포스(진짜 최대) 1,515,000,000. 분할 없는
+    // 이분 탐색은 구멍 앞쪽 덩어리에 갇혀 1,265,500,000을 낸다 —
+    // 249,500,000원(약 2.5억) 과소 계상. buildSearchSegments에서
+    // capCliffs를 빼면 이 두 단언이 1,265,500,000 vs 1,515,000,000으로
+    // 갈라지며 실패한다 — 즉 이 테스트가 그 회귀를 잠근다.
+    expect(result.affordablePrice).toBe(brute);
+    expect(result.affordablePrice).toBe(1_515_000_000);
+  });
+
+  it("찾은 가격이 실제로 감당 가능하다", () => {
+    const result = calcAffordablePrice(buyer, ascendingCapRules);
+    const ownFunds = ownFundsAt(result.affordablePrice, buyer, ascendingCapRules);
+    expect(ownFunds).toBeLessThanOrEqual(calcAvailableCash(buyer).amount);
+  });
+
+  it("한 스텝 위는 감당 불가능하다 — 진짜 최대다", () => {
+    const result = calcAffordablePrice(buyer, ascendingCapRules);
+    const next = result.affordablePrice + PRICE_STEP;
+    expect(ownFundsAt(next, buyer, ascendingCapRules)).toBeGreaterThan(
+      calcAvailableCash(buyer).amount,
+    );
   });
 });
