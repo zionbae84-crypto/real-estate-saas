@@ -263,4 +263,60 @@ describe("aggregate", () => {
     );
     expect(units[0]?.changeRate12m).toBe(1);
   });
+
+  it("aggregate 산출물은 complexKey로 정렬된다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 의도적으로 역순으로 입력: C, A, B
+        trade({
+          builtYear: 2000,
+          complexName: "C아파트",
+          price: 1_000_000_000,
+        }),
+        trade({
+          builtYear: 2000,
+          complexName: "A아파트",
+          price: 2_000_000_000,
+        }),
+        trade({
+          builtYear: 2000,
+          complexName: "B아파트",
+          price: 3_000_000_000,
+        }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units).toHaveLength(3);
+    // complexKey로 정렬되었으므로 A < B < C 순서여야 함
+    expect(units[0]?.complexName).toContain("A");
+    expect(units[1]?.complexName).toContain("B");
+    expect(units[2]?.complexName).toContain("C");
+  });
+
+  it("aggregate 산출물은 동일 단지 내에서 areaBucket으로 정렬된다", () => {
+    // 동일 단지, 다른 평형으로 역순 입력: 101, 84
+    const units = aggregate(
+      normalizeAll([
+        trade({
+          builtYear: 2000,
+          complexName: "test-complex",
+          exclusiveAreaSqm: 101.2,
+          price: 1_000_000_000,
+        }),
+        trade({
+          builtYear: 2000,
+          complexName: "test-complex",
+          exclusiveAreaSqm: 84.4,
+          price: 2_000_000_000,
+        }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units).toHaveLength(2);
+    // 같은 complexKey이므로 areaBucket으로 정렬되어야 함: 84 < 101
+    expect(units[0]?.areaBucket).toBe(84);
+    expect(units[1]?.areaBucket).toBe(101);
+  });
 });

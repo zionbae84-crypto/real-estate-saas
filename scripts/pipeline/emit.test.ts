@@ -38,6 +38,29 @@ describe("buildRegions", () => {
     ]);
     expect(regions[0]?.complexCount).toBe(2);
   });
+
+  it("시군구별 평형 수를 센다 — 단지 1개, 평형 2개", () => {
+    const regions = buildRegions([
+      unit({ regionCode: "11680", complexKey: "a", areaBucket: 84 }),
+      unit({ regionCode: "11680", complexKey: "a", areaBucket: 101 }),
+    ]);
+    expect(regions).toHaveLength(1);
+    expect(regions[0]?.complexCount).toBe(1);
+    expect(regions[0]?.unitCount).toBe(2);
+  });
+
+  it("시군구 산출물은 regionCode로 정렬된다", () => {
+    const regions = buildRegions([
+      unit({ regionCode: "11680", complexKey: "a" }),
+      unit({ regionCode: "11650", complexKey: "b" }),
+      unit({ regionCode: "11740", complexKey: "c" }),
+    ]);
+    expect(regions).toHaveLength(3);
+    // regionCode 오름차순 정렬: 11650 < 11680 < 11740
+    expect(regions[0]?.regionCode).toBe("11650");
+    expect(regions[1]?.regionCode).toBe("11680");
+    expect(regions[2]?.regionCode).toBe("11740");
+  });
 });
 
 describe("buildManifest", () => {

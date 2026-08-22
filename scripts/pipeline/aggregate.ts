@@ -139,5 +139,13 @@ export function aggregate(
     });
   }
 
+  // 산출물 순서를 결정론화: complexKey로 정렬, 같으면 areaBucket으로 정렬
+  // complexKey는 문자열이므로 < 연산자로 locale-independent 비교
+  units.sort((a, b) => {
+    const keyCompare = a.complexKey < b.complexKey ? -1 : a.complexKey > b.complexKey ? 1 : 0;
+    if (keyCompare !== 0) return keyCompare;
+    return a.areaBucket - b.areaBucket;
+  });
+
   return units;
 }

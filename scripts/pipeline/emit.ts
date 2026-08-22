@@ -33,11 +33,14 @@ export function buildRegions(units: ComplexUnit[]): RegionMeta[] {
     unitCounts.set(unit.regionCode, (unitCounts.get(unit.regionCode) ?? 0) + 1);
   }
 
-  return [...byRegion.entries()].map(([regionCode, keys]) => ({
-    regionCode,
-    complexCount: keys.size,
-    unitCount: unitCounts.get(regionCode) ?? 0,
-  }));
+  // 산출물 순서를 결정론화: regionCode로 정렬 (locale-independent)
+  return [...byRegion.entries()]
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+    .map(([regionCode, keys]) => ({
+      regionCode,
+      complexCount: keys.size,
+      unitCount: unitCounts.get(regionCode) ?? 0,
+    }));
 }
 
 export function buildManifest(
