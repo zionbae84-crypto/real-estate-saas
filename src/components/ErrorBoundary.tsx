@@ -1,3 +1,4 @@
+import { ActionButton } from "seed-design/ui/action-button";
 import { Component, type ErrorInfo, type ReactNode } from "react";
 
 interface Props {
@@ -31,15 +32,16 @@ export class ErrorBoundary extends Component<Props, State> {
       <div className="error-fallback" role="alert">
         <h2>계산 중 문제가 발생했습니다</h2>
         <p>입력값을 초기화하고 다시 시도해 주세요.</p>
-        <button
+        <ActionButton
           type="button"
+          variant="neutralSolid"
           onClick={() => {
             this.setState({ error: null });
             this.props.onReset();
           }}
         >
           입력 초기화
-        </button>
+        </ActionButton>
       </div>
     );
   }

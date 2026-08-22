@@ -1,0 +1,42 @@
+/*
+ * SEED Design 브랜드 토큰 재정의.
+ *
+ * SEED의 기본 브랜드 색은 carrot(당근 주황)이다. 이 서비스는 당근마켓이
+ * 아니므로 브랜드 계열만 SEED가 함께 싣는 blue 팔레트로 다시 가리킨다.
+ *
+ * **hex를 새로 지어내지 않고 SEED 자체 팔레트를 가리킨다.** 명도 단계와
+ * 라이트/다크 값이 이미 검증돼 있다. 여기서 바꾸는 것은 "어느 팔레트를
+ * 쓰는가"뿐이다.
+ *
+ * ⚠ **셀렉터를 SEED의 라이트 모드 셀렉터와 똑같이 맞춰야 한다.**
+ * 맨 `:root`로 쓰면 명시도(0,1,0)가 SEED의
+ * `:root[data-seed-color-mode="light-only"]`(0,2,0)보다 낮아, 파일을 나중에
+ * 불러와도 **조용히 진다.** 실제로 처음에 그렇게 짰다가 브라우저에서
+ * 여전히 주황색이 나오는 것을 확인하고 고쳤다. 아래 셀렉터는 SEED
+ * base.css의 라이트 블록에서 그대로 가져온 것이며,
+ * scripts/seed-brand-tokens.test.ts가 두 셀렉터가 계속 같은지 검사한다.
+ *
+ * ⚠ **이것은 공식 문서가 보장하는 경로가 아니다.** SEED 문서는 라이트/다크
+ * 전환만 다루고 테마 커스터마이즈 방법을 명시하지 않는다. 그래서 재정의
+ * 대상을 이 파일 한 곳에 모으고, 위 테스트가 브랜드 토큰이 전부 덮여
+ * 있는지와 셀렉터가 어긋나지 않았는지를 함께 검사한다. SEED를 올렸을 때
+ * 새 브랜드 토큰이 생기거나 셀렉터가 바뀌면 그 테스트가 먼저 깨진다 —
+ * 화면에 주황색이 나가기 전에.
+ *
+ * ⚠ **라이트 모드 전용이다.** vite.config.ts가 colorMode를 "light-only"로
+ * 고정하고 있다. 다크 모드를 켠다면 SEED의 다크 셀렉터에 대응하는 블록을
+ * 여기 함께 추가해야 한다.
+ */
+:root,
+:root[data-seed-color-mode="system"][data-seed-user-color-scheme="light"],
+:root[data-seed-color-mode="light-only"],
+:root [data-seed-color-mode="light-only"] {
+  --seed-color-bg-brand-solid: var(--seed-color-palette-blue-600);
+  --seed-color-bg-brand-solid-pressed: var(--seed-color-palette-blue-700);
+  --seed-color-bg-brand-weak: var(--seed-color-palette-blue-100);
+  --seed-color-bg-brand-weak-pressed: var(--seed-color-palette-blue-200);
+  --seed-color-fg-brand: var(--seed-color-palette-blue-600);
+  --seed-color-fg-brand-contrast: var(--seed-color-palette-blue-700);
+  --seed-color-stroke-brand-solid: var(--seed-color-palette-blue-700);
+  --seed-color-stroke-brand-weak: var(--seed-color-palette-blue-300);
+}

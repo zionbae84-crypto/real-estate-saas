@@ -18,6 +18,7 @@
   "author": "",
   "license": "ISC",
   "devDependencies": {
+    "@seed-design/vite-plugin": "^2.1.0",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.6.5",
@@ -32,6 +33,8 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@seed-design/css": "^2.5.0",
+    "@seed-design/react": "^2.3.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   }
