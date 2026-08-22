@@ -3,7 +3,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { ProfileForm } from "./components/ProfileForm";
 import { SafetyBadge } from "./components/SafetyBadge";
-import { useAffordability } from "./state/useAffordability";
+import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
+import { rules, useAffordability } from "./state/useAffordability";
 import { useProfileForm } from "./state/useProfileForm";
 
 export function App() {
@@ -15,8 +16,8 @@ export function App() {
     <main className="app">
       <h1>내 예산으로 살 수 있는 집</h1>
       <p className="subtitle">
-        2026년 3월 규제 기준 · 수도권 · 입력한 재무정보는 이 브라우저를 벗어나지
-        않습니다
+        {formatRuleVersionLabel(rules)} · 수도권 · 입력한 재무정보는 이
+        브라우저를 벗어나지 않습니다
       </p>
 
       <ErrorBoundary onReset={reset}>
