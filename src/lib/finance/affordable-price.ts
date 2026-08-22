@@ -83,6 +83,18 @@ export function calcAffordablePrice(
     ownFundsRequired(price, profile, rules) <= cash.amount,
   );
 
+  if (affordablePrice === null) {
+    // 도달 불가능한 분기다: 위에서 이미 `ownFundsRequired(0, …) <=
+    // cash.amount`를 확인했으므로 첫 구간(`low: 0`)은 반드시 이
+    // 조건에서 `accepts(0)`이 참이고, `searchMaxPrice`는 그 경우
+    // 절대 `null`을 돌려주지 않는다(위 주석 참고). 그럼에도 타입을
+    // 정직하게 좁히기 위해 방어적으로 남겨 둔다 — 여기 도달하면
+    // 탐색 로직 자체가 깨진 것이므로 조용히 0으로 얼버무리지 않는다.
+    throw new Error(
+      "calcAffordablePrice: searchMaxPrice가 예상과 달리 null을 반환했다 (불변식 위반)",
+    );
+  }
+
   return resultAt(
     affordablePrice,
     profile,
@@ -212,6 +224,7 @@ function searchSegment(
 
 /**
  * 룰셋이 만드는 모든 절벽에서 구간을 나눠, `accepts`가 참인 최대 가격을 찾는다.
+ * 참인 가격이 하나도 없으면(가격 0부터 이미 거짓이면) `null`.
  *
  * **`calcAffordablePrice`와 `calcSafePrice`가 이 함수를 공유한다.** 두 숫자는
  * 화면에 나란히 놓이므로 서로 다른 절벽 위에서 계산되면 안 된다. 절벽 목록만
@@ -219,15 +232,32 @@ function searchSegment(
  * 한쪽에만 반영되는 결함이 난다.
  *
  * `accepts`는 부작용이 없어야 하고, 같은 가격에 대해 같은 답을 줘야 한다.
+ *
+ * 반환값이 `null`이 아니면 그 값은 반드시 `accepts`를 통과했다 —
+ * `searchSegment`의 모든 후보가 채택 전 재검증을 거치기 때문이다.
+ * `best`의 초깃값을 `0`이 아니라 `null`로 둔 것이 이 보장의 핵심이다.
+ * 예전에는 초깃값이 `0`이라, 모든 구간이 자기 구간의 시작가에서부터
+ * 이미 거짓이면(즉 `searchSegment`가 전부 `null`을 돌려주면) 그 `0`이
+ * `accepts`를 한 번도 통과하지 못한 채 그대로 새어나갔다 — "0원이
+ * 안전 최대치"와 "안전한 가격이 없음"이 똑같이 `0`으로 뭉개졌다.
+ *
+ * `calcAffordablePrice`는 이 함수를 호출하기 전에 이미
+ * `ownFundsRequired(0, …) <= cash.amount`(= `accepts(0)`이 참)를 직접
+ * 확인해 두므로, 첫 구간(항상 `low: 0`에서 시작)이 `null`을 돌려주는
+ * 일이 없다 — 즉 이 함수는 그 호출 경로에서는 절대 `null`을 반환하지
+ * 않는다. `calcSafePrice`는 그런 사전 보장이 없어 `null`을 실제로
+ * 받아 처리해야 하는 유일한 호출자다.
  */
 export function searchMaxPrice(
   rules: Rules,
   accepts: (price: number) => boolean,
-): number {
-  let best = 0;
+): number | null {
+  let best: number | null = null;
   for (const segment of buildSearchSegments(rules)) {
     const candidate = searchSegment(segment, accepts);
-    if (candidate !== null && candidate > best) best = candidate;
+    if (candidate !== null && (best === null || candidate > best)) {
+      best = candidate;
+    }
   }
   return best;
 }
