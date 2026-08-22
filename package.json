@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "pipeline:probe": "tsx scripts/pipeline/probe.ts",
-    "pipeline:fetch": "tsx scripts/pipeline/fetch.ts"
+    "pipeline:fetch": "tsx scripts/pipeline/fetch.ts",
+    "pipeline": "tsx scripts/pipeline/run.ts"
   },
   "keywords": [],
   "author": "",

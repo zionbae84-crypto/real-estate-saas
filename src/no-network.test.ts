@@ -35,6 +35,11 @@ import { describe, expect, it } from "vitest";
  * 이 배열을 순회하며 `pattern.test(sample)`이 참인지 확인한다 — sample이
  * 없거나 패턴이 느슨해지면 그 테스트가 바로 빨갛게 죽는다. 이 핀이 없으면
  * "이 정규식이 지금도 뭔가를 잡고 있다"는 사실 자체가 다시 무인지대가 된다.
+ *
+ * 이 스캔은 `src/`만 본다. `scripts/pipeline/`은 의도적으로 제외돼 있다 —
+ * 약속의 내용은 "사용자 재무정보가 브라우저를 벗어나지 않는다"이고,
+ * 파이프라인은 **사용자 데이터를 아예 보지 않는 빌드 타임 도구**이기 때문이다.
+ * 파이프라인이 `fetch`를 쓰는 것은 위반이 아니다.
  */
 interface ForbiddenPattern {
   pattern: RegExp;

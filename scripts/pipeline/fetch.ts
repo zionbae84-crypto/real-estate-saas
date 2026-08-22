@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { DATA_DIR, RAW_DIR, loadRegions } from "./config";
 import { parseResponse } from "./parse-response";
 import type { RawTrade } from "./types";
@@ -401,6 +402,12 @@ export async function main(): Promise<void> {
   console.log(`\n완료: ${log.length}건 중 실패 ${failed}건. 로그는 data/fetch-log.json`);
 }
 
-if (import.meta.url === `file://${process.argv[1]}`) {
+// `file://${process.argv[1]}`로 직접 비교하면 저장소 경로에 비-ASCII 문자가
+// 있을 때(이 저장소의 실제 경로 "부동산 saas"가 그렇다) import.meta.url은
+// 퍼센트 인코딩되는 반면 process.argv[1]은 원문 그대로라 항상 false가 되어
+// npm run pipeline:fetch가 콘솔 출력도 에러도 없이 exit 0으로 조용히 아무
+// 일도 안 한다 — "정상 종료"처럼 보이는 최악의 실패다. pathToFileURL로
+// 양쪽을 같은 방식으로 인코딩해 비교한다.
+if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
   await main();
 }
