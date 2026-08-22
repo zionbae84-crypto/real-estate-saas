@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DATA_DIR, RAW_DIR, loadRegions } from "./config";
 import { parseResponse } from "./parse-response";
@@ -20,9 +20,10 @@ export interface FetchLogEntry {
    */
   truncated?: boolean;
   /**
-   * 캐시 파일이 손상돼(깨진 JSON, 배열이 아닌 JSON) 캐시 없음으로 취급하고
-   * 다시 받았으면 true. 재수집이 성공해도 이 사실 자체는 드러나야 한다 —
-   * 디스크 손상이 조용히 "정상 캐시 히트"처럼 보이면 안 된다.
+   * 캐시 파일이 손상돼(깨진 JSON, 봉투(객체) 형식이 아니거나 trades 필드가
+   * 배열이 아님) 캐시 없음으로 취급하고 다시 받았으면 true. 재수집이 성공해도
+   * 이 사실 자체는 드러나야 한다 — 디스크 손상이 조용히 "정상 캐시 히트"처럼
+   * 보이면 안 된다.
    */
   cacheCorrupted?: boolean;
 }
@@ -38,11 +39,12 @@ const NUM_OF_ROWS = "1000";
 const NUM_OF_ROWS_NUM = Number(NUM_OF_ROWS);
 const MONTHS_BACK = 12;
 /**
- * 한 시군구·월에 대해 받을 최대 페이지 수. totalCount를 계속 못 채워도
- * 무한 루프에 빠지지 않도록 하는 상한이다. numOfRows(1000) × 20 = 20,000건이면
- * 수도권 66개 시군구로 넓혀도 한 달치로는 충분히 넉넉하다.
+ * 시군구·월 "하나"에 대해 받을 최대 페이지 수(66개 시군구 전체에 곱하는 값이
+ * 아니다 — 이 상한은 대상 하나하나에 독립적으로 적용된다). totalCount를 계속
+ * 못 채워도 무한 루프에 빠지지 않도록 하는 상한이다. numOfRows(1000) × 20 =
+ * 20,000건이면 시군구 하나의 한 달치 아파트 거래량으로 충분히 넉넉하다.
  */
-const MAX_PAGES = 20;
+export const MAX_PAGES = 20;
 
 /** 이번 달부터 과거로 months개월치 (지역 × 월) 조합을 만든다. */
 export function buildTargets(
@@ -224,11 +226,24 @@ async function fetchAllPages(
   return { trades, failures, truncated };
 }
 
-/** 임시 파일에 쓴 뒤 rename한다 — 쓰다가 끊겨도 반쪽 파일이 남지 않는다. */
+/**
+ * 임시 파일에 쓴 뒤 rename한다 — 쓰다가 끊겨도 반쪽 파일이 남지 않는다.
+ * rename 자체가 실패하면(예: 대상 경로가 디렉터리) 임시 파일을 지우고
+ * 원래 에러를 그대로 던진다 — 정리가 실패해도 원래 에러를 삼키지 않는다.
+ */
 function writeFileAtomic(path: string, data: string): void {
   const tmpPath = `${path}.tmp-${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   writeFileSync(tmpPath, data);
-  renameSync(tmpPath, path);
+  try {
+    renameSync(tmpPath, path);
+  } catch (renameError) {
+    try {
+      rmSync(tmpPath, { force: true });
+    } catch {
+      // 정리 실패는 무시한다 — 아래에서 원래 에러를 그대로 던진다.
+    }
+    throw renameError;
+  }
 }
 
 interface FetchDeps {
@@ -263,8 +278,12 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
             regionCode,
             yearMonth,
             status: "cached",
-            tradeCount: cached.length,
-            failures: 0,
+            tradeCount: cached.trades.length,
+            failures: cached.failures,
+            // 잘린 채 캐시된 달은 이번 실행에서 다시 fetch하지 않으므로, 봉투에
+            // 저장해 둔 truncated를 그대로 이어받아야 report(Task 6)가 계속
+            // 알 수 있다 — 그렇지 않으면 캐시 적중 다음 실행부터 잘림이 사라진다.
+            ...(cached.truncated ? { truncated: true } : {}),
           });
           continue;
         } catch {
@@ -279,7 +298,12 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
         deps.key,
         deps.wait,
       );
-      writeFileAtomic(path, JSON.stringify(trades, null, 2));
+      const envelope: CacheEnvelope = {
+        trades,
+        failures,
+        ...(truncated ? { truncated: true } : {}),
+      };
+      writeFileAtomic(path, JSON.stringify(envelope, null, 2));
       log.push({
         regionCode,
         yearMonth,
@@ -314,14 +338,41 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
   return log;
 }
 
-/** 캐시 파일을 읽어 RawTrade[]로 반환한다. JSON이 아니거나 배열이 아니면 throw. */
-function readCache(path: string): RawTrade[] {
+/**
+ * 캐시 파일의 봉투 형식. 최상위가 RawTrade[]였던 옛 형식과 달리, 거래 배열과
+ * 함께 수집 메타데이터(failures, truncated)를 담아 캐시 적중 시에도
+ * FetchLogEntry를 정확히 재구성할 수 있게 한다 — 특히 truncated는 캐시
+ * 적중 경로가 다시 fetch를 부르지 않으므로 봉투에 없으면 영영 사라진다.
+ * 필드명은 FetchLogEntry의 대응 필드와 맞춘다.
+ */
+interface CacheEnvelope {
+  trades: RawTrade[];
+  failures: number;
+  truncated?: boolean;
+}
+
+/**
+ * 캐시 파일을 읽어 CacheEnvelope로 반환한다. 아직 실제 캐시 파일이 만들어진
+ * 적이 없으므로(실제 수집은 Task 7에서 처음 돈다) 옛 배열 형식과의 호환은
+ * 다루지 않는다 — 봉투(객체)가 아니거나 trades가 배열이 아니면 손상으로
+ * 보고 throw한다. 호출자가 캐시 없음 취급으로 다시 받는다.
+ */
+function readCache(path: string): CacheEnvelope {
   const raw = readFileSync(path, "utf8");
   const parsed = JSON.parse(raw) as unknown;
-  if (!Array.isArray(parsed)) {
-    throw new Error("캐시 파일이 배열이 아닙니다");
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("캐시 파일이 봉투(객체) 형식이 아닙니다");
   }
-  return parsed as RawTrade[];
+  const obj = parsed as Record<string, unknown>;
+  if (!Array.isArray(obj.trades)) {
+    throw new Error("캐시 봉투의 trades 필드가 배열이 아닙니다");
+  }
+  const failures = typeof obj.failures === "number" ? obj.failures : 0;
+  return {
+    trades: obj.trades as RawTrade[],
+    failures,
+    ...(obj.truncated === true ? { truncated: true } : {}),
+  };
 }
 
 export async function main(): Promise<void> {

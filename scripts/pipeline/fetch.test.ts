@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { buildTargets, fetchOne, redactKey, runFetch, shouldSkip } from "./fetch";
+import { MAX_PAGES, buildTargets, fetchOne, redactKey, runFetch, shouldSkip } from "./fetch";
 
 describe("buildTargets", () => {
   it("지역 × 개월 수만큼 만든다", () => {
@@ -183,7 +183,10 @@ describe("runFetch", () => {
     // "지난 달은 부르지 않았다"만 별도로 검증한다.
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse(sampleBody(0)));
     vi.stubGlobal("fetch", fetchMock);
-    mkdtempCache(rawDir, "11680-202607.json", [{ dummy: true }, { dummy: true }]);
+    mkdtempCache(rawDir, "11680-202607.json", {
+      trades: [{ dummy: true }, { dummy: true }],
+      failures: 0,
+    });
 
     const log = await runFetch({
       rawDir,
@@ -228,7 +231,7 @@ describe("runFetch", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(log[0]).toMatchObject({ status: "fetched", tradeCount: 1, failures: 0 });
     const written = JSON.parse(readFileSync(join(rawDir, "11680-202608.json"), "utf8"));
-    expect(written).toHaveLength(1);
+    expect(written.trades).toHaveLength(1);
   });
 
   it("거래가 없으면 status는 empty이고 빈 배열을 캐시로 남긴다", async () => {
@@ -349,7 +352,8 @@ describe("runFetch — 페이지네이션·캐시 견고성", () => {
     expect(log[0]).toMatchObject({ status: "fetched", tradeCount: 1500, failures: 0 });
     expect(log[0]?.truncated).toBeUndefined();
     const written = JSON.parse(readFileSync(join(rawDir, "11680-202608.json"), "utf8"));
-    expect(written).toHaveLength(1500);
+    expect(written.trades).toHaveLength(1500);
+    expect(written.truncated).toBeUndefined();
   });
 
   it("totalCount가 문자열이어도 페이지네이션이 동작한다", async () => {
@@ -391,7 +395,7 @@ describe("runFetch — 페이지네이션·캐시 견고성", () => {
     });
 
     expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
-    expect(fetchMock.mock.calls.length).toBeLessThanOrEqual(50);
+    expect(fetchMock.mock.calls.length).toBe(MAX_PAGES);
     expect(log[0]?.truncated).toBe(true);
     expect(log[0]?.status).not.toBe("failed");
   });
@@ -462,7 +466,7 @@ describe("runFetch — 페이지네이션·캐시 견고성", () => {
     expect(existsSync(join(dataDir, "fetch-log.json"))).toBe(true);
   });
 
-  it("JSON.parse 결과가 배열이 아닌 캐시도 손상으로 취급한다", async () => {
+  it("캐시가 봉투 형식이 아니면(trades 필드 없음) 손상으로 취급한다", async () => {
     mkdirSync(rawDir, { recursive: true });
     writeFileSync(join(rawDir, "11680-202607.json"), JSON.stringify({ not: "an array" }));
     const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(1)));
@@ -511,6 +515,134 @@ describe("runFetch — 페이지네이션·캐시 견고성", () => {
     expect(existsSync(logPath)).toBe(true);
     const parsed = JSON.parse(readFileSync(logPath, "utf8")) as unknown[];
     expect(parsed).toHaveLength(2);
+  });
+});
+
+describe("runFetch — 캐시 봉투와 잘림 표시 영속화", () => {
+  let rawDir: string;
+  let dataDir: string;
+
+  beforeEach(() => {
+    const root = mkdtempSync(join(tmpdir(), "fetch-pipeline-test-"));
+    rawDir = join(root, "raw");
+    dataDir = root;
+  });
+
+  afterEach(() => {
+    rmSync(dataDir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+  });
+
+  // 202608(이번 달)이 존재하면 재수집 대상이 되어 버리므로, "지난 달" 캐시 하나만
+  // 보도록 now를 202608로 두고 202607 캐시를 검사한다. months=1이면 대상은
+  // 202608뿐이라, 캐시 히트를 확인하려면 202607을 대상에 넣어야 한다 — months=2로
+  // 이번 달(202608, fetch mock 필요)과 지난 달(202607, 캐시 히트) 둘 다 대상에 넣는다.
+  const now = new Date("2026-08-22T00:00:00Z");
+
+  it("잘린 채 캐시된 달은 다음 실행에서도 캐시 적중 시 잘림 표시가 남는다", async () => {
+    mkdtempCache(rawDir, "11680-202607.json", {
+      trades: [{ dummy: true }],
+      failures: 0,
+      truncated: true,
+    });
+    // 이번 달(202608)은 캐시가 있어도 무조건 다시 받으므로 fetch가 최소 1번은
+    // 불린다. mockResolvedValue로 같은 Response 인스턴스를 재사용하면 두 번째
+    // 호출에서 "body already read"가 나므로 호출마다 새 Response를 만든다.
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(0)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 2,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry).toEqual({
+      regionCode: "11680",
+      yearMonth: "202607",
+      status: "cached",
+      tradeCount: 1,
+      failures: 0,
+      truncated: true,
+    });
+  });
+
+  it("정상적으로 캐시된 달은 잘림 표시가 붙지 않는다", async () => {
+    mkdtempCache(rawDir, "11680-202607.json", {
+      trades: [{ dummy: true }],
+      failures: 0,
+    });
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(0)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 2,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry?.truncated).toBeUndefined();
+    expect(entry).toEqual({
+      regionCode: "11680",
+      yearMonth: "202607",
+      status: "cached",
+      tradeCount: 1,
+      failures: 0,
+    });
+  });
+
+  it("캐시 파일이 봉투가 아닌 옛 배열 형식이면 손상으로 보고 재수집하며 로그에 남긴다", async () => {
+    // Task 6 이전 세대의 캐시 형식(최상위가 RawTrade[]). 봉투가 아니므로 손상으로 처리해야 한다.
+    mkdtempCache(rawDir, "11680-202607.json", [{ dummy: true }, { dummy: true }]);
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(1)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 2,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry?.status).not.toBe("cached");
+    expect(entry?.cacheCorrupted).toBe(true);
+  });
+
+  it("캐시 봉투의 trades 필드가 배열이 아니면 손상으로 취급한다", async () => {
+    mkdtempCache(rawDir, "11680-202607.json", { trades: "not-an-array", failures: 0 });
+    const fetchMock = vi.fn().mockImplementation(async () => jsonResponse(sampleBody(1)));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 2,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry?.cacheCorrupted).toBe(true);
   });
 });
 
