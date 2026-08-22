@@ -1,0 +1,6 @@
+{
+  "underMergeMaxEditDistance": 2,
+  "overMergeMinPriceRatio": 2.0,
+  "overMergeMinTradeCount": 4,
+  "lowConfidenceMinTrades": 3
+}
