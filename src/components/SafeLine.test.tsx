@@ -2,8 +2,19 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { SafeLine, type SafeLineProps } from "./SafeLine";
 
-function renderSafeLine(props: SafeLineProps) {
-  return render(<SafeLine {...props} />);
+/**
+ * 리뷰 수정(Important 2): `SafeLineProps`에 `noRepaymentCapacity`가
+ * 추가돼 필수 prop이 됐다 — 아래 헬퍼가 기본값을 채워, 이 값과 무관한
+ * 기존 테스트(숫자 표시·병합 여부)는 값을 매번 신경 쓰지 않아도 되게
+ * 한다. 원인 귀속 자체를 검증하는 테스트는 명시적으로 다른 값을 넘긴다.
+ */
+function renderSafeLine(
+  props: Omit<SafeLineProps, "noRepaymentCapacity"> &
+    Partial<Pick<SafeLineProps, "noRepaymentCapacity">>,
+) {
+  return render(
+    <SafeLine noRepaymentCapacity={false} {...props} />,
+  );
 }
 
 describe("SafeLine", () => {
@@ -42,5 +53,48 @@ describe("SafeLine", () => {
     expect(
       screen.queryByText(/최대 가격까지 부담률이 안전 범위/),
     ).not.toBeInTheDocument();
+  });
+
+  describe("리뷰 수정: 안전한 가격이 없는 원인을 소득으로 단정하지 않는다 (Important 2)", () => {
+    // calcSafePrice가 null(또는 0)을 돌려주는 이유는 둘이다 — 소득이
+    // 없거나, 기존 부채가 이미 상환 여력을 채웠거나. 리뷰어 브루트포스
+    // 그리드 1,920개 중 1,304개(68%)가 후자였다. 원인을 하나로(소득
+    // 탓으로) 뭉뚱그리면 소득이 높고 부채가 많은 사용자에게도 "소득이
+    // 없다"고 잘못 말하게 된다. BudgetResult의 ZeroBudgetMessage가 이미
+    // breakdown.DSR === 0으로 두 원인을 구분해 쓰는 근거를 그대로
+    // 받아, 여기서는 그 결과(noRepaymentCapacity)만 boolean으로 받는다.
+    it("noRepaymentCapacity가 true면(DSR===0) 소득·부채를 원인으로 짚는다", () => {
+      renderSafeLine({
+        affordablePrice: 300_000_000,
+        safePrice: null,
+        noRepaymentCapacity: true,
+      });
+      expect(
+        screen.getByText(/소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어/),
+      ).toBeInTheDocument();
+    });
+
+    it("noRepaymentCapacity가 false면(DSR>0) 소득 탓으로 단정하지 않는다", () => {
+      renderSafeLine({
+        affordablePrice: 300_000_000,
+        safePrice: null,
+        noRepaymentCapacity: false,
+      });
+      expect(screen.queryByText(/소득으로는/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/소득이 없거나 기존 부채가/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("safePrice가 0이어도(null과 같은 화면) 같은 원인 분기를 따른다", () => {
+      renderSafeLine({
+        affordablePrice: 300_000_000,
+        safePrice: 0,
+        noRepaymentCapacity: true,
+      });
+      expect(
+        screen.getByText(/소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어/),
+      ).toBeInTheDocument();
+    });
   });
 });

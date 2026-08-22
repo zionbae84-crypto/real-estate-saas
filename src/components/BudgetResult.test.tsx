@@ -165,5 +165,28 @@ describe("BudgetResult", () => {
       const safeLineText = screen.getByText("무리 없는 선");
       expect(safeLineText.closest("details")).toBeNull();
     });
+
+    describe("리뷰 수정: 안전선이 없는 원인을 SafeLine에 그대로 전달한다 (Important 2)", () => {
+      it("실구매력은 있지만(0 아님) DSR이 0이면 소득·부채를 원인으로 짚는다", () => {
+        const r = result({
+          affordablePrice: 600_000_000,
+          loanLimit: {
+            amount: 420_000_000,
+            binding: "LTV",
+            breakdown: { LTV: 420_000_000, DSR: 0, CAP: 600_000_000, POLICY: 0 },
+          },
+        });
+        renderResult({ result: r, safePrice: null });
+        expect(
+          screen.getByText(/소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어/),
+        ).toBeInTheDocument();
+      });
+
+      it("DSR이 0이 아니면 소득 탓으로 단정하지 않는다", () => {
+        const r = result({ affordablePrice: 600_000_000 }); // 기본 DSR: 574_316_140
+        renderResult({ result: r, safePrice: null });
+        expect(screen.queryByText(/소득이 없거나 기존 부채가/)).not.toBeInTheDocument();
+      });
+    });
   });
 });

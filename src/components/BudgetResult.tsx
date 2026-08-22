@@ -57,6 +57,10 @@ export function BudgetResult({ result, safePrice }: BudgetResultProps) {
             <SafeLine
               affordablePrice={result.affordablePrice}
               safePrice={safePrice}
+              // ZeroBudgetMessage와 같은 근거로 원인을 판단해 넘긴다 —
+              // breakdown.DSR은 가격에 의존하지 않으므로 affordablePrice가
+              // 0이 아닌 이 분기에서도 그대로 유효하다(SafeLine.tsx 참고).
+              noRepaymentCapacity={result.loanLimit.breakdown.DSR === 0}
             />
           </div>
 

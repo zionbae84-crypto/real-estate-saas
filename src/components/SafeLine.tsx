@@ -12,6 +12,22 @@ export interface SafeLineProps {
    * 없다는 뜻이다.
    */
   safePrice: number | null;
+  /**
+   * 리뷰 수정(Important 2): 상환 능력(DSR) 자체가 0인지 —
+   * 소득이 없거나 기존 부채가 이미 상환 한도를 채운 경우.
+   * `BudgetResult`의 `ZeroBudgetMessage`와 같은 근거
+   * (`result.loanLimit.breakdown.DSR === 0`)로 호출부가 판단해 전달한다.
+   *
+   * `safePrice`가 `null`(또는 `0`)이 되는 이유는 둘이다 — 소득이 없거나,
+   * 기존 부채가 이미 상환 여력을 채웠거나. 이걸 구분하지 않고 "소득으로는
+   * 무리 없이 살 수 있는 가격대가 없다"고 단정하면, 소득이 높고 부채가
+   * 많은 사용자에게도 "소득이 없다"고 잘못 말하게 된다(리뷰어 브루트포스
+   * 그리드 1,920개 중 1,304개, 68%가 이 경우였다). `breakdown.DSR`은
+   * 가격에 의존하지 않으므로(calcDsrLimit이 price를 받지 않는다)
+   * 이 값은 `affordablePrice`·`safePrice`가 무엇이든 그 프로필의 실제
+   * 상환능력 상태를 그대로 반영한다 — 진단에 쓰기 안전한 근거다.
+   */
+  noRepaymentCapacity: boolean;
 }
 
 /**
@@ -30,17 +46,27 @@ export interface SafeLineProps {
  *    "0원까지는 안전합니다"처럼 읽혀 사용자에게 실질적으로 도움이 되는
  *    정보가 아니다 — 살 수 있는 게 없다는 뜻을 "0"이라는 계산 결과로
  *    포장하는 셈이다. **0원을 결과로 내미는 것은 정보가 아니라 조롱이다.**
- *    그래서 이 컴포넌트는 둘을 같은 문장으로 묶어 보여준다.
+ *    그래서 이 컴포넌트는 둘을 같은 문장으로 묶어 보여준다. 다만
+ *    원인까지 하나로(소득 탓으로) 단정하지는 않는다 — `noRepaymentCapacity`로
+ *    소득·부채 문제인지, 그 외의 이유(예: 스트레스 금리에서도 부담률이
+ *    임계값을 못 넘음)인지를 갈라 말한다(리뷰 수정 Important 2).
  * 2. `safePrice === affordablePrice`(0이 아닌 경우)이면 — 최대 가격
  *    자체가 이미 안전 범위 안에 있다는 뜻이다. 같은 숫자를 두 번 나란히
  *    보여주면 사용자에게는 계산 오류처럼 보이므로, 한 줄로 합쳐 그
  *    사실을 직접 말한다.
  */
-export function SafeLine({ affordablePrice, safePrice }: SafeLineProps) {
+export function SafeLine({
+  affordablePrice,
+  safePrice,
+  noRepaymentCapacity,
+}: SafeLineProps) {
   if (safePrice === null || safePrice === 0) {
     return (
       <p className="safe-line safe-line--none">
-        지금 소득으로는 무리 없이 살 수 있는 가격대가 없습니다.
+        {noRepaymentCapacity
+          ? "소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어 " +
+            "무리 없이 살 수 있는 가격대가 없습니다."
+          : "지금 조건으로는 무리 없이 살 수 있는 가격대가 없습니다."}
       </p>
     );
   }
