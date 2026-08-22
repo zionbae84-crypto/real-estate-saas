@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+import { rules } from "./useAffordability";
 import {
   DEFAULT_FORM_STATE,
   loadStoredState,
   toProfile,
+  useProfileForm,
   type ProfileFormState,
 } from "./useProfileForm";
 
@@ -27,7 +30,24 @@ describe("DEFAULT_FORM_STATE", () => {
     // (toProfile이 null을 0으로 좁혀 엔진에는 그대로 0으로 전달된다).
     expect(DEFAULT_FORM_STATE.existingDebtAnnualPayment).toBeNull();
     expect(DEFAULT_FORM_STATE.status).toBe("무주택");
-    expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBe(84);
+  });
+
+  it("전용면적 기본값은 농특세 임계값을 넘는 쪽이다 — 숫자를 박지 않고 룰셋에서 유도한다", () => {
+    // 예전에는 84로 박혀 있었는데, 농특세 임계값(85㎡ 초과)보다 낮아
+    // 부대비용을 과소 계상하고 살 수 있는 가격을 과대 계상했다 — 이
+    // 제품이 절대 하면 안 되는 방향의 결함이었다. 여기서 숫자(86)를
+    // 다시 박으면 같은 실수를 테스트에서 반복하는 셈이라, 룰셋 임계값
+    // 기준으로 "그 값을 넘는지"를 확인한다.
+    expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBeGreaterThan(
+      rules.acquisitionTax.ruralTaxAreaThresholdSqm,
+    );
+    expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBe(
+      rules.acquisitionTax.ruralTaxAreaThresholdSqm + 1,
+    );
+  });
+
+  it("touched는 처음엔 비어 있다 — 전부 가정 중이라는 뜻이다", () => {
+    expect(DEFAULT_FORM_STATE.touched).toEqual([]);
   });
 });
 
@@ -53,7 +73,7 @@ describe("toProfile", () => {
       // DEFAULT_FORM_STATE.isRegulatedArea가 true이므로 state()가 만드는
       // 기본 프로필에도 그대로 true가 전달된다.
       isRegulatedArea: true,
-      exclusiveAreaSqm: 84,
+      exclusiveAreaSqm: DEFAULT_FORM_STATE.exclusiveAreaSqm,
     });
   });
 
@@ -147,8 +167,42 @@ describe("loadStoredState", () => {
     const loaded = loadStoredState(storage(stored));
     expect(loaded.cash).toBeNull();
     expect(loaded.annualIncome).toBe(50_000_000);
-    expect(loaded.exclusiveAreaSqm).toBe(84);
+    expect(loaded.exclusiveAreaSqm).toBe(DEFAULT_FORM_STATE.exclusiveAreaSqm);
     expect(loaded.status).toBe("무주택");
+  });
+
+  it("touched가 없는 옛 저장본은 빈 배열로 채운다 — 전부 가정 중이라는 안전한 뜻이다", () => {
+    const stored = JSON.stringify({
+      cash: 200_000_000,
+      annualIncome: 50_000_000,
+    });
+    expect(loadStoredState(storage(stored)).touched).toEqual([]);
+  });
+
+  it("유효한 touched 항목은 그대로 복원한다", () => {
+    const stored = JSON.stringify({
+      ...DEFAULT_FORM_STATE,
+      touched: ["existingDebt", "area"],
+    });
+    expect(loadStoredState(storage(stored)).touched).toEqual([
+      "existingDebt",
+      "area",
+    ]);
+  });
+
+  it("touched에 알 수 없는 값이 섞여 있으면 걸러낸다", () => {
+    const stored = JSON.stringify({
+      ...DEFAULT_FORM_STATE,
+      touched: ["existingDebt", "조작된값", 123],
+    });
+    expect(loadStoredState(storage(stored)).touched).toEqual([
+      "existingDebt",
+    ]);
+  });
+
+  it("touched가 배열이 아니면 빈 배열로 대체한다", () => {
+    const stored = JSON.stringify({ ...DEFAULT_FORM_STATE, touched: "전부" });
+    expect(loadStoredState(storage(stored)).touched).toEqual([]);
   });
 
   it("정상 저장값은 그대로 복원한다", () => {
@@ -201,13 +255,135 @@ describe("loadStoredState", () => {
       expect(loaded.isRegulatedArea, bad).toBe(true);
     });
 
-    it("실제 boolean false는 그대로 복원한다", () => {
+    it("touched에 regulatedArea가 있으면 실제 boolean false를 그대로 복원한다", () => {
+      // 리뷰 수정(Critical 2) 전에는 touched 여부와 무관하게 boolean이면
+      // 무조건 복원했다. 이제는 "손대지 않은 필드는 정의상 가정이므로
+      // 기본값이어야 한다"는 규칙이 생겨, touched에 없으면 저장된 값이
+      // 진짜 boolean이어도 무시하고 기본값으로 되돌린다(아래 Critical 2
+      // 테스트 참고) — 그래서 이 테스트는 "사용자가 실제로 확정했다"는
+      // 전제(touched)를 명시적으로 넣어 원래 검증 의도(진짜 값은 그대로
+      // 복원된다)를 유지한다.
       const stored = JSON.stringify({
         ...DEFAULT_FORM_STATE,
         isRegulatedArea: false,
+        touched: ["regulatedArea"],
       });
       const loaded = loadStoredState({ getItem: () => stored });
       expect(loaded.isRegulatedArea).toBe(false);
+    });
+  });
+
+  describe("리뷰 수정(Critical 2): touched에 없는 필드는 저장된 값과 무관하게 현재 기본값이다", () => {
+    // 손대지 않은 필드는 정의상 가정이다. 옛 저장본(touched 필드 자체가
+    // 없던 시절)을 복원하면 이 항목들의 touched는 항상 빈 배열이 되는데,
+    // 그때 저장된 exclusiveAreaSqm(예: 마이그레이션 전 기본값 84)이나
+    // isRegulatedArea가 그대로 살아나면 "가정"이라는 이름표를 단 값이
+    // 실제로는 사용자가 한 번도 확인한 적 없는 옛 기본값이 된다. 전용면적
+    // 84는 농특세 임계값(85㎡) **이하**라 실구매력을 실제보다 크게
+    // 계산한다 — 이 제품이 절대 하면 안 되는 방향의 결함이다(재현: 리뷰
+    // 브리프의 4억 8,290만원 vs 86㎡ 기준 4억 8,130만원).
+
+    it("옛 저장본(exclusiveAreaSqm: 84, touched 없음)을 복원하면 전용면적은 현재 기본값이 된다", () => {
+      const stored = JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 60_000_000,
+        exclusiveAreaSqm: 84,
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.touched).toEqual([]); // 전제 확인: 옛 저장본엔 touched가 없다
+      expect(loaded.exclusiveAreaSqm).toBe(DEFAULT_FORM_STATE.exclusiveAreaSqm);
+      expect(loaded.exclusiveAreaSqm).not.toBe(84);
+    });
+
+    it("touched에 area가 있으면 저장된 전용면적을 그대로 존중한다", () => {
+      const stored = JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 60_000_000,
+        exclusiveAreaSqm: 59,
+        touched: ["area"],
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.exclusiveAreaSqm).toBe(59);
+    });
+
+    it("옛 저장본(isRegulatedArea: false, touched 없음)을 복원하면 규제지역은 현재 기본값(true)이 된다", () => {
+      const stored = JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 60_000_000,
+        isRegulatedArea: false,
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.touched).toEqual([]);
+      expect(loaded.isRegulatedArea).toBe(DEFAULT_FORM_STATE.isRegulatedArea);
+      expect(loaded.isRegulatedArea).toBe(true);
+    });
+
+    it("touched에 regulatedArea가 있으면 저장된 isRegulatedArea를 그대로 존중한다", () => {
+      const stored = JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 60_000_000,
+        isRegulatedArea: false,
+        touched: ["regulatedArea"],
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.isRegulatedArea).toBe(false);
+    });
+  });
+
+  describe("리뷰 수정: 옛 갈아타기 상태를 화면 없이 조용히 반영하지 않는다 (Important 3, 방향 a)", () => {
+    // status/existingHome UI가 ProfileForm에서 완전히 빠졌다. 이 상태에서
+    // 옛 저장본의 "갈아타기"를 그대로 복원해 반영하면, 사용자가 보지도
+    // 고치지도 못하는 채로 구매력(가용 현금)이 매도 순자산만큼 조용히
+    // 올라간다 — 이 제품이 절대 하면 안 되는 방향이다. 편집 UI가 돌아올
+    // 때까지는 안전한 기본값(무주택)으로 되돌린다.
+    it("옛 저장본의 status가 갈아타기여도 무주택으로 되돌린다", () => {
+      const stored = JSON.stringify({
+        cash: 50_000_000,
+        annualIncome: 100_000_000,
+        status: "갈아타기",
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 300_000_000,
+          capitalGainsTax: 20_000_000,
+        },
+      });
+      const loaded = loadStoredState(storage(stored));
+      expect(loaded.status).toBe("무주택");
+    });
+
+    it("toProfile도 무주택으로 처리해 existingHome을 엔진에 넘기지 않는다 — 구매력이 조용히 올라가지 않는다", () => {
+      const stored = JSON.stringify({
+        cash: 50_000_000,
+        annualIncome: 100_000_000,
+        status: "갈아타기",
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 300_000_000,
+          capitalGainsTax: 20_000_000,
+        },
+      });
+      const loaded = loadStoredState(storage(stored));
+      const profile = toProfile(loaded);
+      expect(profile?.existingHome).toBeUndefined();
+    });
+
+    it("existingHome 값 자체는 보존한다 — 편집 UI가 돌아왔을 때 데이터를 잃지 않는다", () => {
+      const stored = JSON.stringify({
+        cash: 50_000_000,
+        annualIncome: 100_000_000,
+        status: "갈아타기",
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 300_000_000,
+          capitalGainsTax: 20_000_000,
+        },
+      });
+      const loaded = loadStoredState(storage(stored));
+      expect(loaded.existingHome).toEqual({
+        expectedSalePrice: 700_000_000,
+        remainingLoan: 300_000_000,
+        capitalGainsTax: 20_000_000,
+      });
     });
   });
 
@@ -243,12 +419,16 @@ describe("loadStoredState", () => {
     });
 
     it("toProfile을 거쳐도 0은 0으로, null은 undefined(미반영 경고 대상)로 남는다", () => {
+      // 리뷰 수정(Important 3, 방향 a) 이후 loadStoredState는 status를
+      // 항상 "무주택"으로 되돌린다 — 여기서 검증하려는 것은 그 결정과
+      // 무관한 toProfile의 capitalGainsTax 0/undefined 정규화이므로,
+      // existingHome 파싱은 loadStoredState로 거치고 status만 테스트가
+      // 직접 "갈아타기"로 되돌려 toProfile의 existingHome 분기를 태운다.
       const zero = loadStoredState(
         storage(
           JSON.stringify({
             cash: 1,
             annualIncome: 1,
-            status: "갈아타기",
             existingHome: {
               expectedSalePrice: 700_000_000,
               remainingLoan: 300_000_000,
@@ -257,14 +437,16 @@ describe("loadStoredState", () => {
           }),
         ),
       );
-      expect(toProfile(zero)?.existingHome?.capitalGainsTax).toBe(0);
+      expect(
+        toProfile({ ...zero, status: "갈아타기" })?.existingHome
+          ?.capitalGainsTax,
+      ).toBe(0);
 
       const missing = loadStoredState(
         storage(
           JSON.stringify({
             cash: 1,
             annualIncome: 1,
-            status: "갈아타기",
             existingHome: {
               expectedSalePrice: 700_000_000,
               remainingLoan: 300_000_000,
@@ -273,7 +455,75 @@ describe("loadStoredState", () => {
           }),
         ),
       );
-      expect(toProfile(missing)?.existingHome?.capitalGainsTax).toBeUndefined();
+      expect(
+        toProfile({ ...missing, status: "갈아타기" })?.existingHome
+          ?.capitalGainsTax,
+      ).toBeUndefined();
     });
+  });
+});
+
+describe("useProfileForm — setField가 touched를 기록한다", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("기존 부채를 바꾸면 existingDebt가 touched에 들어간다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    expect(result.current.state.touched).not.toContain("existingDebt");
+
+    act(() => result.current.setField("existingDebtAnnualPayment", 1_200_000));
+
+    expect(result.current.state.touched).toContain("existingDebt");
+  });
+
+  it("규제지역을 바꾸면 regulatedArea가 touched에 들어간다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => result.current.setField("isRegulatedArea", false));
+    expect(result.current.state.touched).toContain("regulatedArea");
+  });
+
+  it("전용면적을 바꾸면 area가 touched에 들어간다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => result.current.setField("exclusiveAreaSqm", 59));
+    expect(result.current.state.touched).toContain("area");
+  });
+
+  it("cash·annualIncome·isFirstTimeBuyer는 touched에 기록되지 않는다", () => {
+    // 이 셋은 첫 화면에 늘 보이는 필수 입력이라 "가정"이라는 개념 자체가
+    // 없다 — AssumableField에 속하지 않는다.
+    const { result } = renderHook(() => useProfileForm());
+    act(() => {
+      result.current.setField("cash", 100_000_000);
+      result.current.setField("annualIncome", 50_000_000);
+      result.current.setField("isFirstTimeBuyer", true);
+    });
+    expect(result.current.state.touched).toEqual([]);
+  });
+
+  it("기존 부채 입력에서 파싱 실패로 null이 넘어오면 touched에 기록하지 않는다", () => {
+    // MoneyInput은 못 읽는 값(예: 지운 빈 칸, 문자 섞인 값)일 때
+    // onChange(null)을 부른다. 이때 existingDebt를 touched로 표시하면,
+    // AssumptionLine은 "사용자가 부채를 확정했다"고 오해해 문구를 감추는데
+    // 실제 계산은 여전히 0을 가정한다 — 문구와 계산이 어긋난다. 값이 실제로
+    // 있을 때만 touched로 기록해야 한다.
+    const { result } = renderHook(() => useProfileForm());
+    act(() => result.current.setField("existingDebtAnnualPayment", null));
+    expect(result.current.state.touched).not.toContain("existingDebt");
+  });
+
+  it("기존 부채에 실제 값을 넣으면 여전히 touched에 기록된다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => result.current.setField("existingDebtAnnualPayment", 1_200_000));
+    expect(result.current.state.touched).toContain("existingDebt");
+  });
+
+  it("같은 항목을 두 번 바꿔도 touched에 중복으로 쌓이지 않는다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => {
+      result.current.setField("exclusiveAreaSqm", 59);
+      result.current.setField("exclusiveAreaSqm", 40);
+    });
+    expect(
+      result.current.state.touched.filter((f) => f === "area"),
+    ).toHaveLength(1);
   });
 });

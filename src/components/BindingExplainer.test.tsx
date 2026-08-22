@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { BindingConstraint, LoanLimit } from "../lib/finance";
-import { BindingExplainer } from "./BindingExplainer";
+import { BindingExplainer, getBindingTitle } from "./BindingExplainer";
 
 function limit(binding: BindingConstraint): LoanLimit {
   return {
@@ -44,6 +44,11 @@ describe("BindingExplainer", () => {
     expect(container.querySelector(".binding-amount")).toHaveTextContent(
       "4억 2,000만원",
     );
+  });
+
+  it("리뷰 수정(Minor 5): 한도 금액에 '대출 한도' 라벨이 붙는다 — 접힌 영역에서 부대비용 옆 맨 숫자로 보이지 않는다", () => {
+    render(<BindingExplainer loanLimit={limit("LTV")} />);
+    expect(screen.getByText("대출 한도")).toBeInTheDocument();
   });
 
   it("네 제약의 한도를 모두 펼쳐 보여준다", () => {
@@ -301,6 +306,36 @@ describe("BindingExplainer", () => {
       // 여유액 = 393,890,000 - 373,305,491 = 20,584,509
       expect(runnerUp).toHaveTextContent("2,058만 4,509원");
       expect(container.querySelector(".runner-up-tied")).not.toBeInTheDocument();
+    });
+  });
+
+  describe("showTitle", () => {
+    it("기본값은 제목을 보여준다", () => {
+      render(<BindingExplainer loanLimit={limit("LTV")} />);
+      expect(
+        screen.getByRole("heading", { name: "담보 가치(LTV)에 걸렸습니다" }),
+      ).toBeInTheDocument();
+    });
+
+    it("false면 제목 줄을 그리지 않는다 — BudgetResult가 같은 문구를 이미 밖에서 보여줄 때 쓴다", () => {
+      render(<BindingExplainer loanLimit={limit("LTV")} showTitle={false} />);
+      expect(
+        screen.queryByRole("heading", { name: "담보 가치(LTV)에 걸렸습니다" }),
+      ).not.toBeInTheDocument();
+      // 나머지 내용(금액·조언)은 그대로 남아 있다 — 제목만 빠진다.
+      expect(screen.getByText(/현금을 더 모으면/)).toBeInTheDocument();
+    });
+  });
+
+  describe("getBindingTitle", () => {
+    it("각 제약의 한 줄 제목을 컴포넌트가 그리는 것과 똑같이 돌려준다", () => {
+      const bindings: BindingConstraint[] = ["LTV", "DSR", "CAP", "POLICY"];
+      for (const binding of bindings) {
+        render(<BindingExplainer loanLimit={limit(binding)} />);
+        expect(
+          screen.getByRole("heading", { name: getBindingTitle(binding) }),
+        ).toBeInTheDocument();
+      }
     });
   });
 });

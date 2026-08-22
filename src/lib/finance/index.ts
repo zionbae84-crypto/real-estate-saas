@@ -9,6 +9,7 @@ export type { MatchedPolicyLoan } from "./loan-limit";
 export { matchPolicyLoans } from "./policy-loans";
 export { assertValidProfile } from "./profile";
 export { parseRules } from "./rules";
+export { calcSafePrice } from "./safe-price";
 export { calcSafetyScore } from "./safety";
 export type {
   BindingConstraint,

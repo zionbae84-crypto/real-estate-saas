@@ -79,12 +79,20 @@ export function calcAffordablePrice(
     ]);
   }
 
-  let affordablePrice = 0;
-  for (const segment of buildSearchSegments(rules)) {
-    const candidate = searchSegment(segment, profile, rules, cash.amount);
-    if (candidate !== null && candidate > affordablePrice) {
-      affordablePrice = candidate;
-    }
+  const affordablePrice = searchMaxPrice(rules, (price) =>
+    ownFundsRequired(price, profile, rules) <= cash.amount,
+  );
+
+  if (affordablePrice === null) {
+    // 도달 불가능한 분기다: 위에서 이미 `ownFundsRequired(0, …) <=
+    // cash.amount`를 확인했으므로 첫 구간(`low: 0`)은 반드시 이
+    // 조건에서 `accepts(0)`이 참이고, `searchMaxPrice`는 그 경우
+    // 절대 `null`을 돌려주지 않는다(위 주석 참고). 그럼에도 타입을
+    // 정직하게 좁히기 위해 방어적으로 남겨 둔다 — 여기 도달하면
+    // 탐색 로직 자체가 깨진 것이므로 조용히 0으로 얼버무리지 않는다.
+    throw new Error(
+      "calcAffordablePrice: searchMaxPrice가 예상과 달리 null을 반환했다 (불변식 위반)",
+    );
   }
 
   return resultAt(
@@ -160,21 +168,19 @@ function buildSearchSegments(rules: Rules): SearchSegment[] {
 }
 
 /**
- * 한 구간(f가 단조 증가한다고 가정할 수 있는 범위) 안에서 감당 가능한
- * 최대가를 이분 탐색으로 찾는다. 구간 하한부터 이미 예산을 넘으면 이
- * 구간에는 후보가 없다. 찾은 값은 PRICE_STEP으로 내림한 뒤, 가정에
- * 기대지 않고 실제 가격에서 다시 정직하게 재계산해 감당 가능함을
- * 검증한 경우에만 후보로 인정한다.
+ * 한 구간(f가 단조라고 가정할 수 있는 범위) 안에서 `accepts`가 참인 최대
+ * 가격을 이분 탐색으로 찾는다.
+ *
+ * `accepts`는 "이 가격이 조건을 만족하는가"를 답한다. 감당 가능 여부든
+ * 안전 등급이든, 가격이 오를수록 거짓으로 바뀌는 성질이면 된다.
  */
 function searchSegment(
   segment: SearchSegment,
-  profile: BuyerProfile,
-  rules: Rules,
-  cashAmount: number,
+  accepts: (price: number) => boolean,
 ): number | null {
   const { low: segLow, high: segHigh } = segment;
   if (segLow > segHigh) return null;
-  if (ownFundsRequired(segLow, profile, rules) > cashAmount) return null;
+  if (!accepts(segLow)) return null;
 
   let low = segLow;
   let high = segHigh;
@@ -182,7 +188,7 @@ function searchSegment(
   // 50회면 100억 범위를 0.01원 미만까지 좁힌다
   for (let i = 0; i < 50; i++) {
     const mid = (low + high) / 2;
-    if (ownFundsRequired(mid, profile, rules) <= cashAmount) {
+    if (accepts(mid)) {
       low = mid;
     } else {
       high = mid;
@@ -190,7 +196,7 @@ function searchSegment(
   }
 
   // 이분 탐색은 high를 좁히기만 하고 low에 대입하지 않으므로, 구간 전체를
-  // 감당할 수 있어도 low는 segHigh에 무한히 가까워질 뿐 도달하지 못한다.
+  // 받아들일 수 있어도 low는 segHigh에 무한히 가까워질 뿐 도달하지 못한다.
   // 그대로 내림하면 답이 한 스텝(PRICE_STEP) 낮게 나온다 — 구간 상단
   // 자체도 후보로 함께 검증한다.
   //
@@ -208,11 +214,51 @@ function searchSegment(
   let best: number | null = null;
   for (const candidate of candidates) {
     if (candidate < segLow) continue;
-    // 구간 가정에 기대지 않고, 실제 가격에서 정직하게 재계산해 검증한다.
-    if (ownFundsRequired(candidate, profile, rules) > cashAmount) continue;
+    // 구간 가정에 기대지 않고, 실제 가격에서 정직하게 재검증한다.
+    if (!accepts(candidate)) continue;
     if (best === null || candidate > best) best = candidate;
   }
 
+  return best;
+}
+
+/**
+ * 룰셋이 만드는 모든 절벽에서 구간을 나눠, `accepts`가 참인 최대 가격을 찾는다.
+ * 참인 가격이 하나도 없으면(가격 0부터 이미 거짓이면) `null`.
+ *
+ * **`calcAffordablePrice`와 `calcSafePrice`가 이 함수를 공유한다.** 두 숫자는
+ * 화면에 나란히 놓이므로 서로 다른 절벽 위에서 계산되면 안 된다. 절벽 목록만
+ * 공유하고 탐색을 각자 쓰면, 구간 상단·PRICE_STEP 경계 처리 같은 세부가
+ * 한쪽에만 반영되는 결함이 난다.
+ *
+ * `accepts`는 부작용이 없어야 하고, 같은 가격에 대해 같은 답을 줘야 한다.
+ *
+ * 반환값이 `null`이 아니면 그 값은 반드시 `accepts`를 통과했다 —
+ * `searchSegment`의 모든 후보가 채택 전 재검증을 거치기 때문이다.
+ * `best`의 초깃값을 `0`이 아니라 `null`로 둔 것이 이 보장의 핵심이다.
+ * 예전에는 초깃값이 `0`이라, 모든 구간이 자기 구간의 시작가에서부터
+ * 이미 거짓이면(즉 `searchSegment`가 전부 `null`을 돌려주면) 그 `0`이
+ * `accepts`를 한 번도 통과하지 못한 채 그대로 새어나갔다 — "0원이
+ * 안전 최대치"와 "안전한 가격이 없음"이 똑같이 `0`으로 뭉개졌다.
+ *
+ * `calcAffordablePrice`는 이 함수를 호출하기 전에 이미
+ * `ownFundsRequired(0, …) <= cash.amount`(= `accepts(0)`이 참)를 직접
+ * 확인해 두므로, 첫 구간(항상 `low: 0`에서 시작)이 `null`을 돌려주는
+ * 일이 없다 — 즉 이 함수는 그 호출 경로에서는 절대 `null`을 반환하지
+ * 않는다. `calcSafePrice`는 그런 사전 보장이 없어 `null`을 실제로
+ * 받아 처리해야 하는 유일한 호출자다.
+ */
+export function searchMaxPrice(
+  rules: Rules,
+  accepts: (price: number) => boolean,
+): number | null {
+  let best: number | null = null;
+  for (const segment of buildSearchSegments(rules)) {
+    const candidate = searchSegment(segment, accepts);
+    if (candidate !== null && (best === null || candidate > best)) {
+      best = candidate;
+    }
+  }
   return best;
 }
 

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BuyerProfile, HouseholdStatus } from "../lib/finance";
+import { rules } from "./useAffordability";
 
 export const STORAGE_KEY = "budget-profile-v1";
 
@@ -8,6 +9,23 @@ export interface ExistingHomeFormState {
   remainingLoan: number | null;
   capitalGainsTax: number | null;
 }
+
+/** 사용자가 직접 값을 정한 항목. 여기 없으면 기본값(=가정)으로 계산 중이다 */
+export type AssumableField = "existingDebt" | "regulatedArea" | "area";
+
+const ALL_ASSUMABLE_FIELDS: readonly AssumableField[] = [
+  "existingDebt",
+  "regulatedArea",
+  "area",
+];
+
+/** setField가 건드린 키를 어느 AssumableField로 기록할지 매핑한다 */
+const ASSUMABLE_KEY_MAP: Partial<Record<keyof ProfileFormState, AssumableField>> =
+  {
+    existingDebtAnnualPayment: "existingDebt",
+    isRegulatedArea: "regulatedArea",
+    exclusiveAreaSqm: "area",
+  };
 
 export interface ProfileFormState {
   cash: number | null;
@@ -18,7 +36,27 @@ export interface ProfileFormState {
   isRegulatedArea: boolean;
   exclusiveAreaSqm: number;
   existingHome: ExistingHomeFormState;
+  /**
+   * 사용자가 명시적으로 정한 항목들.
+   *
+   * 값만 봐서는 가정인지 사용자 선택인지 알 수 없다 — isRegulatedArea가
+   * true인 것이 "기본값 그대로"인지 "사용자가 규제지역을 골랐다"인지
+   * 구분되지 않는다. 가정 문구는 그 구분 위에 서 있으므로 따로 기록한다.
+   */
+  touched: AssumableField[];
 }
+
+/**
+ * 전용면적 기본값. 농특세 임계값을 **넘는** 쪽으로 둔다.
+ *
+ * 농특세는 전용 85㎡ 초과에 붙는다. 임계값 아래로 두면 부대비용이 적게
+ * 잡혀 살 수 있는 가격이 실제보다 크게 나온다 — 이 제품이 피해야 하는
+ * 방향이다. 사용자가 실제 면적을 넣으면 대개 이 가정보다 유리해진다.
+ *
+ * 룰셋에서 유도하는 이유: 숫자를 박아 두면 임계값이 바뀌었을 때 방향이
+ * 조용히 뒤집힌다.
+ */
+const ASSUMED_AREA_SQM = rules.acquisitionTax.ruralTaxAreaThresholdSqm + 1;
 
 export const DEFAULT_FORM_STATE: ProfileFormState = {
   cash: null,
@@ -36,12 +74,13 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
   // 30%p 과대평가하게 되므로, 모르면 규제지역(true)으로 두는 쪽이
   // 안전하다 — 이 제품은 항상 과대평가를 피하는 쪽을 기본값으로 삼는다.
   isRegulatedArea: true,
-  exclusiveAreaSqm: 84,
+  exclusiveAreaSqm: ASSUMED_AREA_SQM,
   existingHome: {
     expectedSalePrice: null,
     remainingLoan: null,
     capitalGainsTax: null,
   },
+  touched: [],
 };
 
 /** 필수값(현금·소득)이 채워졌을 때만 BuyerProfile을 만든다. */
@@ -104,30 +143,64 @@ export function loadStoredState(
       ? (o.existingHome as Record<string, unknown>)
       : {};
 
+  // touched를 먼저 계산한다 — isRegulatedArea·exclusiveAreaSqm 복원이
+  // 이 값에 의존한다(아래 리뷰 수정 Critical 2 참고).
+  const touched = parseTouched(o.touched);
+
   return {
     cash: amount(o.cash),
     annualIncome: amount(o.annualIncome),
     existingDebtAnnualPayment: amount(o.existingDebtAnnualPayment),
-    status:
-      o.status === "무주택" || o.status === "갈아타기"
-        ? o.status
-        : DEFAULT_FORM_STATE.status,
+    // "갈아타기" 상태는 저장본에 남아 있어도 항상 "무주택"으로 되돌린다.
+    // ProfileForm은 status/기존 주택(existingHome) 편집 UI를 전혀
+    // 렌더링하지 않는다 — 사용자가 이 값을 보거나 고칠 방법이 없다.
+    // 그런데도 그대로 복원해 반영하면 calcAvailableCash가 매도 순자산을
+    // 현금에 더해, 사용자가 보지도 고치지도 못한 채로 구매력이 조용히
+    // 올라간다. 이 제품은 항상 안전한(과소평가) 쪽을 기본값으로 삼으므로,
+    // 편집 UI가 돌아오기 전까지는 무주택으로 취급한다.
+    //
+    // existingHome 필드값 자체는 지우지 않고 아래에서 그대로 보존한다 —
+    // 편집 UI가 돌아왔을 때 사용자가 예전에 넣은 값을 잃지 않게 하기
+    // 위해서다. AssumptionLine은 이 보존된 값을 보고 "갈아타기 정보가
+    // 있지만 반영되지 않았다"는 사실을 알림 문구로 드러낸다.
+    status: DEFAULT_FORM_STATE.status,
     isFirstTimeBuyer:
       typeof o.isFirstTimeBuyer === "boolean"
         ? o.isFirstTimeBuyer
         : DEFAULT_FORM_STATE.isFirstTimeBuyer,
-    isRegulatedArea:
-      typeof o.isRegulatedArea === "boolean"
+    // 리뷰 수정(Critical 2): 손대지 않은 필드는 정의상 가정이므로, 반드시
+    // "지금" 코드가 정하는 기본값이어야 한다. touched에 없으면 저장된
+    // 값이 유효한 타입이어도(boolean·양수) 무시하고 DEFAULT_FORM_STATE를
+    // 쓴다 — 그러지 않으면 옛 저장본(예: 전용면적 84, 마이그레이션 전
+    // 기본값)이 "가정"이라는 이름표를 달고 되살아나, 사용자가 확인한 적
+    // 없는 값이 계산에 쓰이면서 문구는 그 사실을 숨긴다. touched에 있으면
+    // (사용자가 실제로 정한 값이면) 기존과 같은 타입 검증을 거쳐 그대로
+    // 복원한다.
+    isRegulatedArea: touched.includes("regulatedArea")
+      ? typeof o.isRegulatedArea === "boolean"
         ? o.isRegulatedArea
-        : DEFAULT_FORM_STATE.isRegulatedArea,
-    exclusiveAreaSqm:
-      positive(o.exclusiveAreaSqm) ?? DEFAULT_FORM_STATE.exclusiveAreaSqm,
+        : DEFAULT_FORM_STATE.isRegulatedArea
+      : DEFAULT_FORM_STATE.isRegulatedArea,
+    exclusiveAreaSqm: touched.includes("area")
+      ? (positive(o.exclusiveAreaSqm) ?? DEFAULT_FORM_STATE.exclusiveAreaSqm)
+      : DEFAULT_FORM_STATE.exclusiveAreaSqm,
     existingHome: {
       expectedSalePrice: amount(home.expectedSalePrice),
       remainingLoan: amount(home.remainingLoan),
       capitalGainsTax: amount(home.capitalGainsTax),
     },
+    // 옛 저장본에는 touched가 아예 없다. 없으면 "전부 가정 중"이라는
+    // 뜻이므로 빈 배열이 안전한 방향이다 — 실제로는 사용자가 예전에
+    // 값을 정했을 수도 있는 항목을 다시 "가정 중"으로 보여주는 것은,
+    // 반대로 사용자가 정한 적 없는 값을 "확정"으로 잘못 표시하는 것보다
+    // 안전하다.
+    touched,
   };
+}
+
+function parseTouched(value: unknown): AssumableField[] {
+  if (!Array.isArray(value)) return [];
+  return ALL_ASSUMABLE_FIELDS.filter((field) => value.includes(field));
 }
 
 /**
@@ -168,20 +241,22 @@ export function useProfileForm() {
 
   const setField = useCallback(
     <K extends keyof ProfileFormState>(key: K, value: ProfileFormState[K]) => {
-      setState((prev) => ({ ...prev, [key]: value }));
-    },
-    [],
-  );
-
-  const setExistingHomeField = useCallback(
-    <K extends keyof ExistingHomeFormState>(
-      key: K,
-      value: ExistingHomeFormState[K],
-    ) => {
-      setState((prev) => ({
-        ...prev,
-        existingHome: { ...prev.existingHome, [key]: value },
-      }));
+      setState((prev) => {
+        const assumable = ASSUMABLE_KEY_MAP[key];
+        // 기존 부채 입력란은 파싱 실패(못 읽는 값, 빈 칸) 시 onChange(null)을
+        // 부른다. 이때도 touched로 기록하면 AssumptionLine이 "사용자가
+        // 확정했다"고 오해해 문구를 감추는데, 실제 계산은 여전히 0을
+        // 가정한다 — 값이 실제로 있을 때만 touched로 표시해야 문구와
+        // 계산이 어긋나지 않는다. (다른 AssumableField는 체크박스·숫자
+        // 입력이라 이런 "실패해서 null" 경로가 없다.)
+        const isEmptyExistingDebt =
+          key === "existingDebtAnnualPayment" && value === null;
+        const touched =
+          assumable && !isEmptyExistingDebt && !prev.touched.includes(assumable)
+            ? [...prev.touched, assumable]
+            : prev.touched;
+        return { ...prev, [key]: value, touched };
+      });
     },
     [],
   );
@@ -194,5 +269,5 @@ export function useProfileForm() {
   // state가 실제로 바뀔 때만 새 profile을 만들도록 메모이즈한다.
   const profile = useMemo(() => toProfile(state), [state]);
 
-  return { state, setField, setExistingHomeField, reset, profile };
+  return { state, setField, reset, profile };
 }
