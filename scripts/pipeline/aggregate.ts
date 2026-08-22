@@ -17,12 +17,30 @@ export interface ComplexUnit {
   maxPrice: number;
   /** 최근 3개월 중위값 대비 그 이전 3개월 중위값의 변동률. 비교 대상이 없으면 null */
   changeRate3m: number | null;
+  /** changeRate3m 계산에 쓰인 "최근 3개월" 창의 거래 건수 */
+  changeRate3mRecentCount: number;
+  /** changeRate3m 계산에 쓰인 "그 이전 3개월" 창의 거래 건수(분모 쪽) */
+  changeRate3mPriorCount: number;
+  /**
+   * changeRate3m이 근거한 두 창 중 하나라도 lowConfidenceMinTrades 미만이면
+   * true. changeRate3m 자체는 null이 아니어도(계산은 됐어도) 표본이 1~2건뿐인
+   * 급등락일 수 있다 — lowConfidence(대표가 신뢰도)와 별개로, 이 변동률
+   * 하나만 두고 봐도 신뢰할 수 있는지를 나타낸다. changeRate3m이 null이면
+   * 애초에 값이 없으므로 항상 false.
+   */
+  changeRate3mLowConfidence: boolean;
   /**
    * 최근 6개월 중위값(= medianPrice) 대비 그 이전 6개월 중위값의 변동률.
    * 특정 시점(12개월 전) 대비가 아니라 "최근 6개월 vs 그 이전 6개월"이므로,
    * 3개월 vs 3개월로 대칭인 changeRate3m과 창 크기가 다르다. 비교 대상이 없으면 null.
    */
   changeRate12m: number | null;
+  /** changeRate12m의 "최근 6개월" 창 거래 건수. tradeCount와 같은 값이다. */
+  changeRate12mRecentCount: number;
+  /** changeRate12m의 "그 이전 6개월" 창 거래 건수(분모 쪽) */
+  changeRate12mPriorCount: number;
+  /** changeRate3mLowConfidence와 같은 뜻으로, changeRate12m에 대해 판정한다. */
+  changeRate12mLowConfidence: boolean;
   lowConfidence: boolean;
 }
 
@@ -81,6 +99,32 @@ function changeRate(recent: number[], older: number[]): number | null {
   return (median(recent) - from) / from;
 }
 
+interface ChangeRateResult {
+  rate: number | null;
+  recentCount: number;
+  priorCount: number;
+  lowConfidence: boolean;
+}
+
+/**
+ * changeRate와 함께 그 값이 근거한 두 창의 거래 건수·저신뢰 여부를 낸다.
+ *
+ * 값을 null로 지우는 대신 정보를 더하는 기존 관례(lowConfidence가 tradeCount·
+ * minPrice·maxPrice와 함께 나가는 것과 같다)를 따른다 — 표본이 1건뿐인
+ * 변동률도 값 자체는 내보내되, 어느 창이 얼마나 얇았는지 소비자가 판단할 수
+ * 있게 한다. 값이 애초에 null이면(비교 대상 없음) lowConfidence를 켤 대상이
+ * 없으므로 항상 false다.
+ */
+function changeRateWithConfidence(
+  recent: number[],
+  older: number[],
+  minTrades: number,
+): ChangeRateResult {
+  const rate = changeRate(recent, older);
+  const lowConfidence = rate !== null && (recent.length < minTrades || older.length < minTrades);
+  return { rate, recentCount: recent.length, priorCount: older.length, lowConfidence };
+}
+
 export function aggregate(
   trades: NormalizedTrade[],
   asOf: Date,
@@ -122,6 +166,9 @@ export function aggregate(
       .filter((t) => at(t) < sixMonthsAgo && at(t) >= twelveMonthsAgo && at(t) <= asOf)
       .map((t) => t.price);
 
+    const rate3m = changeRateWithConfidence(last3m, prior3m, config.lowConfidenceMinTrades);
+    const rate12m = changeRateWithConfidence(recentPrices, prior12m, config.lowConfidenceMinTrades);
+
     units.push({
       complexKey: first.complexKey,
       complexName: first.complexName,
@@ -133,8 +180,14 @@ export function aggregate(
       tradeCount: recent.length,
       minPrice: Math.min(...recentPrices),
       maxPrice: Math.max(...recentPrices),
-      changeRate3m: changeRate(last3m, prior3m),
-      changeRate12m: changeRate(recentPrices, prior12m),
+      changeRate3m: rate3m.rate,
+      changeRate3mRecentCount: rate3m.recentCount,
+      changeRate3mPriorCount: rate3m.priorCount,
+      changeRate3mLowConfidence: rate3m.lowConfidence,
+      changeRate12m: rate12m.rate,
+      changeRate12mRecentCount: rate12m.recentCount,
+      changeRate12mPriorCount: rate12m.priorCount,
+      changeRate12mLowConfidence: rate12m.lowConfidence,
       lowConfidence: recent.length < config.lowConfidenceMinTrades,
     });
   }

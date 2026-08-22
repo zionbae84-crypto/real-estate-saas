@@ -294,6 +294,97 @@ describe("aggregate", () => {
     expect(units[2]?.complexName).toContain("C");
   });
 
+  it("changeRate3m: 두 창 모두 거래가 충분하면 lowConfidence 플래그가 서지 않는다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 최근 3개월: 3건
+        trade({ price: 2_000_000_000, contractDate: "2026-06-01" }),
+        trade({ price: 3_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 4_000_000_000, contractDate: "2026-08-01" }),
+        // 그 이전 3개월: 3건
+        trade({ price: 1_000_000_000, contractDate: "2026-03-01" }),
+        trade({ price: 2_000_000_000, contractDate: "2026-04-01" }),
+        trade({ price: 3_000_000_000, contractDate: "2026-05-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate3mRecentCount).toBe(3);
+    expect(units[0]?.changeRate3mPriorCount).toBe(3);
+    expect(units[0]?.changeRate3mLowConfidence).toBe(false);
+  });
+
+  it("changeRate3m: 이전 3개월 창이 1건뿐이면 lowConfidence 플래그가 선다 — I4", () => {
+    // I4: 리뷰에서 지적된 핵심 사례. 두 창 중 하나가 1건뿐이면 changeRate3m
+    // 자체는 계산되지만(null이 아님) 신뢰할 수 없다 — lowConfidenceMinTrades(3)
+    // 미만이라는 사실이 값과 함께 나가야 한다.
+    const units = aggregate(
+      normalizeAll([
+        // 최근 3개월: 2건(하한 미만)
+        trade({ price: 4_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 4_000_000_000, contractDate: "2026-08-01" }),
+        // 그 이전 3개월: 1건(하한 미만)
+        trade({ price: 2_000_000_000, contractDate: "2026-04-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate3m).not.toBeNull();
+    expect(units[0]?.changeRate3mRecentCount).toBe(2);
+    expect(units[0]?.changeRate3mPriorCount).toBe(1);
+    expect(units[0]?.changeRate3mLowConfidence).toBe(true);
+  });
+
+  it("changeRate3m: 비교 대상이 없어 null이면 lowConfidence 플래그는 서지 않는다", () => {
+    // 값 자체가 없으니(null) "신뢰할 수 없는 값"이라는 플래그도 의미가 없다.
+    const units = aggregate(
+      normalizeAll([trade({ price: 1_000_000_000, contractDate: "2026-07-01" })]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate3m).toBeNull();
+    expect(units[0]?.changeRate3mLowConfidence).toBe(false);
+  });
+
+  it("changeRate12m: 이전 6개월 창이 1건뿐이면 lowConfidence 플래그가 선다 — I4", () => {
+    // 힐스테이트e편한세상문정 49㎡ 실제 사례(거래 2건으로 +96%)와 같은 형태.
+    const units = aggregate(
+      normalizeAll([
+        // 최근 6개월: 2건
+        trade({ price: 9_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 9_500_000_000, contractDate: "2026-08-01" }),
+        // 그 이전 6개월: 1건(하한 미만)
+        trade({ price: 4_500_000_000, contractDate: "2025-09-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate12m).not.toBeNull();
+    expect(units[0]?.changeRate12mRecentCount).toBe(2);
+    expect(units[0]?.changeRate12mPriorCount).toBe(1);
+    expect(units[0]?.changeRate12mLowConfidence).toBe(true);
+  });
+
+  it("changeRate12m: 두 창 모두 충분하면 lowConfidence 플래그가 서지 않는다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 최근 6개월(2026-02-22~2026-08-22): 3건
+        trade({ price: 5_000_000_000, contractDate: "2026-06-01" }),
+        trade({ price: 6_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 7_000_000_000, contractDate: "2026-08-01" }),
+        // 그 이전 6개월(2025-08-22~2026-02-22): 3건
+        trade({ price: 2_000_000_000, contractDate: "2025-09-01" }),
+        trade({ price: 3_000_000_000, contractDate: "2025-10-01" }),
+        trade({ price: 4_000_000_000, contractDate: "2025-11-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.changeRate12mRecentCount).toBe(3);
+    expect(units[0]?.changeRate12mPriorCount).toBe(3);
+    expect(units[0]?.changeRate12mLowConfidence).toBe(false);
+  });
+
   it("aggregate 산출물은 동일 단지 내에서 areaBucket으로 정렬된다", () => {
     // 동일 단지, 다른 평형으로 역순 입력: 101, 84
     const units = aggregate(

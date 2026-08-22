@@ -182,7 +182,13 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     minPrice: 1_900_000_000,
     maxPrice: 2_100_000_000,
     changeRate3m: 0.02,
+    changeRate3mRecentCount: 3,
+    changeRate3mPriorCount: 3,
+    changeRate3mLowConfidence: false,
     changeRate12m: 0.1,
+    changeRate12mRecentCount: 5,
+    changeRate12mPriorCount: 5,
+    changeRate12mLowConfidence: false,
     lowConfidence: false,
     ...overrides,
   };
