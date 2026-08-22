@@ -18,6 +18,16 @@ export interface ParseResult {
   trades: RawTrade[];
   /** 파싱에 실패한 레코드 수. 조용히 버리지 않고 세어서 리포트에 남긴다 */
   failures: number;
+  /**
+   * 해제(취소)된 거래로 걸러낸 레코드 수.
+   *
+   * `cdealType`이 공백이 아니면 계약이 해제된 것이다. 해제된 거래가 단지의
+   * 대표가(중위값)에 섞이면 실제로는 성사되지 않은 금액이 시세로 둔갑한다.
+   * 파싱 실패(형식 오류)와 원인이 다르므로 failures와 합치지 않고 따로 센다 —
+   * 합치면 "이번 달 데이터 품질이 나쁘다"는 신호와 "정상적으로 해제된 계약이
+   * 있다"는 신호가 뒤섞여 실패 카운트가 무의미해진다.
+   */
+  cancelled: number;
 }
 
 export interface ReportConfig {
