@@ -255,10 +255,75 @@ describe("loadStoredState", () => {
       expect(loaded.isRegulatedArea, bad).toBe(true);
     });
 
-    it("실제 boolean false는 그대로 복원한다", () => {
+    it("touched에 regulatedArea가 있으면 실제 boolean false를 그대로 복원한다", () => {
+      // 리뷰 수정(Critical 2) 전에는 touched 여부와 무관하게 boolean이면
+      // 무조건 복원했다. 이제는 "손대지 않은 필드는 정의상 가정이므로
+      // 기본값이어야 한다"는 규칙이 생겨, touched에 없으면 저장된 값이
+      // 진짜 boolean이어도 무시하고 기본값으로 되돌린다(아래 Critical 2
+      // 테스트 참고) — 그래서 이 테스트는 "사용자가 실제로 확정했다"는
+      // 전제(touched)를 명시적으로 넣어 원래 검증 의도(진짜 값은 그대로
+      // 복원된다)를 유지한다.
       const stored = JSON.stringify({
         ...DEFAULT_FORM_STATE,
         isRegulatedArea: false,
+        touched: ["regulatedArea"],
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.isRegulatedArea).toBe(false);
+    });
+  });
+
+  describe("리뷰 수정(Critical 2): touched에 없는 필드는 저장된 값과 무관하게 현재 기본값이다", () => {
+    // 손대지 않은 필드는 정의상 가정이다. 옛 저장본(touched 필드 자체가
+    // 없던 시절)을 복원하면 이 항목들의 touched는 항상 빈 배열이 되는데,
+    // 그때 저장된 exclusiveAreaSqm(예: 마이그레이션 전 기본값 84)이나
+    // isRegulatedArea가 그대로 살아나면 "가정"이라는 이름표를 단 값이
+    // 실제로는 사용자가 한 번도 확인한 적 없는 옛 기본값이 된다. 전용면적
+    // 84는 농특세 임계값(85㎡) **이하**라 실구매력을 실제보다 크게
+    // 계산한다 — 이 제품이 절대 하면 안 되는 방향의 결함이다(재현: 리뷰
+    // 브리프의 4억 8,290만원 vs 86㎡ 기준 4억 8,130만원).
+
+    it("옛 저장본(exclusiveAreaSqm: 84, touched 없음)을 복원하면 전용면적은 현재 기본값이 된다", () => {
+      const stored = JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 60_000_000,
+        exclusiveAreaSqm: 84,
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.touched).toEqual([]); // 전제 확인: 옛 저장본엔 touched가 없다
+      expect(loaded.exclusiveAreaSqm).toBe(DEFAULT_FORM_STATE.exclusiveAreaSqm);
+      expect(loaded.exclusiveAreaSqm).not.toBe(84);
+    });
+
+    it("touched에 area가 있으면 저장된 전용면적을 그대로 존중한다", () => {
+      const stored = JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 60_000_000,
+        exclusiveAreaSqm: 59,
+        touched: ["area"],
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.exclusiveAreaSqm).toBe(59);
+    });
+
+    it("옛 저장본(isRegulatedArea: false, touched 없음)을 복원하면 규제지역은 현재 기본값(true)이 된다", () => {
+      const stored = JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 60_000_000,
+        isRegulatedArea: false,
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.touched).toEqual([]);
+      expect(loaded.isRegulatedArea).toBe(DEFAULT_FORM_STATE.isRegulatedArea);
+      expect(loaded.isRegulatedArea).toBe(true);
+    });
+
+    it("touched에 regulatedArea가 있으면 저장된 isRegulatedArea를 그대로 존중한다", () => {
+      const stored = JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 60_000_000,
+        isRegulatedArea: false,
+        touched: ["regulatedArea"],
       });
       const loaded = loadStoredState({ getItem: () => stored });
       expect(loaded.isRegulatedArea).toBe(false);

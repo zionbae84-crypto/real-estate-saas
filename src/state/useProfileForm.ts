@@ -143,6 +143,10 @@ export function loadStoredState(
       ? (o.existingHome as Record<string, unknown>)
       : {};
 
+  // touched를 먼저 계산한다 — isRegulatedArea·exclusiveAreaSqm 복원이
+  // 이 값에 의존한다(아래 리뷰 수정 Critical 2 참고).
+  const touched = parseTouched(o.touched);
+
   return {
     cash: amount(o.cash),
     annualIncome: amount(o.annualIncome),
@@ -164,12 +168,22 @@ export function loadStoredState(
       typeof o.isFirstTimeBuyer === "boolean"
         ? o.isFirstTimeBuyer
         : DEFAULT_FORM_STATE.isFirstTimeBuyer,
-    isRegulatedArea:
-      typeof o.isRegulatedArea === "boolean"
+    // 리뷰 수정(Critical 2): 손대지 않은 필드는 정의상 가정이므로, 반드시
+    // "지금" 코드가 정하는 기본값이어야 한다. touched에 없으면 저장된
+    // 값이 유효한 타입이어도(boolean·양수) 무시하고 DEFAULT_FORM_STATE를
+    // 쓴다 — 그러지 않으면 옛 저장본(예: 전용면적 84, 마이그레이션 전
+    // 기본값)이 "가정"이라는 이름표를 달고 되살아나, 사용자가 확인한 적
+    // 없는 값이 계산에 쓰이면서 문구는 그 사실을 숨긴다. touched에 있으면
+    // (사용자가 실제로 정한 값이면) 기존과 같은 타입 검증을 거쳐 그대로
+    // 복원한다.
+    isRegulatedArea: touched.includes("regulatedArea")
+      ? typeof o.isRegulatedArea === "boolean"
         ? o.isRegulatedArea
-        : DEFAULT_FORM_STATE.isRegulatedArea,
-    exclusiveAreaSqm:
-      positive(o.exclusiveAreaSqm) ?? DEFAULT_FORM_STATE.exclusiveAreaSqm,
+        : DEFAULT_FORM_STATE.isRegulatedArea
+      : DEFAULT_FORM_STATE.isRegulatedArea,
+    exclusiveAreaSqm: touched.includes("area")
+      ? (positive(o.exclusiveAreaSqm) ?? DEFAULT_FORM_STATE.exclusiveAreaSqm)
+      : DEFAULT_FORM_STATE.exclusiveAreaSqm,
     existingHome: {
       expectedSalePrice: amount(home.expectedSalePrice),
       remainingLoan: amount(home.remainingLoan),
@@ -180,7 +194,7 @@ export function loadStoredState(
     // 값을 정했을 수도 있는 항목을 다시 "가정 중"으로 보여주는 것은,
     // 반대로 사용자가 정한 적 없는 값을 "확정"으로 잘못 표시하는 것보다
     // 안전하다.
-    touched: parseTouched(o.touched),
+    touched,
   };
 }
 
