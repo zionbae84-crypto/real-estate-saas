@@ -458,7 +458,9 @@ function validateEligibility(
  *
  * `eligibility.maxHousePrice`가 있으면 그 가격에서의 캡이다. 없으면 어떤
  * 가격에서도 자격이 있다는 뜻이므로, 구간 중 가장 작은 캡을 쓴다 — 캡이
- * 가격에 따라 단조 감소한다는 보장이 스키마에 없으므로 최소값을 직접 구한다.
+ * 가격에 따라 단조 비증가라는 사실은 validateSemanticInvariants가 이
+ * 호출보다 먼저 강제하지만(위 absoluteCap.brackets 비증가 검사), 그래도
+ * 최소값을 직접 스캔해 어떤 구간 배치에도 맞는 값을 구한다.
  *
  * 가격→캡 조회는 `loan-limit.ts`의 `calcAbsoluteCap` 하나만 쓴다. 검증과
  * 계산이 다른 규칙을 쓰면 조용히 어긋나므로 복제하지 않는다.
@@ -477,10 +479,11 @@ function capAtHighestEligiblePrice(rules: Rules, loan: PolicyLoanRule): number {
 
 /**
  * "upTo 오름차순, 마지막 구간만 upTo가 null" 형태의 구간 배열을 검증하는
- * 공용 헬퍼. brokerageFee와 housingBond.brackets가 정확히 같은 모양이라
- * (오름차순 상한 + 마지막 구간만 무한대) 여기 하나로 묶었다 — 복붙하면
- * 한쪽만 고치고 다른 쪽을 잊는 결함이 반복된다. 상한(upTo) 이외의 나머지
- * 필드(rate/cap 또는 perThousand) 검증은 호출자가 validateItem으로 넘긴다.
+ * 공용 헬퍼. brokerageFee·housingBond.brackets·absoluteCap.brackets가
+ * 정확히 같은 모양이라(오름차순 상한 + 마지막 구간만 무한대) 여기 하나로
+ * 묶었다 — 복붙하면 한쪽만 고치고 다른 쪽을 잊는 결함이 반복된다.
+ * 상한(upTo) 이외의 나머지 필드(rate/cap 또는 perThousand 또는 amount)
+ * 검증은 호출자가 validateItem으로 넘긴다.
  */
 function validateAscendingBrackets(
   brackets: unknown[],

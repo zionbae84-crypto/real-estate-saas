@@ -124,6 +124,8 @@ export interface SafetyScore {
 
 /** 정책대출 상품 정의 */
 export interface PolicyLoanRule {
+  /** 이 상품의 금리·한도 선택 근거를 설명하는 인간이 읽을 수 있는 주석 */
+  _note?: string;
   id: string;
   /** 조건 키-값. 엔진이 일반적으로 평가한다 */
   eligibility: {

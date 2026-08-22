@@ -313,8 +313,7 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     "결과 가격에서 자기부담금이 가용현금을 넘지 않는다: %s",
     (_label, p) => {
       const result = calcAffordablePrice(p, rules);
-      const ownFunds =
-        result.affordablePrice - result.loanLimit.amount + result.costs.total;
+      const ownFunds = ownFundsAt(result.affordablePrice, p, rules);
       expect(ownFunds).toBeLessThanOrEqual(result.availableCash);
     },
   );
@@ -497,8 +496,7 @@ describe("calcAffordablePrice — 안전하지 않은 방향 스윕", () => {
 
     for (const [label, p] of grid) {
       const result = calcAffordablePrice(p, rules);
-      const ownFunds =
-        result.affordablePrice - result.loanLimit.amount + result.costs.total;
+      const ownFunds = ownFundsAt(result.affordablePrice, p, rules);
 
       if (result.affordablePrice > 0) {
         expect(
@@ -665,7 +663,9 @@ describe("캡 구간 절벽을 넘나드는 탐색", () => {
 // 하지 않으면 "파싱이 이미 막잖아"라는 이유로 캡 절벽 분할 코드 자체가
 // 나중에 아무 검증 없이 삭제될 수 있다. 이 테스트는 buildSearchSegments가
 // absoluteCap.brackets[].upTo를 절벽으로 넣지 않으면 반드시 실패한다
-// (직접 확인함 — 이 파일 하단 보고서 절 참고).
+// (직접 확인함 — buildSearchSegments에서 capCliffs를 제거하고 돌려 보면
+// 아래 "브루트포스와 일치한다" 단언이 1,265,500,000 vs 1,515,000,000으로
+// 갈라지며 실패하는 것으로 확인했다).
 describe("캡이 올라가는 구간에서 분할이 실제로 안전망 역할을 한다", () => {
   // 15억까지는 캡 6억, 15억 초과는 캡 30억(=사실상 무제한) — parseRules라면
   // 거부할 룰셋이다. 값은 리뷰가 제시한 예시(1_500_000_000 / 600_000_000,
