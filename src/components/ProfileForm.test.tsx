@@ -7,6 +7,7 @@ import {
   type ExistingHomeFormState,
   type ProfileFormState,
 } from "../state/useProfileForm";
+import { rules } from "../state/useAffordability";
 import { ProfileForm } from "./ProfileForm";
 
 /**
@@ -148,6 +149,23 @@ describe("ProfileForm", () => {
       const input = screen.getByLabelText("전용면적 (㎡)");
       await userEvent.clear(input);
       expect(input).toHaveValue(null);
+    });
+  });
+
+  describe("규제 수치 고정", () => {
+    it("규제지역 LTV 퍼센트가 규칙셋과 일치한다", () => {
+      render(<Harness />);
+
+      const regulatedPercent = Math.round(
+        rules.ltv.regulated.default * 100,
+      ).toString();
+      const unregulatedPercent = Math.round(
+        rules.ltv.unregulated.default * 100,
+      ).toString();
+
+      const hintText = screen.getByText(/무주택자 LTV가/);
+      expect(hintText.textContent).toContain(`${regulatedPercent}%`);
+      expect(hintText.textContent).toContain(`${unregulatedPercent}%`);
     });
   });
 });

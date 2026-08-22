@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { CostBreakdown as CostBreakdownData } from "../lib/finance";
+import { rules } from "../state/useAffordability";
 import { CostBreakdown } from "./CostBreakdown";
 
 function costs(overrides: Partial<CostBreakdownData> = {}): CostBreakdownData {
@@ -48,16 +49,24 @@ describe("CostBreakdown", () => {
 
   it("국민주택채권 항목에 추정치임을 밝힌다", () => {
     render(<CostBreakdown costs={costs()} />);
-    // 라벨이나 부가 설명 어딘가에 "추정"이 등장해야 한다 — 시가표준액
+    // 라벨뿐 아니라 전체 추정치 취지의 문장이 나와야 한다 — 시가표준액
     // 비율과 할인율이 모두 검증되지 않은 가정치이기 때문에, 취득세처럼
     // 확정된 숫자와 같은 확신으로 보여주면 안 된다.
-    expect(screen.getByText(/국민주택채권/).textContent).toMatch(/추정/);
+    expect(
+      screen.getByText(
+        /시가표준액 비율·할인율이 확정 값이 아니라 실제와 다를 수 있는 추정치/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("항목별 금액이 0이어도 표시된다", () => {
     const { container } = render(
       <CostBreakdown
-        costs={costs({ brokerageFee: 0, total: 11_687_840 })}
+        costs={costs({
+          brokerageFee: 0,
+          brokerageVat: 0,
+          total: 11_431_840,
+        })}
       />,
     );
     expect(screen.getByText("중개보수")).toBeInTheDocument();
@@ -72,5 +81,15 @@ describe("CostBreakdown", () => {
     // 값이 그대로 나오면 컴포넌트가 재계산하지 않는다는 뜻이다.
     render(<CostBreakdown costs={costs({ total: 99_999_999 })} />);
     expect(screen.getByText("9,999만 9,999원")).toBeInTheDocument();
+  });
+
+  it("중개보수 부가세 비율이 규칙셋과 일치한다", () => {
+    render(<CostBreakdown costs={costs()} />);
+
+    const vatPercent = Math.round(
+      rules.brokerageVatRate * 100,
+    ).toString();
+
+    expect(screen.getByText(`중개보수 부가세 (${vatPercent}%)`)).toBeInTheDocument();
   });
 });
