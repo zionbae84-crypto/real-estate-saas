@@ -243,13 +243,13 @@ describe("국민주택채권", () => {
     expect(costs.housingBondCost).toBe(0);
   });
 
-  it("할인율이 0이면 부담이 0이다 (채권을 팔지 않는 경우)", () => {
-    const costs = calcAcquisitionCosts(500_000_000, profile(), {
-      ...rules,
-      housingBond: { ...rules.housingBond, assumedDiscountRate: 0 },
-    });
-    expect(costs.housingBondCost).toBe(0);
-  });
+  // 예전에는 여기서 assumedDiscountRate: 0을 "채권을 팔지 않는 경우"로
+  // 만들어 housingBondCost가 0이 됨을 확인했다. 하지만 parseRules는
+  // assumedDiscountRate를 (0, 1] 범위(assertRatio)로 검사해 0을
+  // 거부한다 — 즉 실제 룰셋 JSON은 이 상태에 도달할 수 없다. 이 테스트를
+  // 남겨 두면 지원되지 않는 설정을 지원되는 것처럼 문서화하게 된다.
+  // 같은 의도(경계값 검사)는 rules.test.ts의
+  // "housingBond.assumedDiscountRate가 0이면 실패한다" 테스트가 대신한다.
 });
 
 describe("확장된 total", () => {

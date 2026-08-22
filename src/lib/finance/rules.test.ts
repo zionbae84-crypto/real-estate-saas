@@ -304,6 +304,34 @@ describe("parseRules — 의미 불변식", () => {
     expect(() => parseRules(broken)).toThrow(/safetyThreshold\.safe/);
   });
 
+  // 규제지역 LTV가 비규제보다 커지는 것은 값이 뒤바뀐 오타일 가능성이
+  // 압도적으로 크고, 그 방향의 오타는 이 브랜치가 고친 결함(규제지역
+  // 한도 과대평가)을 그대로 재현한다. 타입 검사만으로는 조용히 통과하므로
+  // 부등식으로 따로 잡아야 한다.
+  it("규제지역 default LTV가 비규제보다 크면 실패한다", () => {
+    const broken = {
+      ...rawRules,
+      ltv: {
+        regulated: { default: 0.7, firstTimeBuyer: 0.7 },
+        unregulated: { default: 0.4, firstTimeBuyer: 0.7 },
+      },
+    };
+    expect(() => parseRules(broken)).toThrow(/ltv\.regulated\.default/);
+  });
+
+  it("규제지역 생애최초 LTV가 비규제보다 크면 실패한다", () => {
+    const broken = {
+      ...rawRules,
+      ltv: {
+        regulated: { default: 0.4, firstTimeBuyer: 0.8 },
+        unregulated: { default: 0.7, firstTimeBuyer: 0.7 },
+      },
+    };
+    expect(() => parseRules(broken)).toThrow(
+      /ltv\.regulated\.firstTimeBuyer/,
+    );
+  });
+
   // ltv.default/ltv.firstTimeBuyer 케이스는 ltv가 regulated/unregulated로
   // 갈라지며 "확장된 룰셋 검증" describe 블록의 네 경로 테스트로 옮겼다
   // (의도는 동일 — 비율 범위 (0, 1] 위반을 잡는다).
@@ -509,6 +537,18 @@ describe("확장된 룰셋 검증", () => {
       (broken.housingBond as Record<string, unknown>)[key] = 2;
       expect(() => parseRules(broken), key).toThrow(new RegExp(key));
     }
+  });
+
+  // assumedRatio는 (0, 1] — 하한이 배타적이라 0은 상한(2)과 마찬가지로
+  // 거부된다. acquisition-cost.test.ts가 예전에 "assumedDiscountRate: 0"을
+  // calcAcquisitionCosts에 직접 넣어 지원되는 설정처럼 다뤘는데, 실제로는
+  // parseRules를 거치는 어떤 룰셋도 이 상태에 도달할 수 없다 — 그 테스트는
+  // 삭제하고 대신 여기서 "파서가 이 경계를 실제로 막는다"는 사실 자체를
+  // 확인한다.
+  it("housingBond.assumedDiscountRate가 0이면 실패한다 (하한 배타)", () => {
+    const broken = structuredClone(rawRules) as typeof rawRules;
+    (broken.housingBond as Record<string, unknown>).assumedDiscountRate = 0;
+    expect(() => parseRules(broken)).toThrow(/assumedDiscountRate/);
   });
 
   it("housingBond 구간이 오름차순이 아니면 실패한다", () => {

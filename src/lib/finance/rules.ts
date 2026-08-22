@@ -194,6 +194,27 @@ function validateSemanticInvariants(rules: Rules): void {
     rules.ltv.unregulated.firstTimeBuyer,
     "ltv.unregulated.firstTimeBuyer",
   );
+
+  // 규제지역은 담보가치를 더 보수적으로 본다 — 규제지역 LTV가 비규제보다
+  // 높아지는 것은 값이 뒤바뀐 오타(예: regulated.default: 0.7,
+  // unregulated.default: 0.4)일 가능성이 압도적으로 크고, 그 방향의
+  // 오타는 규제지역 한도를 과대평가한다. 이 브랜치가 고친 결함과 정확히
+  // 같은 모양이므로, 자동으로 잡히게 여기서 부등식으로 고정한다.
+  if (!(rules.ltv.regulated.default <= rules.ltv.unregulated.default)) {
+    throw new Error(
+      `룰셋 값 오류: ltv.regulated.default는 ltv.unregulated.default 이하여야 합니다 (${rules.ltv.regulated.default} / ${rules.ltv.unregulated.default})`,
+    );
+  }
+  if (
+    !(
+      rules.ltv.regulated.firstTimeBuyer <= rules.ltv.unregulated.firstTimeBuyer
+    )
+  ) {
+    throw new Error(
+      `룰셋 값 오류: ltv.regulated.firstTimeBuyer는 ltv.unregulated.firstTimeBuyer 이하여야 합니다 (${rules.ltv.regulated.firstTimeBuyer} / ${rules.ltv.unregulated.firstTimeBuyer})`,
+    );
+  }
+
   assertRatio(rules.dsrLimit, "dsrLimit");
 
   // 중개보수 부가세는 세율이지 "소득·가격의 몇 %" 비율이 아니므로
