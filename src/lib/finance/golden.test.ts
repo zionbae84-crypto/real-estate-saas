@@ -18,6 +18,9 @@ describe("골든 테스트 — 공식 수치 대조", () => {
     existingDebtAnnualPayment: 0,
     isFirstTimeBuyer: false,
     exclusiveAreaSqm: 84,
+    // 이 파일의 기존 테스트는 전부 비규제 수도권 70% 기준으로 쓰였다.
+    // 기본값을 false로 둬 기존 기대값이 그대로 유지되게 한다.
+    isRegulatedArea: false,
   };
 
   // 출처: 금융위원회 보도자료 "3단계 스트레스 DSR 시행방안 확정·발표"
@@ -46,13 +49,13 @@ describe("골든 테스트 — 공식 수치 대조", () => {
     expect(result.binding).toBe("CAP");
   });
 
-  // 출처: rules.ltv.default(0.7)와 위 6억 절대상한(absoluteCap) 두 수치의
-  // 조합 검증. LTV만 적용하면 12억 × 70% = 8.4억이 나오지만, 절대상한
-  // 6억이 더 작으므로 최종 한도는 6억으로 잘려야 한다.
-  // 신뢰도 주의: 이 테스트는 rules.ltv.default(0.7)를 사용한다. 이 값은
-  // task-9-report.md 5절에 기록된 대로 "미확인"(규제지역/비규제지역 구분을
-  // 앱이 모델링하지 않아 단일 금융위 원문으로 확정하지 못함) 상태이며,
-  // 이 파일의 다른 테스트들보다 확신도가 낮다.
+  // 출처: rules.ltv.unregulated.default(0.7)와 위 6억 절대상한(absoluteCap)
+  // 두 수치의 조합 검증. LTV만 적용하면 12억 × 70% = 8.4억이 나오지만,
+  // 절대상한 6억이 더 작으므로 최종 한도는 6억으로 잘려야 한다.
+  // 갱신(규제지역 LTV 분기 도입): highEarner는 isRegulatedArea: false라
+  // rules.ltv.unregulated.default(0.7)가 적용된다. 이 profile로
+  // isRegulatedArea: true를 넣으면 LTV가 40%(4.8억)로 바뀌어 절대상한이
+  // 아닌 LTV가 binding이 되므로, 이 테스트는 비규제 경로를 고정한다.
   it("12억 아파트 · LTV 70%는 8.4억이 아니라 6억으로 잘린다", () => {
     const result = calcMaxLoan(
       { ...highEarner, annualIncome: 1_000_000_000 },
@@ -67,8 +70,10 @@ describe("골든 테스트 — 공식 수치 대조", () => {
   // (fsc.go.kr no010101/84824) 및 「수도권 주택담보대출 6억까지···
   // '갭투자' 제동」(fsc.go.kr no010107/84834), 2025-06-27 발표: "수도권·
   // 규제지역 내 생애최초 주택구입 목적 주담대의 LTV를 80%에서 70%로
-  // 강화". 이 앱의 MVP 범위는 수도권 한정이므로 생애최초 우대 없이
-  // rules.ltv.default와 동일한 70%가 적용되어야 한다.
+  // 강화". highEarner는 isRegulatedArea: false이므로
+  // rules.ltv.unregulated.firstTimeBuyer(0.7)가 적용되어, 생애최초 우대
+  // 없이 default와 동일한 70%가 나와야 한다(비규제에서는 우대가 없다는
+  // 사실 자체는 아래 "규제지역 LTV" describe에서 별도로 고정한다).
   it("생애최초 주담대 LTV는 (구)80%가 아니라 70%다 — 2025-06-27 가계부채 대책", () => {
     const result = calcMaxLoan(
       { ...highEarner, isFirstTimeBuyer: true },
@@ -76,5 +81,14 @@ describe("골든 테스트 — 공식 수치 대조", () => {
       300_000_000,
     );
     expect(result.breakdown.LTV).toBe(210_000_000);
+  });
+
+  // 출처: 금융위 「주택시장 안정화 대책」 — 규제지역 무주택자·처분조건부
+  // 1주택자의 LTV는 70%에서 40%로 강화됐고, 생애최초만 규제지역에서도
+  // 70% 예외를 받는다. 이 두 수치가 어긋나면 룰셋을 먼저 의심한다.
+  it("규제지역 무주택자 LTV는 40%, 생애최초는 70%다", () => {
+    expect(rules.ltv.regulated.default).toBe(0.4);
+    expect(rules.ltv.regulated.firstTimeBuyer).toBe(0.7);
+    expect(rules.ltv.unregulated.default).toBe(0.7);
   });
 });

@@ -16,6 +16,9 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
     existingDebtAnnualPayment: 0,
     isFirstTimeBuyer: false,
     exclusiveAreaSqm: 84,
+    // 이 파일의 기존 테스트는 전부 비규제 수도권 70% 기준으로 쓰였다.
+    // 기본값을 false로 둬 기존 기대값이 그대로 유지되게 한다.
+    isRegulatedArea: false,
     ...overrides,
   };
 }
@@ -90,6 +93,14 @@ describe("assertValidProfile", () => {
         }),
       ),
     ).toThrow(/existingHome\.remainingLoan/);
+  });
+
+  it("isRegulatedArea가 불리언이 아니면 필드명을 알려주며 실패한다", () => {
+    const broken = {
+      ...profile(),
+      isRegulatedArea: "true",
+    } as unknown as BuyerProfile;
+    expect(() => assertValidProfile(broken)).toThrow(/isRegulatedArea/);
   });
 
   it("양도세는 선택 입력이지만, 입력했다면 유효해야 한다", () => {

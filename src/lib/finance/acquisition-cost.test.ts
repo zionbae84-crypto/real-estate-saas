@@ -14,6 +14,9 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
     existingDebtAnnualPayment: 0,
     isFirstTimeBuyer: false,
     exclusiveAreaSqm: 84,
+    // 이 파일의 기존 테스트는 전부 비규제 수도권 70% 기준으로 쓰였다.
+    // 기본값을 false로 둬 기존 기대값이 그대로 유지되게 한다.
+    isRegulatedArea: false,
     ...overrides,
   };
 }

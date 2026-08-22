@@ -19,6 +19,9 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
     existingDebtAnnualPayment: 0,
     isFirstTimeBuyer: false,
     exclusiveAreaSqm: 84,
+    // 이 파일의 기존 테스트는 전부 비규제 수도권 70% 기준으로 쓰였다.
+    // 기본값을 false로 둬 기존 기대값이 그대로 유지되게 한다.
+    isRegulatedArea: false,
     ...overrides,
   };
 }
@@ -449,6 +452,75 @@ describe("calcMaxLoan — price 경계 검증", () => {
   it("정상적인 price는 그대로 통과한다", () => {
     expect(() => calcMaxLoan(profile(), rules, 500_000_000)).not.toThrow();
     expect(() => calcMaxLoan(profile(), rules, 0)).not.toThrow();
+  });
+});
+
+describe("규제지역 LTV", () => {
+  it("규제지역 무주택자는 40%다", () => {
+    const result = calcMaxLoan(
+      profile({ isRegulatedArea: true, annualIncome: 1_000_000_000 }),
+      rules,
+      300_000_000,
+    );
+    expect(result.breakdown.LTV).toBe(120_000_000);
+  });
+
+  it("비규제 수도권 무주택자는 70%다", () => {
+    const result = calcMaxLoan(
+      profile({ isRegulatedArea: false, annualIncome: 1_000_000_000 }),
+      rules,
+      300_000_000,
+    );
+    expect(result.breakdown.LTV).toBe(210_000_000);
+  });
+
+  it("생애최초는 규제지역에서도 70%로 예외를 받는다", () => {
+    const result = calcMaxLoan(
+      profile({
+        isRegulatedArea: true,
+        isFirstTimeBuyer: true,
+        annualIncome: 1_000_000_000,
+      }),
+      rules,
+      300_000_000,
+    );
+    expect(result.breakdown.LTV).toBe(210_000_000);
+  });
+
+  it("규제지역에서는 생애최초 우대가 30%p로 커진다", () => {
+    const base = calcMaxLoan(
+      profile({ isRegulatedArea: true, annualIncome: 1_000_000_000 }),
+      rules,
+      300_000_000,
+    );
+    const first = calcMaxLoan(
+      profile({
+        isRegulatedArea: true,
+        isFirstTimeBuyer: true,
+        annualIncome: 1_000_000_000,
+      }),
+      rules,
+      300_000_000,
+    );
+    expect(first.breakdown.LTV - base.breakdown.LTV).toBe(90_000_000);
+  });
+
+  it("비규제 수도권에서는 생애최초 우대가 없다", () => {
+    const base = calcMaxLoan(
+      profile({ isRegulatedArea: false, annualIncome: 1_000_000_000 }),
+      rules,
+      300_000_000,
+    );
+    const first = calcMaxLoan(
+      profile({
+        isRegulatedArea: false,
+        isFirstTimeBuyer: true,
+        annualIncome: 1_000_000_000,
+      }),
+      rules,
+      300_000_000,
+    );
+    expect(first.breakdown.LTV).toBe(base.breakdown.LTV);
   });
 });
 
