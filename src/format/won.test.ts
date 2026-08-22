@@ -47,6 +47,10 @@ describe("formatWon", () => {
     expect(() => formatWon(-Infinity)).toThrow(RangeError);
   });
 
+  it("양수인데 0으로 반올림되는 값도 0원이다", () => {
+    expect(formatWon(0.4)).toBe("0원");
+  });
+
   it("음수로 반올림되는 값은 0원이다", () => {
     expect(formatWon(-0.5)).toBe("0원");
   });

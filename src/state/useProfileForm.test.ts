@@ -148,4 +148,90 @@ describe("loadStoredState", () => {
     expect(loaded.cash).toBe(200_000_000);
     expect(loaded.isFirstTimeBuyer).toBe(true);
   });
+
+  describe("isFirstTimeBuyer는 boolean이 아니면 기본값(false)으로 대체한다", () => {
+    // localStorage는 사용자가 직접 고칠 수 있는 자리다. 문자열 "true"나
+    // 숫자 1처럼 "참으로 보이는" 값이 그대로 통과하면, 켜두면 LTV·정책대출
+    // 자격을 과대평가하는 이 플래그가 검증 없이 켜져 버린다.
+    it.each([
+      ["문자열 \"true\"", "true"],
+      ["숫자 1", 1],
+      ["문자열 \"1\"", "1"],
+      ["null", null],
+    ])("%s는 false로 떨어진다", (_label, value) => {
+      const stored = JSON.stringify({ isFirstTimeBuyer: value });
+      expect(loadStoredState(storage(stored)).isFirstTimeBuyer).toBe(false);
+    });
+
+    it("실제 boolean true는 그대로 복원한다", () => {
+      const stored = JSON.stringify({ isFirstTimeBuyer: true });
+      expect(loadStoredState(storage(stored)).isFirstTimeBuyer).toBe(true);
+    });
+  });
+
+  describe("existingHome.capitalGainsTax: 0과 미입력(null)을 구분해 복원한다", () => {
+    // 엔진은 capitalGainsTax가 "없을 때"만 양도세 미반영 경고를 낸다
+    // (useProfileForm.ts의 toProfile 주석 참고). 0(양도세가 실제로
+    // 0원)과 미입력을 구분하지 못하고 0이 "미입력"으로 저하되면, 양도세가
+    // 정말 0원인 사용자에게도 필요 없는 경고가 뜨게 된다.
+    it("0은 0으로 남는다 — null로 저하되지 않는다", () => {
+      const stored = JSON.stringify({
+        status: "갈아타기",
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 300_000_000,
+          capitalGainsTax: 0,
+        },
+      });
+      const loaded = loadStoredState(storage(stored));
+      expect(loaded.existingHome.capitalGainsTax).toBe(0);
+    });
+
+    it("미입력(null)은 null로 남는다", () => {
+      const stored = JSON.stringify({
+        status: "갈아타기",
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 300_000_000,
+          capitalGainsTax: null,
+        },
+      });
+      const loaded = loadStoredState(storage(stored));
+      expect(loaded.existingHome.capitalGainsTax).toBeNull();
+    });
+
+    it("toProfile을 거쳐도 0은 0으로, null은 undefined(미반영 경고 대상)로 남는다", () => {
+      const zero = loadStoredState(
+        storage(
+          JSON.stringify({
+            cash: 1,
+            annualIncome: 1,
+            status: "갈아타기",
+            existingHome: {
+              expectedSalePrice: 700_000_000,
+              remainingLoan: 300_000_000,
+              capitalGainsTax: 0,
+            },
+          }),
+        ),
+      );
+      expect(toProfile(zero)?.existingHome?.capitalGainsTax).toBe(0);
+
+      const missing = loadStoredState(
+        storage(
+          JSON.stringify({
+            cash: 1,
+            annualIncome: 1,
+            status: "갈아타기",
+            existingHome: {
+              expectedSalePrice: 700_000_000,
+              remainingLoan: 300_000_000,
+              capitalGainsTax: null,
+            },
+          }),
+        ),
+      );
+      expect(toProfile(missing)?.existingHome?.capitalGainsTax).toBeUndefined();
+    });
+  });
 });

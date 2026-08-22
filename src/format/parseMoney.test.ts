@@ -149,5 +149,17 @@ describe("parseMoney", () => {
       expect(result).toBeLessThanOrEqual(Number.MAX_SAFE_INTEGER);
       expect(result).toBe(9_000_000_000);
     });
+
+    it("경계값 그 자체: MAX_SAFE_INTEGER는 파싱되고, +1은 null이다", () => {
+      // "9".repeat(30)처럼 안전 범위를 한참 넘는 값으로만 검증하면, 경계를
+      // 하나 잘못 세는 실수(>= 대신 >, 또는 그 반대)를 놓칠 수 있다.
+      // 원 접미사(WON_PATTERN)는 입력 숫자를 만원 배율 없이 그대로 원
+      // 단위로 읽으므로, MAX_SAFE_INTEGER를 오차 없이 정확히 겨냥할 수 있다.
+      const atLimit = `${Number.MAX_SAFE_INTEGER}원`;
+      const overLimit = `${Number.MAX_SAFE_INTEGER + 1}원`;
+
+      expect(parseMoney(atLimit)).toBe(Number.MAX_SAFE_INTEGER);
+      expect(parseMoney(overLimit)).toBeNull();
+    });
   });
 });
