@@ -1,7 +1,7 @@
 {
   "version": "2026-03",
   "effectiveFrom": "2026-03-01",
-  "_scope": "수도권·규제지역 기준. ltv·absoluteCap·stressDSR.surcharge는 실제 규제에서 지역별로 다르며, 이 파일은 수도권 값만 담는다. 다른 지역을 지원하려면 값 교체가 아니라 스키마에 지역 축을 추가해야 한다.",
+  "_scope": "수도권 기준. ltv는 규제지역/비규제지역 축을 이미 갖고 있다(ltv.regulated/ltv.unregulated). absoluteCap·stressDSR.surcharge는 아직 스칼라이며 실제 규제에서는 지역별로 다르다. 이 파일 전체가 수도권 값만 담으며 수도권/비수도권 축은 어디에도 없다. 다른 지역을 지원하려면 값 교체가 아니라 스키마에 수도권/비수도권 축을 추가해야 한다.",
   "baseRate": 0.042,
   "loanTermMonths": 360,
   "stressDSR": { "stage": 3, "surcharge": 0.015 },
