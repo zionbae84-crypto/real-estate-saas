@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -230,17 +230,22 @@ describe("runPipeline: 빈 데이터 가드 (통합)", () => {
   });
 
   /**
-   * 실제 data/ 아래 산출물 파일들의 mtime을 스냅샷한다.
+   * 실제 data/ 아래 산출물 파일들의 mtime을 스냅샷한다. 파일이 없으면 null —
+   * data/는 gitignore 대상이라 깨끗한 체크아웃·CI·동료 기계에는 아예 없을 수
+   * 있다(이 파일들을 만드는 것은 emit()뿐이고, 이 스위트의 어떤 테스트도
+   * emit()을 부르지 않는다). "없음"도 유효한 스냅샷 상태로 다뤄야
+   * statSync가 ENOENT로 테스트 전체를 깨뜨리지 않는다.
    *
    * 이 스위트는 "가드가 emit() 도달 전에 멈춰서 실제 산출물을 절대 건드리지
    * 않는다"는 것을 증명해야 한다. emit()은 DATA_DIR을 하드코딩해서 쓰므로,
-   * 진짜로 안 쓰였는지 확인하는 유일한 방법은 실제 data/ 파일의 mtime이
-   * runPipeline 호출 전후로 그대로인지 보는 것이다.
+   * 진짜로 안 쓰였는지 확인하는 유일한 방법은 실제 data/ 파일의 mtime(또는
+   * 부재)이 runPipeline 호출 전후로 그대로인지 보는 것이다.
    */
-  function snapshotOutputMtimes(): Record<string, number> {
-    const snapshot: Record<string, number> = {};
+  function snapshotOutputMtimes(): Record<string, number | null> {
+    const snapshot: Record<string, number | null> = {};
     for (const name of OUTPUT_FILES) {
-      snapshot[name] = statSync(join(DATA_DIR, name)).mtimeMs;
+      const path = join(DATA_DIR, name);
+      snapshot[name] = existsSync(path) ? statSync(path).mtimeMs : null;
     }
     return snapshot;
   }
