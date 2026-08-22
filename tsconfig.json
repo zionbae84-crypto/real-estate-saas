@@ -11,7 +11,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["node", "vite/client"]
+    "types": ["node", "vite/client"],
+    "paths": { "seed-design/*": ["./seed-design/*"] }
   },
-  "include": ["src", "scripts"]
+  "include": ["src", "scripts", "seed-design"]
 }
