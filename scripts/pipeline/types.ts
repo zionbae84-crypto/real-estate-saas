@@ -28,6 +28,20 @@ export interface ParseResult {
    * 있다"는 신호가 뒤섞여 실패 카운트가 무의미해진다.
    */
   cancelled: number;
+  /**
+   * 응답 자체가 성공이 아니라고 판단되면 사유(짧은 문자열), 정상 응답이면 null.
+   *
+   * 공공데이터포털은 일일 트래픽 초과·미등록/만료 키·잘못된 파라미터 같은
+   * 가장 흔한 실패들을 **HTTP 200**과 함께 돌려준다 — 게이트웨이 XML 봉투이거나,
+   * `response.header.resultCode`가 성공이 아닌 JSON 본문으로. 이걸 "거래
+   * 없음"과 구분하지 않으면 오류 응답이 조용히 빈 캐시로 영구 저장된다.
+   *
+   * error가 null이 아니면 trades/failures/cancelled는 모두 의미가 없다
+   * (전부 0/빈 배열) — 호출자는 trades를 쓰기 전에 반드시 error를 먼저 봐야
+   * 한다. 사유 문자열에는 resultCode/resultMsg 정도만 담고, 원본 응답 본문
+   * 전체나 요청 URL(키가 들어 있다)은 절대 넣지 않는다 — 길이도 제한한다.
+   */
+  error: string | null;
 }
 
 export interface ReportConfig {

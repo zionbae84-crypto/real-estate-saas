@@ -133,9 +133,81 @@ describe("parseResponse", () => {
     expect(trades.length).toBe(19);
   });
 
-  it("파싱 불가한 본문에도 예외를 던지지 않고 빈 결과를 돌려준다", () => {
+  it("파싱 불가한 본문(JSON이 아님)에는 예외를 던지지 않고 오류로 표시한다 — 거래 0건으로 착각하지 않는다", () => {
+    // C1: 게이트웨이 XML처럼 JSON으로 읽을 수 없는 본문. 예전에는 이 경우가
+    // "거래 없음"과 구분되지 않아 빈 봉투가 그대로 캐시됐다.
     expect(() => parseResponse("전혀 응답이 아님")).not.toThrow();
     const result = parseResponse("전혀 응답이 아님");
-    expect(result).toEqual({ trades: [], failures: 0, cancelled: 0 });
+    expect(result.trades).toEqual([]);
+    expect(result.failures).toBe(0);
+    expect(result.cancelled).toBe(0);
+    expect(typeof result.error).toBe("string");
+  });
+
+  it("게이트웨이 XML 봉투(HTTP 200이지만 JSON이 아님)를 오류로 표시한다", () => {
+    const gatewayXml =
+      '<OpenAPI_ServiceResponse><cmmMsgHeader><errMsg>SERVICE ERROR</errMsg>' +
+      "<returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg>" +
+      "<returnReasonCode>30</returnReasonCode></cmmMsgHeader></OpenAPI_ServiceResponse>";
+    const result = parseResponse(gatewayXml);
+    expect(result.trades).toEqual([]);
+    expect(typeof result.error).toBe("string");
+  });
+
+  it("resultCode가 성공(00/000)이 아닌 JSON 응답을 오류로 표시하고 거래를 만들지 않는다", () => {
+    const serviceError = JSON.stringify({
+      response: {
+        header: { resultCode: "22", resultMsg: "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR" },
+        body: { items: "", numOfRows: 10, pageNo: 1, totalCount: 0 },
+      },
+    });
+    const result = parseResponse(serviceError);
+    expect(result.trades).toEqual([]);
+    expect(result.failures).toBe(0);
+    expect(typeof result.error).toBe("string");
+    expect(result.error).toContain("22");
+  });
+
+  it("resultCode가 00이면 성공으로 본다(공공데이터포털 공통 성공 코드)", () => {
+    const ok = JSON.stringify({
+      response: {
+        header: { resultCode: "00", resultMsg: "NORMAL SERVICE" },
+        body: { items: "" },
+      },
+    });
+    const result = parseResponse(ok);
+    expect(result.error).toBeNull();
+    expect(result.trades).toEqual([]);
+  });
+
+  it("resultCode가 000이고 진짜 거래 0건이면 오류가 아니라 정상 빈 결과다", () => {
+    const realEmpty = JSON.stringify({
+      response: {
+        header: { resultCode: "000", resultMsg: "OK" },
+        body: { items: "", numOfRows: 10, pageNo: 1, totalCount: 0 },
+      },
+    });
+    const result = parseResponse(realEmpty);
+    expect(result.error).toBeNull();
+    expect(result.trades).toEqual([]);
+    expect(result.failures).toBe(0);
+  });
+
+  it("정상 응답(SAMPLE)은 error가 null이다", () => {
+    const result = parseResponse(SAMPLE);
+    expect(result.error).toBeNull();
+  });
+
+  it("오류 메시지에 원본 응답 본문 전체를 통째로 담지 않는다(길이 제한)", () => {
+    const hugeMsg = "x".repeat(5000);
+    const serviceError = JSON.stringify({
+      response: {
+        header: { resultCode: "99", resultMsg: hugeMsg },
+        body: {},
+      },
+    });
+    const result = parseResponse(serviceError);
+    expect(typeof result.error).toBe("string");
+    expect((result.error ?? "").length).toBeLessThan(1000);
   });
 });

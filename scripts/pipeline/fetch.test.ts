@@ -299,6 +299,124 @@ describe("runFetch", () => {
   });
 });
 
+function gatewayErrorXml(): string {
+  return (
+    "<OpenAPI_ServiceResponse><cmmMsgHeader><errMsg>SERVICE ERROR</errMsg>" +
+    "<returnAuthMsg>SERVICE_KEY_IS_NOT_REGISTERED_ERROR</returnAuthMsg>" +
+    "<returnReasonCode>30</returnReasonCode></cmmMsgHeader></OpenAPI_ServiceResponse>"
+  );
+}
+
+function serviceErrorJson(resultCode: string, resultMsg: string): unknown {
+  return {
+    response: {
+      header: { resultCode, resultMsg },
+      body: { items: "", numOfRows: 10, pageNo: 1, totalCount: 0 },
+    },
+  };
+}
+
+describe("runFetch — C1: HTTP 200 오류 응답을 거래 없음과 구분한다", () => {
+  let rawDir: string;
+  let dataDir: string;
+
+  beforeEach(() => {
+    const root = mkdtempSync(join(tmpdir(), "fetch-pipeline-test-"));
+    rawDir = join(root, "raw");
+    dataDir = root;
+  });
+
+  afterEach(() => {
+    rmSync(dataDir, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+  });
+
+  const now = new Date("2026-08-22T00:00:00Z");
+
+  it("게이트웨이 XML(HTTP 200, JSON 아님)은 실패로 기록되고 캐시를 남기지 않는다", async () => {
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(gatewayErrorXml(), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(log[0]).toMatchObject({ status: "failed", tradeCount: 0 });
+    expect(log[0]?.error).toBeDefined();
+    expect(existsSync(join(rawDir, "11680-202608.json"))).toBe(false);
+  });
+
+  it("성공이 아닌 resultCode를 담은 JSON(HTTP 200)은 실패로 기록되고 캐시를 남기지 않는다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse(serviceErrorJson("22", "LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(log[0]).toMatchObject({ status: "failed", tradeCount: 0 });
+    expect(log[0]?.error).toContain("22");
+    expect(existsSync(join(rawDir, "11680-202608.json"))).toBe(false);
+  });
+
+  it("진짜 거래 0건 응답(resultCode 000, items 빈 문자열)은 정상적으로 empty로 기록되고 캐시된다", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockImplementation(async () => jsonResponse(serviceErrorJson("000", "OK")));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key: "key",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(log[0]).toMatchObject({ status: "empty", tradeCount: 0 });
+    expect(existsSync(join(rawDir, "11680-202608.json"))).toBe(true);
+  });
+
+  it("오류 응답 실패 메시지에 요청 URL이나 서비스키가 섞이지 않는다", async () => {
+    const key = "leak-if-not-redacted";
+    const fetchMock = vi.fn().mockImplementation(async () => new Response(gatewayErrorXml(), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now,
+      months: 1,
+      key,
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+
+    expect(log[0]?.error).toBeDefined();
+    expect(log[0]?.error ?? "").not.toContain(key);
+  });
+});
+
 function pageBody(itemCount: number, totalCount: number | string): unknown {
   const item =
     itemCount === 0

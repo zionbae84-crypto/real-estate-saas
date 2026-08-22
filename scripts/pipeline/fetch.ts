@@ -198,6 +198,14 @@ async function fetchAllPages(
   for (let pageNo = 1; pageNo <= MAX_PAGES; pageNo++) {
     const body = await fetchOne(regionCode, yearMonth, key, wait, pageNo);
     const parsed = parseResponse(body);
+    // C1: HTTP 200이지만 오류 응답(게이트웨이 XML, 성공이 아닌 resultCode)이면
+    // "거래 없음"으로 캐시하지 않는다 — throw로 이 시군구·월 전체를 실패
+    // 처리에 넘긴다(중간 페이지 실패와 같은 경로: 캐시 없음, status: "failed").
+    // 이미 모은 이전 페이지들의 trades/failures도 함께 버려진다 — 부분
+    // 오염된 데이터를 성공으로 둔갑시키지 않기 위해서다.
+    if (parsed.error !== null) {
+      throw new Error(`API 오류 응답: ${parsed.error}`);
+    }
     trades.push(...parsed.trades);
     failures += parsed.failures;
 

@@ -1,5 +1,14 @@
 import type { ParseResult, RawTrade } from "./types";
 
+/** 공공데이터포털·국토부 API가 성공으로 보는 resultCode 값들. */
+const SUCCESS_RESULT_CODES = new Set(["00", "000"]);
+/** error 사유 문자열의 최대 길이. 원본 본문 전체가 실수로 통째로 들어오는 걸 막는다. */
+const MAX_ERROR_MESSAGE_LENGTH = 300;
+
+function truncate(message: string, max: number): string {
+  return message.length > max ? `${message.slice(0, max)}…` : message;
+}
+
 /**
  * 국토부 실거래가 API 응답(JSON 문자열)을 RawTrade 배열로 바꾼다.
  *
@@ -11,20 +20,23 @@ import type { ParseResult, RawTrade } from "./types";
  * - `cdealType`이 문자열이 아니면(필드 없음/undefined/null/숫자 등) 해제
  *   여부를 판정할 수 없다 — 정상 거래로 관대하게 봐주지 않고 failures로 센다.
  *   (아래 classifyDealStatus 참고)
- * - 응답 자체가 파싱 불가하면 { trades: [], failures: 0, cancelled: 0 }을
- *   돌려주고 호출자가 판단하게 한다.
+ * - 응답 자체가 성공이 아니면(JSON이 아니거나, resultCode가 성공이 아니거나,
+ *   예상한 모양이 전혀 아니면) trades는 항상 빈 배열이고 error에 사유를
+ *   담는다. 호출자는 trades를 쓰기 전에 반드시 error부터 확인해야 한다 —
+ *   그렇지 않으면 "일일 트래픽 초과" 같은 오류가 "이번 달 거래 없음"으로
+ *   조용히 캐시된다(C1).
  */
 export function parseResponse(body: string): ParseResult {
-  const items = extractItems(body);
-  if (items === null) {
-    return { trades: [], failures: 0, cancelled: 0 };
+  const extracted = extractItems(body);
+  if ("error" in extracted) {
+    return { trades: [], failures: 0, cancelled: 0, error: extracted.error };
   }
 
   const trades: RawTrade[] = [];
   let failures = 0;
   let cancelled = 0;
 
-  for (const item of items) {
+  for (const item of extracted.items) {
     const dealStatus = classifyDealStatus(item);
     if (dealStatus === "cancelled") {
       cancelled += 1;
@@ -42,34 +54,55 @@ export function parseResponse(body: string): ParseResult {
     trades.push(trade);
   }
 
-  return { trades, failures, cancelled };
+  return { trades, failures, cancelled, error: null };
 }
+
+type ExtractResult = { items: unknown[] } | { error: string };
 
 /**
  * 응답 본문에서 아이템 목록을 꺼낸다. 두 가지 국토부 API 특유의 형태를 다룬다:
  * - 해당 시군구·월에 거래가 없으면 `items`가 `""`(빈 문자열)이다. 빈 배열이 아니다.
  * - 거래가 정확히 1건이면 `items.item`이 배열이 아니라 객체 하나로 온다.
  *
- * 본문 자체를 JSON으로 읽을 수 없거나 예상한 모양이 아니면 null을 돌려준다.
+ * C1: 공공데이터포털은 일일 트래픽 초과·미등록/만료 키·잘못된 파라미터 같은
+ * 가장 흔한 실패를 **HTTP 200**과 함께 돌려준다 — 아래 두 형태 중 하나로:
+ * 1. 본문 자체가 JSON이 아님(게이트웨이가 XML 오류 봉투를 돌려줌).
+ * 2. JSON이지만 `response.header.resultCode`가 성공 코드가 아님.
+ * 두 경우 모두 "거래 없음"이 아니라 오류로 돌려준다 — 예전에는 이 구분이
+ * 없어서 오류 응답이 빈 캐시로 영구 저장됐다.
  */
-function extractItems(body: string): unknown[] | null {
+function extractItems(body: string): ExtractResult {
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
   } catch {
-    return null;
+    return { error: "응답 본문이 JSON이 아닙니다(게이트웨이 오류 응답일 가능성)" };
+  }
+
+  const resultCode = getPath(parsed, ["response", "header", "resultCode"]);
+  if (typeof resultCode === "string" && !SUCCESS_RESULT_CODES.has(resultCode)) {
+    const resultMsgRaw = getPath(parsed, ["response", "header", "resultMsg"]);
+    const resultMsg = typeof resultMsgRaw === "string" ? resultMsgRaw : "(메시지 없음)";
+    return { error: truncate(`resultCode ${resultCode}: ${resultMsg}`, MAX_ERROR_MESSAGE_LENGTH) };
   }
 
   const items = getPath(parsed, ["response", "body", "items"]);
-  if (items === "" || items === undefined || items === null) {
-    // 거래 없음(빈 문자열) 또는 예상한 경로가 아예 없음 — 둘 다 "거래 없음"으로 본다.
-    return [];
+  if (items === "") {
+    // 해당 시군구·월에 거래가 정말 없다는 뜻(빈 문자열). resultCode가
+    // 성공이었거나 애초에 없었을 때만 여기 도달한다.
+    return { items: [] };
+  }
+  if (items === undefined || items === null) {
+    // response.body.items 경로 자체가 없다 — 예상한 응답 모양이 전혀 아니다.
+    // resultCode도 없어 성공/실패를 판정할 근거가 없으므로, "거래 없음"으로
+    // 관대하게 봐주지 않고 오류로 본다.
+    return { error: "응답 본문이 예상한 형식이 아닙니다(response.body.items 없음)" };
   }
 
   const item = getPath(items, ["item"]);
-  if (item === undefined) return [];
-  if (Array.isArray(item)) return item;
-  return [item];
+  if (item === undefined) return { items: [] };
+  if (Array.isArray(item)) return { items: item };
+  return { items: [item] };
 }
 
 /** obj[keys[0]][keys[1]]... 를 안전하게 따라간다. 중간에 없으면 undefined. */
