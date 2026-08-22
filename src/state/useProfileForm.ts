@@ -147,10 +147,19 @@ export function loadStoredState(
     cash: amount(o.cash),
     annualIncome: amount(o.annualIncome),
     existingDebtAnnualPayment: amount(o.existingDebtAnnualPayment),
-    status:
-      o.status === "무주택" || o.status === "갈아타기"
-        ? o.status
-        : DEFAULT_FORM_STATE.status,
+    // "갈아타기" 상태는 저장본에 남아 있어도 항상 "무주택"으로 되돌린다.
+    // ProfileForm은 status/기존 주택(existingHome) 편집 UI를 전혀
+    // 렌더링하지 않는다 — 사용자가 이 값을 보거나 고칠 방법이 없다.
+    // 그런데도 그대로 복원해 반영하면 calcAvailableCash가 매도 순자산을
+    // 현금에 더해, 사용자가 보지도 고치지도 못한 채로 구매력이 조용히
+    // 올라간다. 이 제품은 항상 안전한(과소평가) 쪽을 기본값으로 삼으므로,
+    // 편집 UI가 돌아오기 전까지는 무주택으로 취급한다.
+    //
+    // existingHome 필드값 자체는 지우지 않고 아래에서 그대로 보존한다 —
+    // 편집 UI가 돌아왔을 때 사용자가 예전에 넣은 값을 잃지 않게 하기
+    // 위해서다. AssumptionLine은 이 보존된 값을 보고 "갈아타기 정보가
+    // 있지만 반영되지 않았다"는 사실을 알림 문구로 드러낸다.
+    status: DEFAULT_FORM_STATE.status,
     isFirstTimeBuyer:
       typeof o.isFirstTimeBuyer === "boolean"
         ? o.isFirstTimeBuyer
@@ -220,8 +229,16 @@ export function useProfileForm() {
     <K extends keyof ProfileFormState>(key: K, value: ProfileFormState[K]) => {
       setState((prev) => {
         const assumable = ASSUMABLE_KEY_MAP[key];
+        // 기존 부채 입력란은 파싱 실패(못 읽는 값, 빈 칸) 시 onChange(null)을
+        // 부른다. 이때도 touched로 기록하면 AssumptionLine이 "사용자가
+        // 확정했다"고 오해해 문구를 감추는데, 실제 계산은 여전히 0을
+        // 가정한다 — 값이 실제로 있을 때만 touched로 표시해야 문구와
+        // 계산이 어긋나지 않는다. (다른 AssumableField는 체크박스·숫자
+        // 입력이라 이런 "실패해서 null" 경로가 없다.)
+        const isEmptyExistingDebt =
+          key === "existingDebtAnnualPayment" && value === null;
         const touched =
-          assumable && !prev.touched.includes(assumable)
+          assumable && !isEmptyExistingDebt && !prev.touched.includes(assumable)
             ? [...prev.touched, assumable]
             : prev.touched;
         return { ...prev, [key]: value, touched };

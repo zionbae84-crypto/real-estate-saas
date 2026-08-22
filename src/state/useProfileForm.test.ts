@@ -265,6 +265,63 @@ describe("loadStoredState", () => {
     });
   });
 
+  describe("리뷰 수정: 옛 갈아타기 상태를 화면 없이 조용히 반영하지 않는다 (Important 3, 방향 a)", () => {
+    // status/existingHome UI가 ProfileForm에서 완전히 빠졌다. 이 상태에서
+    // 옛 저장본의 "갈아타기"를 그대로 복원해 반영하면, 사용자가 보지도
+    // 고치지도 못하는 채로 구매력(가용 현금)이 매도 순자산만큼 조용히
+    // 올라간다 — 이 제품이 절대 하면 안 되는 방향이다. 편집 UI가 돌아올
+    // 때까지는 안전한 기본값(무주택)으로 되돌린다.
+    it("옛 저장본의 status가 갈아타기여도 무주택으로 되돌린다", () => {
+      const stored = JSON.stringify({
+        cash: 50_000_000,
+        annualIncome: 100_000_000,
+        status: "갈아타기",
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 300_000_000,
+          capitalGainsTax: 20_000_000,
+        },
+      });
+      const loaded = loadStoredState(storage(stored));
+      expect(loaded.status).toBe("무주택");
+    });
+
+    it("toProfile도 무주택으로 처리해 existingHome을 엔진에 넘기지 않는다 — 구매력이 조용히 올라가지 않는다", () => {
+      const stored = JSON.stringify({
+        cash: 50_000_000,
+        annualIncome: 100_000_000,
+        status: "갈아타기",
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 300_000_000,
+          capitalGainsTax: 20_000_000,
+        },
+      });
+      const loaded = loadStoredState(storage(stored));
+      const profile = toProfile(loaded);
+      expect(profile?.existingHome).toBeUndefined();
+    });
+
+    it("existingHome 값 자체는 보존한다 — 편집 UI가 돌아왔을 때 데이터를 잃지 않는다", () => {
+      const stored = JSON.stringify({
+        cash: 50_000_000,
+        annualIncome: 100_000_000,
+        status: "갈아타기",
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 300_000_000,
+          capitalGainsTax: 20_000_000,
+        },
+      });
+      const loaded = loadStoredState(storage(stored));
+      expect(loaded.existingHome).toEqual({
+        expectedSalePrice: 700_000_000,
+        remainingLoan: 300_000_000,
+        capitalGainsTax: 20_000_000,
+      });
+    });
+  });
+
   describe("existingHome.capitalGainsTax: 0과 미입력(null)을 구분해 복원한다", () => {
     // 엔진은 capitalGainsTax가 "없을 때"만 양도세 미반영 경고를 낸다
     // (useProfileForm.ts의 toProfile 주석 참고). 0(양도세가 실제로
@@ -297,12 +354,16 @@ describe("loadStoredState", () => {
     });
 
     it("toProfile을 거쳐도 0은 0으로, null은 undefined(미반영 경고 대상)로 남는다", () => {
+      // 리뷰 수정(Important 3, 방향 a) 이후 loadStoredState는 status를
+      // 항상 "무주택"으로 되돌린다 — 여기서 검증하려는 것은 그 결정과
+      // 무관한 toProfile의 capitalGainsTax 0/undefined 정규화이므로,
+      // existingHome 파싱은 loadStoredState로 거치고 status만 테스트가
+      // 직접 "갈아타기"로 되돌려 toProfile의 existingHome 분기를 태운다.
       const zero = loadStoredState(
         storage(
           JSON.stringify({
             cash: 1,
             annualIncome: 1,
-            status: "갈아타기",
             existingHome: {
               expectedSalePrice: 700_000_000,
               remainingLoan: 300_000_000,
@@ -311,14 +372,16 @@ describe("loadStoredState", () => {
           }),
         ),
       );
-      expect(toProfile(zero)?.existingHome?.capitalGainsTax).toBe(0);
+      expect(
+        toProfile({ ...zero, status: "갈아타기" })?.existingHome
+          ?.capitalGainsTax,
+      ).toBe(0);
 
       const missing = loadStoredState(
         storage(
           JSON.stringify({
             cash: 1,
             annualIncome: 1,
-            status: "갈아타기",
             existingHome: {
               expectedSalePrice: 700_000_000,
               remainingLoan: 300_000_000,
@@ -327,7 +390,10 @@ describe("loadStoredState", () => {
           }),
         ),
       );
-      expect(toProfile(missing)?.existingHome?.capitalGainsTax).toBeUndefined();
+      expect(
+        toProfile({ ...missing, status: "갈아타기" })?.existingHome
+          ?.capitalGainsTax,
+      ).toBeUndefined();
     });
   });
 });
@@ -366,6 +432,23 @@ describe("useProfileForm — setField가 touched를 기록한다", () => {
       result.current.setField("isFirstTimeBuyer", true);
     });
     expect(result.current.state.touched).toEqual([]);
+  });
+
+  it("기존 부채 입력에서 파싱 실패로 null이 넘어오면 touched에 기록하지 않는다", () => {
+    // MoneyInput은 못 읽는 값(예: 지운 빈 칸, 문자 섞인 값)일 때
+    // onChange(null)을 부른다. 이때 existingDebt를 touched로 표시하면,
+    // AssumptionLine은 "사용자가 부채를 확정했다"고 오해해 문구를 감추는데
+    // 실제 계산은 여전히 0을 가정한다 — 문구와 계산이 어긋난다. 값이 실제로
+    // 있을 때만 touched로 기록해야 한다.
+    const { result } = renderHook(() => useProfileForm());
+    act(() => result.current.setField("existingDebtAnnualPayment", null));
+    expect(result.current.state.touched).not.toContain("existingDebt");
+  });
+
+  it("기존 부채에 실제 값을 넣으면 여전히 touched에 기록된다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => result.current.setField("existingDebtAnnualPayment", 1_200_000));
+    expect(result.current.state.touched).toContain("existingDebt");
   });
 
   it("같은 항목을 두 번 바꿔도 touched에 중복으로 쌓이지 않는다", () => {
