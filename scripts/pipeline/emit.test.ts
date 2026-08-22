@@ -1,6 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { ComplexUnit } from "./aggregate";
-import { buildManifest, buildRegions } from "./emit";
+import { buildManifest, buildRegions, buildSchemaDoc, emit } from "./emit";
 
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
   return {
@@ -98,5 +101,91 @@ describe("buildManifest", () => {
       "2026-03",
     );
     expect(m.lowConfidenceUnitCount).toBe(1);
+  });
+});
+
+describe("buildSchemaDoc (I7)", () => {
+  it("changeRate12m이 12개월 전 시점도 12개월 창도 아니라는 것을 명시한다", () => {
+    const doc = buildSchemaDoc();
+    expect(doc).toContain("changeRate12m");
+    expect(doc).toMatch(/12개월 전 시점.*아니다|아니다.*12개월/);
+  });
+
+  it("실제 필드 이름들을 담는다", () => {
+    const doc = buildSchemaDoc();
+    for (const field of [
+      "complexKey",
+      "areaBucket",
+      "medianPrice",
+      "lowConfidence",
+      "changeRate3m",
+      "changeRate3mRecentCount",
+      "changeRate3mPriorCount",
+      "changeRate3mLowConfidence",
+      "changeRate12mRecentCount",
+      "changeRate12mPriorCount",
+      "changeRate12mLowConfidence",
+      "dataAsOf",
+      "generatedAt",
+      "regionCodes",
+    ]) {
+      expect(doc).toContain(field);
+    }
+  });
+
+  it("dataAsOf가 계약월 기준이며 신고 지연으로 과소 보고될 수 있음을 설명한다", () => {
+    const doc = buildSchemaDoc();
+    expect(doc).toMatch(/지연/);
+    expect(doc).toMatch(/과소/);
+  });
+
+  it("호출할 때마다 바이트 단위로 같은 문서를 낸다 — 결정론", () => {
+    expect(buildSchemaDoc()).toBe(buildSchemaDoc());
+  });
+
+  it("complexKey 행의 pipe가 이스케이프되어 표 헤더와 같은 열 수를 유지한다", () => {
+    // JS 템플릿 리터럴에서 단일 백슬래시(`\|`)는 인식되지 않는 이스케이프라
+    // 조용히 사라져 그냥 `|`가 된다 — 표를 깨는 이스케이프 안 된 파이프로
+    // 되돌아간다(이 파일이 실제로 겪은 버그). 이스케이프는 반드시
+    // `\\|`(소스 상 이중 백슬래시)여야 살아남는다.
+    const splitMarkdownRow = (row: string): string[] => row.split(/(?<!\\)\|/);
+    const doc = buildSchemaDoc();
+    const lines = doc.split("\n");
+    const headerLine = lines.find((l) => l.startsWith("| 필드 | 타입 | 단위/창"));
+    const complexKeyLine = lines.find((l) => l.startsWith("| complexKey"));
+    expect(headerLine).toBeDefined();
+    expect(complexKeyLine).toBeDefined();
+    expect(complexKeyLine).toContain("\\|");
+    expect(splitMarkdownRow(complexKeyLine ?? "").length).toBe(
+      splitMarkdownRow(headerLine ?? "").length,
+    );
+  });
+});
+
+describe("emit — 산출물과 함께 스키마 문서를 쓴다 (I7)", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "emit-schema-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("data/README.md를 실제 파일로 쓴다", () => {
+    emit([unit()], new Date("2026-08-22T00:00:00Z"), "2026-08", "2026-03", root);
+    const readmePath = join(root, "README.md");
+    expect(existsSync(readmePath)).toBe(true);
+    const content = readFileSync(readmePath, "utf8");
+    expect(content).toContain("changeRate12m");
+    expect(content).toContain("lowConfidence");
+  });
+
+  it("complexes.json·manifest.json·regions.json도 함께 쓴다", () => {
+    emit([unit()], new Date("2026-08-22T00:00:00Z"), "2026-08", "2026-03", root);
+    expect(existsSync(join(root, "complexes.json"))).toBe(true);
+    expect(existsSync(join(root, "manifest.json"))).toBe(true);
+    expect(existsSync(join(root, "regions.json"))).toBe(true);
   });
 });
