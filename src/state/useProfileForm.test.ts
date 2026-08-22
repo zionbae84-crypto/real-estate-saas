@@ -1,8 +1,11 @@
-import { describe, expect, it } from "vitest";
+import { act, renderHook } from "@testing-library/react";
+import { beforeEach, describe, expect, it } from "vitest";
+import { rules } from "./useAffordability";
 import {
   DEFAULT_FORM_STATE,
   loadStoredState,
   toProfile,
+  useProfileForm,
   type ProfileFormState,
 } from "./useProfileForm";
 
@@ -27,7 +30,24 @@ describe("DEFAULT_FORM_STATE", () => {
     // (toProfile이 null을 0으로 좁혀 엔진에는 그대로 0으로 전달된다).
     expect(DEFAULT_FORM_STATE.existingDebtAnnualPayment).toBeNull();
     expect(DEFAULT_FORM_STATE.status).toBe("무주택");
-    expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBe(84);
+  });
+
+  it("전용면적 기본값은 농특세 임계값을 넘는 쪽이다 — 숫자를 박지 않고 룰셋에서 유도한다", () => {
+    // 예전에는 84로 박혀 있었는데, 농특세 임계값(85㎡ 초과)보다 낮아
+    // 부대비용을 과소 계상하고 살 수 있는 가격을 과대 계상했다 — 이
+    // 제품이 절대 하면 안 되는 방향의 결함이었다. 여기서 숫자(86)를
+    // 다시 박으면 같은 실수를 테스트에서 반복하는 셈이라, 룰셋 임계값
+    // 기준으로 "그 값을 넘는지"를 확인한다.
+    expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBeGreaterThan(
+      rules.acquisitionTax.ruralTaxAreaThresholdSqm,
+    );
+    expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBe(
+      rules.acquisitionTax.ruralTaxAreaThresholdSqm + 1,
+    );
+  });
+
+  it("touched는 처음엔 비어 있다 — 전부 가정 중이라는 뜻이다", () => {
+    expect(DEFAULT_FORM_STATE.touched).toEqual([]);
   });
 });
 
@@ -53,7 +73,7 @@ describe("toProfile", () => {
       // DEFAULT_FORM_STATE.isRegulatedArea가 true이므로 state()가 만드는
       // 기본 프로필에도 그대로 true가 전달된다.
       isRegulatedArea: true,
-      exclusiveAreaSqm: 84,
+      exclusiveAreaSqm: DEFAULT_FORM_STATE.exclusiveAreaSqm,
     });
   });
 
@@ -147,8 +167,42 @@ describe("loadStoredState", () => {
     const loaded = loadStoredState(storage(stored));
     expect(loaded.cash).toBeNull();
     expect(loaded.annualIncome).toBe(50_000_000);
-    expect(loaded.exclusiveAreaSqm).toBe(84);
+    expect(loaded.exclusiveAreaSqm).toBe(DEFAULT_FORM_STATE.exclusiveAreaSqm);
     expect(loaded.status).toBe("무주택");
+  });
+
+  it("touched가 없는 옛 저장본은 빈 배열로 채운다 — 전부 가정 중이라는 안전한 뜻이다", () => {
+    const stored = JSON.stringify({
+      cash: 200_000_000,
+      annualIncome: 50_000_000,
+    });
+    expect(loadStoredState(storage(stored)).touched).toEqual([]);
+  });
+
+  it("유효한 touched 항목은 그대로 복원한다", () => {
+    const stored = JSON.stringify({
+      ...DEFAULT_FORM_STATE,
+      touched: ["existingDebt", "area"],
+    });
+    expect(loadStoredState(storage(stored)).touched).toEqual([
+      "existingDebt",
+      "area",
+    ]);
+  });
+
+  it("touched에 알 수 없는 값이 섞여 있으면 걸러낸다", () => {
+    const stored = JSON.stringify({
+      ...DEFAULT_FORM_STATE,
+      touched: ["existingDebt", "조작된값", 123],
+    });
+    expect(loadStoredState(storage(stored)).touched).toEqual([
+      "existingDebt",
+    ]);
+  });
+
+  it("touched가 배열이 아니면 빈 배열로 대체한다", () => {
+    const stored = JSON.stringify({ ...DEFAULT_FORM_STATE, touched: "전부" });
+    expect(loadStoredState(storage(stored)).touched).toEqual([]);
   });
 
   it("정상 저장값은 그대로 복원한다", () => {
@@ -275,5 +329,53 @@ describe("loadStoredState", () => {
       );
       expect(toProfile(missing)?.existingHome?.capitalGainsTax).toBeUndefined();
     });
+  });
+});
+
+describe("useProfileForm — setField가 touched를 기록한다", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("기존 부채를 바꾸면 existingDebt가 touched에 들어간다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    expect(result.current.state.touched).not.toContain("existingDebt");
+
+    act(() => result.current.setField("existingDebtAnnualPayment", 1_200_000));
+
+    expect(result.current.state.touched).toContain("existingDebt");
+  });
+
+  it("규제지역을 바꾸면 regulatedArea가 touched에 들어간다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => result.current.setField("isRegulatedArea", false));
+    expect(result.current.state.touched).toContain("regulatedArea");
+  });
+
+  it("전용면적을 바꾸면 area가 touched에 들어간다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => result.current.setField("exclusiveAreaSqm", 59));
+    expect(result.current.state.touched).toContain("area");
+  });
+
+  it("cash·annualIncome·isFirstTimeBuyer는 touched에 기록되지 않는다", () => {
+    // 이 셋은 첫 화면에 늘 보이는 필수 입력이라 "가정"이라는 개념 자체가
+    // 없다 — AssumableField에 속하지 않는다.
+    const { result } = renderHook(() => useProfileForm());
+    act(() => {
+      result.current.setField("cash", 100_000_000);
+      result.current.setField("annualIncome", 50_000_000);
+      result.current.setField("isFirstTimeBuyer", true);
+    });
+    expect(result.current.state.touched).toEqual([]);
+  });
+
+  it("같은 항목을 두 번 바꿔도 touched에 중복으로 쌓이지 않는다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => {
+      result.current.setField("exclusiveAreaSqm", 59);
+      result.current.setField("exclusiveAreaSqm", 40);
+    });
+    expect(
+      result.current.state.touched.filter((f) => f === "area"),
+    ).toHaveLength(1);
   });
 });

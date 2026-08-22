@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { BuyerProfile, HouseholdStatus } from "../lib/finance";
+import { rules } from "./useAffordability";
 
 export const STORAGE_KEY = "budget-profile-v1";
 
@@ -8,6 +9,23 @@ export interface ExistingHomeFormState {
   remainingLoan: number | null;
   capitalGainsTax: number | null;
 }
+
+/** 사용자가 직접 값을 정한 항목. 여기 없으면 기본값(=가정)으로 계산 중이다 */
+export type AssumableField = "existingDebt" | "regulatedArea" | "area";
+
+const ALL_ASSUMABLE_FIELDS: readonly AssumableField[] = [
+  "existingDebt",
+  "regulatedArea",
+  "area",
+];
+
+/** setField가 건드린 키를 어느 AssumableField로 기록할지 매핑한다 */
+const ASSUMABLE_KEY_MAP: Partial<Record<keyof ProfileFormState, AssumableField>> =
+  {
+    existingDebtAnnualPayment: "existingDebt",
+    isRegulatedArea: "regulatedArea",
+    exclusiveAreaSqm: "area",
+  };
 
 export interface ProfileFormState {
   cash: number | null;
@@ -18,7 +36,27 @@ export interface ProfileFormState {
   isRegulatedArea: boolean;
   exclusiveAreaSqm: number;
   existingHome: ExistingHomeFormState;
+  /**
+   * 사용자가 명시적으로 정한 항목들.
+   *
+   * 값만 봐서는 가정인지 사용자 선택인지 알 수 없다 — isRegulatedArea가
+   * true인 것이 "기본값 그대로"인지 "사용자가 규제지역을 골랐다"인지
+   * 구분되지 않는다. 가정 문구는 그 구분 위에 서 있으므로 따로 기록한다.
+   */
+  touched: AssumableField[];
 }
+
+/**
+ * 전용면적 기본값. 농특세 임계값을 **넘는** 쪽으로 둔다.
+ *
+ * 농특세는 전용 85㎡ 초과에 붙는다. 임계값 아래로 두면 부대비용이 적게
+ * 잡혀 살 수 있는 가격이 실제보다 크게 나온다 — 이 제품이 피해야 하는
+ * 방향이다. 사용자가 실제 면적을 넣으면 대개 이 가정보다 유리해진다.
+ *
+ * 룰셋에서 유도하는 이유: 숫자를 박아 두면 임계값이 바뀌었을 때 방향이
+ * 조용히 뒤집힌다.
+ */
+const ASSUMED_AREA_SQM = rules.acquisitionTax.ruralTaxAreaThresholdSqm + 1;
 
 export const DEFAULT_FORM_STATE: ProfileFormState = {
   cash: null,
@@ -36,12 +74,13 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
   // 30%p 과대평가하게 되므로, 모르면 규제지역(true)으로 두는 쪽이
   // 안전하다 — 이 제품은 항상 과대평가를 피하는 쪽을 기본값으로 삼는다.
   isRegulatedArea: true,
-  exclusiveAreaSqm: 84,
+  exclusiveAreaSqm: ASSUMED_AREA_SQM,
   existingHome: {
     expectedSalePrice: null,
     remainingLoan: null,
     capitalGainsTax: null,
   },
+  touched: [],
 };
 
 /** 필수값(현금·소득)이 채워졌을 때만 BuyerProfile을 만든다. */
@@ -127,7 +166,18 @@ export function loadStoredState(
       remainingLoan: amount(home.remainingLoan),
       capitalGainsTax: amount(home.capitalGainsTax),
     },
+    // 옛 저장본에는 touched가 아예 없다. 없으면 "전부 가정 중"이라는
+    // 뜻이므로 빈 배열이 안전한 방향이다 — 실제로는 사용자가 예전에
+    // 값을 정했을 수도 있는 항목을 다시 "가정 중"으로 보여주는 것은,
+    // 반대로 사용자가 정한 적 없는 값을 "확정"으로 잘못 표시하는 것보다
+    // 안전하다.
+    touched: parseTouched(o.touched),
   };
+}
+
+function parseTouched(value: unknown): AssumableField[] {
+  if (!Array.isArray(value)) return [];
+  return ALL_ASSUMABLE_FIELDS.filter((field) => value.includes(field));
 }
 
 /**
@@ -168,7 +218,14 @@ export function useProfileForm() {
 
   const setField = useCallback(
     <K extends keyof ProfileFormState>(key: K, value: ProfileFormState[K]) => {
-      setState((prev) => ({ ...prev, [key]: value }));
+      setState((prev) => {
+        const assumable = ASSUMABLE_KEY_MAP[key];
+        const touched =
+          assumable && !prev.touched.includes(assumable)
+            ? [...prev.touched, assumable]
+            : prev.touched;
+        return { ...prev, [key]: value, touched };
+      });
     },
     [],
   );

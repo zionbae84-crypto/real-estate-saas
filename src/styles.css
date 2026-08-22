@@ -188,3 +188,34 @@ body {
 .policy-none {
   color: #666;
 }
+
+/*
+ * AssumptionLine: 숨긴 가정을 결과 옆에 문장으로 드러내고, 각 항목을
+ * 눌러서 고칠 수 있게 한다. 목록이지만 시각적으로는 안내 카드처럼
+ * 보이게 한다 — 사용자에게 중요한 것은 "항목 목록"이 아니라 "이 조건은
+ * 내가 정하지 않았다"는 사실이다.
+ */
+.assumption-line {
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0;
+  padding: 0;
+  list-style: none;
+}
+
+.assumption-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 0.625rem 0.875rem;
+  background: #f4f6f8;
+  border: 1px dashed var(--border);
+  border-radius: 0.375rem;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+.assumption-item:hover {
+  background: #eef1f4;
+}

@@ -1,9 +1,50 @@
 import { useEffect, useState } from "react";
+import { Checkbox } from "seed-design/ui/checkbox";
 import type {
+  AssumableField,
   ExistingHomeFormState,
   ProfileFormState,
 } from "../state/useProfileForm";
 import { MoneyInput } from "./MoneyInput";
+
+const MONTHS_PER_YEAR = 12;
+
+/**
+ * 연간 금액(원) → 월 금액(원). "매달 나가는 대출금"으로 물어 받은 값을
+ * 엔진이 원하는 연간 값으로 바꾸는 변환의 반대 방향이다.
+ *
+ * 한 곳에만 둔다 — 두 군데서 곱하고 나누면 언젠가 한쪽만 고쳐 값을
+ * 넣고 다시 열었을 때 12배가 된 숫자를 보게 된다. 반올림해 정수 원
+ * 단위를 유지한다(이 프로젝트의 금액은 전부 원 단위 정수다).
+ */
+function toMonthly(annualWon: number | null): number | null {
+  return annualWon === null ? null : Math.round(annualWon / MONTHS_PER_YEAR);
+}
+
+/** 월 금액(원) → 연간 금액(원). {@link toMonthly}의 역변환. */
+function toAnnual(monthlyWon: number | null): number | null {
+  return monthlyWon === null ? null : monthlyWon * MONTHS_PER_YEAR;
+}
+
+/**
+ * SEED Checkbox의 `onCheckedChange`는 배포판에 따라 `boolean | "indeterminate"`를
+ * 줄 수 있다(Radix 계열 `CheckedState` 관례). `checked === true`로 명시적으로
+ * 좁힌다 — `"indeterminate"`는 truthy 문자열이라 `!!checked`나 `as boolean`으로
+ * 뭉개면 참이 되고, 그러면 규제지역 LTV가 40%에서 70%로 뛰어 한도를 30%p
+ * 과대 계상한다. 이 제품이 절대 하면 안 되는 방향이다.
+ *
+ * (지금 이 프로젝트가 물고 있는 @seed-design/react-checkbox@2.0.1의
+ * `onCheckedChange`는 소스 확인 결과 boolean으로만 좁혀 두어 실제로는
+ * `"indeterminate"`가 흘러들어오지 않는다. 그래도 파라미터 타입은
+ * `boolean | "indeterminate"`로 넓게 받아 두어, 라이브러리가 나중에
+ * `CheckedState` 유니온으로 바뀌어도 이 방어선이 조용히 무너지지 않게
+ * 한다.)
+ */
+export function isExplicitlyChecked(
+  checked: boolean | "indeterminate",
+): boolean {
+  return checked === true;
+}
 
 export interface ProfileFormProps {
   state: ProfileFormState;
@@ -15,12 +56,22 @@ export interface ProfileFormProps {
     key: K,
     value: ExistingHomeFormState[K],
   ) => void;
+  /**
+   * 지금 펼쳐서 편집 중인 가정 항목. 미지정이거나 null이면 첫 화면의
+   * 세 항목(보유 현금 · 연 소득 · 생애최초 여부)만 보인다.
+   *
+   * 나머지 가정(기존 부채 · 규제지역 · 전용면적)을 눌러서 고치는 흐름은
+   * `AssumptionLine`이 결과 영역에서 담당한다 — 이 prop은 그 컴포넌트가
+   * 고른 항목을 여기 전달받아 제자리(폼 안)에서 편집 UI를 펼치는
+   * 자리다.
+   */
+  openField?: AssumableField | null;
 }
 
 export function ProfileForm({
   state,
   setField,
-  setExistingHomeField,
+  openField = null,
 }: ProfileFormProps) {
   return (
     <form className="profile-form" onSubmit={(e) => e.preventDefault()}>
@@ -39,88 +90,52 @@ export function ProfileForm({
         onChange={(won) => setField("annualIncome", won)}
       />
 
-      <MoneyInput
-        id="debt"
-        label="기존 부채 연간 원리금"
-        value={state.existingDebtAnnualPayment}
-        onChange={(won) => setField("existingDebtAnnualPayment", won)}
-        hint="없으면 비워 두세요."
-      />
-
       <div className="field">
-        <label htmlFor="status">주택 보유 상황</label>
-        <select
-          id="status"
-          value={state.status}
-          onChange={(e) =>
-            setField(
-              "status",
-              e.target.value === "갈아타기" ? "갈아타기" : "무주택",
-            )
+        <Checkbox
+          inputProps={{ id: "first-time" }}
+          label="생애최초 주택 구입"
+          checked={state.isFirstTimeBuyer}
+          onCheckedChange={(checked) =>
+            setField("isFirstTimeBuyer", isExplicitlyChecked(checked))
           }
-        >
-          <option value="무주택">무주택</option>
-          <option value="갈아타기">갈아타기 (기존 주택 매도)</option>
-        </select>
+        />
       </div>
 
-      {state.status === "갈아타기" && (
-        <fieldset className="existing-home">
-          <legend>기존 주택</legend>
-          <MoneyInput
-            id="sale-price"
-            label="기존 주택 예상 매도가"
-            value={state.existingHome.expectedSalePrice}
-            onChange={(won) => setExistingHomeField("expectedSalePrice", won)}
-          />
-          <MoneyInput
-            id="remaining-loan"
-            label="상환할 기존 대출"
-            value={state.existingHome.remainingLoan}
-            onChange={(won) => setExistingHomeField("remainingLoan", won)}
-          />
-          <MoneyInput
-            id="capital-gains-tax"
-            label="예상 양도세"
-            value={state.existingHome.capitalGainsTax}
-            onChange={(won) => setExistingHomeField("capitalGainsTax", won)}
-            hint="비워 두면 계산에 반영되지 않고 경고가 표시됩니다."
-          />
-        </fieldset>
+      {openField === "existingDebt" && (
+        <MoneyInput
+          id="debt-monthly"
+          label="매달 나가는 대출금"
+          value={toMonthly(state.existingDebtAnnualPayment)}
+          onChange={(monthlyWon) =>
+            setField("existingDebtAnnualPayment", toAnnual(monthlyWon))
+          }
+          hint="없으면 비워 두세요."
+        />
       )}
 
-      <div className="field">
-        <label htmlFor="first-time">
-          <input
-            id="first-time"
-            type="checkbox"
-            checked={state.isFirstTimeBuyer}
-            onChange={(e) => setField("isFirstTimeBuyer", e.target.checked)}
-          />
-          생애최초 주택 구입
-        </label>
-      </div>
-
-      <div className="field">
-        <label htmlFor="regulated-area">
-          <input
-            id="regulated-area"
-            type="checkbox"
+      {openField === "regulatedArea" && (
+        <div className="field">
+          <Checkbox
+            inputProps={{ id: "regulated-area" }}
+            label="규제지역(투기과열지구·조정대상지역)"
             checked={state.isRegulatedArea}
-            onChange={(e) => setField("isRegulatedArea", e.target.checked)}
+            onCheckedChange={(checked) =>
+              setField("isRegulatedArea", isExplicitlyChecked(checked))
+            }
           />
-          규제지역(투기과열지구·조정대상지역)
-        </label>
-        <p className="hint">
-          무주택자 LTV가 규제지역은 40%, 비규제(수도권)는 70%로 갈립니다.
-          잘 모르면 켜 둔 채로 계산하세요 — 한도를 과대평가하지 않습니다.
-        </p>
-      </div>
+          <p className="hint">
+            무주택자 LTV가 규제지역은 40%, 비규제(수도권)는 70%로 갈립니다.
+            잘 모르면 켜 둔 채로 계산하세요 — 한도를 과대평가하지 않습니다.
+          </p>
+        </div>
+      )}
 
-      <AreaInput
-        value={state.exclusiveAreaSqm}
-        onChange={(value) => setField("exclusiveAreaSqm", value)}
-      />
+      {openField === "area" && (
+        <AreaInput
+          value={state.exclusiveAreaSqm}
+          onChange={(value) => setField("exclusiveAreaSqm", value)}
+        />
+      )}
     </form>
   );
 }
