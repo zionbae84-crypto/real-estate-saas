@@ -298,4 +298,46 @@ describe("ProfileForm", () => {
       expect(input).toHaveValue(null);
     });
   });
+
+  describe("리뷰 수정(Critical 1): 값을 정한 항목은 openField 없이도(재마운트해도) 보인다", () => {
+    // AssumptionLine은 openField로 가는 유일한 입구다. 값을 한 번 정하고
+    // 다른 항목을 열거나(같은 세션에서 openField가 바뀌거나) 새로고침하면
+    // (재마운트, openField가 useState 초깃값 null로 리셋) 그 필드를 다시
+    // 열 버튼 자체가 AssumptionLine 문구에서 사라진다 — 값은 localStorage에
+    // 남아 엔진을 계속 움직이는데 화면에서는 확인도 수정도 할 수 없다.
+    //
+    // 고침: 각 필드를 openField === field일 때 "또는" 사용자가 이미 값을
+    // 정했을 때(확정 조건은 필드마다 다르다) 렌더링한다.
+
+    it("기존 부채: 값이 있으면(existingDebtAnnualPayment !== null) openField 없이도 보인다", () => {
+      renderForm({ initial: { existingDebtAnnualPayment: 6_000_000 } });
+      expect(screen.getByLabelText(/매달 나가는 대출금/)).toHaveValue("50");
+    });
+
+    it("규제지역: touched에 있으면 openField 없이도 보인다", () => {
+      renderForm({
+        initial: { isRegulatedArea: false, touched: ["regulatedArea"] },
+      });
+      const checkbox = screen.getByRole("checkbox", { name: /규제지역/ });
+      expect(checkbox).not.toBeChecked();
+    });
+
+    it("전용면적: touched에 있으면 openField 없이도 보인다", () => {
+      renderForm({ initial: { exclusiveAreaSqm: 59, touched: ["area"] } });
+      expect(screen.getByLabelText("전용면적 (㎡)")).toHaveValue(59);
+    });
+
+    it("회귀 방지: 처음 온 사용자(아무 것도 안 정한 상태)는 여전히 입력이 셋뿐이다", () => {
+      renderForm();
+      expect(screen.getAllByRole("textbox")).toHaveLength(2);
+      expect(screen.getAllByRole("checkbox")).toHaveLength(1);
+      expect(
+        screen.queryByLabelText(/매달 나가는 대출금/),
+      ).not.toBeInTheDocument();
+      expect(screen.queryByLabelText(/전용면적/)).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("checkbox", { name: /규제지역/ }),
+      ).not.toBeInTheDocument();
+    });
+  });
 });

@@ -58,13 +58,24 @@ export interface ProfileFormProps {
     value: ProfileFormState[K],
   ) => void;
   /**
-   * 지금 펼쳐서 편집 중인 가정 항목. 미지정이거나 null이면 첫 화면의
-   * 세 항목(보유 현금 · 연 소득 · 생애최초 여부)만 보인다.
+   * 지금 펼쳐서 편집 중인 가정 항목. 미지정이거나 null이고, 아직 아무
+   * 것도 확정하지 않은 사용자라면 첫 화면의 세 항목(보유 현금 · 연 소득 ·
+   * 생애최초 여부)만 보인다.
    *
    * 나머지 가정(기존 부채 · 규제지역 · 전용면적)을 눌러서 고치는 흐름은
    * `AssumptionLine`이 결과 영역에서 담당한다 — 이 prop은 그 컴포넌트가
    * 고른 항목을 여기 전달받아 제자리(폼 안)에서 편집 UI를 펼치는
    * 자리다.
+   *
+   * 리뷰 수정(Critical 1): 각 필드는 `openField === field`이거나 사용자가
+   * **이미 그 값을 확정**했을 때 렌더링한다(existingDebt는
+   * `existingDebtAnnualPayment !== null`로, regulatedArea·area는
+   * `state.touched`로 판단). `openField`는 `App`의 세션 한정
+   * `useState`라 저장되지 않는다 — 이 prop만으로 판단하면 사용자가 값을
+   * 정하는 순간 `AssumptionLine`에서 그 항목이 빠지면서(가정이 아니게
+   * 됐으니 맞다) 동시에 그 항목을 다시 열 유일한 버튼도 함께 사라진다.
+   * 그러면 값은 `localStorage`에 남아 엔진을 계속 움직이는데, 새로고침하거나
+   * 다른 항목을 열면 화면에서는 그 값을 다시 보거나 고칠 방법이 없어진다.
    */
   openField?: AssumableField | null;
 }
@@ -102,7 +113,8 @@ export function ProfileForm({
         />
       </div>
 
-      {openField === "existingDebt" && (
+      {(openField === "existingDebt" ||
+        state.existingDebtAnnualPayment !== null) && (
         <MoneyInput
           id="debt-monthly"
           label="매달 나가는 대출금"
@@ -110,11 +122,12 @@ export function ProfileForm({
           onChange={(monthlyWon) =>
             setField("existingDebtAnnualPayment", toAnnual(monthlyWon))
           }
-          hint="없으면 비워 두세요."
+          hint="대출이 없으면 0을 입력하세요. 비워 두면 이 항목을 다음에 또 물어봅니다."
         />
       )}
 
-      {openField === "regulatedArea" && (
+      {(openField === "regulatedArea" ||
+        state.touched.includes("regulatedArea")) && (
         <div className="field">
           <Checkbox
             inputProps={{ id: "regulated-area" }}
@@ -131,7 +144,7 @@ export function ProfileForm({
         </div>
       )}
 
-      {openField === "area" && (
+      {(openField === "area" || state.touched.includes("area")) && (
         <AreaInput
           value={state.exclusiveAreaSqm}
           onChange={(value) => setField("exclusiveAreaSqm", value)}
