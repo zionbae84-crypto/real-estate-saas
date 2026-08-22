@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { ComplexUnit } from "./aggregate";
 import { aggregate } from "./aggregate";
-import { DATA_DIR, RAW_DIR, loadReportConfig } from "./config";
+import { DATA_DIR, RAW_DIR, loadReportConfig, loadRegions } from "./config";
 import { emit } from "./emit";
 import type { FetchLogEntry } from "./fetch";
 import { normalizeAll } from "./normalize";
@@ -47,8 +47,16 @@ function isCacheEnvelope(value: unknown): value is CacheEnvelope {
  *
  * 디렉터리가 없거나 캐시 파일이 하나도 없을 때도 같은 이유로 던진다 — 0건짜리
  * complexes.json이 조용히 만들어지면 그것도 "데이터가 없다"는 사실을 감춘다.
+ *
+ * I6: `fetch`는 raw 파일을 지우지 않는다. regions.json에서 시군구를 뺀
+ * 뒤에도(잘못된 프로브, 오타난 코드, 의도적 롤백) 그 지역의 캐시된 달들이
+ * data/raw/에 남아 있으면, 필터링 없이는 계속 complexes.json·regions.json·
+ * manifest.regionCodes로 흘러든다 — manifest.regionCodes는 "이 산출물이
+ * 담고 있는 지역"을 주장하는 필드이므로 이러면 그 주장 자체가 거짓말이
+ * 된다. regions는 loadRegions()를 기본값으로 받아 실제 실행에서는 항상
+ * 현재 설정을 기준으로 검증하고, 테스트는 임시 목록을 주입할 수 있다.
  */
-export function loadRawTrades(dir: string = RAW_DIR): RawTrade[] {
+export function loadRawTrades(dir: string = RAW_DIR, regions: string[] = loadRegions()): RawTrade[] {
   if (!existsSync(dir)) {
     throw new Error(`${dir}가 없습니다. 먼저 npm run pipeline:fetch 를 실행하세요.`);
   }
@@ -57,6 +65,7 @@ export function loadRawTrades(dir: string = RAW_DIR): RawTrade[] {
     throw new Error(`${dir}에 캐시 파일이 없습니다. 먼저 npm run pipeline:fetch 를 실행하세요.`);
   }
 
+  const allowedRegions = new Set(regions);
   const trades: RawTrade[] = [];
   for (const file of files) {
     const path = join(dir, file);
@@ -70,6 +79,17 @@ export function loadRawTrades(dir: string = RAW_DIR): RawTrade[] {
           `${file}을 지우고 그 파일명에 담긴 시군구·연월 데이터를 ` +
           `npm run pipeline:fetch 로 다시 받으세요.`,
       );
+    }
+    for (const t of parsed.trades) {
+      if (!allowedRegions.has(t.regionCode)) {
+        throw new Error(
+          `${file}: 거래의 regionCode "${t.regionCode}"가 현재 regions.json ` +
+            `설정(${regions.join(", ")})에 없습니다. 지역이 설정에서 빠진 뒤에도 ` +
+            `이 캐시 파일이 남아 있어 산출물(complexes.json·manifest.regionCodes)에 ` +
+            `계속 흘러들고 있습니다. 이 지역을 계속 쓰려면 regions.json에 다시 ` +
+            `추가하고, 더 이상 쓰지 않으려면 ${file}을 지우세요.`,
+        );
+      }
     }
     trades.push(...parsed.trades);
   }

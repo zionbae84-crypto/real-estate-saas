@@ -99,6 +99,36 @@ describe("loadRawTrades", () => {
 
     expect(() => loadRawTrades(rawDir)).toThrow();
   });
+
+  it("regions.json 설정에 없는 지역의 거래가 섞여 있으면 조용히 흘려보내지 않고 던진다 — I6", () => {
+    // I6: 지역이 설정(regions.json)에서 빠진 뒤에도 그 지역의 raw 캐시
+    // 파일이 남아 있으면, 예전에는 아무 필터링 없이 계속 complexes.json·
+    // manifest.regionCodes로 흘러들었다. manifest.regionCodes는 "이 산출물이
+    // 어느 지역을 담고 있다"를 주장하는 필드라, 설정과 어긋나면 그 자체로
+    // 거짓말이 된다.
+    writeCache(rawDir, "99999-202607.json", {
+      trades: [trade({ regionCode: "99999" })],
+      failures: 0,
+    });
+
+    expect(() => loadRawTrades(rawDir, ["11680", "11650"])).toThrow(/regions\.json|99999/);
+  });
+
+  it("regions.json 설정에 있는 지역만 있으면 정상 처리된다(회귀 방지) — I6", () => {
+    writeCache(rawDir, "11680-202607.json", { trades: [trade({ regionCode: "11680" })], failures: 0 });
+
+    expect(loadRawTrades(rawDir, ["11680", "11650"])).toHaveLength(1);
+  });
+
+  it("regions 인자를 생략하면 실제 regions.json(loadRegions())을 기본값으로 쓴다 — I6", () => {
+    // 기존 테스트들이 두 번째 인자 없이 loadRawTrades(rawDir)를 부르고도
+    // "11680"/"11650" 거래를 정상 처리하는 것 자체가 이 회귀 방지다 — 실제
+    // regions.json에 두 코드가 있기 때문이다. 여기서는 실제 설정에 없는
+    // 코드로 기본값 배선 자체를 직접 검증한다.
+    writeCache(rawDir, "00000-202607.json", { trades: [trade({ regionCode: "00000" })], failures: 0 });
+
+    expect(() => loadRawTrades(rawDir)).toThrow(/regions\.json|00000/);
+  });
 });
 
 describe("loadFetchLog", () => {
