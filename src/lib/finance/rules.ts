@@ -264,6 +264,31 @@ function validateSemanticInvariants(rules: Rules): void {
     assertNonNegative(bracket.amount, `absoluteCap.brackets[${index}].amount`);
   });
 
+  // absoluteCap은 가격이 올라갈수록 낮아지거나 같아야지, 높아지면 안 된다
+  // (비증가). 실제 규제에서 주담대 절대 상한은 고가주택일수록 강하게
+  // 죄지, 완화되지 않는다(예: "15억 이하 6억 → 15억 초과 4억"은 있어도
+  // 그 반대는 없다). 올라가는 캡은 오타이거나 값 오입력이다.
+  //
+  // 이 불변식이 없으면 buildSearchSegments(affordable-price.ts)가 절벽에서
+  // 나눈 구간 하나가 실제로는 "선택지 상실 → 한도 하락"이 아니라 "한도
+  // 상승"이 되어, ownFunds가 그 경계에서 오히려 떨어진다. 그러면 감당
+  // 가능한 가격 집합이 두 덩어리로 갈라지고, 분할되지 않은 이분 탐색은
+  // 낮은 쪽 덩어리에 수렴해 실구매력을 조용히 과소 계상한다(억 단위로
+  // 틀릴 수 있음이 리뷰에서 실측됨). 데이터 오류를 계산에 흘리지 않고
+  // 여기, 파싱 단계에서 시끄럽게 끊는다.
+  //
+  // 같은 값이 반복되는 평평한 구간(비증가의 등호 쪽)은 오류가 아니므로
+  // 허용한다.
+  let previousCapAmount: number | null = null;
+  rules.absoluteCap.brackets.forEach((bracket, index) => {
+    if (previousCapAmount !== null && bracket.amount > previousCapAmount) {
+      throw new Error(
+        `룰셋 값 오류: absoluteCap.brackets의 amount는 가격이 올라갈수록 커지면 안 됩니다 (구간 ${index - 1}: ${previousCapAmount} → 구간 ${index}: ${bracket.amount})`,
+      );
+    }
+    previousCapAmount = bracket.amount;
+  });
+
   rules.policyLoans.forEach((loan, index) => {
     const path = `policyLoans[${index}]`;
     assertNonNegative(loan.maxAmount, `${path}.maxAmount`);
