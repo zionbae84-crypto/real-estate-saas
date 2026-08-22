@@ -53,15 +53,7 @@ function readPayment(): number {
   return parseFormattedWon(text);
 }
 
-/**
- * 화면에 그려진 실구매 가능 가격(.affordable-price)을 원 단위 숫자로 읽는다.
- *
- * 지금은 이 파일의 어떤 테스트도 부르지 않는다 — 규제지역 체크박스가
- * ProfileForm에서 openField로 열어야만 나타나도록 바뀌었는데, 그걸 여는
- * AssumptionLine을 App에 배치하는 일은 이 태스크가 아니라 이후 태스크의
- * 몫이다. 그 배치가 끝나면 "규제지역을 열어 끄면 실구매력이 올라간다"
- * 통합 테스트를 이 헬퍼로 되살릴 수 있다.
- */
+/** 화면에 그려진 실구매 가능 가격(.affordable-price)을 원 단위 숫자로 읽는다. */
 function readAffordablePrice(): number {
   const text = document.querySelector(".affordable-price")?.textContent ?? "";
   return parseFormattedWon(text);
@@ -84,9 +76,12 @@ describe("예산 계산기 통합", () => {
 
     expect(screen.getByText("실구매 가능 가격")).toBeInTheDocument();
     expect(screen.getByRole("slider")).toBeInTheDocument();
-    expect(
-      screen.getByRole("heading", { name: /걸렸습니다|최대치입니다/ }),
-    ).toBeInTheDocument();
+    // BudgetResult의 2단("무엇이 막았는지 한 줄")은 이제 <h2>가 아니라
+    // 평범한 문단이다 — 제목 계층은 "실구매 가능 가격"(1단) 하나로
+    // 좁혔다. BindingExplainer 자신의 <h3>는 접힌 4단 안에서
+    // showTitle={false}로 꺼져 있으므로, 이 문구는 화면에 정확히 한
+    // 번만 나타난다.
+    expect(screen.getByText(/걸렸습니다|최대치입니다/)).toBeInTheDocument();
   });
 
   it("슬라이더를 내리면 월 상환액과 부담률이 줄어든다", async () => {
@@ -95,13 +90,18 @@ describe("예산 계산기 통합", () => {
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
 
     const slider = screen.getByRole("slider");
-    const max = Number(slider.getAttribute("max"));
+    // SEED 썸은 <div role="slider">라 네이티브 max 속성이 없다 —
+    // aria-valuemax로 범위를 읽는다.
+    const max = Number(slider.getAttribute("aria-valuemax"));
     expect(max).toBeGreaterThan(0);
 
     const ratioAtMax = readRatio();
     const paymentAtMax = readPayment();
 
-    fireEvent.change(slider, { target: { value: String(Math.floor(max / 2 / 100_000) * 100_000) } });
+    // SEED Slider는 값이 배열인 커스텀 위젯이라 네이티브 <input type=range>처럼
+    // fireEvent.change로 값을 바꿀 수 없다 — 키보드 상호작용(Home = 최솟값으로)이
+    // 실제 사용자가 슬라이더를 내리는 것과 같은 경로(useSlider의 onKeyDown)를 태운다.
+    fireEvent.keyDown(slider, { key: "Home" });
 
     expect(readRatio()).toBeLessThan(ratioAtMax);
     expect(readPayment()).toBeLessThan(paymentAtMax);
@@ -124,5 +124,35 @@ describe("예산 계산기 통합", () => {
 
     render(<App />);
     expect(screen.getByLabelText("보유 현금")).toHaveValue("20000");
+  });
+
+  /**
+   * 폼에서 엔진을 거쳐 화면 숫자까지 이어지는 유일한 종단 검증.
+   *
+   * Task 3에서 규제지역 체크박스가 ProfileForm 첫 화면에서 빠지고
+   * AssumptionLine 뒤의 openField로만 도달하게 되면서 지워졌던 테스트다
+   * (그때는 AssumptionLine이 App에 배선되지 않아 열 방법이 없었다). 이제
+   * AssumptionLine이 배선됐으니 그 버튼을 눌러 규제지역 필드를 열고,
+   * 체크를 끄면(비규제지역 = 수도권) LTV 한도가 40% → 70%로 올라 실구매력이
+   * 오른다는 사실을 화면 숫자로 직접 확인한다.
+   */
+  it("규제지역 체크를 끄면 실구매력이 올라간다", async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
+
+    const priceBefore = readAffordablePrice();
+    expect(priceBefore).toBeGreaterThan(0);
+
+    // 기본값(가정)은 규제지역(true)이므로 AssumptionLine 문구는
+    // "규제지역으로 계산했어요"다(AssumptionLine.tsx의 buildAssumptionItems 참고).
+    await userEvent.click(screen.getByText(/규제지역으로 계산했어요/));
+
+    const checkbox = screen.getByRole("checkbox", { name: /규제지역/ });
+    expect(checkbox).toBeChecked();
+    await userEvent.click(checkbox);
+    expect(checkbox).not.toBeChecked();
+
+    expect(readAffordablePrice()).toBeGreaterThan(priceBefore);
   });
 });

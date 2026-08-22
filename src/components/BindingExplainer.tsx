@@ -3,6 +3,16 @@ import { NO_POLICY_LIMIT, type BindingConstraint, type LoanLimit } from "../lib/
 
 export interface BindingExplainerProps {
   loanLimit: LoanLimit;
+  /**
+   * `<h3>` 제목 줄을 함께 그릴지. 기본값 `true`.
+   *
+   * `BudgetResult`는 같은 문구(`getBindingTitle`)를 결과 계단의 2단
+   * ("무엇이 막았는지 한 줄")에서 먼저 보여준 뒤, 이 컴포넌트를 접힌
+   * 4단(부대비용·정책대출·상세 설명) 안에 다시 배치한다. 그때
+   * `showTitle={false}`로 넘겨 같은 문구가 화면에 두 번(한 번은 굵은
+   * 한 줄로, 한 번은 접힌 details 안 제목으로) 찍히지 않게 한다.
+   */
+  showTitle?: boolean;
 }
 
 interface Explanation {
@@ -32,6 +42,16 @@ const EXPLANATIONS: Record<BindingConstraint, Explanation> = {
       "정책대출을 택했을 때 받을 수 있는 금액이 은행 대출보다 큽니다. 금리 조건을 함께 비교해 보세요.",
   },
 };
+
+/**
+ * 걸린 제약을 한 줄로 요약한 문구. `BudgetResult`가 결과 계단의 2단
+ * ("무엇이 막았는지 한 줄")에서 쓴다 — 이 컴포넌트 자신의 `<h3>`와 같은
+ * 문구를 별도로 하드코딩하지 않고 이 맵 하나에서 함께 가져오게 해,
+ * 두 자리의 문구가 갈라질 일이 없게 한다.
+ */
+export function getBindingTitle(binding: BindingConstraint): string {
+  return EXPLANATIONS[binding].title;
+}
 
 const LABELS: Record<BindingConstraint, string> = {
   LTV: "담보 가치(LTV)",
@@ -90,13 +110,16 @@ function findRunnerUp(
   return { constraint: smallest, headroom };
 }
 
-export function BindingExplainer({ loanLimit }: BindingExplainerProps) {
+export function BindingExplainer({
+  loanLimit,
+  showTitle = true,
+}: BindingExplainerProps) {
   const explanation = EXPLANATIONS[loanLimit.binding];
   const runnerUp = findRunnerUp(loanLimit.binding, loanLimit.breakdown);
 
   return (
     <section className="binding-explainer">
-      <h3>{explanation.title}</h3>
+      {showTitle && <h3>{explanation.title}</h3>}
       <p className="binding-amount">{formatWon(loanLimit.amount)}</p>
       <p className="binding-advice">{explanation.advice}</p>
 

@@ -63,6 +63,64 @@ body {
   margin: 0.25rem 0;
 }
 
+.result-step--binding {
+  color: #444;
+  margin: 0 0 1rem;
+}
+
+.result-step--fold {
+  margin: 1rem 0;
+}
+
+.result-step--fold > summary {
+  cursor: pointer;
+  color: #666;
+}
+
+/*
+ * SafeLine: 안전선을 최대 가격 옆에 "동등한 무게"로 둔다는 것이 이
+ * 제품의 핵심 주장이다. 그래서 두 항목을 나란히(flex) 놓고, 같은
+ * font-size·font-weight로 맞춘다 — 한쪽이 시각적으로 더 작거나 옅으면
+ * "여기까지가 무리 없는 선"이라는 말이 힘을 잃는다.
+ */
+.safe-line--split {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5rem;
+  margin: 0 0 1rem;
+}
+
+.safe-line-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+}
+
+.safe-line-label {
+  font-size: 0.8125rem;
+  color: #666;
+}
+
+.safe-line-amount {
+  font-size: 1.375rem;
+  font-weight: 700;
+}
+
+.safe-line-item--safe .safe-line-amount {
+  color: var(--safe);
+}
+
+.safe-line--none {
+  color: var(--danger);
+  margin: 0 0 1rem;
+}
+
+.safe-line--merged {
+  color: var(--safe);
+  font-weight: 600;
+  margin: 0 0 1rem;
+}
+
 .warning-list {
   background: #fff6e5;
   border-left: 4px solid var(--caution);

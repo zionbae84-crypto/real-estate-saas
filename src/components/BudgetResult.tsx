@@ -1,15 +1,33 @@
+import { Text } from "@seed-design/react";
 import type { AffordableResult } from "../lib/finance";
 import { formatWon } from "../format/won";
-import { BindingExplainer } from "./BindingExplainer";
+import { BindingExplainer, getBindingTitle } from "./BindingExplainer";
 import { CostBreakdown } from "./CostBreakdown";
 import { PolicyLoanList } from "./PolicyLoanList";
+import { SafeLine } from "./SafeLine";
 import { WarningList } from "./WarningList";
 
 export interface BudgetResultProps {
   result: AffordableResult;
+  /**
+   * 상환 부담이 안전 범위에 머무는 최대 매매가, 또는 그런 가격이 하나도
+   * 없으면 `null`. `useAffordability`의 `safePrice`를 그대로 받는다.
+   */
+  safePrice: number | null;
 }
 
-export function BudgetResult({ result }: BudgetResultProps) {
+/**
+ * 결과를 네 단으로 나눈다.
+ *
+ * 1. 최대 가격 — 크게
+ * 2. 무엇이 막았는지 한 줄
+ * 3. 안전선 — 최대 가격 옆에 나란히
+ * 4. 접힌 채로 — 부대비용 내역·정책대출 목록·상세 설명
+ *
+ * 경고(`WarningList`)는 이 계단 바깥, 맨 위에 두고 접지 않는다 — 접으면
+ * 안 되는 종류의 정보다.
+ */
+export function BudgetResult({ result, safePrice }: BudgetResultProps) {
   return (
     <section className="budget-result">
       <WarningList warnings={result.warnings} />
@@ -18,11 +36,36 @@ export function BudgetResult({ result }: BudgetResultProps) {
         <ZeroBudgetMessage result={result} />
       ) : (
         <>
-          <h2>실구매 가능 가격</h2>
-          <p className="affordable-price">{formatWon(result.affordablePrice)}</p>
-          <BindingExplainer loanLimit={result.loanLimit} />
-          <CostBreakdown costs={result.costs} />
-          <PolicyLoanList matched={result.matchedPolicyLoans} />
+          <div className="result-step result-step--price">
+            <h2>실구매 가능 가격</h2>
+            {/*
+              SEED `Text`는 공식 문서에 `as` prop이 없다 — 있어도 제목
+              계층이 필요한 자리에는 쓰지 않는다. 그래서 블록 배치는
+              평범한 `<p>`가 맡고, `Text`는(기본 `<span>`) 그 안에서
+              숫자에만 SEED 타이포 토큰을 입힌다.
+            */}
+            <p className="affordable-price">
+              <Text>{formatWon(result.affordablePrice)}</Text>
+            </p>
+          </div>
+
+          <p className="result-step result-step--binding">
+            {getBindingTitle(result.loanLimit.binding)}
+          </p>
+
+          <div className="result-step result-step--safe-line">
+            <SafeLine
+              affordablePrice={result.affordablePrice}
+              safePrice={safePrice}
+            />
+          </div>
+
+          <details className="result-step result-step--fold">
+            <summary>부대비용·정책대출·상세 설명 더 보기</summary>
+            <BindingExplainer loanLimit={result.loanLimit} showTitle={false} />
+            <CostBreakdown costs={result.costs} />
+            <PolicyLoanList matched={result.matchedPolicyLoans} />
+          </details>
         </>
       )}
     </section>

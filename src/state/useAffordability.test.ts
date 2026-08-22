@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { BuyerProfile } from "../lib/finance";
-import { PRICE_STEP } from "../lib/finance";
+import { calcSafePrice, PRICE_STEP } from "../lib/finance";
 import { rules, useAffordability } from "./useAffordability";
 
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
@@ -135,5 +135,29 @@ describe("useAffordability", () => {
     const { result } = renderHook(() => useAffordability(profile()));
     act(() => result.current!.setPrice(Infinity));
     expect(result.current!.price).toBe(0);
+  });
+
+  describe("safePrice", () => {
+    it("calcSafePrice가 같은 프로필·룰셋에서 내는 값과 같다", () => {
+      const p = profile();
+      const { result } = renderHook(() => useAffordability(p));
+      expect(result.current!.safePrice).toBe(calcSafePrice(p, rules));
+    });
+
+    it("소득이 0이면(안전한 가격이 없으면) null이다", () => {
+      const { result } = renderHook(() =>
+        useAffordability(profile({ cash: 0, annualIncome: 0 })),
+      );
+      expect(result.current?.safePrice).toBeNull();
+    });
+
+    it("슬라이더로 가격을 움직여도 바뀌지 않는다 — 프로필에서만 정해진다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      const before = result.current!.safePrice;
+
+      act(() => result.current!.setPrice(100_000_000));
+
+      expect(result.current!.safePrice).toBe(before);
+    });
   });
 });
