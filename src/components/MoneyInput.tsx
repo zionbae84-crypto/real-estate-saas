@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { TextField, TextFieldInput } from "seed-design/ui/text-field";
 import { formatWon } from "../format/won";
 import { parseMoney } from "../format/parseMoney";
 
@@ -44,18 +45,21 @@ export function MoneyInput({
 
   return (
     <div className="money-input">
-      <label htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        type="text"
-        inputMode="numeric"
-        autoComplete="off"
-        value={text}
-        onChange={(event) => handleChange(event.target.value)}
-      />
-      {hint !== undefined && <p className="hint">{hint}</p>}
+      <TextField
+        label={label}
+        description={hint}
+        invalid={unreadable}
+        errorMessage={unreadable ? "숫자로 읽을 수 없습니다" : undefined}
+      >
+        <TextFieldInput
+          id={id}
+          inputMode="numeric"
+          autoComplete="off"
+          value={text}
+          onChange={(event) => handleChange(event.target.value)}
+        />
+      </TextField>
       {parsed !== null && <p className="echo">{formatWon(parsed)}</p>}
-      {unreadable && <p className="error">숫자로 읽을 수 없습니다</p>}
     </div>
   );
 }

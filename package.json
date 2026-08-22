@@ -33,6 +33,7 @@
     "vitest": "^4.1.10"
   },
   "dependencies": {
+    "@karrotmarket/react-monochrome-icon": "^1.25.0",
     "@seed-design/css": "^2.5.0",
     "@seed-design/react": "^2.3.0",
     "react": "^19.2.8",

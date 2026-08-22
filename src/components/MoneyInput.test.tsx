@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { MoneyInput } from "./MoneyInput";
@@ -48,6 +48,35 @@ describe("MoneyInput", () => {
   it("초기 value가 있으면 만원 단위로 채워 보여준다", () => {
     setup(350_000_000);
     expect(screen.getByLabelText("보유 현금")).toHaveValue("35000");
+  });
+
+  it("만원 기본 해석을 되비춰 자릿수 오해를 드러낸다", () => {
+    const onChange = vi.fn();
+    render(
+      <MoneyInput id="cash" label="보유 현금" value={null} onChange={onChange} />,
+    );
+
+    // "5천만원"을 의도하고 50000000을 넣으면 실제로는 5,000억이 된다.
+    // 되비추기가 그 오해를 즉시 눈에 보이게 만든다.
+    fireEvent.change(screen.getByLabelText("보유 현금"), {
+      target: { value: "50000000" },
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith(500_000_000_000);
+    expect(screen.getByText(/5,000억/)).toBeInTheDocument();
+  });
+
+  it("억·만 단위를 섞어 쓴 입력을 읽는다", () => {
+    const onChange = vi.fn();
+    render(
+      <MoneyInput id="cash" label="보유 현금" value={null} onChange={onChange} />,
+    );
+
+    fireEvent.change(screen.getByLabelText("보유 현금"), {
+      target: { value: "3억5000" },
+    });
+
+    expect(onChange).toHaveBeenLastCalledWith(350_000_000);
   });
 
   it("힌트를 표시한다", () => {
