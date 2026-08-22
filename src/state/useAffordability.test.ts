@@ -12,6 +12,10 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
     existingDebtAnnualPayment: 0,
     isFirstTimeBuyer: false,
     exclusiveAreaSqm: 84,
+    // 이 파일의 테스트는 정확한 LTV 퍼센트가 아니라 훅의 동작(가격 조임,
+    // override 유지 등)을 검증하므로 규제 여부는 결과에 영향을 주지
+    // 않는다. 앱의 기본값(true, 과대평가를 피하는 쪽)과 맞춰 둔다.
+    isRegulatedArea: true,
     ...overrides,
   };
 }

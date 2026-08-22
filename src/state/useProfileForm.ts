@@ -15,6 +15,7 @@ export interface ProfileFormState {
   existingDebtAnnualPayment: number | null;
   status: HouseholdStatus;
   isFirstTimeBuyer: boolean;
+  isRegulatedArea: boolean;
   exclusiveAreaSqm: number;
   existingHome: ExistingHomeFormState;
 }
@@ -30,6 +31,11 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
   status: "무주택",
   // 켜두면 LTV·정책대출 자격을 과대평가하는 방향이므로 꺼진 쪽이 안전하다.
   isFirstTimeBuyer: false,
+  // isFirstTimeBuyer와 반대 방향의 같은 이유: 규제지역 무주택자 LTV는
+  // 40%, 비규제(수도권)는 70%다. 잘못 꺼두면(비규제로 잘못 알면) 한도를
+  // 30%p 과대평가하게 되므로, 모르면 규제지역(true)으로 두는 쪽이
+  // 안전하다 — 이 제품은 항상 과대평가를 피하는 쪽을 기본값으로 삼는다.
+  isRegulatedArea: true,
   exclusiveAreaSqm: 84,
   existingHome: {
     expectedSalePrice: null,
@@ -51,6 +57,7 @@ export function toProfile(state: ProfileFormState): BuyerProfile | null {
     // 있어야 하므로) 엔진 경계에서는 둘 다 0이다 — 여기서만 좁힌다.
     existingDebtAnnualPayment: state.existingDebtAnnualPayment ?? 0,
     isFirstTimeBuyer: state.isFirstTimeBuyer,
+    isRegulatedArea: state.isRegulatedArea,
     exclusiveAreaSqm: state.exclusiveAreaSqm,
   };
 
@@ -109,6 +116,10 @@ export function loadStoredState(
       typeof o.isFirstTimeBuyer === "boolean"
         ? o.isFirstTimeBuyer
         : DEFAULT_FORM_STATE.isFirstTimeBuyer,
+    isRegulatedArea:
+      typeof o.isRegulatedArea === "boolean"
+        ? o.isRegulatedArea
+        : DEFAULT_FORM_STATE.isRegulatedArea,
     exclusiveAreaSqm:
       positive(o.exclusiveAreaSqm) ?? DEFAULT_FORM_STATE.exclusiveAreaSqm,
     existingHome: {

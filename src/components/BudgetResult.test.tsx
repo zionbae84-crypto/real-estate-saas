@@ -16,7 +16,16 @@ function result(overrides: Partial<AffordableResult> = {}): AffordableResult {
       brokerageFee: 2_560_000,
       legalFee: 600_000,
       movingCost: 1_500_000,
-      total: 13_060_000,
+      // Task 4로 CostBreakdown에 추가된 두 항목. 값은 실제 엔진
+      // (calcAcquisitionCosts)이 가격 6억4천만원에서 산출하는 값과
+      // 같게 맞췄다: brokerageVat = brokerageFee(2,560,000) * 10%.
+      // housingBondCost = calcHousingBondCost(640_000_000, rules).
+      brokerageVat: 256_000,
+      housingBondCost: 931_840,
+      // 위 두 항목이 늘어난 만큼 합계도 늘어난다.
+      // 이전 값 13,060,000 → 새 값 14,247,840
+      // (13,060,000 + 256,000 + 931,840).
+      total: 14_247_840,
     },
     availableCash: 200_000_000,
     matchedPolicyLoans: [],
@@ -33,7 +42,9 @@ describe("BudgetResult", () => {
 
   it("부대비용 합계를 보여준다", () => {
     render(<BudgetResult result={result()} />);
-    expect(screen.getByText("1,306만원")).toBeInTheDocument();
+    // Task 4에서 costs.total에 brokerageVat·housingBondCost가 더해지며
+    // 13,060,000 → 14,247,840으로 바뀌었다("1,306만원" → "1,424만 7,840원").
+    expect(screen.getByText("1,424만 7,840원")).toBeInTheDocument();
   });
 
   it("걸린 제약 설명을 함께 보여준다", () => {

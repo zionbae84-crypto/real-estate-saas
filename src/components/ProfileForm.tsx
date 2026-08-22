@@ -101,6 +101,22 @@ export function ProfileForm({
         </label>
       </div>
 
+      <div className="field">
+        <label htmlFor="regulated-area">
+          <input
+            id="regulated-area"
+            type="checkbox"
+            checked={state.isRegulatedArea}
+            onChange={(e) => setField("isRegulatedArea", e.target.checked)}
+          />
+          규제지역(투기과열지구·조정대상지역)
+        </label>
+        <p className="hint">
+          무주택자 LTV가 규제지역은 40%, 비규제(수도권)는 70%로 갈립니다.
+          잘 모르면 켜 둔 채로 계산하세요 — 한도를 과대평가하지 않습니다.
+        </p>
+      </div>
+
       <AreaInput
         value={state.exclusiveAreaSqm}
         onChange={(value) => setField("exclusiveAreaSqm", value)}

@@ -15,6 +15,10 @@ describe("DEFAULT_FORM_STATE", () => {
     expect(DEFAULT_FORM_STATE.isFirstTimeBuyer).toBe(false);
   });
 
+  it("규제지역 기본값은 true다 — 과대평가를 피하는 쪽이다", () => {
+    expect(DEFAULT_FORM_STATE.isRegulatedArea).toBe(true);
+  });
+
   it("필수값은 비어 있고 나머지는 기본값이 있다", () => {
     expect(DEFAULT_FORM_STATE.cash).toBeNull();
     expect(DEFAULT_FORM_STATE.annualIncome).toBeNull();
@@ -46,8 +50,18 @@ describe("toProfile", () => {
       annualIncome: 50_000_000,
       existingDebtAnnualPayment: 0,
       isFirstTimeBuyer: false,
+      // DEFAULT_FORM_STATE.isRegulatedArea가 true이므로 state()가 만드는
+      // 기본 프로필에도 그대로 true가 전달된다.
+      isRegulatedArea: true,
       exclusiveAreaSqm: 84,
     });
+  });
+
+  it("toProfile이 규제지역을 그대로 전달한다", () => {
+    const profile = toProfile(
+      state({ cash: 1, annualIncome: 1, isRegulatedArea: false }),
+    );
+    expect(profile?.isRegulatedArea).toBe(false);
   });
 
   it("무주택이면 existingHome을 넣지 않는다", () => {
@@ -166,6 +180,34 @@ describe("loadStoredState", () => {
     it("실제 boolean true는 그대로 복원한다", () => {
       const stored = JSON.stringify({ isFirstTimeBuyer: true });
       expect(loadStoredState(storage(stored)).isFirstTimeBuyer).toBe(true);
+    });
+  });
+
+  describe("isRegulatedArea는 boolean이 아니면 기본값(true)으로 되돌린다", () => {
+    // isFirstTimeBuyer와 같은 이유, 반대 방향: 이 필드는 꺼졌을 때(false)
+    // LTV를 40%→70%로 과대평가한다. "참으로 보이는" 조작값이 검증 없이
+    // 통과해 false로 떨어지면 안 되고, 항상 안전한 기본값(true)으로
+    // 돌아가야 한다.
+    it.each([
+      ["문자열 \"true\"", '"true"'],
+      ["숫자 1", "1"],
+      ["null", "null"],
+    ])("%s는 기본값(true)으로 되돌린다", (_label, bad) => {
+      const stored = JSON.stringify({
+        ...DEFAULT_FORM_STATE,
+        isRegulatedArea: JSON.parse(bad),
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.isRegulatedArea, bad).toBe(true);
+    });
+
+    it("실제 boolean false는 그대로 복원한다", () => {
+      const stored = JSON.stringify({
+        ...DEFAULT_FORM_STATE,
+        isRegulatedArea: false,
+      });
+      const loaded = loadStoredState({ getItem: () => stored });
+      expect(loaded.isRegulatedArea).toBe(false);
     });
   });
 
