@@ -18,7 +18,10 @@ describe("DEFAULT_FORM_STATE", () => {
   it("필수값은 비어 있고 나머지는 기본값이 있다", () => {
     expect(DEFAULT_FORM_STATE.cash).toBeNull();
     expect(DEFAULT_FORM_STATE.annualIncome).toBeNull();
-    expect(DEFAULT_FORM_STATE.existingDebtAnnualPayment).toBe(0);
+    // 다른 금액 필드(cash, annualIncome)처럼 미입력 상태는 null이다.
+    // 0을 기본값으로 두면 입력란이 "0"으로 시작해 지울 방법이 없어진다
+    // (toProfile이 null을 0으로 좁혀 엔진에는 그대로 0으로 전달된다).
+    expect(DEFAULT_FORM_STATE.existingDebtAnnualPayment).toBeNull();
     expect(DEFAULT_FORM_STATE.status).toBe("무주택");
     expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBe(84);
   });

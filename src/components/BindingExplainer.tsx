@@ -1,5 +1,5 @@
 import { formatWon } from "../format/won";
-import type { BindingConstraint, LoanLimit } from "../lib/finance";
+import { NO_POLICY_LIMIT, type BindingConstraint, type LoanLimit } from "../lib/finance";
 
 export interface BindingExplainerProps {
   loanLimit: LoanLimit;
@@ -121,7 +121,11 @@ export function BindingExplainer({ loanLimit }: BindingExplainerProps) {
                 {LABELS[key]}
                 {key === loanLimit.binding && " ← 여기에 걸림"}
               </dt>
-              <dd>{formatWon(loanLimit.breakdown[key])}</dd>
+              <dd>
+                {key === "POLICY" && loanLimit.breakdown[key] === NO_POLICY_LIMIT
+                  ? "선택지 없음"
+                  : formatWon(loanLimit.breakdown[key])}
+              </dd>
             </div>
           ))}
         </dl>

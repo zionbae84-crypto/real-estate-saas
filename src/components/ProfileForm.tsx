@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type {
   ExistingHomeFormState,
   ProfileFormState,
@@ -42,7 +43,7 @@ export function ProfileForm({
         id="debt"
         label="기존 부채 연간 원리금"
         value={state.existingDebtAnnualPayment}
-        onChange={(won) => setField("existingDebtAnnualPayment", won ?? 0)}
+        onChange={(won) => setField("existingDebtAnnualPayment", won)}
         hint="없으면 비워 두세요."
       />
 
@@ -100,22 +101,65 @@ export function ProfileForm({
         </label>
       </div>
 
-      <div className="field">
-        <label htmlFor="area">전용면적 (㎡)</label>
-        <input
-          id="area"
-          type="number"
-          min={1}
-          step={1}
-          value={state.exclusiveAreaSqm}
-          onChange={(e) => {
-            const next = Number(e.target.value);
-            if (Number.isFinite(next) && next > 0) {
-              setField("exclusiveAreaSqm", next);
-            }
-          }}
-        />
-      </div>
+      <AreaInput
+        value={state.exclusiveAreaSqm}
+        onChange={(value) => setField("exclusiveAreaSqm", value)}
+      />
     </form>
+  );
+}
+
+interface AreaInputProps {
+  value: number;
+  onChange: (value: number) => void;
+}
+
+/**
+ * 전용면적 입력란. 이전에는 change 핸들러가 파싱 실패("", "0" 등)일 때
+ * 그냥 아무 것도 하지 않았다 — value prop이 그대로라 리렌더가 안 일어나고,
+ * 그 결과 통제 입력(controlled input)인데도 브라우저가 사용자가 방금
+ * 지운 화면 그대로("" 등)를 계속 보여줬다. 실제 계산에 쓰이는 값(농특세
+ * 판정 등)과 화면이 어긋나는 상태다.
+ *
+ * 원본 텍스트를 로컬 상태로 따로 들고, 파싱 가능할 때만 상위 상태를
+ * 갱신하며, blur 시점에 여전히 유효하지 않으면 마지막으로 유효했던
+ * 값으로 되돌린다 — 입력 중에는 자유롭게 지우고 다시 쓸 수 있으면서도,
+ * 입력을 마쳤을 때는 화면과 계산값이 항상 일치한다.
+ */
+function AreaInput({ value, onChange }: AreaInputProps) {
+  const [text, setText] = useState(() => String(value));
+
+  useEffect(() => {
+    setText((current) => (Number(current) === value ? current : String(value)));
+  }, [value]);
+
+  function handleChange(next: string) {
+    setText(next);
+    const parsed = Number(next);
+    if (next.trim() !== "" && Number.isFinite(parsed) && parsed > 0) {
+      onChange(parsed);
+    }
+  }
+
+  function handleBlur() {
+    const parsed = Number(text);
+    if (text.trim() === "" || !Number.isFinite(parsed) || parsed <= 0) {
+      setText(String(value));
+    }
+  }
+
+  return (
+    <div className="field">
+      <label htmlFor="area">전용면적 (㎡)</label>
+      <input
+        id="area"
+        type="number"
+        min={1}
+        step={1}
+        value={text}
+        onChange={(e) => handleChange(e.target.value)}
+        onBlur={handleBlur}
+      />
+    </div>
   );
 }

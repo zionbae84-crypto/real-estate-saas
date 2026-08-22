@@ -99,3 +99,97 @@ body {
   color: var(--caution);
   font-size: 0.875rem;
 }
+
+.prompt {
+  color: #666;
+  margin: 1.5rem 0;
+}
+
+.binding-explainer {
+  margin: 1rem 0;
+  padding: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+}
+
+/*
+ * 여유(runner-up)와 동률 재걸림(runner-up-tied)은 서로 반대 의미다 —
+ * 하나는 "이 조언을 따르면 한도가 늘어난다", 다른 하나는 "따라도 같은
+ * 금액에서 다시 걸려 늘어나지 않는다". 지금까지 둘 다 룰이 없어 같은
+ * 민무늬 텍스트로 렌더링돼 의미 차이가 화면에 보이지 않았다.
+ */
+.runner-up,
+.runner-up-tied {
+  margin: 0.75rem 0 0;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.25rem;
+  font-size: 0.9375rem;
+}
+
+.runner-up {
+  background: #eaf6ec;
+  border-left: 3px solid var(--safe);
+}
+
+.runner-up-tied {
+  background: #fff6e5;
+  border-left: 3px solid var(--caution);
+}
+
+.no-budget {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #fdecec;
+  border-left: 4px solid var(--danger);
+  border-radius: 0.25rem;
+}
+
+.error-fallback {
+  margin: 1rem 0;
+  padding: 1rem;
+  background: #fdecec;
+  border: 1px solid var(--danger);
+  border-radius: 0.375rem;
+}
+
+.safety-note {
+  color: #666;
+  font-size: 0.875rem;
+  margin: 0.5rem 0 0;
+}
+
+.stressed-payment {
+  font-weight: 700;
+}
+
+.cost-total {
+  font-weight: 700;
+  margin-left: 0.375rem;
+}
+
+/*
+ * PolicyLoanList의 각 <li>는 이름·금리·(금액 또는 policy-none 안내)를
+ * 나란히 <span>으로만 두고 있어 룰이 없으면 "디딤돌연 3.2%자격은
+ * 되지만…"처럼 서로 붙어 렌더링된다. flex + gap으로 항목 사이 간격을
+ * 만든다.
+ */
+.policy-loan-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.policy-loan-list li:last-child {
+  border-bottom: none;
+}
+
+.policy-name {
+  font-weight: 600;
+}
+
+.policy-none {
+  color: #666;
+}

@@ -20,6 +20,7 @@ export function PriceSlider({ price, max, onChange }: PriceSliderProps) {
         max={max}
         step={PRICE_STEP}
         value={price}
+        aria-valuetext={formatWon(price)}
         onChange={(event) => onChange(Number(event.target.value))}
       />
 

@@ -49,4 +49,14 @@ describe("PriceSlider", () => {
       screen.queryByText(/빌릴 수 있는 한계이지/),
     ).not.toBeInTheDocument();
   });
+
+  it("aria-valuetext로 사람이 읽는 금액을 노출한다 — 스크린 리더가 원 단위 정수를 그대로 읽지 않도록", () => {
+    render(
+      <PriceSlider price={624_600_000} max={640_000_000} onChange={vi.fn()} />,
+    );
+    expect(screen.getByRole("slider")).toHaveAttribute(
+      "aria-valuetext",
+      "6억 2,460만원",
+    );
+  });
 });

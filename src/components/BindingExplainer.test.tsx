@@ -50,7 +50,27 @@ describe("BindingExplainer", () => {
     render(<BindingExplainer loanLimit={limit("LTV")} />);
     expect(screen.getByText("5억 7,431만 6,140원")).toBeInTheDocument();
     expect(screen.getByText("6억원")).toBeInTheDocument();
-    expect(screen.getByText("0원")).toBeInTheDocument();
+    // POLICY: 0은 NO_POLICY_LIMIT — "0원 받을 수 있다"가 아니라 "정책대출
+    // 이라는 선택지 자체가 없다"는 뜻이므로 그렇게 표시해야 한다.
+    expect(screen.getByText("선택지 없음")).toBeInTheDocument();
+    expect(screen.queryByText("0원")).not.toBeInTheDocument();
+  });
+
+  it("정책대출 한도가 0이 아니면 금액을 그대로 보여준다", () => {
+    const loanLimit: LoanLimit = {
+      amount: 200_000_000,
+      binding: "POLICY",
+      breakdown: {
+        LTV: 100_000_000,
+        DSR: 120_000_000,
+        CAP: 150_000_000,
+        POLICY: 200_000_000,
+      },
+    };
+    const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+    const policyRow = container.querySelector('[data-binding="POLICY"]');
+    expect(policyRow).toHaveTextContent("2억원");
+    expect(policyRow).not.toHaveTextContent("선택지 없음");
   });
 
   describe("2순위 제약 인라인 표시", () => {
