@@ -96,6 +96,34 @@ describe("findUnderMergeCandidates", () => {
   });
 });
 
+describe("findUnderMergeCandidates 경계값 — underMergeMaxEditDistance", () => {
+  // 접두어 관계가 아니면서(둘 다 길이가 같고 서로의 prefix가 아님) 딱 두 글자만
+  // 다른 이름 쌍. prefix 지름길에 걸리지 않고 순수하게 편집거리만으로 판정되게 한다.
+  it("편집거리가 정확히 상한(2)이면 후보로 잡힌다", () => {
+    const found = findUnderMergeCandidates(
+      [
+        unit({ complexKey: "11680|대치동|1979|삼성12차" }),
+        unit({ complexKey: "11680|대치동|1979|삼성34차" }),
+      ],
+      config,
+    );
+    expect(found).toHaveLength(1);
+    expect(found[0]?.distance).toBe(config.underMergeMaxEditDistance);
+  });
+
+  // 위와 같은 형태에서 다른 글자 하나를 늘려 편집거리를 3으로 만든다 — 상한보다 1 크다.
+  it("편집거리가 상한보다 하나 크면(3) 후보로 잡히지 않는다", () => {
+    const found = findUnderMergeCandidates(
+      [
+        unit({ complexKey: "11680|대치동|1979|삼성123차" }),
+        unit({ complexKey: "11680|대치동|1979|삼성456차" }),
+      ],
+      config,
+    );
+    expect(found).toHaveLength(0);
+  });
+});
+
 describe("findOverMergeSuspects", () => {
   it("같은 평형에서 최고가가 최저가의 2배 이상이면 의심한다", () => {
     const found = findOverMergeSuspects(
@@ -116,6 +144,52 @@ describe("findOverMergeSuspects", () => {
   it("가격 차가 작으면 의심하지 않는다", () => {
     const found = findOverMergeSuspects(
       [unit({ minPrice: 1_900_000_000, maxPrice: 2_100_000_000, tradeCount: 10 })],
+      config,
+    );
+    expect(found).toHaveLength(0);
+  });
+});
+
+describe("findOverMergeSuspects 경계값 — overMergeMinTradeCount", () => {
+  // 가격 배율은 넉넉히 2배를 넘겨 고정해 두고, 거래 건수만 하한(4) 근처에서 움직인다.
+  it("거래 건수가 정확히 하한(4)이면 신호가 난다", () => {
+    const found = findOverMergeSuspects(
+      [unit({ minPrice: 1_000_000, maxPrice: 3_000_000, tradeCount: config.overMergeMinTradeCount })],
+      config,
+    );
+    expect(found).toHaveLength(1);
+  });
+
+  it("거래 건수가 하한보다 하나 적으면(3) 신호가 나지 않는다", () => {
+    const found = findOverMergeSuspects(
+      [unit({ minPrice: 1_000_000, maxPrice: 3_000_000, tradeCount: config.overMergeMinTradeCount - 1 })],
+      config,
+    );
+    expect(found).toHaveLength(0);
+  });
+});
+
+describe("findOverMergeSuspects 경계값 — overMergeMinPriceRatio", () => {
+  // 거래 건수는 하한에 정확히 맞춰 고정해 두고, 가격 배율만 2.0 근처에서 움직인다.
+  // 부동소수점 오차를 피하려고 최저가·최고가를 원 단위 정수로 골라 배율이
+  // 정확히 config.overMergeMinPriceRatio(2.0)가 되게 한다.
+  it("최고÷최저가 정확히 하한(2.0)이면 신호가 난다", () => {
+    const found = findOverMergeSuspects(
+      [
+        unit({
+          minPrice: 1_000_000,
+          maxPrice: 1_000_000 * config.overMergeMinPriceRatio,
+          tradeCount: config.overMergeMinTradeCount,
+        }),
+      ],
+      config,
+    );
+    expect(found).toHaveLength(1);
+  });
+
+  it("최고÷최저가 하한 바로 아래(1.99)면 신호가 나지 않는다", () => {
+    const found = findOverMergeSuspects(
+      [unit({ minPrice: 100_000_000, maxPrice: 199_000_000, tradeCount: config.overMergeMinTradeCount })],
       config,
     );
     expect(found).toHaveLength(0);
@@ -151,6 +225,42 @@ describe("findSplitAreaSuspects", () => {
       [
         unit({ areaBucket: 84, tradeCount: 1 }),
         unit({ areaBucket: 101, tradeCount: 1 }),
+      ],
+      config,
+    );
+    expect(found).toHaveLength(0);
+  });
+});
+
+describe("findSplitAreaSuspects 경계값 — lowConfidenceMinTrades", () => {
+  // 판정 조건은 "인접한 두 버킷이 둘 다 하한 미만"이다. 하한 자체는 신호를 내지 않는다.
+  it("두 버킷 모두 거래가 정확히 하한(3)이면 신호가 나지 않는다", () => {
+    const found = findSplitAreaSuspects(
+      [
+        unit({ areaBucket: 84, tradeCount: config.lowConfidenceMinTrades }),
+        unit({ areaBucket: 85, tradeCount: config.lowConfidenceMinTrades }),
+      ],
+      config,
+    );
+    expect(found).toHaveLength(0);
+  });
+
+  it("두 버킷 모두 거래가 하한보다 하나 적으면(2) 신호가 난다", () => {
+    const found = findSplitAreaSuspects(
+      [
+        unit({ areaBucket: 84, tradeCount: config.lowConfidenceMinTrades - 1 }),
+        unit({ areaBucket: 85, tradeCount: config.lowConfidenceMinTrades - 1 }),
+      ],
+      config,
+    );
+    expect(found).toHaveLength(1);
+  });
+
+  it("한쪽만 정확히 하한(3)이어도 신호가 나지 않는다 — 둘 다 미만이어야 한다", () => {
+    const found = findSplitAreaSuspects(
+      [
+        unit({ areaBucket: 84, tradeCount: config.lowConfidenceMinTrades }),
+        unit({ areaBucket: 85, tradeCount: config.lowConfidenceMinTrades - 1 }),
       ],
       config,
     );
