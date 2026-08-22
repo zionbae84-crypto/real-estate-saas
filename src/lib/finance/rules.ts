@@ -88,6 +88,10 @@ export function parseRules(raw: unknown): Rules {
   assertNumberField(r, "brokerageVatRate", "brokerageVatRate");
 
   const housingBond = assertPlainObject(r.housingBond, "housingBond");
+  // 국민주택채권 주석(선택 필드이지만 있으면 문자열이어야 한다)
+  if (housingBond._note !== undefined && typeof housingBond._note !== "string") {
+    throw new Error("룰셋 필드 누락 또는 타입 오류: housingBond._note");
+  }
   assertNumberField(
     housingBond,
     "assumedPriceToStandardRatio",

@@ -20,6 +20,15 @@ describe("parseRules", () => {
     expect(() => parseRules({ ...rawRules, _scope: 123 })).toThrow(/_scope/);
   });
 
+  it("housingBond._note가 문자열이 아니면 실패한다", () => {
+    expect(() =>
+      parseRules({
+        ...rawRules,
+        housingBond: { ...rawRules.housingBond, _note: 123 },
+      }),
+    ).toThrow(/housingBond\._note/);
+  });
+
   it("필수 필드가 없으면 어느 필드인지 알려주며 실패한다", () => {
     const broken = { ...rawRules, dsrLimit: undefined };
     expect(() => parseRules(broken)).toThrow(/dsrLimit/);
@@ -468,18 +477,24 @@ describe("parseRules — 의미 불변식", () => {
 });
 
 describe("확장된 룰셋 검증", () => {
-  it("규제/비규제 LTV 네 값을 모두 비율로 검증한다", () => {
-    for (const path of [
+  it("규제/비규제 LTV 네 값을 모두 비율로 검증한다 — 세 가지 위반 유형(0, 1.5, -0.1) 모두 포함", () => {
+    // 네 경로 × 세 위반 유형 행렬
+    const paths = [
       "ltv.regulated.default",
       "ltv.regulated.firstTimeBuyer",
       "ltv.unregulated.default",
       "ltv.unregulated.firstTimeBuyer",
-    ]) {
-      const broken = structuredClone(rawRules) as Record<string, unknown>;
-      setByPath(broken, path, 1.5);
-      expect(() => parseRules(broken), path).toThrow(
-        new RegExp(path.replace(/\./g, "\\.")),
-      );
+    ];
+    const violations = [0, 1.5, -0.1];
+
+    for (const path of paths) {
+      for (const violation of violations) {
+        const broken = structuredClone(rawRules) as Record<string, unknown>;
+        setByPath(broken, path, violation);
+        expect(() => parseRules(broken), `${path} = ${violation}`).toThrow(
+          new RegExp(path.replace(/\./g, "\\.")),
+        );
+      }
     }
   });
 
