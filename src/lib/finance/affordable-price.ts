@@ -79,13 +79,9 @@ export function calcAffordablePrice(
     ]);
   }
 
-  let affordablePrice = 0;
-  for (const segment of buildSearchSegments(rules)) {
-    const candidate = searchSegment(segment, profile, rules, cash.amount);
-    if (candidate !== null && candidate > affordablePrice) {
-      affordablePrice = candidate;
-    }
-  }
+  const affordablePrice = searchMaxPrice(rules, (price) =>
+    ownFundsRequired(price, profile, rules) <= cash.amount,
+  );
 
   return resultAt(
     affordablePrice,
@@ -160,21 +156,19 @@ function buildSearchSegments(rules: Rules): SearchSegment[] {
 }
 
 /**
- * 한 구간(f가 단조 증가한다고 가정할 수 있는 범위) 안에서 감당 가능한
- * 최대가를 이분 탐색으로 찾는다. 구간 하한부터 이미 예산을 넘으면 이
- * 구간에는 후보가 없다. 찾은 값은 PRICE_STEP으로 내림한 뒤, 가정에
- * 기대지 않고 실제 가격에서 다시 정직하게 재계산해 감당 가능함을
- * 검증한 경우에만 후보로 인정한다.
+ * 한 구간(f가 단조라고 가정할 수 있는 범위) 안에서 `accepts`가 참인 최대
+ * 가격을 이분 탐색으로 찾는다.
+ *
+ * `accepts`는 "이 가격이 조건을 만족하는가"를 답한다. 감당 가능 여부든
+ * 안전 등급이든, 가격이 오를수록 거짓으로 바뀌는 성질이면 된다.
  */
 function searchSegment(
   segment: SearchSegment,
-  profile: BuyerProfile,
-  rules: Rules,
-  cashAmount: number,
+  accepts: (price: number) => boolean,
 ): number | null {
   const { low: segLow, high: segHigh } = segment;
   if (segLow > segHigh) return null;
-  if (ownFundsRequired(segLow, profile, rules) > cashAmount) return null;
+  if (!accepts(segLow)) return null;
 
   let low = segLow;
   let high = segHigh;
@@ -182,7 +176,7 @@ function searchSegment(
   // 50회면 100억 범위를 0.01원 미만까지 좁힌다
   for (let i = 0; i < 50; i++) {
     const mid = (low + high) / 2;
-    if (ownFundsRequired(mid, profile, rules) <= cashAmount) {
+    if (accepts(mid)) {
       low = mid;
     } else {
       high = mid;
@@ -190,7 +184,7 @@ function searchSegment(
   }
 
   // 이분 탐색은 high를 좁히기만 하고 low에 대입하지 않으므로, 구간 전체를
-  // 감당할 수 있어도 low는 segHigh에 무한히 가까워질 뿐 도달하지 못한다.
+  // 받아들일 수 있어도 low는 segHigh에 무한히 가까워질 뿐 도달하지 못한다.
   // 그대로 내림하면 답이 한 스텝(PRICE_STEP) 낮게 나온다 — 구간 상단
   // 자체도 후보로 함께 검증한다.
   //
@@ -208,11 +202,33 @@ function searchSegment(
   let best: number | null = null;
   for (const candidate of candidates) {
     if (candidate < segLow) continue;
-    // 구간 가정에 기대지 않고, 실제 가격에서 정직하게 재계산해 검증한다.
-    if (ownFundsRequired(candidate, profile, rules) > cashAmount) continue;
+    // 구간 가정에 기대지 않고, 실제 가격에서 정직하게 재검증한다.
+    if (!accepts(candidate)) continue;
     if (best === null || candidate > best) best = candidate;
   }
 
+  return best;
+}
+
+/**
+ * 룰셋이 만드는 모든 절벽에서 구간을 나눠, `accepts`가 참인 최대 가격을 찾는다.
+ *
+ * **`calcAffordablePrice`와 `calcSafePrice`가 이 함수를 공유한다.** 두 숫자는
+ * 화면에 나란히 놓이므로 서로 다른 절벽 위에서 계산되면 안 된다. 절벽 목록만
+ * 공유하고 탐색을 각자 쓰면, 구간 상단·PRICE_STEP 경계 처리 같은 세부가
+ * 한쪽에만 반영되는 결함이 난다.
+ *
+ * `accepts`는 부작용이 없어야 하고, 같은 가격에 대해 같은 답을 줘야 한다.
+ */
+export function searchMaxPrice(
+  rules: Rules,
+  accepts: (price: number) => boolean,
+): number {
+  let best = 0;
+  for (const segment of buildSearchSegments(rules)) {
+    const candidate = searchSegment(segment, accepts);
+    if (candidate !== null && candidate > best) best = candidate;
+  }
   return best;
 }
 
