@@ -96,11 +96,11 @@ export function buildSchemaDoc(): string {
 | medianPrice | number | 원 단위 정수. **최근 6개월** 거래의 중위값 | 없음(항상 존재) |
 | tradeCount | number | 최근 6개월 거래 건수 | 없음 |
 | minPrice / maxPrice | number | 원 단위 정수. 최근 6개월 창 안의 최저·최고가 | 없음 |
-| changeRate3m | number \\| null | 최근 **3개월** 중위값 대비 그 이전 3개월 중위값의 변동률(비율, 0.05 = 5%) | 비교할 이전 3개월 거래가 없으면 null |
+| changeRate3m | number \\| null | (최근 **3개월** 중위값 − 그 이전 3개월 중위값) ÷ 그 이전 3개월 중위값(분모). **양수면 최근이 더 비싸졌다는 뜻, 음수면 더 싸졌다는 뜻**이다(비율, 0.05 = 최근이 5% 더 비쌈, -0.05 = 최근이 5% 더 싸짐) | 비교할 이전 3개월 거래가 없으면 null |
 | changeRate3mRecentCount | number | changeRate3m의 "최근 3개월" 창 거래 건수 | 없음 |
 | changeRate3mPriorCount | number | changeRate3m의 "그 이전 3개월" 창 거래 건수(분모 쪽) | 없음 |
 | changeRate3mLowConfidence | boolean | 위 두 창 중 하나라도 report-config.json의 lowConfidenceMinTrades 미만이면 true | 해당 없음(changeRate3m이 null이면 항상 false) |
-| changeRate12m | number \\| null | **주의: "12개월 전 시점" 대비도 "12개월 창" 비교도 아니다.** 최근 **6개월** 중위값(= medianPrice)과 그 이전 **6개월** 중위값을 비교한 변동률(비율) | 비교할 이전 6개월 거래가 없으면 null |
+| changeRate12m | number \\| null | **주의: "12개월 전 시점" 대비도 "12개월 창" 비교도 아니다.** (최근 **6개월** 중위값(= medianPrice) − 그 이전 **6개월** 중위값) ÷ 그 이전 6개월 중위값(분모). 부호 의미는 changeRate3m과 같다(양수 = 상승, 음수 = 하락) | 비교할 이전 6개월 거래가 없으면 null |
 | changeRate12mRecentCount | number | changeRate12m의 "최근 6개월" 창 거래 건수. tradeCount와 같은 값이다 | 없음 |
 | changeRate12mPriorCount | number | changeRate12m의 "그 이전 6개월" 창 거래 건수(분모 쪽) | 없음 |
 | changeRate12mLowConfidence | boolean | changeRate3mLowConfidence와 같은 뜻으로 changeRate12m에 대해 판정 | 해당 없음(changeRate12m이 null이면 항상 false) |

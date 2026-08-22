@@ -143,6 +143,32 @@ describe("buildSchemaDoc (I7)", () => {
     expect(buildSchemaDoc()).toBe(buildSchemaDoc());
   });
 
+  it("changeRate3m 행에 계산식(분자-분모/분모)과 분모, 부호 의미를 명시한다", () => {
+    // 한국어 "X 대비 Y"는 X가 기준(분모)이라는 뜻인데, 실제 코드
+    // (aggregate.ts의 changeRate)는 분모가 '그 이전 3개월'이다. "최근 3개월
+    // 중위값 대비 그 이전 3개월 중위값의 변동률"이라는 옛 문구는 정반대로
+    // 읽힌다. 애매한 "대비" 대신 계산식 자체와 부호 의미를 못박아야 한다.
+    const doc = buildSchemaDoc();
+    const lines = doc.split("\n");
+    const row = lines.find((l) => l.startsWith("| changeRate3m "));
+    expect(row).toBeDefined();
+    expect(row).toContain("÷");
+    expect(row).toContain("그 이전 3개월 중위값");
+    expect(row).toMatch(/양수/);
+    expect(row).toMatch(/음수/);
+  });
+
+  it("changeRate12m 행에도 같은 형식의 계산식과 부호 의미를 명시한다", () => {
+    const doc = buildSchemaDoc();
+    const lines = doc.split("\n");
+    const row = lines.find((l) => l.startsWith("| changeRate12m "));
+    expect(row).toBeDefined();
+    expect(row).toContain("÷");
+    expect(row).toContain("그 이전 6개월 중위값");
+    expect(row).toMatch(/양수/);
+    expect(row).toMatch(/음수/);
+  });
+
   it("complexKey 행의 pipe가 이스케이프되어 표 헤더와 같은 열 수를 유지한다", () => {
     // JS 템플릿 리터럴에서 단일 백슬래시(`\|`)는 인식되지 않는 이스케이프라
     // 조용히 사라져 그냥 `|`가 된다 — 표를 깨는 이스케이프 안 된 파이프로

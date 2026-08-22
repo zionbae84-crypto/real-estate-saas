@@ -15,7 +15,13 @@ export interface ComplexUnit {
   tradeCount: number;
   minPrice: number;
   maxPrice: number;
-  /** 최근 3개월 중위값 대비 그 이전 3개월 중위값의 변동률. 비교 대상이 없으면 null */
+  /**
+   * (최근 3개월 중위값 − 그 이전 3개월 중위값) ÷ 그 이전 3개월 중위값.
+   * 분모는 "그 이전 3개월"이다 — 한국어 "X 대비 Y"는 X가 기준(분모)이라는
+   * 뜻이라 "최근 대비 이전"이라고 쓰면 정반대로 읽힌다. 양수면 최근이 더
+   * 비싸졌다는 뜻, 음수면 더 싸졌다는 뜻이다(비율, 0.05 = 5%). 비교 대상(그
+   * 이전 3개월 거래)이 없으면 null.
+   */
   changeRate3m: number | null;
   /** changeRate3m 계산에 쓰인 "최근 3개월" 창의 거래 건수 */
   changeRate3mRecentCount: number;
@@ -30,9 +36,11 @@ export interface ComplexUnit {
    */
   changeRate3mLowConfidence: boolean;
   /**
-   * 최근 6개월 중위값(= medianPrice) 대비 그 이전 6개월 중위값의 변동률.
-   * 특정 시점(12개월 전) 대비가 아니라 "최근 6개월 vs 그 이전 6개월"이므로,
-   * 3개월 vs 3개월로 대칭인 changeRate3m과 창 크기가 다르다. 비교 대상이 없으면 null.
+   * (최근 6개월 중위값(= medianPrice) − 그 이전 6개월 중위값) ÷ 그 이전
+   * 6개월 중위값. 분모는 changeRate3m과 마찬가지로 "그 이전" 창이고, 부호
+   * 의미도 같다(양수 = 상승, 음수 = 하락). 특정 시점(12개월 전) 대비가
+   * 아니라 "최근 6개월 vs 그 이전 6개월"이므로, 3개월 vs 3개월로 대칭인
+   * changeRate3m과 창 크기가 다르다. 비교 대상이 없으면 null.
    */
   changeRate12m: number | null;
   /** changeRate12m의 "최근 6개월" 창 거래 건수. tradeCount와 같은 값이다. */
