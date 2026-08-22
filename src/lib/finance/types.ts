@@ -24,6 +24,14 @@ export interface BuyerProfile {
   isFirstTimeBuyer: boolean;
   /** 전용면적(㎡). 농특세 부과 기준(85㎡ 초과) 판정에 쓰인다 */
   exclusiveAreaSqm: number;
+  /**
+   * 규제지역(투기과열지구·조정대상지역) 소재 여부.
+   *
+   * LTV가 크게 갈린다. 규제지역 무주택자는 40%, 비규제 수도권은 70%다.
+   * 생애최초는 규제지역에서도 70% 예외를 받는다. 잘못 켜고 끄면 한도가
+   * 30%p 어긋나므로, 폼의 기본값은 과대평가를 피하는 쪽(규제지역=true)이다.
+   */
+  isRegulatedArea: boolean;
   /** 갈아타기일 때만 존재 */
   existingHome?: ExistingHome;
 }
@@ -80,6 +88,10 @@ export interface CostBreakdown {
   legalFee: number;
   /** 이사 비용(원) */
   movingCost: number;
+  /** 중개보수에 붙는 부가가치세(원) */
+  brokerageVat: number;
+  /** 국민주택채권 매입 후 즉시 매도 시의 할인 손실 추정액(원) */
+  housingBondCost: number;
   /** 위 항목의 합계(원) */
   total: number;
 }
@@ -159,8 +171,24 @@ export interface Rules {
   /** 안전성 평가용 금리 스트레스 폭 (0.02 = +2%p) */
   safetyStressSurcharge: number;
   ltv: {
-    default: number;
-    firstTimeBuyer: number;
+    regulated: { default: number; firstTimeBuyer: number };
+    unregulated: { default: number; firstTimeBuyer: number };
+  };
+  /** 중개보수에 별도로 붙는 부가가치세율. 일반과세자 기준 0.1 */
+  brokerageVatRate: number;
+  housingBond: {
+    /**
+     * 매매가 대비 시가표준액(공동주택 공시가격) 비율.
+     * **검증되지 않은 가정치다.** 단지·연도별로 달라 단일 값으로 확정할 수 없다.
+     */
+    assumedPriceToStandardRatio: number;
+    /**
+     * 채권 즉시 매도 시 할인율. **검증되지 않은 가정치다.**
+     * 매일 변동하며 조사한 출처들이 4%~10%로 갈렸다.
+     */
+    assumedDiscountRate: number;
+    /** 시가표준액 1,000원당 매입액(원). upTo 오름차순, 마지막은 null */
+    brackets: Array<{ upTo: number | null; perThousand: number }>;
   };
   /** 수도권 주택구입 목적 주담대 절대 상한(원) */
   absoluteCap: number;

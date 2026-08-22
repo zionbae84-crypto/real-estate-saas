@@ -6,7 +6,25 @@
   "loanTermMonths": 360,
   "stressDSR": { "stage": 3, "surcharge": 0.015 },
   "safetyStressSurcharge": 0.02,
-  "ltv": { "default": 0.7, "firstTimeBuyer": 0.7 },
+  "ltv": {
+    "regulated":   { "default": 0.4, "firstTimeBuyer": 0.7 },
+    "unregulated": { "default": 0.7, "firstTimeBuyer": 0.7 }
+  },
+  "brokerageVatRate": 0.1,
+  "housingBond": {
+    "_note": "제1종 국민주택채권. 시가표준액(공동주택 공시가격) 기준 매입 후 즉시 매도 시의 할인 손실이 실제 부담액이다.",
+    "assumedPriceToStandardRatio": 0.7,
+    "assumedDiscountRate": 0.08,
+    "brackets": [
+      { "upTo": 20000000,   "perThousand": 0 },
+      { "upTo": 50000000,   "perThousand": 13 },
+      { "upTo": 100000000,  "perThousand": 19 },
+      { "upTo": 160000000,  "perThousand": 21 },
+      { "upTo": 260000000,  "perThousand": 23 },
+      { "upTo": 600000000,  "perThousand": 26 },
+      { "upTo": null,       "perThousand": 31 }
+    ]
+  },
   "absoluteCap": 600000000,
   "dsrLimit": 0.4,
   "safetyThreshold": { "safe": 0.25, "caution": 0.35, "stressedDanger": 0.4 },

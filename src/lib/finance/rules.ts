@@ -11,7 +11,7 @@ const REQUIRED_NUMBER_FIELDS = [
 ] as const;
 
 const STRESS_DSR_NUMBER_FIELDS = ["stage", "surcharge"] as const;
-const LTV_NUMBER_FIELDS = ["default", "firstTimeBuyer"] as const;
+const LTV_BAND_NUMBER_FIELDS = ["default", "firstTimeBuyer"] as const;
 const SAFETY_THRESHOLD_NUMBER_FIELDS = [
   "safe",
   "caution",
@@ -80,7 +80,35 @@ export function parseRules(raw: unknown): Rules {
   assertNumberFields(stressDSR, "stressDSR", STRESS_DSR_NUMBER_FIELDS);
 
   const ltv = assertPlainObject(r.ltv, "ltv");
-  assertNumberFields(ltv, "ltv", LTV_NUMBER_FIELDS);
+  const ltvRegulated = assertPlainObject(ltv.regulated, "ltv.regulated");
+  assertNumberFields(ltvRegulated, "ltv.regulated", LTV_BAND_NUMBER_FIELDS);
+  const ltvUnregulated = assertPlainObject(ltv.unregulated, "ltv.unregulated");
+  assertNumberFields(ltvUnregulated, "ltv.unregulated", LTV_BAND_NUMBER_FIELDS);
+
+  assertNumberField(r, "brokerageVatRate", "brokerageVatRate");
+
+  const housingBond = assertPlainObject(r.housingBond, "housingBond");
+  assertNumberField(
+    housingBond,
+    "assumedPriceToStandardRatio",
+    "housingBond.assumedPriceToStandardRatio",
+  );
+  assertNumberField(
+    housingBond,
+    "assumedDiscountRate",
+    "housingBond.assumedDiscountRate",
+  );
+  if (
+    !Array.isArray(housingBond.brackets) ||
+    housingBond.brackets.length === 0
+  ) {
+    throw new Error("룰셋 필드 누락 또는 타입 오류: housingBond.brackets");
+  }
+  validateAscendingBrackets(
+    housingBond.brackets,
+    "housingBond.brackets",
+    (obj, path) => assertNumberField(obj, "perThousand", `${path}.perThousand`),
+  );
 
   const safetyThreshold = assertPlainObject(r.safetyThreshold, "safetyThreshold");
   assertNumberFields(
@@ -104,7 +132,12 @@ export function parseRules(raw: unknown): Rules {
   if (!Array.isArray(r.brokerageFee) || r.brokerageFee.length === 0) {
     throw new Error("룰셋 필드 누락 또는 타입 오류: brokerageFee");
   }
-  validateBrokerageBrackets(r.brokerageFee);
+  validateAscendingBrackets(r.brokerageFee, "brokerageFee", (obj, path) => {
+    assertNumberField(obj, "rate", `${path}.rate`);
+    if (obj.cap !== null && !Number.isFinite(obj.cap)) {
+      throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}.cap`);
+    }
+  });
 
   validateSemanticInvariants(raw as Rules);
 
@@ -150,9 +183,35 @@ function validateSemanticInvariants(rules: Rules): void {
     );
   }
 
-  assertRatio(rules.ltv.default, "ltv.default");
-  assertRatio(rules.ltv.firstTimeBuyer, "ltv.firstTimeBuyer");
+  assertRatio(rules.ltv.regulated.default, "ltv.regulated.default");
+  assertRatio(rules.ltv.regulated.firstTimeBuyer, "ltv.regulated.firstTimeBuyer");
+  assertRatio(rules.ltv.unregulated.default, "ltv.unregulated.default");
+  assertRatio(
+    rules.ltv.unregulated.firstTimeBuyer,
+    "ltv.unregulated.firstTimeBuyer",
+  );
   assertRatio(rules.dsrLimit, "dsrLimit");
+
+  // 중개보수 부가세는 세율이지 "소득·가격의 몇 %" 비율이 아니므로
+  // assertRatio의 (0, 1]이 아니라 baseRate와 같은 [0, 1)로 검사한다.
+  assertRate(rules.brokerageVatRate, "brokerageVatRate");
+
+  // housingBond의 두 assumed* 값은 검증되지 않은 가정치이지만, 값 자체는
+  // "비율"이라는 의미를 가지므로 (0, 1] 범위 검사는 그대로 적용한다.
+  assertRatio(
+    rules.housingBond.assumedPriceToStandardRatio,
+    "housingBond.assumedPriceToStandardRatio",
+  );
+  assertRatio(
+    rules.housingBond.assumedDiscountRate,
+    "housingBond.assumedDiscountRate",
+  );
+  rules.housingBond.brackets.forEach((bracket, index) => {
+    assertNonNegative(
+      bracket.perThousand,
+      `housingBond.brackets[${index}].perThousand`,
+    );
+  });
 
   // baseRate가 자릿수 하나만 빠져도(0.042 → 0.0042) DSR 한도가 몇 배로
   // 뛴다. 이자율은 0(무이자)부터 시작할 수 있지만 100% 이상은 데이터
@@ -324,29 +383,37 @@ function validateEligibility(
   }
 }
 
-function validateBrokerageBrackets(brackets: unknown[]): void {
+/**
+ * "upTo 오름차순, 마지막 구간만 upTo가 null" 형태의 구간 배열을 검증하는
+ * 공용 헬퍼. brokerageFee와 housingBond.brackets가 정확히 같은 모양이라
+ * (오름차순 상한 + 마지막 구간만 무한대) 여기 하나로 묶었다 — 복붙하면
+ * 한쪽만 고치고 다른 쪽을 잊는 결함이 반복된다. 상한(upTo) 이외의 나머지
+ * 필드(rate/cap 또는 perThousand) 검증은 호출자가 validateItem으로 넘긴다.
+ */
+function validateAscendingBrackets(
+  brackets: unknown[],
+  pathPrefix: string,
+  validateItem: (obj: Record<string, unknown>, path: string) => void,
+): void {
   brackets.forEach((bracket, index) => {
-    const path = `brokerageFee[${index}]`;
+    const path = `${pathPrefix}[${index}]`;
     const obj = assertPlainObject(bracket, path);
-    assertNumberField(obj, "rate", `${path}.rate`);
-    if (obj.cap !== null && !Number.isFinite(obj.cap)) {
-      throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}.cap`);
-    }
+    validateItem(obj, path);
   });
 
   const last = brackets[brackets.length - 1] as { upTo: unknown };
   if (last.upTo !== null) {
-    throw new Error("중개보수 마지막 구간의 upTo는 null이어야 합니다");
+    throw new Error(`룰셋 값 오류: ${pathPrefix} 마지막 구간의 upTo는 null이어야 합니다`);
   }
 
   let previous = 0;
   for (const bracket of brackets.slice(0, -1)) {
     const { upTo } = bracket as { upTo: unknown };
     if (typeof upTo !== "number" || !Number.isFinite(upTo)) {
-      throw new Error("중개보수 구간의 upTo는 숫자 또는 null이어야 합니다");
+      throw new Error(`룰셋 값 오류: ${pathPrefix} 구간의 upTo는 숫자 또는 null이어야 합니다`);
     }
     if (upTo <= previous) {
-      throw new Error("중개보수 구간은 upTo 오름차순이어야 합니다");
+      throw new Error(`룰셋 값 오류: ${pathPrefix} 구간은 upTo 오름차순이어야 합니다`);
     }
     previous = upTo;
   }

@@ -295,10 +295,10 @@ describe("parseRules — 의미 불변식", () => {
     expect(() => parseRules(broken)).toThrow(/safetyThreshold\.safe/);
   });
 
+  // ltv.default/ltv.firstTimeBuyer 케이스는 ltv가 regulated/unregulated로
+  // 갈라지며 "확장된 룰셋 검증" describe 블록의 네 경로 테스트로 옮겼다
+  // (의도는 동일 — 비율 범위 (0, 1] 위반을 잡는다).
   it.each([
-    ["ltv.default", { ltv: { default: 0, firstTimeBuyer: 0.7 } }],
-    ["ltv.default", { ltv: { default: 1.2, firstTimeBuyer: 0.7 } }],
-    ["ltv.firstTimeBuyer", { ltv: { default: 0.7, firstTimeBuyer: -0.1 } }],
     ["dsrLimit", { dsrLimit: 0 }],
     ["dsrLimit", { dsrLimit: 1.5 }],
   ])("비율 필드 %s가 (0, 1] 밖이면 실패한다", (path, override) => {
@@ -466,3 +466,78 @@ describe("parseRules — 의미 불변식", () => {
     expect(() => parseRules(broken)).toThrow(/policyLoans\[0\]\.maxAmount/);
   });
 });
+
+describe("확장된 룰셋 검증", () => {
+  it("규제/비규제 LTV 네 값을 모두 비율로 검증한다", () => {
+    for (const path of [
+      "ltv.regulated.default",
+      "ltv.regulated.firstTimeBuyer",
+      "ltv.unregulated.default",
+      "ltv.unregulated.firstTimeBuyer",
+    ]) {
+      const broken = structuredClone(rawRules) as Record<string, unknown>;
+      setByPath(broken, path, 1.5);
+      expect(() => parseRules(broken), path).toThrow(
+        new RegExp(path.replace(/\./g, "\\.")),
+      );
+    }
+  });
+
+  it("brokerageVatRate가 비율 범위를 벗어나면 경로를 짚어 실패한다", () => {
+    const broken = { ...rawRules, brokerageVatRate: -0.1 };
+    expect(() => parseRules(broken)).toThrow(/brokerageVatRate/);
+  });
+
+  it("housingBond 가정치가 비율 범위를 벗어나면 실패한다", () => {
+    for (const key of ["assumedPriceToStandardRatio", "assumedDiscountRate"]) {
+      const broken = structuredClone(rawRules) as typeof rawRules;
+      (broken.housingBond as Record<string, unknown>)[key] = 2;
+      expect(() => parseRules(broken), key).toThrow(new RegExp(key));
+    }
+  });
+
+  it("housingBond 구간이 오름차순이 아니면 실패한다", () => {
+    const broken = structuredClone(rawRules) as typeof rawRules;
+    broken.housingBond.brackets = [
+      { upTo: 100000000, perThousand: 19 },
+      { upTo: 50000000, perThousand: 13 },
+      { upTo: null, perThousand: 31 },
+    ];
+    expect(() => parseRules(broken)).toThrow(/오름차순/);
+  });
+
+  it("housingBond 마지막 구간의 upTo가 null이 아니면 실패한다", () => {
+    const broken = structuredClone(rawRules) as typeof rawRules;
+    broken.housingBond.brackets = [{ upTo: 50000000, perThousand: 13 }];
+    expect(() => parseRules(broken)).toThrow(/마지막 구간/);
+  });
+
+  it("perThousand가 음수면 실패한다", () => {
+    const broken = structuredClone(rawRules) as typeof rawRules;
+    broken.housingBond.brackets = [
+      { upTo: 50000000, perThousand: -1 },
+      { upTo: null, perThousand: 31 },
+    ];
+    expect(() => parseRules(broken)).toThrow(/perThousand/);
+  });
+
+  it("실제 룰셋은 통과한다", () => {
+    expect(() => parseRules(rawRules)).not.toThrow();
+  });
+});
+
+/** 점 경로로 중첩 객체의 값을 바꾼다 (테스트 전용) */
+function setByPath(target: Record<string, unknown>, path: string, value: unknown): void {
+  const keys = path.split(".");
+  const last = keys.pop();
+  if (last === undefined) return;
+  let cursor: Record<string, unknown> = target;
+  for (const key of keys) {
+    const next = cursor[key];
+    if (typeof next !== "object" || next === null) return;
+    const copy = { ...(next as Record<string, unknown>) };
+    cursor[key] = copy;
+    cursor = copy;
+  }
+  cursor[last] = value;
+}
