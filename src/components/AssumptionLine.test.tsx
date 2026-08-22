@@ -1,11 +1,13 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { rules } from "../state/useAffordability";
 import {
   DEFAULT_FORM_STATE,
+  loadStoredState,
   type AssumableField,
   type ProfileFormState,
 } from "../state/useProfileForm";
-import { AssumptionLine } from "./AssumptionLine";
+import { AssumptionLine, buildAssumptionItems } from "./AssumptionLine";
 
 function renderLine(overrides: {
   state?: Partial<ProfileFormState>;
@@ -58,5 +60,125 @@ describe("AssumptionLine", () => {
       },
     });
     expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  });
+
+  describe("리뷰 수정: 저장된 부채가 있으면 문구가 거짓말하지 않는다 (Important 1)", () => {
+    it("옛 저장본을 복원해 실제 부채가 반영돼 있으면 '없음'이라고 말하지 않는다", () => {
+      // loadStoredState로 실제 복원 경로를 거친다 — touched는 옛 저장본에
+      // 없으므로 빈 배열로 채워지지만, 부채 금액 자체는 그대로 복원되어
+      // 엔진 계산에 반영된다. 이 상태에서 "기존 대출 없음으로 계산했어요"라고
+      // 말하면 계산과 문구가 어긋난다.
+      const restored = loadStoredState({
+        getItem: () =>
+          JSON.stringify({
+            cash: 200_000_000,
+            annualIncome: 50_000_000,
+            existingDebtAnnualPayment: 6_000_000,
+          }),
+      });
+      expect(restored.touched).toEqual([]); // 전제 확인: touched는 비어 있다
+      expect(restored.existingDebtAnnualPayment).toBe(6_000_000); // 전제 확인: 값은 살아 있다
+
+      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
+      expect(screen.queryByText(/기존 대출 없음/)).not.toBeInTheDocument();
+    });
+
+    it("touched가 비어 있어도 실제 값이 null이면 여전히 가정 문구를 보여준다", () => {
+      const restored = loadStoredState({
+        getItem: () =>
+          JSON.stringify({ cash: 200_000_000, annualIncome: 50_000_000 }),
+      });
+      expect(restored.existingDebtAnnualPayment).toBeNull();
+
+      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
+      expect(screen.getByText(/기존 대출 없음/)).toBeInTheDocument();
+    });
+  });
+
+  describe("리뷰 수정: 면적 임계값은 룰셋에서 유도한다 (Important 2)", () => {
+    it("buildAssumptionItems가 받은 threshold 값을 그대로 문구에 쓴다 — 85 하드코딩이 아니다", () => {
+      const items = buildAssumptionItems(DEFAULT_FORM_STATE, 100);
+      const areaItem = items.find((item) => item.field === "area");
+      expect(areaItem?.text).toContain("100㎡ 이하면");
+      expect(areaItem?.text).not.toContain("85㎡");
+    });
+
+    it("실제 컴포넌트는 룰셋의 ruralTaxAreaThresholdSqm 값을 문구에 반영한다", () => {
+      renderLine();
+      const threshold = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
+      expect(
+        screen.getByText(new RegExp(`${threshold}㎡ 이하면`)),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("리뷰 수정: 옛 갈아타기 정보를 조용히 버리지 않고 알린다 (Important 3, 방향 a)", () => {
+    it("무주택으로 처리됐지만 옛 매도 정보가 남아 있으면 알림 문구를 보여준다", () => {
+      const restored = loadStoredState({
+        getItem: () =>
+          JSON.stringify({
+            cash: 50_000_000,
+            annualIncome: 100_000_000,
+            status: "갈아타기",
+            existingHome: {
+              expectedSalePrice: 700_000_000,
+              remainingLoan: 300_000_000,
+              capitalGainsTax: 20_000_000,
+            },
+          }),
+      });
+      expect(restored.status).toBe("무주택"); // 전제 확인: Important 3 수정으로 무주택 처리됨
+      expect(restored.existingHome.expectedSalePrice).toBe(700_000_000); // 전제 확인: 데이터는 보존됨
+
+      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
+      expect(screen.getByText(/갈아타기/)).toBeInTheDocument();
+    });
+
+    it("옛 매도 정보가 없으면 알림 문구를 보여주지 않는다", () => {
+      renderLine(); // DEFAULT_FORM_STATE — existingHome이 전부 null
+      expect(screen.queryByText(/갈아타기/)).not.toBeInTheDocument();
+    });
+
+    it("알림 문구는 버튼이 아니다 — 고칠 UI가 없으므로 눌러도 아무 일도 없다는 것을 정직하게 드러낸다", () => {
+      const restored = loadStoredState({
+        getItem: () =>
+          JSON.stringify({
+            cash: 50_000_000,
+            annualIncome: 100_000_000,
+            status: "갈아타기",
+            existingHome: {
+              expectedSalePrice: 700_000_000,
+              remainingLoan: 300_000_000,
+              capitalGainsTax: 20_000_000,
+            },
+          }),
+      });
+      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
+      const notice = screen.getByText(/갈아타기/);
+      expect(notice.closest("button")).toBeNull();
+    });
+  });
+
+  describe("리뷰 수정: 커버리지 보강 (Minor 3)", () => {
+    it("면적 문구에 실제 전용면적 값이 들어간다", () => {
+      renderLine({ state: { exclusiveAreaSqm: 59 } });
+      expect(
+        screen.getByText(/59㎡로 가정하고 계산했어요/),
+      ).toBeInTheDocument();
+    });
+
+    it("규제지역 버튼을 누르면 onOpen(\"regulatedArea\")가 불린다", () => {
+      const onOpen = vi.fn();
+      renderLine({ onOpen });
+      fireEvent.click(screen.getByRole("button", { name: /규제지역/ }));
+      expect(onOpen).toHaveBeenCalledWith("regulatedArea");
+    });
+
+    it("전용면적 버튼을 누르면 onOpen(\"area\")가 불린다", () => {
+      const onOpen = vi.fn();
+      renderLine({ onOpen });
+      fireEvent.click(screen.getByRole("button", { name: /전용면적/ }));
+      expect(onOpen).toHaveBeenCalledWith("area");
+    });
   });
 });
