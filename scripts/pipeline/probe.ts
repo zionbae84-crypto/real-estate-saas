@@ -71,8 +71,21 @@ function buildUrl(base: string, type: string, mode: KeyMode, key: string): strin
 }
 
 /** 에러 메시지에 키 값이 우연히 섞여 있으면 지운다. */
+/**
+ * 키가 새어나갈 수 있는 모든 문자열에 적용한다.
+ *
+ * 원본뿐 아니라 URL 인코딩된 형태도 가린다 — fetch가 만든 에러 메시지나
+ * 공공데이터포털의 에러 응답 본문은 serviceKey를 인코딩된 채로 되돌려주는
+ * 경우가 있어, 원본만 치환하면 인코딩된 값이 그대로 출력된다.
+ */
 function redactKey(message: string, key: string): string {
-  return message.split(key).join("<REDACTED>");
+  const forms = [key, encodeURIComponent(key), encodeURI(key)];
+  let out = message;
+  for (const form of forms) {
+    if (form.length === 0) continue;
+    out = out.split(form).join("<REDACTED>");
+  }
+  return out;
 }
 
 async function probeOne(endpoint: Endpoint, type: string, mode: KeyMode, key: string): Promise<void> {
@@ -82,7 +95,7 @@ async function probeOne(endpoint: Endpoint, type: string, mode: KeyMode, key: st
     const res = await fetch(url);
     const body = await res.text();
     console.log(`--- ${label} → HTTP ${res.status} ---`);
-    console.log(body.slice(0, 800));
+    console.log(redactKey(body, key).slice(0, 800));
     console.log();
   } catch (e) {
     console.log(`--- ${label} → 실패: ${redactKey(String(e), key)}`);
