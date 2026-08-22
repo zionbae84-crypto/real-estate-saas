@@ -226,7 +226,7 @@ describe("calcAffordablePrice", () => {
 
 describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
   it("정책대출 절벽 너머에 있는 최대가를 찾아낸다", () => {
-    // 연소득 70,000,000, 무주택, 생애최초 아님. 이 구매자의 답(610,300,000)은
+    // 연소득 70,000,000, 무주택, 생애최초 아님. 이 구매자의 답은
     // 보금자리론 절벽(600,000,000) 너머에 있다.
     //
     // 최대값 의미론 도입 전에는 절벽을 넘는 순간 정책 한도라는 "상한"이
@@ -235,6 +235,10 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     // 이제 절벽은 반대 방향(선택지 상실 → f 상승)으로 작용해 그 실패 양상은
     // 사라졌지만, 구간 분할 탐색이 절벽 너머 답을 놓치지 않는다는 성질은
     // 그대로 지켜야 하므로 회귀 고정용으로 남긴다.
+    //
+    // 값 변경(Task 3, 중개보수 부가세·국민주택채권 도입): 부대비용이
+    // 늘어난 만큼 답이 610,300,000에서 609,200,000으로 낮아졌다. 임계값도
+    // 절벽(600,000,000)과 새 답(609,200,000) 사이로 낮춘다.
     const result = calcAffordablePrice(
       profile({
         cash: 220_000_000,
@@ -246,7 +250,7 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
       }),
       rules,
     );
-    expect(result.affordablePrice).toBeGreaterThanOrEqual(610_000_000);
+    expect(result.affordablePrice).toBeGreaterThanOrEqual(605_000_000);
   });
 
   it.each(cliffSpanningProfiles)(
@@ -303,10 +307,14 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
   //
   // "정책대출이 최대치를 만드는" 사례는 이제 금리 우위가 실제로 작동하는
   // 쪽에서 나온다. cash 150,000,000 · 연소득 3천만은 디딤돌(3.2%) 자격이
-  // 되고, 335,600,000에서
+  // 되고,
   //   은행 DSR@5.7% = 172,294,842
-  //   디딤돌 DSR@4.7% = 192,812,784  (상품한도 250,000,000·LTV 234,919,999 미만)
+  //   디딤돌 DSR@4.7% = 192,812,784  (상품한도 250,000,000·LTV 미만)
   // 이므로 정책 경로가 20,517,942원 더 크다. 순수하게 금리 차이가 만든 값이다.
+  // 두 DSR 값 모두 소득 기반이라 가격에 무관하므로 아래 가격 변경에도 그대로다.
+  //
+  // 값 변경(Task 3, 중개보수 부가세·국민주택채권 도입): 부대비용이 늘어난
+  // 만큼 실구매력이 335,600,000에서 335,100,000으로 500,000원 낮아졌다.
   it("정책대출이 실제로 최종 대출 한도를 결정짓는 케이스가 있다", () => {
     const result = calcAffordablePrice(
       profile({ cash: 150_000_000, annualIncome: 30_000_000 }),
@@ -314,7 +322,7 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     );
     expect(result.loanLimit.binding).toBe("POLICY");
     expect(result.loanLimit.amount).toBe(192_812_784);
-    expect(result.affordablePrice).toBe(335_600_000);
+    expect(result.affordablePrice).toBe(335_100_000);
     // 은행 경로(DSR 172,294,842)보다 정책대출이 더 크다
     expect(result.loanLimit.breakdown.DSR).toBeLessThan(
       result.loanLimit.breakdown.POLICY,
@@ -350,6 +358,12 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
   //          = 350,000,000  → binding POLICY
   //     부대비용 9,600,000 → 자기부담금 159,600,000
   //   한 스텝 위에서는 정책 선택지를 잃어 315,873,877로 떨어진다.
+  //
+  // 값 변경(Task 3, 중개보수 부가세·국민주택채권 도입): 대출한도(350,000,000)
+  // 자체는 가격·소득 기반이라 그대로지만, 부대비용이 9,600,000에서
+  // 10,528,000(= 부가세 200,000 + 채권비용 728,000 추가)으로 늘어
+  // 자기부담금이 159,600,000에서 160,528,000으로 오른다. 픽스처의 cash도
+  // 그만큼 올려야 경계에서 "딱 맞는" 상황이 유지된다.
   it("구간 상단이 정답이면 한 스텝 낮은 값이 아니라 상단 그대로를 반환한다", () => {
     const boundary = 500_000_000;
     const fixtureRules: Rules = {
@@ -364,18 +378,18 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
       ],
     };
     const buyer = profile({
-      cash: 159_600_000,
+      cash: 160_528_000,
       annualIncome: 55_000_000,
     });
 
     // 경계에서 정책대출이 실제로 최대치를 만든다(절벽이 존재한다).
     expect(calcMaxLoan(buyer, fixtureRules, boundary).binding).toBe("POLICY");
     // 경계에서의 자기부담금이 정확히 가용현금과 같음을 먼저 확인한다.
-    expect(ownFundsAt(boundary, buyer, fixtureRules)).toBe(159_600_000);
+    expect(ownFundsAt(boundary, buyer, fixtureRules)).toBe(160_528_000);
     // 한 스텝 위는 정책대출 선택지를 잃어 예산을 넘는다.
     expect(
       ownFundsAt(boundary + PRICE_STEP, buyer, fixtureRules),
-    ).toBeGreaterThan(159_600_000);
+    ).toBeGreaterThan(160_528_000);
 
     const result = calcAffordablePrice(buyer, fixtureRules);
     expect(result.affordablePrice).toBe(boundary);

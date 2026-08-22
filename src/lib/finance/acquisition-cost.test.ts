@@ -121,13 +121,19 @@ describe("calcAcquisitionCosts", () => {
     expect(brokerageFee).toBe(1_000_000);
   });
 
+  // Task 3에서 brokerageVat·housingBondCost 두 항목이 CostBreakdown에
+  // 추가되어 total이 여섯 항목의 합이 됐다. 이 테스트는 항목 나열이지
+  // 리터럴 값이 아니므로, 새 항목을 더하지 않으면 total이 더 커진 만큼
+  // 실패한다.
   it("total은 모든 항목의 합이다", () => {
     const costs = calcAcquisitionCosts(500_000_000, profile(), rules);
     expect(costs.total).toBe(
       costs.acquisitionTax +
         costs.brokerageFee +
+        costs.brokerageVat +
         costs.legalFee +
-        costs.movingCost,
+        costs.movingCost +
+        costs.housingBondCost,
     );
   });
 
@@ -154,11 +160,14 @@ describe("calcAcquisitionCosts", () => {
     for (const value of Object.values(costs)) {
       expect(Number.isInteger(value)).toBe(true);
     }
+    // Task 3에서 추가된 brokerageVat·housingBondCost도 합계에 포함해야 한다.
     expect(costs.total).toBe(
       costs.acquisitionTax +
         costs.brokerageFee +
+        costs.brokerageVat +
         costs.legalFee +
-        costs.movingCost,
+        costs.movingCost +
+        costs.housingBondCost,
     );
   });
 });
@@ -186,5 +195,86 @@ describe("calcAcquisitionCosts — price 경계 검증", () => {
       calcAcquisitionCosts(500_000_000, profile(), rules),
     ).not.toThrow();
     expect(() => calcAcquisitionCosts(0, profile(), rules)).not.toThrow();
+  });
+});
+
+describe("중개보수 부가가치세", () => {
+  it("중개보수의 10%가 부가세로 붙는다", () => {
+    const costs = calcAcquisitionCosts(500_000_000, profile(), rules);
+    expect(costs.brokerageFee).toBe(2_000_000);
+    expect(costs.brokerageVat).toBe(200_000);
+  });
+
+  it("부가세는 상한이 적용된 뒤의 중개보수에 붙는다", () => {
+    // 1.8억은 상한 80만원이 걸리는 구간이다. 부가세는 90만원(상한 전)이
+    // 아니라 80만원(상한 후)의 10%여야 한다.
+    const costs = calcAcquisitionCosts(180_000_000, profile(), rules);
+    expect(costs.brokerageFee).toBe(800_000);
+    expect(costs.brokerageVat).toBe(80_000);
+  });
+
+  it("부가세율이 0이면 부가세도 0이다", () => {
+    const costs = calcAcquisitionCosts(500_000_000, profile(), {
+      ...rules,
+      brokerageVatRate: 0,
+    });
+    expect(costs.brokerageVat).toBe(0);
+  });
+});
+
+describe("국민주택채권", () => {
+  it("시가표준액 추정 후 구간 매입률과 할인율을 곱한다", () => {
+    // 매매가 5억 × 공시비율 0.7 = 시가표준액 3.5억
+    // → 2.6억~6억 구간, 1,000원당 26원 = 3.5억 × 0.026 = 910만원 채권
+    // → 할인율 8% = 728,000원
+    const costs = calcAcquisitionCosts(500_000_000, profile(), rules);
+    expect(costs.housingBondCost).toBe(728_000);
+  });
+
+  it("가격이 오르면 구간이 올라가 부담도 커진다", () => {
+    const low = calcAcquisitionCosts(300_000_000, profile(), rules);
+    const high = calcAcquisitionCosts(900_000_000, profile(), rules);
+    expect(high.housingBondCost).toBeGreaterThan(low.housingBondCost);
+  });
+
+  it("시가표준액이 최저 구간 미만이면 채권 부담이 없다", () => {
+    // 매매가 2,000만 × 0.7 = 1,400만 → 2,000만 미만 구간, 매입률 0
+    const costs = calcAcquisitionCosts(20_000_000, profile(), rules);
+    expect(costs.housingBondCost).toBe(0);
+  });
+
+  it("할인율이 0이면 부담이 0이다 (채권을 팔지 않는 경우)", () => {
+    const costs = calcAcquisitionCosts(500_000_000, profile(), {
+      ...rules,
+      housingBond: { ...rules.housingBond, assumedDiscountRate: 0 },
+    });
+    expect(costs.housingBondCost).toBe(0);
+  });
+});
+
+describe("확장된 total", () => {
+  it("total은 여섯 항목의 합이다", () => {
+    const c = calcAcquisitionCosts(500_000_000, profile(), rules);
+    expect(c.total).toBe(
+      c.acquisitionTax +
+        c.brokerageFee +
+        c.brokerageVat +
+        c.legalFee +
+        c.movingCost +
+        c.housingBondCost,
+    );
+  });
+
+  it("모든 금액은 정수다", () => {
+    const c = calcAcquisitionCosts(777_777_777, profile(), rules);
+    for (const value of Object.values(c)) {
+      expect(Number.isInteger(value)).toBe(true);
+    }
+  });
+
+  it("두 항목이 더해져 total이 이전보다 커진다", () => {
+    const c = calcAcquisitionCosts(500_000_000, profile(), rules);
+    const withoutNew = c.total - c.brokerageVat - c.housingBondCost;
+    expect(c.total).toBeGreaterThan(withoutNew);
   });
 });
