@@ -573,3 +573,98 @@ describe("calcAffordablePrice — 안전하지 않은 방향 스윕", () => {
     expect(at(60_000_000)).toBeGreaterThan(at(30_000_000));
   });
 });
+
+// 이 블록의 세 테스트는 buildSearchSegments를 고치지 않은 상태에서도
+// 전부 통과한다(직접 확인함) — 그래서 "버그를 잡는" RED 테스트가 아니라
+// 회귀 고정용이다. 이유: 절대캡 절벽은 정책대출 자격 상실 절벽과 같은
+// 방향으로만 움직인다 — 가격이 경계를 넘으면 캡이 "떨어져" 대출한도가
+// 아래로 튀고 자기부담금은 위로 점프한다. affordable-price.ts 상단
+// 주석이 정책대출 절벽에 대해 설명하는 논리(절벽은 f를 단조 증가에서
+// 벗어나게 하지 않는다)가 캡 절벽에도 그대로 적용되고, searchSegment의
+// "구간 내부 그리드 정렬 임계값" 구제 후보가 분할되지 않은 큰 구간
+// 안의 절벽에서도 정답을 우연히 구제해 준다. cash를 900M~1.3B(5M
+// 간격), 두 절벽(15억·25억) 경계 ±2M을 PRICE_STEP 그리드로 훑으며
+// 소득·규제지역·생애최초 전 조합, 그리고 0~100억 전 구간에 대한
+// 무작위 퍼징 60회로 확인했고 전부 브루트포스와 일치했다(Task 2 보고서
+// 참고). 그래도 구간 분할은 유지한다 — 현재 룰셋 형태에 기대지 않는
+// 안전장치이며, 캡이 비단조로 바뀌는 미래 룰셋에서는 이 분할이 실제로
+// 답을 바꿀 수 있다.
+describe("캡 구간 절벽을 넘나드는 탐색", () => {
+  // 15억에서 캡이 6억 → 4억으로 떨어지는 룰셋
+  const tiered = parseRules({
+    ...rawRules,
+    absoluteCap: {
+      brackets: [
+        { upTo: 1_500_000_000, amount: 600_000_000 },
+        { upTo: 2_500_000_000, amount: 400_000_000 },
+        { upTo: null, amount: 200_000_000 },
+      ],
+    },
+  });
+
+  // 절벽 근처에 답이 놓이도록 현금·소득을 크게 잡는다.
+  const wealthy: BuyerProfile = {
+    status: "무주택",
+    cash: 1_100_000_000,
+    annualIncome: 300_000_000,
+    existingDebtAnnualPayment: 0,
+    isFirstTimeBuyer: false,
+    exclusiveAreaSqm: 84,
+    isRegulatedArea: false,
+  };
+
+  /**
+   * 이분 탐색이 절벽을 지나치지 않았는지 브루트포스로 확인한다.
+   * PRICE_STEP 단위로 훑어 "현금으로 감당 가능한" 최대 가격을 직접 구하고,
+   * 엔진 결과와 대조한다. 탐색 범위는 절벽 주변으로 좁혀 시간을 아낀다.
+   *
+   * 브리프 원문은 calcAcquisitionCosts(profile, rules, price) 순서로
+   * 호출하지만, 실제 시그니처는 calcAcquisitionCosts(price, profile, rules)다
+   * (이 파일 상단의 ownFundsAt과 acquisition-cost.ts 참고). 원문 그대로
+   * 쓰면 타입이 맞지 않아 컴파일되지 않으므로, 인자 순서만 실제 시그니처에
+   * 맞춰 바로잡았다 — 계산 로직이나 기대값은 손대지 않았다.
+   */
+  function bruteForceMax(
+    profile: BuyerProfile,
+    rules: ReturnType<typeof parseRules>,
+    from: number,
+    to: number,
+  ): number {
+    let best = 0;
+    for (let price = from; price <= to; price += PRICE_STEP) {
+      const loan = calcMaxLoan(profile, rules, price);
+      const costs = calcAcquisitionCosts(price, profile, rules);
+      const ownFunds = price - loan.amount + costs.total;
+      if (ownFunds <= profile.cash) best = price;
+    }
+    return best;
+  }
+
+  it("엔진이 찾은 최대가가 브루트포스와 일치한다", () => {
+    const result = calcAffordablePrice(wealthy, tiered);
+    const brute = bruteForceMax(
+      wealthy,
+      tiered,
+      1_400_000_000,
+      1_700_000_000,
+    );
+    expect(result.affordablePrice).toBe(brute);
+  });
+
+  it("찾은 가격이 실제로 감당 가능하다", () => {
+    const result = calcAffordablePrice(wealthy, tiered);
+    const loan = calcMaxLoan(wealthy, tiered, result.affordablePrice);
+    const costs = calcAcquisitionCosts(result.affordablePrice, wealthy, tiered);
+    const ownFunds = result.affordablePrice - loan.amount + costs.total;
+    expect(ownFunds).toBeLessThanOrEqual(wealthy.cash);
+  });
+
+  it("한 스텝 위는 감당 불가능하다 — 진짜 최대다", () => {
+    const result = calcAffordablePrice(wealthy, tiered);
+    const next = result.affordablePrice + PRICE_STEP;
+    const loan = calcMaxLoan(wealthy, tiered, next);
+    const costs = calcAcquisitionCosts(next, wealthy, tiered);
+    const ownFunds = next - loan.amount + costs.total;
+    expect(ownFunds).toBeGreaterThan(wealthy.cash);
+  });
+});

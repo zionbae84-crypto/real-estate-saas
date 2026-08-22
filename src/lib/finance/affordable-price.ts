@@ -120,18 +120,31 @@ interface SearchSegment {
 }
 
 /**
- * 정책대출 절벽(maxHousePrice)을 기준으로 [0, SEARCH_UPPER_BOUND]를 나눈다.
- * price > maxHousePrice일 때 자격을 잃으므로 경계값 자체는 하위 구간에 속한다.
- * 룰셋에서 도출하며, 값을 직접 하드코딩하지 않는다.
+ * 탐색 범위를 절벽에서 나눈다.
+ *
+ * 절벽은 두 종류다.
+ * 1. 정책대출 자격 상실(`eligibility.maxHousePrice`) — 그 가격을 넘으면
+ *    상품 집합이 바뀌어 대출 한도가 불연속으로 움직인다.
+ * 2. 절대캡 구간 경계(`absoluteCap.brackets[].upTo`) — 그 가격을 넘으면
+ *    캡이 떨어진다.
+ *
+ * 두 경계 모두 **포함**이다. 즉 경계값 자체는 하위 구간에 속하므로
+ * 다음 구간은 경계 + 1에서 시작한다.
+ *
+ * 룰셋에서 도출하며 값을 직접 하드코딩하지 않는다.
  */
 function buildSearchSegments(rules: Rules): SearchSegment[] {
-  const boundaries = Array.from(
-    new Set(
-      rules.policyLoans
-        .map((loan) => loan.eligibility.maxHousePrice)
-        .filter((v): v is number => v !== undefined && v > 0),
-    ),
-  ).sort((a, b) => a - b);
+  const policyCliffs = rules.policyLoans
+    .map((loan) => loan.eligibility.maxHousePrice)
+    .filter((v): v is number => v !== undefined && v > 0);
+
+  const capCliffs = rules.absoluteCap.brackets
+    .map((bracket) => bracket.upTo)
+    .filter((v): v is number => v !== null && v > 0);
+
+  const boundaries = Array.from(new Set([...policyCliffs, ...capCliffs])).sort(
+    (a, b) => a - b,
+  );
 
   const segments: SearchSegment[] = [];
   let low = 0;
