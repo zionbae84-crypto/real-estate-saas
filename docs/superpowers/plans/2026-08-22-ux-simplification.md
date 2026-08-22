@@ -58,7 +58,7 @@
 - Test: `src/lib/finance/safe-price.test.ts`
 
 **Interfaces:**
-- Produces: `calcSafePrice(profile: BuyerProfile, rules: Rules): number` — Task 4가 쓴다
+- Produces: `calcSafePrice(profile: BuyerProfile, rules: Rules): number | null` — Task 4가 쓴다. 리뷰 수정: 실구매력이 0이거나 어떤 가격에서도 `safe` 등급이 나오지 않으면 `null`이다(0과는 뜻이 다르다 — 아래 8절의 경계 조건, `safe-price.ts` 문서 참고).
 - Produces: `searchMaxPrice(rules: Rules, accepts: (price: number) => boolean): number` — `affordable-price.ts`에서 export
 
 ### 왜 탐색을 공유하는가
@@ -286,11 +286,14 @@ import type { BuyerProfile, Rules } from "./types";
  * 탐색은 `calcAffordablePrice`와 같은 `searchMaxPrice`를 쓴다. 두 숫자가
  * 화면에 나란히 놓이므로 서로 다른 절벽 위에서 계산되면 안 된다.
  */
-export function calcSafePrice(profile: BuyerProfile, rules: Rules): number {
+export function calcSafePrice(profile: BuyerProfile, rules: Rules): number | null {
   assertValidProfile(profile);
 
   const affordable = calcAffordablePrice(profile, rules).affordablePrice;
-  if (affordable === 0) return 0;
+  // 리뷰 수정: 실구매력이 0이면 0을 반환하지 않는다. "0원이 안전 최대치"는
+  // 매수가 성립한다는 전제 위에서만 의미가 있는데, 실구매력 0은 그 전제
+  // 자체가 없다 — null(안전한 가격이 하나도 없음)이 정직한 값이다.
+  if (affordable === 0) return null;
 
   return searchMaxPrice(rules, (price) => {
     if (price > affordable) return false;
