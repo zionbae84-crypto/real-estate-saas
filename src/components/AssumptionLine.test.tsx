@@ -96,8 +96,11 @@ describe("AssumptionLine", () => {
   });
 
   describe("리뷰 수정: 면적 임계값은 룰셋에서 유도한다 (Important 2)", () => {
-    it("buildAssumptionItems가 받은 threshold 값을 그대로 문구에 쓴다 — 85 하드코딩이 아니다", () => {
-      const items = buildAssumptionItems(DEFAULT_FORM_STATE, 100);
+    it("buildAssumptionItems가 받은 threshold 값을 그대로 문구에 쓴다 — 85 하드코딩이 아니다 (임계값 초과 방향)", () => {
+      const items = buildAssumptionItems(
+        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 120 },
+        100,
+      );
       const areaItem = items.find((item) => item.field === "area");
       expect(areaItem?.text).toContain("100㎡ 이하면");
       expect(areaItem?.text).not.toContain("85㎡");
@@ -108,6 +111,42 @@ describe("AssumptionLine", () => {
       const threshold = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
       expect(
         screen.getByText(new RegExp(`${threshold}㎡ 이하면`)),
+      ).toBeInTheDocument();
+    });
+  });
+
+  describe("리뷰 수정: 면적 문구가 방향을 분기한다 (Important 1)", () => {
+    // C2를 고쳐도 이 문제는 남는다 — 문장이 "임계값 이하면 늘어날 수
+    // 있다"는 한 방향만 말한다. 가정 면적이 이미 임계값 이하(농특세 미부과)로
+    // 계산 중이면, 진실을 말해도 부대비용이 "줄어들" 수는 없다 — 오히려
+    // 실제 면적이 임계값을 넘으면 부대비용이 늘어 가격이 "낮아질" 수
+    // 있다는 반대 방향이 진실이다. regulatedArea 항목이 이미 이 양방향
+    // 분기를 제대로 다루고 있으므로 같은 방식을 따른다.
+    it("가정 면적이 임계값을 넘으면(농특세 부과) — 고치면 늘어날 수 있다고 말한다", () => {
+      const items = buildAssumptionItems(
+        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 120 },
+        100,
+      );
+      const areaItem = items.find((item) => item.field === "area");
+      expect(areaItem?.text).toMatch(/늘어날 수 있어요/);
+      expect(areaItem?.text).not.toMatch(/낮아질 수 있어요/);
+    });
+
+    it("가정 면적이 임계값 이하면(농특세 미부과) — 고치면 낮아질 수 있다고 반대로 말한다", () => {
+      const items = buildAssumptionItems(
+        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 80 },
+        100,
+      );
+      const areaItem = items.find((item) => item.field === "area");
+      expect(areaItem?.text).toContain("100㎡를 넘으면");
+      expect(areaItem?.text).toMatch(/낮아질 수 있어요/);
+      expect(areaItem?.text).not.toMatch(/늘어날 수 있어요/);
+    });
+
+    it("실제 기본값(임계값+1)은 초과 방향이므로 늘어날 수 있다고 말한다", () => {
+      renderLine();
+      expect(
+        screen.getByText(/부대비용이 줄어 살 수 있는 가격이 늘어날 수 있어요/),
       ).toBeInTheDocument();
     });
   });

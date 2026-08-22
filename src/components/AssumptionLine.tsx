@@ -45,6 +45,15 @@ interface AssumptionItem {
  * 전용면적 임계값(농특세 85㎡)은 인자로 받는다 — 컴포넌트가 직접
  * import해 하드코딩하면 룰셋이 바뀌었을 때(예: 85 → 100) 기본값은
  * 따라가는데 문구만 옛 숫자를 계속 말하게 된다.
+ *
+ * 전용면적 문구도 규제지역과 마찬가지로 방향을 분기한다(리뷰 수정
+ * Important 1). 가정 면적이 임계값을 넘으면(농특세 부과) 실제 면적을
+ * 알려줄 때 부대비용이 줄 수 있다고 말하지만, 가정 면적이 이미 임계값
+ * 이하(농특세 미부과)면 반대다 — 이미 유리한 쪽으로 가정했으므로 실제
+ * 면적이 임계값을 넘을 때만 부대비용이 늘어 가격이 낮아질 수 있다. 방향을
+ * 고정해 두면(항상 "이하면 늘어난다"만 말하면) 가정 면적이 이미 임계값
+ * 이하인 프로필에서 진실을 말해도 부대비용이 줄어들 수 없는데 그럴 수
+ * 있다고 거짓말하게 된다.
  */
 export function buildAssumptionItems(
   state: ProfileFormState,
@@ -73,13 +82,27 @@ export function buildAssumptionItems(
   }
 
   if (!state.touched.includes("area")) {
+    // 리뷰 수정(Important 1): 임계값을 룰셋에서 유도하는 것만으로는
+    // 부족하다 — 방향 주장도 가정 면적이 임계값의 어느 쪽에 있는지에
+    // 따라 갈려야 한다. 가정 면적이 이미 임계값 이하(농특세 미부과)로
+    // 계산 중이면 실제 면적을 알려줘도 부대비용이 "줄어들" 수는 없다
+    // (이미 유리한 쪽으로 가정했으므로). 오히려 실제 면적이 임계값을
+    // 넘으면 농특세가 붙어 부대비용이 늘어 가격이 "낮아질" 수 있다는
+    // 반대 방향이 진실이다. regulatedArea 항목과 같은 양방향 분기 방식을
+    // 따른다.
     items.push({
       field: "area",
       text:
-        `전용면적 ${state.exclusiveAreaSqm}㎡로 가정하고 계산했어요. ` +
-        "실제 면적을 눌러서 알려주세요 — " +
-        `${ruralTaxAreaThresholdSqm}㎡ 이하면 부대비용이 줄어 살 ` +
-        "수 있는 가격이 늘어날 수 있어요.",
+        state.exclusiveAreaSqm > ruralTaxAreaThresholdSqm
+          ? `전용면적 ${state.exclusiveAreaSqm}㎡로 가정하고 계산했어요. ` +
+            "실제 면적을 눌러서 알려주세요 — " +
+            `${ruralTaxAreaThresholdSqm}㎡ 이하면 부대비용이 줄어 살 ` +
+            "수 있는 가격이 늘어날 수 있어요."
+          : `전용면적 ${state.exclusiveAreaSqm}㎡로 가정하고 계산했어요. ` +
+            "이미 농특세가 붙지 않는 면적으로 계산했어요 — 실제 면적을 " +
+            "눌러서 알려주세요, " +
+            `${ruralTaxAreaThresholdSqm}㎡를 넘으면 부대비용이 늘어 살 ` +
+            "수 있는 가격이 낮아질 수 있어요.",
     });
   }
 
