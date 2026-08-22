@@ -193,6 +193,43 @@ describe("calcAffordablePrice", () => {
     expect(result.affordablePrice % 100_000).toBe(0);
   });
 
+  // 폼의 기본값 경로(isRegulatedArea: true). 이 파일의 다른 모든 테스트는
+  // 브랜치 이전 기대값을 보존하려고 isRegulatedArea: false로 고정돼
+  // 있는데, 정작 실제 사용자가 아무것도 건드리지 않았을 때 도는 경로는
+  // true다 — 그런데 calcAffordablePrice 레벨에서 이 경로를 값으로
+  // 확인하는 테스트가 하나도 없었다. 결과값은 코드 출력을 그대로 베낀
+  // 것이 아니라, 이 파일의 bruteForceMax(계산 로직과 무관하게 PRICE_STEP
+  // 그리드를 전수 스캔하는 헬퍼)로 별도 도출해 일치를 확인한 값이다.
+  //
+  // 연소득 80,000,000·현금 300,000,000·무주택·생애최초 아님·규제지역.
+  // 규제지역 LTV(40%)가 DSR·정책대출보다 먼저 걸려 binding이 LTV다:
+  // 482,900,000 × 0.4 = 193,160,000(대출), 부대비용 10,239,762원을 더한
+  // 자기부담금 299,979,762원이 가용현금 300,000,000원 이내에서 최대인
+  // 지점이다. 한 스텝(483,000,000) 위는 이미 예산을 넘는다.
+  it("규제지역(폼 기본값)에서의 실구매력이 브루트포스 결과와 일치한다", () => {
+    const regulated = profile({
+      isRegulatedArea: true,
+      cash: 300_000_000,
+      annualIncome: 80_000_000,
+    });
+    const result = calcAffordablePrice(regulated, rules);
+
+    expect(result.loanLimit.binding).toBe("LTV");
+    expect(result.loanLimit.amount).toBe(193_160_000);
+    expect(result.affordablePrice).toBe(482_900_000);
+
+    const cashAmount = calcAvailableCash(regulated).amount;
+    const trueMax = bruteForceMax(
+      regulated,
+      rules,
+      cashAmount,
+      0,
+      BRUTE_FORCE_CEILING,
+    );
+    expect(trueMax).toBeLessThan(BRUTE_FORCE_CEILING);
+    expect(result.affordablePrice).toBe(trueMax);
+  });
+
   // 코드 리뷰 결함(Critical, 재발): 이 결과 객체가 matchedPolicyLoans에
   // PolicyLoanRule을 그대로 실어 보내던 시절에는, UI가 loan.maxAmount를
   // "받을 수 있는 정책대출"로 렌더링할 경우 연소득 0원·현금 0원·무주택·
