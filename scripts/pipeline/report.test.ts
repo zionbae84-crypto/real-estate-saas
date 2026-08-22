@@ -294,7 +294,7 @@ describe("buildReport", () => {
     },
   ];
 
-  it("수집 실패를 담는다 — normalized.json만으로는 알 수 없는 정보다", () => {
+  it("수집 실패를 담는다 — complexes.json만으로는 알 수 없는 정보다", () => {
     const md = buildReport([unit()], log, config);
     expect(md).toContain("11650");
     expect(md).toContain("HTTP 500");
@@ -475,6 +475,50 @@ describe("buildReport — 거래 0건(status: empty) 노출 (I2)", () => {
     const sections = md.split(/^## /m);
     const section = sections.find((s) => s.startsWith("거래 0건 시군구·월"));
     expect(section).toBeUndefined();
+  });
+
+  it("거래 0건인 달이 캐시 적중(status: cached)으로 들어와도 요약 수치와 목록에 잡힌다 (재발 방지)", () => {
+    // status는 수집 시점에만 정해진다. 거래 0건으로 마감된 달이 캐시되면
+    // 다음 실행의 캐시 적중 경로는 tradeCount: 0이어도 status: "cached"를
+    // 낸다 — status만 보면 이 신호는 '지금 열려 있는 달'만 설명하게 된다.
+    // tradeCount로 판정해야 캐시를 거쳐도 신호가 살아남는다.
+    const zeroThreshold: ReportConfig = { ...config, emptyRatioWarnThreshold: 0 };
+    const logs: FetchLogEntry[] = [
+      { regionCode: "11680", yearMonth: "202603", status: "cached", tradeCount: 0, failures: 0, cancelled: 0 },
+      { regionCode: "11650", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },
+    ];
+    const md = buildReport([unit()], logs, zeroThreshold);
+    expect(md).toMatch(/거래 0건 시군구·월: 1 ?\/ ?전체 2/);
+    const sections = md.split(/^## /m);
+    const section = sections.find((s) => s.startsWith("거래 0건 시군구·월"));
+    expect(section).toBeDefined();
+    expect(section).toContain("11680");
+    expect(section).toContain("202603");
+  });
+
+  it("status: failed인 엔트리는 거래 0건 집계에 중복으로 세어지지 않는다 — 수집 실패 절에서 이미 센다", () => {
+    const logs: FetchLogEntry[] = [
+      {
+        regionCode: "11680",
+        yearMonth: "202608",
+        status: "failed",
+        tradeCount: 0,
+        failures: 0,
+        cancelled: 0,
+        error: "HTTP 500",
+      },
+      { regionCode: "11650", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },
+    ];
+    const md = buildReport([unit()], logs, config);
+    expect(md).toMatch(/거래 0건 시군구·월: 0 ?\/ ?전체 2/);
+  });
+
+  it("거래가 있는 캐시 적중 달은 0건으로 세어지지 않는다", () => {
+    const logs: FetchLogEntry[] = [
+      { regionCode: "11680", yearMonth: "202608", status: "cached", tradeCount: 5, failures: 0, cancelled: 0 },
+    ];
+    const md = buildReport([unit()], logs, config);
+    expect(md).toMatch(/거래 0건 시군구·월: 0 ?\/ ?전체 1/);
   });
 });
 

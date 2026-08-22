@@ -249,12 +249,36 @@ function renderParseFailureSection(entries: FetchLogEntry[]): string[] {
 }
 
 /**
- * 거래 0건(status: "empty")으로 돌아온 시군구·월 목록(I2).
+ * 거래 0건으로 집계된 시군구·월을 골라낸다(I2 재발 방지).
+ *
+ * `status`가 아니라 `tradeCount`로 판정한다. `status`는 수집 **시점**에만
+ * 정해지는 값이라 두 번째 실행부터 신뢰할 수 없다 — 거래 0건으로 마감된
+ * 달이 캐시되면, 다음 실행의 캐시 적중 경로(fetch.ts의 `readCache` 분기)는
+ * `tradeCount: 0`이든 아니든 `status: "cached"`를 낸다. `status === "empty"`로
+ * 뽑으면 이 신호는 "지금 열려 있는 달"만 설명하게 되어, 66개 시군구로 넓힐 때
+ * LAWD_CD 하나가 틀려 그 구가 통째로 빠져도 첫 실행 이후엔 비율이 조용히
+ * 가라앉는다. `tradeCount`는 캐시 봉투에서 그대로 이어받는 값이라 캐시를
+ * 거쳐도 살아남는다(truncated·failures와 같은 성질).
+ *
+ * `status: "failed"`(수집 자체가 안 됨)는 다른 문제이고 "수집 실패" 절에서
+ * 이미 별도로 센다 — `tradeCount`가 항상 0이므로 여기서 제외하지 않으면
+ * 두 절에 같은 항목이 중복으로 잡힌다.
+ */
+function isEmptyRegionMonth(entry: FetchLogEntry): boolean {
+  return entry.status !== "failed" && entry.tradeCount === 0;
+}
+
+/**
+ * 거래 0건으로 집계된 시군구·월 목록(I2).
  *
  * 요약에는 항상 개수/비율을 남기지만(renderSummary), 목록 자체은 그 비율이
  * config.emptyRatioWarnThreshold를 넘을 때만 그린다 — 실제로 거래가 마른
  * 지역도 있을 수 있어 항상 목록으로 사람 눈을 어지럽힐 신호는 아니지만,
  * LAWD_CD 오타나 API가 조용히 빈 응답만 주는 경우 비율이 크게 뛴다.
+ *
+ * 목록에는 이번 실행에서 새로 받은 달과 캐시 적중으로 재사용한 달이 모두
+ * 섞여 있다(isEmptyRegionMonth 참고) — status 열만 보고 "새로 확인됨"으로
+ * 오해하지 않도록 안내 문구에 명시한다.
  */
 function renderEmptyRegionMonthSection(
   entries: FetchLogEntry[],
@@ -265,10 +289,11 @@ function renderEmptyRegionMonthSection(
   return renderListSection(
     "거래 0건 시군구·월",
     [
-      `거래 0건으로 돌아온 시군구·월이 전체의 ${(ratio * 100).toFixed(1)}%로 ` +
+      `거래 0건으로 집계된 시군구·월이 전체의 ${(ratio * 100).toFixed(1)}%로 ` +
         `설정된 경고 임계값(${(threshold * 100).toFixed(1)}%)을 넘었다. LAWD_CD가 ` +
         "틀렸거나 API가 조용히 빈 응답을 주고 있을 수 있다. 실제로 거래가 마른 " +
-        "지역도 있을 수 있으니 아래 목록을 보고 판단하라.",
+        "지역도 있을 수 있으니 아래 목록을 보고 판단하라. 이번 실행에서 새로 받은 " +
+        "달과 캐시 적중(재사용)한 달을 모두 포함한다.",
     ],
     entries,
     ["| 시군구 | 년월 |", "|---|---|"],
@@ -316,7 +341,7 @@ function renderSummary(
     `- 평형 분할 의심: ${counts.splitArea}건`,
     `- 수집 실패: ${issues.failed}건`,
     `- 파싱 실패 레코드: ${issues.parseFailures}건`,
-    `- 거래 0건 시군구·월: ${issues.emptyCount} / 전체 ${issues.totalTargets} (${(emptyRatio * 100).toFixed(1)}%)`,
+    `- 거래 0건 시군구·월: ${issues.emptyCount} / 전체 ${issues.totalTargets} (${(emptyRatio * 100).toFixed(1)}%, 캐시 적중 포함)`,
     `- 데이터 잘림 위험: ${issues.truncated}건`,
     `- 캐시 손상(재수집됨): ${issues.cacheCorrupted}건`,
     `- 해제(취소)된 거래: ${issues.cancelled}건`,
@@ -337,7 +362,7 @@ export function buildReport(
   const cancelled = totalCancelled(log);
   const parseFailureEntries = log.filter((e) => (e.failures ?? 0) > 0);
   const parseFailuresTotal = totalFailures(log);
-  const emptyEntries = log.filter((e) => e.status === "empty");
+  const emptyEntries = log.filter(isEmptyRegionMonth);
   const totalTargets = log.length;
   const emptyRatio = totalTargets === 0 ? 0 : emptyEntries.length / totalTargets;
 

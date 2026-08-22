@@ -254,7 +254,7 @@ describe("runPipeline: 빈 데이터 가드 (통합)", () => {
   let root: string;
   let rawDir: string;
 
-  const OUTPUT_FILES = ["complexes.json", "regions.json", "manifest.json", "report.md"];
+  const OUTPUT_FILES = ["complexes.json", "regions.json", "manifest.json", "report.md", "README.md"];
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "run-pipeline-integration-"));
