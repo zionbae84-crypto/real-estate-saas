@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import rawRules2026_03 from "../../../rules/2026-03.json";
 import rawRules from "../../../rules/2026-08.json";
+import { calcAffordablePrice } from "./affordable-price";
 import { calcAbsoluteCap, calcMaxLoan } from "./loan-limit";
 import { parseRules } from "./rules";
 import type { BuyerProfile } from "./types";
@@ -100,5 +101,30 @@ describe("골든 테스트 2026-08 — 현행 고시 대조", () => {
   it("규제지역 LTV가 무주택 40% · 생애최초 70%다", () => {
     expect(rules.ltv.regulated.default).toBe(0.4);
     expect(rules.ltv.regulated.firstTimeBuyer).toBe(0.7);
+  });
+
+  // 기준 프로필의 실구매력 골든 단언.
+  //
+  // 위 테스트들은 금리·캡 같은 룰셋의 개별 조회값만 고정한다 — 사용자가
+  // 화면에서 실제로 보는 숫자(실구매력, 어느 제약이 걸렸는지)는 어디에도
+  // 고정돼 있지 않았다. 누가 rules/2026-08.json의 값을 바꿔도 이 숫자는
+  // 조용히 움직일 수 있었다.
+  //
+  // 현금 2억 / 연소득 6천만원 / 기존부채 0 / 생애최초 / 규제지역 /
+  // 전용 84㎡ / 무주택. 확인된 값: 4억 7,700만원, 제약은 DSR.
+  it("기준 프로필(현금 2억·연소득 6천만·생애최초·규제지역)의 실구매력이 4억 7,700만원이고 DSR이 제약이다", () => {
+    const buyer: BuyerProfile = {
+      status: "무주택",
+      cash: 200_000_000,
+      annualIncome: 60_000_000,
+      existingDebtAnnualPayment: 0,
+      isFirstTimeBuyer: true,
+      exclusiveAreaSqm: 84,
+      isRegulatedArea: true,
+    };
+    const result = calcAffordablePrice(buyer, rules);
+
+    expect(result.loanLimit.binding).toBe("DSR");
+    expect(result.affordablePrice).toBe(477_000_000);
   });
 });
