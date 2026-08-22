@@ -91,4 +91,38 @@ describe("MoneyInput", () => {
     );
     expect(screen.getByText("단위 없이 쓰면 만원입니다")).toBeInTheDocument();
   });
+
+  it("오류 상태에서도 힌트가 화면에 실제로 보인다", async () => {
+    render(
+      <MoneyInput
+        id="hint-and-error"
+        label="힌트오류"
+        value={null}
+        onChange={vi.fn()}
+        hint="단위 없이 쓰면 만원입니다"
+      />,
+    );
+
+    await userEvent.type(screen.getByLabelText("힌트오류"), "abc");
+
+    // 오류가 함께 떠 있는지부터 확인한다 — 이 케이스가 성립하지 않으면
+    // 아래 힌트 검사가 의미가 없다.
+    expect(screen.getByText("숫자로 읽을 수 없습니다")).toBeInTheDocument();
+
+    // DOM에 존재하는지만 보면 SEED의 VisuallyHidden(clip-rect 트릭)을
+    // 통과해 버린다 — jest-dom의 toBeVisible()조차 display/visibility/
+    // opacity만 보고 clip-rect 트릭은 못 잡는다. 그래서 계산된 스타일을
+    // 직접 읽어 "화면에 실제로 그려지는" 사본이 하나라도 있는지 확인한다.
+    const hintCopies = screen.getAllByText("단위 없이 쓰면 만원입니다");
+    const isActuallyVisible = hintCopies.some((node) => {
+      const style = window.getComputedStyle(node);
+      return (
+        style.position !== "absolute" &&
+        style.width !== "1px" &&
+        style.height !== "1px" &&
+        style.clip !== "rect(0px, 0px, 0px, 0px)"
+      );
+    });
+    expect(isActuallyVisible).toBe(true);
+  });
 });
