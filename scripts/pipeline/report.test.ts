@@ -358,6 +358,23 @@ describe("buildReport", () => {
     expect(md).toMatch(/해제.*0건/);
   });
 
+  it("cancelled 필드가 없는 옛 fetch-log 항목이 섞여 있어도 합계가 깨지지 않는다", () => {
+    // I5 이전에 쓰인 실제 data/fetch-log.json에는 cancelled 필드가 없다.
+    // loadFetchLog는 디스크에서 읽은 값을 검증 없이 FetchLogEntry[]로 캐스트할
+    // 뿐이므로, 타입이 number를 약속해도 런타임에는 undefined일 수 있다 —
+    // 합계 계산이 NaN으로 새지 않아야 한다.
+    const legacyEntry = {
+      regionCode: "11680",
+      yearMonth: "202608",
+      status: "fetched",
+      tradeCount: 26,
+      failures: 0,
+    } as unknown as FetchLogEntry;
+    const md = buildReport([unit()], [legacyEntry], config);
+    expect(md).toMatch(/해제.*0건/);
+    expect(md).not.toContain("NaN");
+  });
+
   it("실패·잘림·캐시손상이 없으면 각 절에 '없음'을 명시한다", () => {
     const cleanLog: FetchLogEntry[] = [
       { regionCode: "11680", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },

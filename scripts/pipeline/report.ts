@@ -150,7 +150,11 @@ function splitFetchIssues(log: FetchLogEntry[]): {
  * 해제 급증은 그 자체로 시장 이상 신호이므로, 요약에서라도 드러낸다.
  */
 function totalCancelled(log: FetchLogEntry[]): number {
-  return log.reduce((sum, e) => sum + e.cancelled, 0);
+  // loadFetchLog는 디스크에서 읽은 값을 검증 없이 FetchLogEntry[]로 캐스트할
+  // 뿐이다 — I5 이전에 쓰인 실제 fetch-log.json에는 cancelled 필드가 아예
+  // 없다. 타입이 number를 약속해도 런타임에는 undefined일 수 있으므로 ?? 0으로
+  // 방어한다(그러지 않으면 합계가 NaN으로 샌다).
+  return log.reduce((sum, e) => sum + (e.cancelled ?? 0), 0);
 }
 
 /**
