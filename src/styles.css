@@ -1,0 +1,101 @@
+:root {
+  --safe: #0a7d33;
+  --caution: #b26a00;
+  --danger: #c02626;
+  --border: #d8d8d8;
+  color-scheme: light;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+  line-height: 1.6;
+}
+
+.app {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: 1.5rem 1rem 4rem;
+}
+
+.subtitle,
+.disclaimer {
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.profile-form {
+  display: grid;
+  gap: 1rem;
+  margin: 1.5rem 0;
+}
+
+.money-input label,
+.field label {
+  display: block;
+  font-weight: 600;
+}
+
+.money-input input,
+.field input[type="number"],
+.field select {
+  width: 100%;
+  padding: 0.5rem;
+  font-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+}
+
+.hint {
+  color: #666;
+  font-size: 0.8125rem;
+  margin: 0.25rem 0 0;
+}
+
+.echo {
+  font-weight: 600;
+  margin: 0.25rem 0 0;
+}
+
+.error {
+  color: var(--danger);
+  margin: 0.25rem 0 0;
+}
+
+.affordable-price {
+  font-size: 2rem;
+  font-weight: 700;
+  margin: 0.25rem 0;
+}
+
+.warning-list {
+  background: #fff6e5;
+  border-left: 4px solid var(--caution);
+  padding: 0.75rem 1rem;
+  list-style: none;
+}
+
+.safety-badge[data-level="safe"] .safety-level { color: var(--safe); }
+.safety-badge[data-level="caution"] .safety-level { color: var(--caution); }
+.safety-badge[data-level="danger"] .safety-level { color: var(--danger); }
+
+.safety-level {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.price-slider input[type="range"] {
+  width: 100%;
+}
+
+.slider-price {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0.25rem 0;
+}
+
+.slider-warning {
+  color: var(--caution);
+  font-size: 0.875rem;
+}
