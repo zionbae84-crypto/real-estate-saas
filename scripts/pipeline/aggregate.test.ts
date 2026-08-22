@@ -8,6 +8,7 @@ const config: ReportConfig = {
   overMergeMinPriceRatio: 2.0,
   overMergeMinTradeCount: 4,
   lowConfidenceMinTrades: 3,
+  emptyRatioWarnThreshold: 0.2,
 };
 
 const AS_OF = new Date("2026-08-22T00:00:00Z");

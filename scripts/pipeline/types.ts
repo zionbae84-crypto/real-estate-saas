@@ -53,4 +53,10 @@ export interface ReportConfig {
   overMergeMinTradeCount: number;
   /** lowConfidence 판정 기준 (최근 6개월 거래 건수 미만) */
   lowConfidenceMinTrades: number;
+  /**
+   * 거래 0건(status: "empty")으로 돌아온 시군구·월의 비율이 이 값(0~1)을
+   * 넘으면 리포트가 해당 목록을 나열한다. 요약 줄(개수/전체)은 이 값과
+   * 무관하게 항상 나온다 — 이 임계값은 "목록까지 펼쳐 보여줄지"만 결정한다.
+   */
+  emptyRatioWarnThreshold: number;
 }

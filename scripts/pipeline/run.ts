@@ -205,7 +205,9 @@ export function runPipeline(asOf: Date, rawDir: string = RAW_DIR): void {
   const report = buildReport(units, loadFetchLog(), config);
   writeFileSync(join(DATA_DIR, "report.md"), report);
 
-  console.log("완료. data/ 아래 complexes.json, regions.json, manifest.json, report.md");
+  console.log(
+    "완료. data/ 아래 complexes.json, regions.json, manifest.json, README.md, report.md",
+  );
 }
 
 // `file://${process.argv[1]}`로 직접 비교하면 저장소 경로에 비-ASCII 문자가

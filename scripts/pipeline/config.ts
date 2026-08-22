@@ -27,13 +27,21 @@ export function loadReportConfig(): ReportConfig {
     "overMergeMinPriceRatio",
     "overMergeMinTradeCount",
     "lowConfidenceMinTrades",
+    "emptyRatioWarnThreshold",
   ] as const;
 
+  const values: Record<(typeof keys)[number], number> = {} as Record<(typeof keys)[number], number>;
   for (const key of keys) {
     const value = raw[key];
     if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
       throw new Error(`report-config.json 필드 오류: ${key}`);
     }
+    values[key] = value;
+  }
+  // emptyRatioWarnThreshold는 비율이므로 1을 넘으면 항상 목록이 펼쳐져
+  // 임계값의 의미가 없어진다.
+  if (values.emptyRatioWarnThreshold > 1) {
+    throw new Error("report-config.json 필드 오류: emptyRatioWarnThreshold는 0보다 크고 1 이하여야 합니다");
   }
   return raw as unknown as ReportConfig;
 }

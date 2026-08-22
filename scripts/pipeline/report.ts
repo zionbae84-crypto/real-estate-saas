@@ -122,6 +122,20 @@ function won(value: number): string {
 }
 
 /**
+ * 마크다운 표 셀 안의 `|`를 이스케이프한다(I3).
+ *
+ * complexKey는 `지역|법정동|건축년도|이름` 형태다. 과소병합·평형분할 절은
+ * 이 키(또는 그 일부)를 표 셀에 그대로 넣는데, 이스케이프하지 않으면 헤더가
+ * 선언한 열 수보다 셀 안의 `|`가 더 열을 만들어 표가 깨진다 — 정작 신호를
+ * 담은 뒤쪽 열(B, 버킷)이 넘쳐서 잘려나간다. 모든 마크다운 렌더러가 넘치는
+ * 열을 버리므로 원본 텍스트로만 온전히 읽힌다. `\|`는 GFM 표에서 리터럴
+ * 파이프 문자로 렌더링되고 열 구분자로 취급되지 않는다.
+ */
+function escapeCell(value: string): string {
+  return value.replace(/\|/g, "\\|");
+}
+
+/**
  * 수집 실패 계열 신호를 사유별로 분리한다.
  *
  * `status: "failed"`, `truncated: true`, `cacheCorrupted: true`는 서로 다른
@@ -155,6 +169,19 @@ function totalCancelled(log: FetchLogEntry[]): number {
   // 없다. 타입이 number를 약속해도 런타임에는 undefined일 수 있으므로 ?? 0으로
   // 방어한다(그러지 않으면 합계가 NaN으로 샌다).
   return log.reduce((sum, e) => sum + (e.cancelled ?? 0), 0);
+}
+
+/**
+ * fetch 로그 전체의 파싱 실패 레코드 총계(I1).
+ *
+ * `FetchLogEntry.failures`는 fetch가 쓰지만 report 어디에서도 읽지 않았다 —
+ * 스펙 §6·§10이 요구하는 "파싱 실패 건수" 신호가 쌓이기만 하고 사람 눈에
+ * 닿는 곳이 없었다. status가 "fetched"/"cached"라도(그 시군구·월 자체는
+ * 성공해도) failures가 있으면 응답 안의 일부 레코드가 조용히 버려진 것이다.
+ * cancelled와 같은 이유로 ?? 0으로 방어한다.
+ */
+function totalFailures(log: FetchLogEntry[]): number {
+  return log.reduce((sum, e) => sum + (e.failures ?? 0), 0);
 }
 
 /**
@@ -194,7 +221,58 @@ function renderFetchIssueSection(
     [description],
     entries,
     ["| 시군구 | 년월 | 사유 |", "|---|---|---|"],
-    (e) => `| ${e.regionCode} | ${e.yearMonth} | ${reasonFor(e)} |`,
+    (e) => `| ${e.regionCode} | ${e.yearMonth} | ${escapeCell(reasonFor(e))} |`,
+    entries.length,
+  );
+}
+
+/**
+ * 파싱 실패(failures > 0) 엔트리를 시군구·년월·건수 표로 그린다(I1).
+ *
+ * status: "failed"(그 시군구·월 전체 수집 실패)와는 다른 신호다 — 여기 담긴
+ * 엔트리는 수집 자체는 성공했는데(fetched/cached) 그 안의 일부 레코드가
+ * 형식에 안 맞아 버려진 경우다. 응답 스키마가 바뀌면 이 숫자가 급증한다.
+ */
+function renderParseFailureSection(entries: FetchLogEntry[]): string[] {
+  return renderListSection(
+    "파싱 실패",
+    [
+      "레코드 하나하나가 형식에 안 맞아 버려진 건수다. 시군구·월 자체는 " +
+        '수집에 성공했어도(`status: "fetched"`/`"cached"`) 이 값이 있으면 ' +
+        "그 안 일부 거래가 조용히 빠진 것이다. 응답 스키마가 바뀌면 이 숫자가 급증한다.",
+    ],
+    entries,
+    ["| 시군구 | 년월 | 건수 |", "|---|---|---|"],
+    (e) => `| ${e.regionCode} | ${e.yearMonth} | ${e.failures ?? 0}건 |`,
+    entries.length,
+  );
+}
+
+/**
+ * 거래 0건(status: "empty")으로 돌아온 시군구·월 목록(I2).
+ *
+ * 요약에는 항상 개수/비율을 남기지만(renderSummary), 목록 자체은 그 비율이
+ * config.emptyRatioWarnThreshold를 넘을 때만 그린다 — 실제로 거래가 마른
+ * 지역도 있을 수 있어 항상 목록으로 사람 눈을 어지럽힐 신호는 아니지만,
+ * LAWD_CD 오타나 API가 조용히 빈 응답만 주는 경우 비율이 크게 뛴다.
+ */
+function renderEmptyRegionMonthSection(
+  entries: FetchLogEntry[],
+  ratio: number,
+  threshold: number,
+): string[] {
+  if (ratio <= threshold) return [];
+  return renderListSection(
+    "거래 0건 시군구·월",
+    [
+      `거래 0건으로 돌아온 시군구·월이 전체의 ${(ratio * 100).toFixed(1)}%로 ` +
+        `설정된 경고 임계값(${(threshold * 100).toFixed(1)}%)을 넘었다. LAWD_CD가 ` +
+        "틀렸거나 API가 조용히 빈 응답을 주고 있을 수 있다. 실제로 거래가 마른 " +
+        "지역도 있을 수 있으니 아래 목록을 보고 판단하라.",
+    ],
+    entries,
+    ["| 시군구 | 년월 |", "|---|---|"],
+    (e) => `| ${e.regionCode} | ${e.yearMonth} |`,
     entries.length,
   );
 }
@@ -203,9 +281,18 @@ function renderSummary(
   units: ComplexUnit[],
   config: ReportConfig,
   counts: { underMerge: number; overMerge: number; splitArea: number; lowConfidence: number },
-  issues: { failed: number; truncated: number; cacheCorrupted: number; cancelled: number },
+  issues: {
+    failed: number;
+    truncated: number;
+    cacheCorrupted: number;
+    cancelled: number;
+    parseFailures: number;
+    emptyCount: number;
+    totalTargets: number;
+  },
 ): string[] {
   const ratio = units.length === 0 ? 0 : (counts.lowConfidence / units.length) * 100;
+  const emptyRatio = issues.totalTargets === 0 ? 0 : issues.emptyCount / issues.totalTargets;
   return [
     "# 파이프라인 이상 신호 리포트",
     "",
@@ -215,6 +302,7 @@ function renderSummary(
     `- 과대병합 최고÷최저 하한: ${config.overMergeMinPriceRatio}`,
     `- 과대병합 최소 거래 건수: ${config.overMergeMinTradeCount}`,
     `- 저신뢰 판정 거래 건수 미만: ${config.lowConfidenceMinTrades}`,
+    `- 거래 0건 비율 경고 임계값: ${(config.emptyRatioWarnThreshold * 100).toFixed(0)}%`,
     "",
     "임계값은 `scripts/pipeline/report-config.json`에 있다. 이 리포트를 보고 조인다.",
     "",
@@ -227,6 +315,8 @@ function renderSummary(
     `- 과대병합 의심: ${counts.overMerge}건`,
     `- 평형 분할 의심: ${counts.splitArea}건`,
     `- 수집 실패: ${issues.failed}건`,
+    `- 파싱 실패 레코드: ${issues.parseFailures}건`,
+    `- 거래 0건 시군구·월: ${issues.emptyCount} / 전체 ${issues.totalTargets} (${(emptyRatio * 100).toFixed(1)}%)`,
     `- 데이터 잘림 위험: ${issues.truncated}건`,
     `- 캐시 손상(재수집됨): ${issues.cacheCorrupted}건`,
     `- 해제(취소)된 거래: ${issues.cancelled}건`,
@@ -245,13 +335,26 @@ export function buildReport(
   const lowConfidence = units.filter((u) => u.lowConfidence).length;
   const { failed, truncated, cacheCorrupted } = splitFetchIssues(log);
   const cancelled = totalCancelled(log);
+  const parseFailureEntries = log.filter((e) => (e.failures ?? 0) > 0);
+  const parseFailuresTotal = totalFailures(log);
+  const emptyEntries = log.filter((e) => e.status === "empty");
+  const totalTargets = log.length;
+  const emptyRatio = totalTargets === 0 ? 0 : emptyEntries.length / totalTargets;
 
   const lines: string[] = [
     ...renderSummary(
       units,
       config,
       { underMerge: underMerge.length, overMerge: overMerge.length, splitArea: splitArea.length, lowConfidence },
-      { failed: failed.length, truncated: truncated.length, cacheCorrupted: cacheCorrupted.length, cancelled },
+      {
+        failed: failed.length,
+        truncated: truncated.length,
+        cacheCorrupted: cacheCorrupted.length,
+        cancelled,
+        parseFailures: parseFailuresTotal,
+        emptyCount: emptyEntries.length,
+        totalTargets,
+      },
     ),
     ...renderListSection(
       "과소병합 후보",
@@ -263,7 +366,7 @@ export function buildReport(
       ],
       underMerge,
       ["| 거리 | A | B |", "|---|---|---|"],
-      ({ a, b, distance }) => `| ${distance} | ${a} | ${b} |`,
+      ({ a, b, distance }) => `| ${distance} | ${escapeCell(a)} | ${escapeCell(b)} |`,
       100,
       "쌍",
     ),
@@ -271,9 +374,9 @@ export function buildReport(
       "과대병합 의심",
       [ADVISORY, "", "같은 키·같은 평형인데 가격이 지나치게 벌어졌다. 다른 단지가 섞였을 수 있다."],
       overMerge,
-      ["| 단지 | 평형 | 건수 | 최저 | 최고 | 배율 |", "|---|---|---|---|---|---|"],
+      ["| 단지 | 건축년도 | 평형 | 건수 | 최저 | 최고 | 배율 |", "|---|---|---|---|---|---|---|"],
       (u) =>
-        `| ${u.complexName} (${u.legalDongName}) | ${u.areaBucket}㎡ | ${u.tradeCount} | ${won(u.minPrice)} | ${won(u.maxPrice)} | ${(u.maxPrice / u.minPrice).toFixed(2)} |`,
+        `| ${escapeCell(u.complexName)} (${escapeCell(u.legalDongName)}) | ${u.builtYear} | ${u.areaBucket}㎡ | ${u.tradeCount} | ${won(u.minPrice)} | ${won(u.maxPrice)} | ${(u.maxPrice / u.minPrice).toFixed(2)} |`,
       50,
     ),
     ...renderListSection(
@@ -281,12 +384,13 @@ export function buildReport(
       ["1㎡ 반올림 때문에 같은 평형이 갈렸을 수 있다."],
       splitArea,
       ["| 단지 키 | 버킷 |", "|---|---|"],
-      ({ complexKey, buckets }) => `| ${complexKey} | ${buckets[0]}㎡ / ${buckets[1]}㎡ |`,
+      ({ complexKey, buckets }) => `| ${escapeCell(complexKey)} | ${buckets[0]}㎡ / ${buckets[1]}㎡ |`,
       50,
     ),
+    ...renderParseFailureSection(parseFailureEntries),
     ...renderFetchIssueSection(
       "수집 실패",
-      "`normalized.json`만으로는 알 수 없는 정보다. `fetch`가 남긴 로그에서 읽는다. 재수집이 필요하다.",
+      "`complexes.json`만 봐서는 알 수 없는 정보다. `fetch`가 남긴 로그(`data/fetch-log.json`)에서 읽는다. 재수집이 필요하다.",
       failed,
       (e) => e.error ?? "(사유 없음)",
     ),
@@ -302,6 +406,7 @@ export function buildReport(
       cacheCorrupted,
       () => "캐시 파일 손상, 재수집으로 대체됨",
     ),
+    ...renderEmptyRegionMonthSection(emptyEntries, emptyRatio, config.emptyRatioWarnThreshold),
   ];
 
   return lines.join("\n");

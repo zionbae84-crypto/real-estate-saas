@@ -15,6 +15,7 @@ const config: ReportConfig = {
   overMergeMinPriceRatio: 2.0,
   overMergeMinTradeCount: 4,
   lowConfidenceMinTrades: 3,
+  emptyRatioWarnThreshold: 0.2,
 };
 
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
@@ -41,6 +42,11 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     ...overrides,
   };
 }
+
+/** 새 describe 블록들이 공용으로 쓰는 최소한의 fetch 로그 픽스처. */
+const baseLog: FetchLogEntry[] = [
+  { regionCode: "11680", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },
+];
 
 describe("editDistance", () => {
   it("같으면 0이다", () => {
@@ -387,5 +393,144 @@ describe("buildReport", () => {
     expect(failedSection).toContain("없음");
     expect(truncatedSection).toContain("없음");
     expect(corruptedSection).toContain("없음");
+  });
+
+  it("normalized.json을 언급하지 않는다 — 실제로 만들어지지 않는 파일이다", () => {
+    const md = buildReport([unit()], log, config);
+    expect(md).not.toContain("normalized.json");
+  });
+});
+
+describe("buildReport — 파싱 실패 건수 노출 (I1)", () => {
+  const logWithFailures: FetchLogEntry[] = [
+    {
+      regionCode: "11680",
+      yearMonth: "202608",
+      status: "fetched",
+      tradeCount: 600,
+      failures: 400,
+      cancelled: 0,
+    },
+    { regionCode: "11650", yearMonth: "202607", status: "cached", tradeCount: 20, failures: 0, cancelled: 0 },
+  ];
+
+  it("파싱 실패 총계를 요약에 담는다", () => {
+    const md = buildReport([unit()], logWithFailures, config);
+    expect(md).toMatch(/파싱 실패.*400건/);
+  });
+
+  it("failures > 0인 엔트리를 시군구·년월·건수로 목록 절에 나열한다", () => {
+    const md = buildReport([unit()], logWithFailures, config);
+    const sections = md.split(/^## /m);
+    const section = sections.find((s) => s.startsWith("파싱 실패"));
+    expect(section).toBeDefined();
+    expect(section).toContain("11680");
+    expect(section).toContain("202608");
+    expect(section).toContain("400");
+    // failures가 0인 엔트리는 목록에 안 나온다
+    expect(section).not.toContain("11650");
+  });
+
+  it("파싱 실패가 없으면 절에 '없음'을 명시한다", () => {
+    const md = buildReport([unit()], baseLog, config);
+    const sections = md.split(/^## /m);
+    const section = sections.find((s) => s.startsWith("파싱 실패"));
+    expect(section).toBeDefined();
+    expect(section).toContain("없음");
+  });
+});
+
+describe("buildReport — 거래 0건(status: empty) 노출 (I2)", () => {
+  it("거래 0건 시군구·월 개수와 전체 대상 수를 요약에 담는다", () => {
+    const logs: FetchLogEntry[] = [
+      { regionCode: "11680", yearMonth: "202608", status: "empty", tradeCount: 0, failures: 0, cancelled: 0 },
+      { regionCode: "11650", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },
+    ];
+    const md = buildReport([unit()], logs, config);
+    expect(md).toMatch(/거래 0건 시군구·월: 1 ?\/ ?전체 2/);
+  });
+
+  it("빈 비율이 설정된 임계값을 넘으면 시군구·월 목록을 나열한다", () => {
+    const highThreshold: ReportConfig = { ...config, emptyRatioWarnThreshold: 0.3 };
+    const logs: FetchLogEntry[] = [
+      { regionCode: "11680", yearMonth: "202608", status: "empty", tradeCount: 0, failures: 0, cancelled: 0 },
+      { regionCode: "11650", yearMonth: "202608", status: "empty", tradeCount: 0, failures: 0, cancelled: 0 },
+      { regionCode: "11710", yearMonth: "202608", status: "fetched", tradeCount: 5, failures: 0, cancelled: 0 },
+    ];
+    const md = buildReport([unit()], logs, highThreshold);
+    const sections = md.split(/^## /m);
+    const section = sections.find((s) => s.startsWith("거래 0건 시군구·월"));
+    expect(section).toBeDefined();
+    expect(section).toContain("11680");
+    expect(section).toContain("11650");
+  });
+
+  it("빈 비율이 설정된 임계값 이하면 목록 절을 만들지 않는다", () => {
+    const lowThreshold: ReportConfig = { ...config, emptyRatioWarnThreshold: 0.9 };
+    const logs: FetchLogEntry[] = [
+      { regionCode: "11680", yearMonth: "202608", status: "empty", tradeCount: 0, failures: 0, cancelled: 0 },
+      { regionCode: "11650", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },
+    ];
+    const md = buildReport([unit()], logs, lowThreshold);
+    const sections = md.split(/^## /m);
+    const section = sections.find((s) => s.startsWith("거래 0건 시군구·월"));
+    expect(section).toBeUndefined();
+  });
+});
+
+describe("buildReport — 마크다운 표 렌더링 (I3)", () => {
+  /** 백슬래시로 이스케이프된 `|`는 실제 마크다운 파서가 열 구분자로 보지 않는다. */
+  function splitMarkdownRow(row: string): string[] {
+    return row.split(/(?<!\\)\|/);
+  }
+
+  it("과소병합 후보 표의 각 데이터 행이 헤더와 같은 열 수를 가진다", () => {
+    const md = buildReport(
+      [
+        unit({ complexKey: "11650|반포동|2003|반포훼미리102동" }),
+        unit({ complexKey: "11650|반포동|2003|반포훼미리103동" }),
+      ],
+      baseLog,
+      config,
+    );
+    const sections = md.split(/^## /m);
+    const section = sections.find((s) => s.startsWith("과소병합 후보"));
+    expect(section).toBeDefined();
+    const lines = (section ?? "").split("\n");
+    const headerLine = lines.find((l) => l.startsWith("| 거리"));
+    const dataLine = lines.find((l) => l.includes("반포훼미리102동"));
+    expect(headerLine).toBeDefined();
+    expect(dataLine).toBeDefined();
+    expect(splitMarkdownRow(dataLine ?? "").length).toBe(splitMarkdownRow(headerLine ?? "").length);
+  });
+
+  it("평형 분할 의심 표에서 complexKey의 pipe가 이스케이프되어 열이 깨지지 않는다", () => {
+    const md = buildReport(
+      [
+        unit({ complexKey: "11650|내곡동|2014|서초더샵포레", areaBucket: 101, tradeCount: 1 }),
+        unit({ complexKey: "11650|내곡동|2014|서초더샵포레", areaBucket: 102, tradeCount: 1 }),
+      ],
+      baseLog,
+      config,
+    );
+    const sections = md.split(/^## /m);
+    const section = sections.find((s) => s.startsWith("평형 분할 의심"));
+    const lines = (section ?? "").split("\n");
+    const headerLine = lines.find((l) => l.startsWith("| 단지 키"));
+    const dataLine = lines.find((l) => l.includes("101㎡"));
+    expect(headerLine).toBeDefined();
+    expect(dataLine).toBeDefined();
+    expect(splitMarkdownRow(dataLine ?? "").length).toBe(splitMarkdownRow(headerLine ?? "").length);
+  });
+
+  it("과대병합 의심 표에 건축년도를 담아 이름+법정동만 같은 두 단지를 구분할 수 있게 한다", () => {
+    const md = buildReport(
+      [unit({ minPrice: 1_000_000_000, maxPrice: 2_000_000_000, tradeCount: 5, builtYear: 1979 })],
+      baseLog,
+      config,
+    );
+    const sections = md.split(/^## /m);
+    const section = sections.find((s) => s.startsWith("과대병합 의심"));
+    expect(section).toContain("1979");
   });
 });
