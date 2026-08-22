@@ -49,6 +49,49 @@ describe("BudgetResult", () => {
     expect(screen.queryByText("0원")).not.toBeInTheDocument();
   });
 
+  describe("실구매력 0원의 원인 안내", () => {
+    // Group 3a 결함 재현: cash 0, income 3억, debt 0. 실제로는 매매가 0원에서도
+    // 발생하는 고정 부대비용(법무비·이사비)조차 현금이 못 감당해서 0이 되는데,
+    // breakdown.DSR이 nonzero인데도(소득이 3억이니 당연하다) 예전 문구는
+    // 항상 "소득이 없거나 기존 부채가..."라고 잘못 말했다.
+    it("DSR이 0이 아니면(소득·부채 문제가 아니면) 현금 부족을 원인으로 짚는다", () => {
+      render(
+        <BudgetResult
+          result={result({
+            affordablePrice: 0,
+            loanLimit: {
+              amount: 0,
+              binding: "LTV",
+              breakdown: { LTV: 0, DSR: 373_305_491, CAP: 600_000_000, POLICY: 0 },
+            },
+            warnings: ["고정 부대비용(법무비·이사비)만으로도 보유 현금을 초과합니다."],
+          })}
+        />,
+      );
+      expect(screen.getByText(/현금을 더 모으면/)).toBeInTheDocument();
+      expect(
+        screen.queryByText(/소득이 없거나 기존 부채가/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("DSR이 0이면 소득·부채 문제를 원인으로 짚는다", () => {
+      render(
+        <BudgetResult
+          result={result({
+            affordablePrice: 0,
+            loanLimit: {
+              amount: 0,
+              binding: "LTV",
+              breakdown: { LTV: 0, DSR: 0, CAP: 600_000_000, POLICY: 0 },
+            },
+          })}
+        />,
+      );
+      expect(screen.getByText(/소득이 없거나 기존 부채가/)).toBeInTheDocument();
+      expect(screen.queryByText(/현금을 더 모으면/)).not.toBeInTheDocument();
+    });
+  });
+
   it("경고가 있으면 결과 위에 보여준다", () => {
     render(
       <BudgetResult
