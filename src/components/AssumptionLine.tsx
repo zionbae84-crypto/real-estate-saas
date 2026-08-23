@@ -130,7 +130,7 @@ export function buildAssumptionItems(
       text:
         "이전에 입력했던 갈아타기(기존 주택 매도) 정보가 있지만, 지금 " +
         "화면은 이 정보를 지원하지 않아 무주택 기준으로 계산했어요. " +
-        "매도 자금은 반영되지 않았습니다.",
+        "매도 자금은 반영되지 않았어요.",
     });
   }
 
@@ -155,6 +155,13 @@ export function AssumptionLine({ state, onOpen }: AssumptionLineProps) {
               <button
                 type="button"
                 className="assumption-item"
+                // data-field는 styles.css의 CSS 선택자(`[data-field="existingDebt"]`)와
+                // 짝을 이루는 순수 스타일 훅이다. onClick은 이 값을 읽지
+                // 않고 클로저의 `field`를 그대로 쓴다 — data-field를 다른
+                // 필드에도 붙이면 아무 기능도 얻지 못한 채 "이 속성이
+                // 어디에 왜 붙는지"만 흐려진다. 그래서 CSS가 실제로
+                // 걸어 쓰는 값(existingDebt)에만 한정한다.
+                data-field={field === "existingDebt" ? field : undefined}
                 onClick={() => onOpen(field)}
               >
                 {item.text}

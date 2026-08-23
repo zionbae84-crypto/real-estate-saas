@@ -30,7 +30,13 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="error-fallback" role="alert">
-        <h2>계산 중 문제가 발생했습니다</h2>
+        {/*
+          리뷰 수정(Minor 1): "계산하다 문제가 생겼어요"는 "계산하다가"의
+          "가"가 잘린 것처럼 읽힌다. role="alert"로 노출되는, 앱이 망가졌을
+          때 나오는 유일한 제목이라 여기서 말이 잘리면 안 된다. "계산 중"으로
+          바꾸면 조사 없이도 자연스럽게 이어진다.
+        */}
+        <h2>계산 중 문제가 생겼어요</h2>
         <p>입력값을 초기화하고 다시 시도해 주세요.</p>
         <ActionButton
           type="button"

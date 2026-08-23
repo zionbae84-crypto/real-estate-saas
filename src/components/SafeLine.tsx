@@ -65,8 +65,8 @@ export function SafeLine({
       <p className="safe-line safe-line--none">
         {noRepaymentCapacity
           ? "소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어 " +
-            "무리 없이 살 수 있는 가격대가 없습니다."
-          : "지금 조건으로는 무리 없이 살 수 있는 가격대가 없습니다."}
+            "무리 없는 가격대가 없어요."
+          : "지금 조건으론 무리 없는 가격대가 없어요."}
       </p>
     );
   }

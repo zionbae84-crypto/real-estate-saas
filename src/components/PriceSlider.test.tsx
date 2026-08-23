@@ -88,14 +88,14 @@ describe("PriceSlider", () => {
   it("최대치일 때 그것이 한계임을 알린다", () => {
     renderSlider({ price: 640_000_000, max: 640_000_000 });
     expect(
-      screen.getByText(/빌릴 수 있는 한계이지 무리하지 않는 선이 아닙니다/),
+      screen.getByText(/빌릴 수 있는 한계예요\. 무리 없는 선은 따로 있어요/),
     ).toBeInTheDocument();
   });
 
   it("최대치가 아니면 한계 안내를 띄우지 않는다", () => {
     renderSlider({ price: 300_000_000, max: 640_000_000 });
     expect(
-      screen.queryByText(/빌릴 수 있는 한계이지/),
+      screen.queryByText(/빌릴 수 있는 한계예요/),
     ).not.toBeInTheDocument();
   });
 
@@ -122,5 +122,26 @@ describe("PriceSlider", () => {
   it("안전선이 없으면(null) 마커를 표시하지 않는다", () => {
     renderSlider({ price: 300_000_000, max: 640_000_000, safePrice: null });
     expect(screen.queryByText("무리 없는 선")).not.toBeInTheDocument();
+  });
+
+  describe("리뷰 수정: 최대 가격일 때 BudgetResult의 .affordable-price와 같은 색을 쓴다 (Important)", () => {
+    // App.tsx가 BudgetResult 바로 아래 이 슬라이더를 렌더링하고, 슬라이더의
+    // max가 BudgetResult가 방금 보여준 그 최대 가격(affordablePrice)이다.
+    // 같은 숫자가 같은 화면에서 두 색으로 보이면 안 되므로, 값이 최대치와
+    // 같을 때만 같은 브랜드 색 클래스를 준다. 최대치가 아니게 되면(사용자가
+    // 임의로 탐색 중인 값) 그 데이터가 아니므로 기본색으로 돌아간다.
+    it("가격이 최대치와 같으면 브랜드 색 클래스가 붙는다", () => {
+      renderSlider({ price: 640_000_000, max: 640_000_000 });
+      const priceEl = screen.getByText("6억 4,000만원", {
+        selector: ".slider-price",
+      });
+      expect(priceEl).toHaveClass("slider-price--max");
+    });
+
+    it("가격이 최대치보다 낮으면 브랜드 색 클래스가 붙지 않는다", () => {
+      renderSlider({ price: 300_000_000, max: 640_000_000 });
+      const priceEl = screen.getByText("3억원", { selector: ".slider-price" });
+      expect(priceEl).not.toHaveClass("slider-price--max");
+    });
   });
 });

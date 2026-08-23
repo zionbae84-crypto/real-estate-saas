@@ -29,7 +29,7 @@ describe("SafeLine", () => {
     renderSafeLine({ affordablePrice: 300_000_000, safePrice: 0 });
     expect(screen.queryByText(/^0원$/)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/무리 없이 살 수 있는 가격대가 없습니다/),
+      screen.getByText(/지금 조건으론 무리 없는 가격대가 없어요/),
     ).toBeInTheDocument();
   });
 
@@ -39,7 +39,7 @@ describe("SafeLine", () => {
     // 안전한 숫자가 없다는 뜻이다.
     renderSafeLine({ affordablePrice: 300_000_000, safePrice: null });
     expect(
-      screen.getByText(/무리 없이 살 수 있는 가격대가 없습니다/),
+      screen.getByText(/지금 조건으론 무리 없는 가격대가 없어요/),
     ).toBeInTheDocument();
   });
 

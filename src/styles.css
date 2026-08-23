@@ -1,8 +1,22 @@
 :root {
-  --safe: #0a7d33;
-  --caution: #b26a00;
-  --danger: #c02626;
-  --border: #d8d8d8;
+  /*
+   * 의미별 색은 SEED 토큰을 가리킨다. hex를 직접 쓰지 않는 이유는
+   * src/seed-brand.css와 같다 — 명도 단계와 모드별 값이 이미 검증돼 있고,
+   * 우리가 색을 두 벌 관리하지 않아도 된다.
+   *
+   * 이름은 이 저장소에서 쓰던 것을 유지한다. 소비처가 여럿이라
+   * 이름까지 바꾸면 이번 변경의 범위가 불필요하게 넓어진다.
+   *
+   * -contrast 단계를 쓴다. base(-fg-positive 등)는 흰 배경에서 본문
+   * 크기 글자 기준 4.5:1을 못 넘는 조합이 있었다(safe 3.96:1, caution
+   * 4.12:1, danger 3.76:1 — 실측, task-2-report.md 참고). -contrast는
+   * 같은 계열의 더 진한 단계이고 24px 굵은 배지 텍스트에서도 여전히
+   * 등급 셋이 서로 다른 색으로 보여 구분이 흐려지지 않는다.
+   */
+  --safe: var(--seed-color-fg-positive-contrast);
+  --caution: var(--seed-color-fg-warning-contrast);
+  --danger: var(--seed-color-fg-critical-contrast);
+  --border: var(--seed-color-stroke-neutral-weak);
   color-scheme: light;
 }
 
@@ -61,6 +75,11 @@ body {
   font-size: 2rem;
   font-weight: 700;
   margin: 0.25rem 0;
+  /*
+   * fg-brand(#5e98fe)는 흰 배경 대비 2.84:1로 큰 글자 기준(3:1)에도
+   * 못 미친다(실측, task-2-report.md 참고). -contrast 단계를 쓴다.
+   */
+  color: var(--seed-color-fg-brand-contrast);
 }
 
 .result-step--binding {
@@ -106,8 +125,33 @@ body {
   font-weight: 700;
 }
 
+/*
+ * 안전선(무리 없는 선)은 positive 계열로 배경·글자를 함께 입힌다 —
+ * "이 가격까지는 무리 없다"는 판단을 색으로도 반복한다. 다만 이번
+ * 작업은 색만 바꾸는 것이라 padding 등 여백은 그대로 둔다.
+ */
+.safe-line-item--safe {
+  background: var(--seed-color-bg-positive-weak);
+}
+
 .safe-line-item--safe .safe-line-amount {
   color: var(--safe);
+}
+
+/*
+ * 리뷰 수정(Important 1): 이 값(affordablePrice)은 `.affordable-price`와
+ * `PriceSlider`의 `.slider-price--max`가 이미 브랜드색으로 표시하는
+ * 것과 같은 숫자다. 슬라이더가 처음엔 최댓값에 있으므로 색을 안 입히면
+ * 한 화면에 같은 금액이 세 번(1단·SafeLine·슬라이더) 나타나는데 그중
+ * 하나만 색이 다르게 된다. 더 나쁜 건 형제인 `.safe-line-item--safe`는
+ * 색을 받는데 이쪽만 기본 검정으로 남으면, "안전선이 의미 있는 숫자고
+ * 최대 가격은 장식"처럼 읽힌다는 점이다 — SafeLine이 두 숫자에 동등한
+ * 무게를 준다는 컴포넌트 의도와 정반대다. 새 hex를 만들지 않고
+ * `.affordable-price`·`.slider-price--max`와 같은 -contrast 토큰을
+ * 그대로 재사용한다(22px 굵게 기준 3.95:1, 큰 글자 기준 3:1을 넘는다).
+ */
+.safe-line-item--max .safe-line-amount {
+  color: var(--seed-color-fg-brand-contrast);
 }
 
 .safe-line--none {
@@ -116,14 +160,19 @@ body {
 }
 
 .safe-line--merged {
+  background: var(--seed-color-bg-positive-weak);
   color: var(--safe);
   font-weight: 600;
   margin: 0 0 1rem;
 }
 
+/*
+ * WarningList는 엔진이 낸 경고다 — 가벼운 주의가 아니라 그냥 지나치면
+ * 안 되는 항목이라 caution(노랑)이 아니라 critical(빨강) 계열을 쓴다.
+ */
 .warning-list {
-  background: #fff6e5;
-  border-left: 4px solid var(--caution);
+  background: var(--seed-color-bg-critical-weak);
+  border-left: 4px solid var(--danger);
   padding: 0.75rem 1rem;
   list-style: none;
 }
@@ -142,6 +191,20 @@ body {
   font-size: 1.5rem;
   font-weight: 700;
   margin: 0.25rem 0;
+}
+
+/*
+ * 리뷰 수정(색 일관성): 슬라이더가 최대값에 있을 때 이 숫자는
+ * `.affordable-price`가 보여준 것과 같은 "실구매 가능 가격" 데이터다.
+ * 같은 의미이므로 같은 브랜드 색을 반복한다(hex 새로 만들지 않고
+ * 같은 -contrast 토큰을 그대로 재사용). 슬라이더를 내려 값이 최대치가
+ * 아니게 되면 임의로 탐색 중인 값일 뿐 더는 그 데이터가 아니므로
+ * 기본색으로 되돌린다. 이 조건(price === max)은 바로 아래
+ * `.slider-warning` 문구와 같은 조건이라 색만으로 의미를 전달하지
+ * 않는다 — 텍스트가 이미 "이건 한계예요"라고 같은 순간에 말해 준다.
+ */
+.slider-price--max {
+  color: var(--seed-color-fg-brand-contrast);
 }
 
 .slider-warning {
@@ -285,6 +348,21 @@ body {
 }
 
 /*
+ * 가정 문구 셋 중 기존 부채만 고치면 숫자가 "내려갈" 수 있다 — 나머지
+ * 둘(규제지역·전용면적)은 고치면 오히려 올라갈 수 있는 중립 가정이다.
+ * 그 방향 차이를 warning 계열로만 드러낸다. 셋 다 노랗게 칠하면 이
+ * 구분이 사라지므로, data-field로 기존 부채 항목만 짚어 색을 입힌다.
+ */
+.assumption-item[data-field="existingDebt"] {
+  background: var(--seed-color-bg-warning-weak);
+  border-color: var(--caution);
+}
+
+.assumption-item[data-field="existingDebt"]:hover {
+  background: var(--seed-color-bg-warning-weak-pressed);
+}
+
+/*
  * assumption-notice: 눌러도 아무 일도 없는 순수 정보 문구(옛 갈아타기
  * 정보가 조용히 버려졌다는 알림 등)다. .assumption-item과 같은 카드
  * 자리를 차지하지만, 대시 테두리(=눌러서 고칠 수 있다는 신호)를 빼서
@@ -298,4 +376,58 @@ body {
   border: 1px solid var(--border);
   border-radius: 0.375rem;
   color: #555;
+}
+
+/*
+ * 모션은 상태가 바뀔 때만 쓴다. 가만히 있는 것은 움직이지 않는다.
+ *
+ * 값은 SEED 토큰을 쓴다 — 직접 정하면 이 저장소만의 감각이 되고,
+ * SEED 컴포넌트의 전환과 어긋난다.
+ *
+ * 금액에는 카운트업을 넣지 않는다. 숫자가 굴러 올라가면 게임처럼 보이고,
+ * 무엇보다 읽을 수 있는 순간이 늦어진다. 사용자가 기다려야 하는 숫자가
+ * 아니다.
+ *
+ * 대상은 같은 DOM 노드 위에서 실제로 색이 바뀌는 지점만 골랐다(다른
+ * 후보는 확인 결과 제외했다 — task-3-report.md 참고):
+ * - .safety-level: SafetyBadge의 data-level 속성이 바뀔 때(같은 <p>가
+ *   유지된 채 색만 safe/caution/danger로 갈린다) — 이 태스크가 고치려는
+ *   "등급이 바뀔 때 색이 튀는" 지점 그 자체다.
+ * - .safe-line: SafeLine이 안전선 없음(--none)에서 안전선=최대가
+ *   병합(--merged)으로 바뀔 때 둘 다 <p>라 같은 노드를 재사용한다(색이
+ *   danger에서 safe로, 배경이 없음에서 positive-weak로 바뀐다). --split은
+ *   <div>라 이 두 상태와는 다른 노드로 갈리지만, 셀렉터 자체는 안전하다.
+ * - .assumption-item: hover 시 배경이 바뀐다(존재 가정 항목은 warning
+ *   계열 hover 배경도 별도로 있다).
+ * - .slider-price: 슬라이더가 최댓값에 닿으면 같은 <p>에 --max 클래스가
+ *   붙어 브랜드색으로 바뀐다(값을 다시 내리면 원래 색으로 돌아간다).
+ */
+.safety-level,
+.safe-line,
+.assumption-item,
+.slider-price {
+  transition:
+    color var(--seed-duration-color-transition) var(--seed-timing-function-easing),
+    background-color var(--seed-duration-color-transition) var(--seed-timing-function-easing);
+}
+
+/*
+ * prefers-reduced-motion은 취향이 아니라 접근성 요구사항이다. 전정기관
+ * 장애가 있는 사용자에게 모션은 불편이 아니라 증상을 유발한다.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /*
+     * `transition-duration: 0.01ms`가 아니라 `transition: none`을 쓴다 —
+     * 앞의 형태는 값이 남아 있는 값(0.01ms)이라 motion-guard의 "전환
+     * 시간을 직접 쓰지 않는다" 검사에 "transition..."+숫자 패턴으로
+     * 걸린다. `none`은 숫자를 쓰지 않고도 전환을 완전히 없애 같은
+     * 접근성 효과(모션 없음)를 낸다.
+     */
+    transition: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
 }

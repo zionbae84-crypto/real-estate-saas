@@ -59,14 +59,14 @@ function ZeroPaymentNote({ safety }: { safety: SafetyScore }) {
   if (!Number.isFinite(safety.burdenRatio)) {
     return (
       <p className="safety-note">
-        대출 없이 전액 현금으로 사는 경우입니다. 이 등급은 상환 부담이
-        아니라 소득 정보가 없다는 사실을 반영합니다.
+        대출 없이 전액 현금으로 사는 경우예요. 이 등급은 상환 부담이
+        아니라 소득 정보가 없다는 사실을 반영해요.
       </p>
     );
   }
 
   return (
-    <p className="safety-note">대출 없이 전액 현금으로 사는 경우입니다.</p>
+    <p className="safety-note">대출 없이 전액 현금으로 사는 경우예요.</p>
   );
 }
 

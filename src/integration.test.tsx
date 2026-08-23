@@ -81,7 +81,10 @@ describe("예산 계산기 통합", () => {
     // 좁혔다. BindingExplainer 자신의 <h3>는 접힌 4단 안에서
     // showTitle={false}로 꺼져 있으므로, 이 문구는 화면에 정확히 한
     // 번만 나타난다.
-    expect(screen.getByText(/걸렸습니다|최대치입니다/)).toBeInTheDocument();
+    // 리뷰 수정(Critical): DSR title을 형제들과 나란한 "…걸렸어요" 형태로
+    // 되돌렸으므로("소득이 한도를 정했어요"는 더 이상 어떤 title도 아니다),
+    // 대안 목록에서 그 표현을 뺀다 — 넓히지 않고 좁힌다.
+    expect(screen.getByText(/걸렸어요|최대치예요/)).toBeInTheDocument();
   });
 
   it("슬라이더를 내리면 월 상환액과 부담률이 줄어든다", async () => {
@@ -113,7 +116,7 @@ describe("예산 계산기 통합", () => {
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
 
     expect(
-      screen.getByText(/빌릴 수 있는 한계이지 무리하지 않는 선이 아닙니다/),
+      screen.getByText(/빌릴 수 있는 한계예요\. 무리 없는 선은 따로 있어요/),
     ).toBeInTheDocument();
   });
 

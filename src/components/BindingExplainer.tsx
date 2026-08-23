@@ -22,24 +22,37 @@ interface Explanation {
 
 const EXPLANATIONS: Record<BindingConstraint, Explanation> = {
   LTV: {
-    title: "담보 가치(LTV)에 걸렸습니다",
+    title: "담보 가치(LTV)에 걸렸어요",
     advice:
-      "집값의 일정 비율까지만 빌려줍니다. 현금을 더 모으면 살 수 있는 가격이 올라갑니다.",
+      "집값의 일정 비율까지만 빌려줘요. 현금을 더 모으면 살 수 있는 가격이 올라가요.",
   },
   DSR: {
-    title: "상환 능력(DSR)에 걸렸습니다",
+    /*
+     * 리뷰 수정(Critical): 예전 문구 "소득이 한도를 정했어요"는 두 가지를
+     * 동시에 잃었다. (1) 이 title은 BudgetResult가 접히지 않은 결과
+     * 계단의 2단("무엇이 막았는지 한 줄")에서 그대로 렌더링하는 유일한
+     * 자리라, 여기서 "DSR"이 사라지면 그 용어는 <details> 두 겹 안(4단
+     * 안의 "네 가지 한도 모두 보기")에 들어가야만 다시 보인다 — 형제인
+     * LTV·CAP은 최상위에서 "(LTV)"·"수도권 대출 상한"으로 용어/명칭을
+     * 유지하는데 DSR만 잃었다. (2) LTV·CAP은 "걸렸어요"(막혔다)인데
+     * DSR만 중립 서술("정했어요")로 바뀌어, 한국 실구매자 대부분을
+     * 실제로 묶는(가장 많이 읽힐) 제약 문장에서만 "막혔다"는 말이
+     * 빠졌다. 형제들과 나란한 형태로 되돌린다 — 용어(DSR)와 동사(걸렸다)
+     * 둘 다 유지한 채 어미만 해요체로 바꾸는 최소 톤 변환이다.
+     */
+    title: "상환 능력(DSR)에 걸렸어요",
     advice:
-      "소득 대비 연간 상환액 한도에 막혔습니다. 기존 부채를 갚으면 한도가 늘어납니다.",
+      "소득 대비 연간 상환액 한도에 막혔어요. 기존 부채를 갚으면 한도가 늘어나요.",
   },
   CAP: {
-    title: "수도권 대출 상한에 걸렸습니다",
+    title: "수도권 대출 상한에 걸렸어요",
     advice:
-      "수도권 주택구입 목적 주택담보대출은 금액 상한이 있습니다. 대출로는 늘릴 수 없습니다 — 현금이 더 필요합니다.",
+      "수도권 주택구입 목적 주택담보대출은 금액 상한이 있어요. 대출로는 못 늘려요. 현금이 더 있어야 해요.",
   },
   POLICY: {
-    title: "정책대출 한도가 최대치입니다",
+    title: "정책대출 한도가 최대치예요",
     advice:
-      "정책대출을 택했을 때 받을 수 있는 금액이 은행 대출보다 큽니다. 금리 조건을 함께 비교해 보세요.",
+      "정책대출을 택했을 때 받을 수 있는 금액이 은행 대출보다 커요. 금리 조건을 함께 비교해 보세요.",
   },
 };
 
@@ -130,15 +143,24 @@ export function BindingExplainer({
       <p className="binding-amount">{formatWon(loanLimit.amount)}</p>
       <p className="binding-advice">{explanation.advice}</p>
 
+      {/*
+        리뷰 수정(가드 사각지대 Minor 1): "라벨은 조사 없이 이어 붙인다"는
+        원래 문법 장치가 "~입니다"라는 합니다체 계사에 기대고 있었다. 그걸
+        "~이에요/예요"로 해요체 전환하려면 라벨 받침 유무에 따라 이에요/예요를
+        분기해야 하는데, 그러면 LABELS 맵 자체를 두 벌로 늘려야 한다(리뷰어
+        판단, 확인 완료). 계사를 통째로 빼고 줄표로 라벨을 붙이면 조사·계사
+        분기 문제 자체가 사라지고, 뒤따르는 "여유가 있어요"와 같은 해요체로
+        한 문단 안에서 목소리가 갈리지 않는다.
+      */}
       {runnerUp && runnerUp.headroom === 0 && (
         <p className="runner-up-tied">
-          {`다음으로 가까운 한도는 ${LABELS[runnerUp.constraint]}입니다. 같은 금액에서 다시 걸리므로 한도가 늘어나지 않습니다.`}
+          {`다음으로 가까운 한도 — ${LABELS[runnerUp.constraint]}. 같은 금액에서 다시 걸리므로 한도가 늘어나지 않아요.`}
         </p>
       )}
 
       {runnerUp && runnerUp.headroom > 0 && (
         <p className="runner-up">
-          {`다음으로 가까운 한도는 ${LABELS[runnerUp.constraint]}입니다. ${formatWon(runnerUp.headroom)} 여유가 있습니다.`}
+          {`다음으로 가까운 한도 — ${LABELS[runnerUp.constraint]}. ${formatWon(runnerUp.headroom)} 여유가 있어요.`}
         </p>
       )}
 

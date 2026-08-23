@@ -72,7 +72,7 @@ describe("BudgetResult", () => {
   it("무엇이 막았는지 한 줄로 보여준다", () => {
     renderResult();
     expect(
-      screen.getByText("담보 가치(LTV)에 걸렸습니다"),
+      screen.getByText("담보 가치(LTV)에 걸렸어요"),
     ).toBeInTheDocument();
   });
 
@@ -88,7 +88,7 @@ describe("BudgetResult", () => {
   it("실구매력이 0이면 숫자 대신 안내를 보여준다", () => {
     renderResult({ result: result({ affordablePrice: 0 }) });
     expect(
-      screen.getByText(/현재 조건으로는 주택담보대출이 나오지 않습니다/),
+      screen.getByText(/현재 조건으로는 주택담보대출이 나오지 않아요/),
     ).toBeInTheDocument();
     expect(screen.queryByText("0원")).not.toBeInTheDocument();
   });
@@ -107,7 +107,7 @@ describe("BudgetResult", () => {
             binding: "LTV",
             breakdown: { LTV: 0, DSR: 373_305_491, CAP: 600_000_000, POLICY: 0 },
           },
-          warnings: ["고정 부대비용(법무비·이사비)만으로도 보유 현금을 초과합니다."],
+          warnings: ["고정 부대비용(법무비·이사비)만으로도 보유 현금을 넘어요."],
         }),
       });
       expect(screen.getByText(/현금을 더 모으면/)).toBeInTheDocument();
@@ -133,15 +133,15 @@ describe("BudgetResult", () => {
   });
 
   it("경고가 있으면 결과 위에 보여준다", () => {
-    renderResult({ result: result({ warnings: ["양도세가 반영되지 않았습니다."] }) });
+    renderResult({ result: result({ warnings: ["양도세가 반영되지 않았어요."] }) });
     expect(
-      screen.getByText("양도세가 반영되지 않았습니다."),
+      screen.getByText("양도세가 반영되지 않았어요."),
     ).toBeInTheDocument();
   });
 
   it("경고는 details 밖에 있다 — 접히지 않는다", () => {
-    renderResult({ result: result({ warnings: ["양도세가 반영되지 않았습니다."] }) });
-    const warning = screen.getByText("양도세가 반영되지 않았습니다.");
+    renderResult({ result: result({ warnings: ["양도세가 반영되지 않았어요."] }) });
+    const warning = screen.getByText("양도세가 반영되지 않았어요.");
     expect(warning.closest("details")).toBeNull();
   });
 
@@ -155,7 +155,7 @@ describe("BudgetResult", () => {
     it("안전선이 null이면 문장으로 보여준다", () => {
       renderResult({ safePrice: null });
       expect(
-        screen.getByText(/무리 없이 살 수 있는 가격대가 없습니다/),
+        screen.getByText(/지금 조건으론 무리 없는 가격대가 없어요/),
       ).toBeInTheDocument();
     });
 

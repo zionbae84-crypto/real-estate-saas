@@ -35,7 +35,7 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>,
     );
     expect(
-      screen.getByText("계산 중 문제가 발생했습니다"),
+      screen.getByText("계산 중 문제가 생겼어요"),
     ).toBeInTheDocument();
     expect(screen.queryByText("정상 렌더")).not.toBeInTheDocument();
   });
@@ -48,7 +48,7 @@ describe("ErrorBoundary", () => {
       </ErrorBoundary>,
     );
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "계산 중 문제가 발생했습니다",
+      "계산 중 문제가 생겼어요",
     );
   });
 
@@ -74,7 +74,7 @@ describe("ErrorBoundary", () => {
 
     render(<Harness />);
     expect(
-      screen.getByText("계산 중 문제가 발생했습니다"),
+      screen.getByText("계산 중 문제가 생겼어요"),
     ).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "입력 초기화" }));
@@ -82,7 +82,7 @@ describe("ErrorBoundary", () => {
     expect(onReset).toHaveBeenCalledTimes(1);
     expect(screen.getByText("정상 렌더")).toBeInTheDocument();
     expect(
-      screen.queryByText("계산 중 문제가 발생했습니다"),
+      screen.queryByText("계산 중 문제가 생겼어요"),
     ).not.toBeInTheDocument();
   });
 

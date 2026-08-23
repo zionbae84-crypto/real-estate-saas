@@ -199,9 +199,7 @@ export function calcMaxLoan(
 function assertNoNaN(breakdown: Record<BindingConstraint, number>): void {
   for (const [key, value] of Object.entries(breakdown)) {
     if (Number.isNaN(value)) {
-      throw new RangeError(
-        `대출 한도 계산에서 NaN이 발생했습니다: ${key}. 프로필 또는 룰셋 값을 확인하세요.`,
-      );
+      throw new RangeError(`대출 한도 계산에서 NaN이 발생했습니다: ${key}. 프로필 또는 룰셋 값을 확인하세요.`);
     }
   }
 }

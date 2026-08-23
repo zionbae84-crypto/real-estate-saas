@@ -72,7 +72,7 @@ export function MoneyInput({
         label={label}
         description={hint}
         invalid={unreadable}
-        errorMessage={unreadable ? "숫자로 읽을 수 없습니다" : undefined}
+        errorMessage={unreadable ? "숫자로 읽을 수 없어요" : undefined}
       >
         <TextFieldInput
           id={id}

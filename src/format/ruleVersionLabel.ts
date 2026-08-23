@@ -15,9 +15,7 @@ export function formatRuleVersionLabel(
 ): string {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(rules.effectiveFrom);
   if (!match) {
-    throw new RangeError(
-      `룰셋 effectiveFrom이 YYYY-MM-DD 형식이 아닙니다: "${rules.effectiveFrom}"`,
-    );
+    throw new RangeError(`룰셋 effectiveFrom이 YYYY-MM-DD 형식이 아닙니다: "${rules.effectiveFrom}"`);
   }
   const [, year, month] = match;
 

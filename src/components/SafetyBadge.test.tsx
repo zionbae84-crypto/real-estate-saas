@@ -14,6 +14,10 @@ function score(overrides: Partial<SafetyScore> = {}): SafetyScore {
   };
 }
 
+function dangerScore(): SafetyScore {
+  return score({ level: "danger" });
+}
+
 describe("SafetyBadge", () => {
   it("월 상환액을 보여준다", () => {
     render(<SafetyBadge safety={score()} />);
@@ -45,6 +49,21 @@ describe("SafetyBadge", () => {
 
   it("등급을 data 속성으로 노출해 스타일이 붙게 한다", () => {
     const { container } = render(<SafetyBadge safety={score({ level: "danger" })} />);
+    expect(container.querySelector('[data-level="danger"]')).not.toBeNull();
+  });
+
+  // 이 두 테스트는 이 커밋 전에도 통과한다. 새 동작을 검증하는 게 아니라
+  // 회귀를 잠그는 것이다 — 색을 화면 전체로 넓히다 보면 등급을 색으로만
+  // 말하게 되기 쉽고, 색이 안 보이는 환경(고대비 모드, 흑백 인쇄, 색각
+  // 이상)에서 경고가 사라지면 그건 이 제품이 피하려는 실패 그 자체다.
+  // 지우지 말 것.
+  it("색을 지워도 등급을 글자로 읽을 수 있다", () => {
+    render(<SafetyBadge safety={dangerScore()} />);
+    expect(screen.getByText("위험")).toBeInTheDocument();
+  });
+
+  it("등급을 data 속성으로도 노출해 CSS가 색을 입힐 수 있다", () => {
+    const { container } = render(<SafetyBadge safety={dangerScore()} />);
     expect(container.querySelector('[data-level="danger"]')).not.toBeNull();
   });
 
@@ -99,7 +118,7 @@ describe("SafetyBadge", () => {
       expect(screen.getByText("위험")).toBeInTheDocument();
       expect(screen.getByText(/대출 없이 전액 현금으로/)).toBeInTheDocument();
       expect(
-        screen.getByText(/소득 정보가 없다는 사실을 반영합니다/),
+        screen.getByText(/소득 정보가 없다는 사실을 반영해요/),
       ).toBeInTheDocument();
     });
 
@@ -117,7 +136,7 @@ describe("SafetyBadge", () => {
       );
       expect(screen.getByText(/대출 없이 전액 현금으로/)).toBeInTheDocument();
       expect(
-        screen.queryByText(/소득 정보가 없다는 사실을 반영합니다/),
+        screen.queryByText(/소득 정보가 없다는 사실을 반영해요/),
       ).not.toBeInTheDocument();
     });
 

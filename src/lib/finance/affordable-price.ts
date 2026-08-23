@@ -40,7 +40,7 @@ const SEARCH_UPPER_BOUND = 10_000_000_000;
 export const PRICE_STEP = 100_000;
 /** price = 0에서도 부과되는 법무비 + 이사비만으로 예산을 초과할 때의 경고 */
 const INSUFFICIENT_CASH_WARNING =
-  "고정 부대비용(법무비·이사비)만으로도 보유 현금을 초과합니다.";
+  "고정 부대비용(법무비·이사비)만으로도 보유 현금을 넘어요.";
 
 /**
  * 가용현금으로 감당 가능한 최대 매매가를 구한다.
@@ -90,9 +90,7 @@ export function calcAffordablePrice(
     // 절대 `null`을 돌려주지 않는다(위 주석 참고). 그럼에도 타입을
     // 정직하게 좁히기 위해 방어적으로 남겨 둔다 — 여기 도달하면
     // 탐색 로직 자체가 깨진 것이므로 조용히 0으로 얼버무리지 않는다.
-    throw new Error(
-      "calcAffordablePrice: searchMaxPrice가 예상과 달리 null을 반환했다 (불변식 위반)",
-    );
+    throw new Error("calcAffordablePrice: searchMaxPrice가 예상과 달리 null을 반환했다 (불변식 위반)");
   }
 
   return resultAt(

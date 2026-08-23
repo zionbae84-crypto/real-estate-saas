@@ -53,7 +53,7 @@ describe("calcAvailableCash", () => {
     );
     expect(result.amount).toBe(450_000_000);
     expect(result.warnings).toContain(
-      "양도세가 반영되지 않았습니다. 실제 가용 자금은 이보다 적을 수 있습니다.",
+      "양도세가 반영되지 않았어요. 실제 가용 자금은 이보다 적을 수 있어요.",
     );
   });
 
@@ -93,7 +93,7 @@ describe("calcAvailableCash", () => {
     const result = calcAvailableCash(profile({ status: "갈아타기" }));
     expect(result.amount).toBe(200_000_000);
     expect(result.warnings).toContain(
-      "기존 주택 정보가 없어 매도 대금이 반영되지 않았습니다.",
+      "기존 주택 정보가 없어 매도 대금이 반영되지 않았어요.",
     );
   });
 

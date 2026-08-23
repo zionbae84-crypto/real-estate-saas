@@ -92,7 +92,7 @@ export function ProfileForm({
         label="보유 현금"
         value={state.cash}
         onChange={(won) => setField("cash", won)}
-        hint="단위를 안 쓰면 만원으로 읽습니다. '3억5000'처럼 써도 됩니다."
+        hint="단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요."
       />
 
       <MoneyInput
@@ -122,7 +122,7 @@ export function ProfileForm({
           onChange={(monthlyWon) =>
             setField("existingDebtAnnualPayment", toAnnual(monthlyWon))
           }
-          hint="대출이 없으면 0을 입력하세요. 비워 두면 이 항목을 다음에 또 물어봅니다."
+          hint="대출이 없으면 0을 입력하세요. 비워 두면 이 항목을 다음에 또 물어봐요."
         />
       )}
 
@@ -138,8 +138,8 @@ export function ProfileForm({
             }
           />
           <p className="hint">
-            무주택자 LTV가 규제지역은 40%, 비규제(수도권)는 70%로 갈립니다.
-            잘 모르면 켜 둔 채로 계산하세요 — 한도를 과대평가하지 않습니다.
+            무주택자 LTV가 규제지역은 40%, 비규제(수도권)는 70%로 갈려요.
+            잘 모르면 켜 둔 채로 계산하세요 — 한도를 과대평가하지 않아요.
           </p>
         </div>
       )}
