@@ -287,6 +287,28 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(summary?.textContent).toMatch(/인쇄일/);
     });
 
+    it("리뷰 수정(인쇄 '함께 볼 것'): 부제의 개인정보 보호 문구만 별도 span으로 감싼다", () => {
+      // "입력한 재무정보는 이 브라우저를 벗어나지 않아요"는 "이
+      // 브라우저"라는 지시 대상이 종이 위에는 없어 인쇄에서 뜻이 서지
+      // 않는다 — .subtitle-privacy-note만 인쇄에서 지운다
+      // (styles.css). 룰셋 기준·수도권 범위는 종이에서도 뜻이 있어
+      // 남긴다.
+      const { container } = render(<App />);
+      const subtitle = container.querySelector(".subtitle");
+      const note = subtitle?.querySelector(".subtitle-privacy-note");
+
+      expect(note).not.toBeNull();
+      expect(note?.textContent).toBe(
+        " · 입력한 재무정보는 이 브라우저를 벗어나지 않아요",
+      );
+
+      // 화면 문구는 인쇄 결함 수정 전과 정확히 같아야 한다.
+      const expectedLabel = formatRuleVersionLabel(rules);
+      expect(subtitle?.textContent).toBe(
+        `${expectedLabel} · 수도권 · 입력한 재무정보는 이 브라우저를 벗어나지 않아요`,
+      );
+    });
+
     it("목록 화면에서는 전용면적이 가정값이라고 밝히고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
       const { container } = render(<App />);
       await fillProfile();

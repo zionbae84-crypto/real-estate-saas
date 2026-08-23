@@ -136,8 +136,17 @@ export function App() {
     <main className="app">
       <h1>내 예산으로 살 수 있는 집</h1>
       <p className="subtitle">
-        {formatRuleVersionLabel(rules)} · 수도권 · 입력한 재무정보는 이
-        브라우저를 벗어나지 않아요
+        {/*
+          리뷰 수정(인쇄 함께 볼 것): "이 브라우저를 벗어나지 않아요"는
+          "이 브라우저"라는 지시 대상이 종이 위에는 없어 뜻이 서지 않는다
+          — 인쇄에서만 지운다(hiddenInPrint.ts의 .subtitle-privacy-note).
+          앞의 룰셋 기준·수도권 범위는 종이에서도 뜻이 있어 남긴다.
+        */}
+        {formatRuleVersionLabel(rules)} · 수도권
+        <span className="subtitle-privacy-note">
+          {" "}
+          · 입력한 재무정보는 이 브라우저를 벗어나지 않아요
+        </span>
       </p>
 
       <ErrorBoundary onReset={reset}>

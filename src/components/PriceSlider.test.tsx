@@ -144,4 +144,37 @@ describe("PriceSlider", () => {
       expect(priceEl).not.toHaveClass("slider-price--max");
     });
   });
+
+  describe("리뷰 수정(인쇄 결함 2): 한계 경고에서 조작 지시만 감싼다", () => {
+    // "슬라이더를 내려 ~ 확인해 보세요"는 종이 위에서는 누를 수 없는
+    // 조작 지시다. 이 span만 인쇄에서 지운다(styles.css의 .slider-action)
+    // — "이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요"는 이
+    // 인쇄물에서 가장 중요한 문장 중 하나라 반드시 남아야 한다.
+    it("한계 경고 안의 조작 지시만 .slider-action으로 감싼다", () => {
+      renderSlider({ price: 640_000_000, max: 640_000_000 });
+      const warning = screen.getByText(/이건 빌릴 수 있는 한계예요/);
+      const action = warning.querySelector(".slider-action");
+
+      expect(action).not.toBeNull();
+      expect(action?.textContent).toBe(
+        "슬라이더를 내려 부담이 어떻게 달라지는지 확인해 보세요.",
+      );
+
+      // 화면 문구는 인쇄 결함 수정 전과 똑같아야 한다.
+      expect(warning.textContent).toBe(
+        "이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요. " +
+          "슬라이더를 내려 부담이 어떻게 달라지는지 확인해 보세요.",
+      );
+
+      // action을 뺀 나머지(=인쇄에 남는 것)에는 핵심 경고 문장이 있어야
+      // 한다.
+      const printedText = Array.from(warning.childNodes)
+        .filter((node) => node !== action)
+        .map((node) => node.textContent ?? "")
+        .join("");
+      expect(printedText).toContain("이건 빌릴 수 있는 한계예요.");
+      expect(printedText).toContain("무리 없는 선은 따로 있어요.");
+      expect(printedText).not.toContain("슬라이더를 내려");
+    });
+  });
 });

@@ -162,14 +162,21 @@ describe("인쇄 CSS", () => {
     });
   });
 
-  describe("<details>는 인쇄 시 내용이 강제로 펼쳐진다", () => {
+  describe("<details>는 인쇄 시 내용이 강제로 펼쳐진다(레거시 자식-display 규칙)", () => {
     /**
-     * "펼쳐진다"의 실제 뜻: `<details>`의 요약(summary)이 아닌 자식에 대해
-     * `display`를 `none`이 아닌 값으로 강제하는 규칙이 존재한다. 규칙
-     * 문자열을 그대로 베끼면(예: 정확히 이 텍스트가 있는지) 다른 표현으로
-     * 같은 효과를 내는 CSS를 쓰자마자 헛되이 실패한다 — 그래서 선택자가
-     * "details의, summary가 아닌 자식"을 겨냥하는지와 선언부가 실제로
-     * display를 강제하는지, 두 가지를 별도로 확인한다.
+     * **이 describe 블록의 한계(리뷰 지적, 실측으로 확인):** 아래 검사는
+     * "details의, summary가 아닌 자식에 display:none이 아닌 값을 거는
+     * 규칙이 CSS 텍스트에 있는가"만 본다. 이 규칙 자체는 Chrome/Chromium
+     * 에서 **아무 효과가 없다** — Chromium은 <details>의 열림·닫힘을
+     * light DOM 자식의 display가 아니라 내부 `::details-content` 의사
+     * 요소 하나의 content-visibility·block-size로 구현한다. MCP
+     * 브라우저로 이 미디어 쿼리를 강제 적용해 직접 확인했다: 이 규칙만
+     * 있고 아래 "::details-content" 규칙이 없으면 `document.body.innerText`에
+     * 부대비용·정책대출 내역이 여전히 나타나지 않는다. 즉 이 테스트는
+     * "문자열이 파일에 있는가"는 잠그지만 "브라우저에서 실제로 펼쳐지는가"는
+     * 전혀 증명하지 못한다 — 아래 새 describe 블록이 실제로 동작을
+     * 바꾸는 선택자(`::details-content`)를 검사한다. 이 블록은 비-Chromium
+     * 엔진을 위한 폴백 규칙이 계속 존재하는지만 확인하는 용도로 남긴다.
      */
     function forcesDetailsChildrenVisible(block: string): boolean {
       return parseRules(block).some((rule) => {
@@ -204,6 +211,63 @@ describe("인쇄 CSS", () => {
         section:not(summary) { display: block; }
       `;
       expect(forcesDetailsChildrenVisible(unrelated)).toBe(false);
+    });
+  });
+
+  describe("<details>는 인쇄 시 실제로 펼쳐진다(::details-content 오버라이드)", () => {
+    /**
+     * 위 블록과 다른 선택자(`::details-content`)를 정확히 겨눈다 — 이게
+     * MCP 브라우저로 실측한, Chromium에서 실제로 내용을 펼치는 그
+     * 규칙이다(styles.css 해당 규칙의 주석 참고). content-visibility를
+     * visible로 뒤집는 선언이 있는지, hidden으로 되돌리는 선언과 함께
+     * 있지는 않은지 확인한다.
+     *
+     * 이 테스트도 여전히 CSS 텍스트 파싱이다 — "그 선택자가 파일에
+     * 있는가"는 잠그지만 "브라우저가 그 선택자를 실제로 어떻게 렌더링
+     * 하는가"는 증명하지 못한다(jsdom은 ::details-content를 구현하지
+     * 않는다). 실제 렌더링 확인은 이 커밋에서 MCP 브라우저로
+     * `document.body.innerText`를 읽어 수동으로 실증했다 — 이후 이
+     * 규칙을 건드리면 같은 방법으로 다시 확인해야 한다.
+     */
+    function forcesDetailsContentVisible(block: string): boolean {
+      return parseRules(block).some((rule) => {
+        const targetsDetailsContentPseudo = rule.selectors.some((s) =>
+          /details[^{]*::details-content/.test(s),
+        );
+        if (!targetsDetailsContentPseudo) return false;
+        return (
+          /content-visibility\s*:\s*visible\b/i.test(rule.body) &&
+          !/content-visibility\s*:\s*hidden\b/i.test(rule.body)
+        );
+      });
+    }
+
+    it("styles.css의 인쇄 블록이 ::details-content를 강제로 편다", () => {
+      expect(forcesDetailsContentVisible(printBlock ?? "")).toBe(true);
+    });
+
+    it("이 규칙이 없으면 거부한다(회귀 테스트) — 예: 레거시 자식-display 규칙뿐인 블록", () => {
+      const legacyOnly = `
+        details:not([open]) > *:not(summary) { display: block !important; }
+      `;
+      expect(forcesDetailsContentVisible(legacyOnly)).toBe(false);
+    });
+
+    it("details 아닌 요소의 ::details-content 흉내는 잡지 않는다(오탐 방지 확인)", () => {
+      const unrelated = `
+        section::details-content { content-visibility: visible; }
+      `;
+      expect(forcesDetailsContentVisible(unrelated)).toBe(false);
+    });
+
+    it("content-visibility를 다시 hidden으로 되돌리는 규칙은 잡지 않는다(오탐 방지 확인)", () => {
+      const contradicting = `
+        details:not([open])::details-content {
+          content-visibility: visible;
+          content-visibility: hidden;
+        }
+      `;
+      expect(forcesDetailsContentVisible(contradicting)).toBe(false);
     });
   });
 

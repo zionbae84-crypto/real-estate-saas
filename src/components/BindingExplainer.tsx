@@ -165,7 +165,11 @@ export function BindingExplainer({
       )}
 
       <details>
-        <summary>네 가지 한도 모두 보기</summary>
+        {/* BudgetResult.tsx와 같은 이유(리뷰 수정, 인쇄 결함 2) — "모두
+            보기" 접미사만 인쇄에서 지운다. */}
+        <summary>
+          네 가지 한도<span className="fold-more-hint"> 모두 보기</span>
+        </summary>
         <dl>
           {ORDER.map((key) => (
             <div key={key} data-binding={key}>

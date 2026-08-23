@@ -86,8 +86,17 @@ export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProp
 
       {price === max && (
         <p className="slider-warning">
-          이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요.
-          슬라이더를 내려 부담이 어떻게 달라지는지 확인해 보세요.
+          {/*
+            리뷰 수정(인쇄 결함 2): "이건 빌릴 수 있는 한계예요. 무리
+            없는 선은 따로 있어요"는 인쇄물에서 가장 중요한 문장 중
+            하나라 반드시 남긴다. 뒤의 "슬라이더를 내려 ~"만 종이 위에서
+            누를 수 없는 조작 지시라 별도 span으로 감싸 인쇄에서 지운다
+            — hiddenInPrint.ts의 .slider-action.
+          */}
+          이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요.{" "}
+          <span className="slider-action">
+            슬라이더를 내려 부담이 어떻게 달라지는지 확인해 보세요.
+          </span>
         </p>
       )}
     </section>

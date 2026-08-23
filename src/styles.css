@@ -646,7 +646,11 @@ body {
   .region-filter,
   .print-button,
   .complex-more,
-  .complex-detail-back {
+  .complex-detail-back,
+  .subtitle-privacy-note,
+  .assumption-action,
+  .slider-action,
+  .fold-more-hint {
     display: none;
   }
 
@@ -677,8 +681,37 @@ body {
     display: block;
   }
 
+  /*
+   * 아래 규칙은 실제로는 아무것도 펼치지 못한다 — Chrome/Chromium이
+   * <details>의 열림·닫힘을 light DOM 자식의 display가 아니라 내부
+   * ::details-content 의사 요소 하나의 content-visibility·block-size로
+   * 구현하기 때문이다(직접 확인: MCP 브라우저로 이 미디어 쿼리를 강제
+   * 적용한 뒤 `document.body.innerText`를 읽으면, 아래 자식 규칙이 있어도
+   * 부대비용·한도 내역이 여전히 비어 있다). 자식 각각의 display는 이미
+   * 기본값이 block이라 이 규칙은 애초에 no-op이었다. 그래도 지우지 않고
+   * 남겨 둔다 — details를 다른 방식(light DOM에 직접 display:none을 거는
+   * 옛 구현)으로 렌더링하는 비-Chromium 엔진에서는 이 형태가 실제로
+   * 먹힐 수 있고, 남겨서 드는 비용이 없다. 실제로 펼치는 규칙은 바로
+   * 아래 ::details-content 쪽이다.
+   */
   details:not([open]) > *:not(summary) {
     display: block !important;
+  }
+
+  /*
+   * 실제로 펼치는 규칙. `::details-content`는 Chromium이 노출하는 의사
+   * 요소로, 접힌 <details>에서는 `content-visibility: hidden`과
+   * `block-size: 0`이 걸려 있다(직접 확인: getComputedStyle(el,
+   * '::details-content')). 이 둘을 뒤집으면 중첩된 <details>
+   * (CostBreakdown, BindingExplainer의 "네 가지 한도 모두 보기")까지
+   * 각 단계마다 그대로 펼쳐진다 — 실측: 이 규칙을 넣은 뒤
+   * `document.body.innerText`에 "부대비용 907만 7,341원"과 그 내역,
+   * "네 가지 한도 모두 보기" 안의 네 항목이 모두 나타난다.
+   */
+  details:not([open])::details-content {
+    content-visibility: visible !important;
+    block-size: auto !important;
+    overflow: visible !important;
   }
 
   /*
