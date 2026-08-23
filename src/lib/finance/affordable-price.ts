@@ -90,9 +90,7 @@ export function calcAffordablePrice(
     // 절대 `null`을 돌려주지 않는다(위 주석 참고). 그럼에도 타입을
     // 정직하게 좁히기 위해 방어적으로 남겨 둔다 — 여기 도달하면
     // 탐색 로직 자체가 깨진 것이므로 조용히 0으로 얼버무리지 않는다.
-    throw new Error(
-      "calcAffordablePrice: searchMaxPrice가 예상과 달리 null을 반환했다 (불변식 위반)",
-    );
+    throw new Error("calcAffordablePrice: searchMaxPrice가 예상과 달리 null을 반환했다 (불변식 위반)");
   }
 
   return resultAt(
