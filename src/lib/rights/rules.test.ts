@@ -315,6 +315,97 @@ describe("권리분석 룰셋 파싱", () => {
     });
   });
 
+  /**
+   * 리뷰 수정(Important 3): 오피스텔은 건축법상 업무시설이지만 오피스텔
+   * 건축기준에 따라 주거로 쓰는 것이 적법하다. 무단 용도변경이 아니고
+   * 원상복구 명령·이행강제금 대상도 아니다. 예전 룰셋은 근생빌라
+   * (제2종근생을 주거로 개조)에 대한 서술을 업무시설까지 늘리면서
+   * 오피스텔에 없는 법적 효과를 단정하고 stop으로 보냈다.
+   */
+  describe("오피스텔을 근생빌라와 갈라낸다", () => {
+    const item = realItem("mainUse");
+    const officetel = item.options.find((o) => o.label.includes("오피스텔") && o.verdict !== "stop");
+
+    it("오피스텔 선택지가 따로 있고, stop이 아니라 expert다", () => {
+      // 주택 수 산입·대출 조건이 달라질 수 있어 확인은 필요하지만,
+      // "사면 안 돼요"라고 말할 근거는 없다.
+      expect(officetel).toBeDefined();
+      expect(officetel?.verdict).toBe("expert");
+    });
+
+    it("오피스텔의 주거 사용을 무단 용도변경이라고 말하지 않는다", () => {
+      expect(officetel?.note).toContain("무단 용도변경이 아니에요");
+    });
+
+    it("stop 선택지가 업무시설을 끌어들이지 않는다", () => {
+      const stop = item.options.find((o) => o.verdict === "stop");
+      expect(stop?.label).not.toContain("업무시설");
+      expect(stop?.label).toContain("근린생활시설");
+    });
+
+    it("어떤 문구도 업무시설 전체를 무단 용도변경이라고 단정하지 않는다", () => {
+      const everyPhrase = [
+        item.question,
+        item.where,
+        item.why,
+        ...item.options.flatMap((o) => [o.label, o.note ?? ""]),
+      ].join(" ");
+      expect(everyPhrase).not.toMatch(/업무시설[^.]*무단 용도변경(?!이 아니)/);
+    });
+  });
+
+  /**
+   * 리뷰 수정(Important 4): 집합건축물대장은 표제부의 '주용도'와 전유부의
+   * 호실별 '용도'가 따로다. 근생빌라는 표제부가 '공동주택'이면서 문제
+   * 호실만 전유부에서 근생인 경우가 흔해, 표제부만 본 사용자는 "주택으로
+   * 되어 있어요"를 고르게 된다.
+   */
+  it("건축물대장 항목이 전유부의 호실 용도를 보라고 말한다", () => {
+    const item = realItem("mainUse");
+    expect(item.where).toContain("표제부");
+    expect(item.where).toContain("전유부");
+    expect(item.where).toContain("호실");
+  });
+
+  /**
+   * 리뷰 수정(Minor 6): '현재 유효사항'만 발급하면 말소사항이 아예
+   * 표시되지 않는다. "빨간 줄이 그어진 것은 빼세요"만 적으면 그 발급본을
+   * 든 사용자는 무엇을 빼라는 말인지 알 수 없다.
+   */
+  it("말소사항을 말하는 항목은 어느 쪽을 떼야 하는지 함께 알려준다", () => {
+    const rules = parseRightsRules(rawRightsRules);
+    for (const item of rules.items) {
+      if (!item.where.includes("말소")) continue;
+      expect(item.where, item.id).toContain("말소사항 포함");
+    }
+  });
+
+  /**
+   * 리뷰 수정(Minor 3): "한 사람 지분만 사면 그 집을 혼자 쓸 수 없어요"는
+   * 과단정이다 — 과반수 지분권자는 민법 제265조의 관리행위로 사용방법을
+   * 정할 수 있다.
+   */
+  it("공유 지분 설명이 과단정하지 않다", () => {
+    const item = realItem("coOwnership");
+    expect(item.why).not.toContain("혼자 쓸 수 없어요");
+    expect(item.why).toContain("민법 제265조");
+  });
+
+  /**
+   * 위반건축물을 stop으로 두는 이유는 계약이 무효라서가 아니라 대출이
+   * 막히고 이행강제금이 붙기 때문이다. 등급은 그대로 두되(내리는 건
+   * 낙관 방향이다) 그 이유가 note에 적혀 있어야 한다.
+   */
+  it("위반건축물 note가 stop의 이유를 대출·이행강제금으로 말한다", () => {
+    const stop = realItem("illegalBuilding").options.find(
+      (o) => o.verdict === "stop",
+    );
+    expect(stop?.note).toMatch(/대출/);
+    expect(stop?.note).toContain("이행강제금");
+    // 위반 내용의 폭이 넓다는 사실도 함께 말한다.
+    expect(stop?.note).toMatch(/폭이 넓|다양|제각/);
+  });
+
   describe("결론 문구", () => {
     it("네 가지 전체 결론 문구가 모두 있어야 한다", () => {
       expectRejected((r) => {
