@@ -1,8 +1,34 @@
 import { formatWon } from "../format/won";
-import type { SafetyLevel, SafetyScore } from "../lib/finance";
+import { burdenGrade, plainGrade } from "../lib/burden-grade";
+import type { SafetyScore } from "../lib/finance";
+import { landLeaseRules } from "../state/landLeaseRules";
 
 export interface SafetyBadgeProps {
   safety: SafetyScore;
+  /**
+   * 이 배지가 **특정 평형**에 대한 것일 때만 넘긴다
+   * (`ComplexUnit.landLeasehold` 값을 그대로).
+   *
+   * 넘기지 않으면 이 배지는 어떤 집도 가리키지 않는다는 뜻이다 — 화면
+   * 위쪽의 한도 배지가 그렇다(프로필과 슬라이더 가격으로만 잰다).
+   * 그 자리에서는 등급을 붙들 근거가 없다: 토지임대부는 집의 성질이지
+   * 프로필의 성질이 아니다. **`"N"`을 대신 넘기지 않는다** — 그건
+   * "토지임대부가 아니다"라고 말하는 것이고, 우리는 그렇게 말한 적이
+   * 없다.
+   */
+  landLeasehold?: "Y" | "N" | null;
+  /**
+   * 등급이 왜 거기서 멈췄는지를 이 배지가 **직접** 설명하는가. 기본은
+   * 설명한다.
+   *
+   * `false`를 주는 자리는 하나뿐이다: 배지가 둘 뜨는 화면(단지 상세)의
+   * **위쪽** 배지. 두 배지가 같은 평형을 두고 같은 문장을 말하면 한
+   * 화면에 똑같은 경고가 두 번 뜨고, 그러면 둘 다 잡음으로 읽힌다
+   * (`LandLeaseNote`가 화면별로 문장을 가른 이유와 같다). 등급 **글자**
+   * 자체는 두 배지 모두에 그대로 남는다 — 지우는 것은 설명뿐이라, 위
+   * 배지가 아래 배지보다 낙관적으로 말하는 일은 생기지 않는다.
+   */
+  explainGrade?: boolean;
   /**
    * 이 배지가 어느 질문에 답하는지 알려주는 한 줄.
    *
@@ -21,17 +47,37 @@ export interface SafetyBadgeProps {
   label?: string;
 }
 
-const LABELS: Record<SafetyLevel, string> = {
-  safe: "안전",
-  caution: "주의",
-  danger: "위험",
-};
+/**
+ * 등급 글자와 색.
+ *
+ * 목록의 행 배지와 **같은 함수**에서 나온다(`lib/burden-grade.ts`).
+ * 두 화면이 각자 등급을 정하면 같은 집을 두고 목록은 "확인 필요",
+ * 상세는 "안전"이라고 말하는 일이 생긴다 — 그 어긋남은 눈에 잘 띄지
+ * 않는데, 하필 더 낙관적인 쪽이 매물 옆에 붙어 읽힌다.
+ */
+export function SafetyBadge({
+  safety,
+  label,
+  landLeasehold,
+  explainGrade = true,
+}: SafetyBadgeProps) {
+  const grade =
+    landLeasehold === undefined
+      ? plainGrade(safety.level)
+      : burdenGrade(safety.level, landLeasehold, landLeaseRules);
 
-export function SafetyBadge({ safety, label }: SafetyBadgeProps) {
   return (
-    <section className="safety-badge" data-level={safety.level}>
+    <section className="safety-badge" data-level={grade.level}>
       {label !== undefined && <p className="safety-badge-label">{label}</p>}
-      <p className="safety-level">{LABELS[safety.level]}</p>
+      <p className="safety-level">{grade.label}</p>
+      {/*
+        등급이 왜 거기서 멈췄는지는 등급 글자 **바로 아래**에서 말한다.
+        아래 월 상환액·부담률을 읽기 전에 그 숫자가 무엇을 빠뜨렸는지
+        알아야 한다 — 숫자를 다 읽은 뒤에 말하면 이미 늦다.
+      */}
+      {grade.note !== null && explainGrade && (
+        <p className="safety-grade-note">{grade.note}</p>
+      )}
 
       <dl>
         <div>

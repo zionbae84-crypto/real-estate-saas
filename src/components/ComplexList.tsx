@@ -1,24 +1,23 @@
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
+import { burdenGrade } from "../lib/burden-grade";
 import type { ComplexListEntry, ComplexListResult } from "../lib/complex-list";
-import type { SafetyLevel } from "../lib/finance";
+import { landLeaseRules } from "../state/landLeaseRules";
+import { LandLeaseNote } from "./LandLeaseNote";
+import { NoLoanLine } from "./NoLoanLine";
 
 /**
  * 각 덩어리에서 한 번에 보여주는 최대 행 수.
  *
- * 두 덩어리를 합쳐 세지 않고 **각각** 자른다. 합쳐 세면 안전 덩어리가
- * 길 때 두 번째 덩어리가 화면 밖으로 밀려나고, 그러면 "선이 어디에
+ * 덩어리를 합쳐 세지 않고 **각각** 자른다. 합쳐 세면 안전 덩어리가
+ * 길 때 뒤 덩어리가 화면 밖으로 밀려나고, 그러면 "선이 어디에
  * 있는가"라는 이 화면의 요점이 보이지 않는다 — 실제로 안전 82개·부담
- * 7개인 프로필에서 두 번째 헤더가 아예 안 나왔다.
+ * 7개인 프로필에서 두 번째 헤더가 아예 안 나왔다. 덩어리가 셋이 된
+ * 뒤에는 이 규칙이 더 중요해졌다: 가운데 덩어리("우리 숫자로는 …")가
+ * 밀려나면 등급을 붙든 이유 자체가 화면에서 사라진다.
  */
 const PAGE_SIZE = 10;
-
-const LEVEL_LABELS: Record<SafetyLevel, string> = {
-  safe: "안전",
-  caution: "주의",
-  danger: "위험",
-};
 
 export interface ComplexListProps {
   result: ComplexListResult;
@@ -52,8 +51,15 @@ export interface ComplexListProps {
  * **변동률을 내지 않는다.** 사실 서술이지만 투자 판단 재료로 읽힌다
  * (같은 조항의 "수익률 예측 금지").
  *
- * 목록을 안전선에서 두 덩어리로 가른다. 어디까지가 무리 없는지를 배지
+ * 목록을 등급에서 세 덩어리로 가른다. 어디까지가 무리 없는지를 배지
  * 하나가 아니라 목록 구조가 말한다.
+ *
+ * 가운데 덩어리는 **우리가 다 재지 못한 행**이다(토지임대부이거나
+ * 토지임대부인지 모르는 평형). "무리 없이 살 수 있어요"에 넣으면 우리가
+ * 스스로 불완전하다고 인정한 숫자로 안심시키는 것이 되고, "부담이
+ * 커요"에 넣으면 모르는 것을 아는 척하는 것이 된다 — 그래서 자기
+ * 덩어리를 준다. 가르는 기준은 행 배지와 **같은 함수**다
+ * (`lib/burden-grade.ts`의 `burdenGradeLevel`).
  */
 export function ComplexList({
   result,
@@ -64,7 +70,8 @@ export function ComplexList({
   onShowMore,
   onSelect,
 }: ComplexListProps) {
-  const total = result.withinSafe.length + result.beyondSafe.length;
+  const total =
+    result.withinSafe.length + result.unverified.length + result.beyondSafe.length;
 
   if (total === 0) {
     return (
@@ -81,8 +88,10 @@ export function ComplexList({
   }
 
   const safeShown = result.withinSafe.slice(0, visibleCount);
+  const unverifiedShown = result.unverified.slice(0, visibleCount);
   const beyondShown = result.beyondSafe.slice(0, visibleCount);
-  const remaining = total - safeShown.length - beyondShown.length;
+  const remaining =
+    total - safeShown.length - unverifiedShown.length - beyondShown.length;
 
   return (
     <section className="complex-list" aria-label="살 수 있는 단지">
@@ -94,6 +103,25 @@ export function ComplexList({
           <h3 className="complex-group complex-group--safe">무리 없이 살 수 있어요</h3>
           <ul className="complex-rows">
             {safeShown.map((e) => (
+              <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
+            ))}
+          </ul>
+        </>
+      )}
+
+      {/*
+        우리 숫자가 그 행의 매달 부담을 다 담지 못하는 행들. 안전 덩어리
+        **바로 다음**에 둔다 — 이 행들은 우리 계산상 "무리 없는" 쪽에
+        있던 행이라, 사용자가 좋은 선택지를 찾는 그 자리에서 바로
+        읽혀야 한다. 헤더 문구는 룰셋에서 온다(판정을 바꾸는 근거다).
+      */}
+      {unverifiedShown.length > 0 && (
+        <>
+          <h3 className="complex-group complex-group--unverified">
+            {landLeaseRules.grade.groupHeading}
+          </h3>
+          <ul className="complex-rows">
+            {unverifiedShown.map((e) => (
               <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
             ))}
           </ul>
@@ -141,7 +169,9 @@ function ComplexRow({
   onSelect?: (unit: ComplexUnit) => void;
 }) {
   const { unit, burden, needsBuiltYear } = entry;
-  const level = burden.safety.level;
+  // 덩어리를 가른 것과 **같은 함수**다(lib/complex-list.ts). 배지와
+  // 덩어리 헤더가 어긋나려면 이 함수가 같은 입력에 다른 답을 내야 한다.
+  const grade = burdenGrade(burden.safety.level, unit.landLeasehold, landLeaseRules);
 
   // 각 줄은 <p>가 아니라 <span>이다. onSelect가 있으면 이 마크업이
   // 그대로 <button> 안으로 들어가는데, button의 콘텐츠 모델은
@@ -157,22 +187,44 @@ function ComplexRow({
         {formatRange(unit.minPrice, unit.maxPrice)}
         <span className="complex-trades"> · {AGGREGATION_WINDOW_LABEL} 거래 {unit.tradeCount}건</span>
       </span>
-      <span className="complex-burden" data-level={level}>
+      <span className="complex-burden" data-level={grade.level}>
         범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
         {burden.neededLoan === 0 ? (
           // 현금만으로 덮이는 가격이다. "월 0원 · 부담률 0%"만 보여주면
-          // 계산이 안 된 것처럼 읽힌다 — 왜 0인지를 말한다.
+          // 계산이 안 된 것처럼 읽힌다 — 왜 0인지를 말한다. 그 말이
+          // "매달 나가는 돈이 없다"로 읽히지 않게 하는 일은 NoLoanLine이
+          // 같은 자리에서 한다.
           <>
-            <span className="complex-no-loan">대출 없이 살 수 있어요</span>{" "}
-            <span className="complex-level">{LEVEL_LABELS[level]}</span>
+            <NoLoanLine landLeasehold={unit.landLeasehold} />{" "}
+            <span className="complex-level">{grade.label}</span>
           </>
         ) : (
           <>
             월 {formatWon(burden.safety.monthlyPayment)} · 부담률{" "}
             {(burden.safety.burdenRatio * 100).toFixed(0)}%{" "}
-            <span className="complex-level">{LEVEL_LABELS[level]}</span>
+            <span className="complex-level">{grade.label}</span>
           </>
         )}
+        {/*
+          등급이 왜 거기서 멈췄는지는 등급 글자 **바로 옆**에서 말한다.
+          숫자와 등급이 문구보다 먼저 읽히므로, 아래 표시 안으로 밀면
+          사용자는 "확인 필요"를 읽고도 무엇이 부족한지 모른 채 지나간다.
+        */}
+        {grade.note !== null && (
+          <span className="complex-grade-note"> {grade.note}</span>
+        )}
+        {/*
+          토지임대부 표시는 이 숫자 **안**에 붙는다. 부담률·등급을 읽는
+          바로 그 자리에서 "이 월 상환액 밖에 매달 나가는 돈이 더 있다"를
+          알아야 한다 — 행 이름 옆이나 목록 아래 각주로 밀면 읽히지 않고,
+          그러면 이 행은 아무 표시 없이 "무리 없이 살 수 있어요" 덩어리에
+          들어앉는다.
+
+          `neededLoan === 0`(대출 없이 사는 경우)에도 그대로 붙는다. 오히려
+          그쪽이 더 낙관적으로 읽히는 자리다 — 대출이 없다고 매달 나가는
+          돈이 없는 것이 아니다.
+        */}
+        <LandLeaseNote landLeasehold={unit.landLeasehold} />
       </span>
     </>
   );

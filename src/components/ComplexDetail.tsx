@@ -6,6 +6,8 @@ import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/f
 import type { PriceBudgetInput } from "../lib/price";
 import { formatRange } from "./ComplexList";
 import { CostBreakdown } from "./CostBreakdown";
+import { LandLeaseNote } from "./LandLeaseNote";
+import { NoLoanLine } from "./NoLoanLine";
 import { PriceCheck } from "./PriceCheck";
 import { SafetyBadge } from "./SafetyBadge";
 
@@ -96,7 +98,9 @@ export function ComplexDetail({
       <p className="complex-detail-loan">
         범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
         {burden.neededLoan === 0 ? (
-          <span className="complex-no-loan">대출 없이 살 수 있어요</span>
+          // 목록의 행과 같은 컴포넌트다 — 두 화면이 이 말을 다르게 하면
+          // 안 된다(NoLoanLine 참고).
+          <NoLoanLine landLeasehold={unit.landLeasehold} />
         ) : (
           <>
             필요 대출액은 <strong>{formatWon(burden.neededLoan)}</strong>이에요
@@ -104,7 +108,30 @@ export function ComplexDetail({
         )}
       </p>
 
-      <SafetyBadge safety={burden.safety} label="이 집을 샀을 때예요" />
+      {/*
+        `landLeasehold`를 넘긴다 — 이 배지는 **이 평형**에 대한 답이라,
+        우리 월 상환액이 이 집의 매달 부담을 다 담는지가 등급에 걸린다.
+        목록의 행 배지와 같은 함수에서 나오므로 두 화면이 같은 집을 두고
+        다른 등급을 말할 수 없다(`lib/burden-grade.ts`).
+      */}
+      <SafetyBadge
+        safety={burden.safety}
+        label="이 집을 샀을 때예요"
+        landLeasehold={unit.landLeasehold}
+      />
+
+      {/*
+        토지임대부 표시는 배지 **바로 아래**에 붙는다. 배지가 "월
+        상환액"과 "부담률"을 말한 직후의 자리라, 방금 읽은 그 숫자에
+        토지 사용료가 빠져 있다는 사실이 정정처럼 이어 읽힌다. 부대비용
+        내역 아래나 화면 끝으로 밀면 숫자와 떨어져 읽히지 않는다.
+
+        금액을 채워 넣지는 않는다 — 토지 사용료는 우리 데이터에 없다.
+        `CostBreakdown`에도 넣지 않는 이유가 같다: 없는 값을 0으로 두면
+        부대비용 합계가 실제보다 작아지고, 지어낸 값을 두면 화면이 없는
+        근거로 계산한다.
+      */}
+      <LandLeaseNote landLeasehold={unit.landLeasehold} />
 
       <CostBreakdown costs={costs} />
 

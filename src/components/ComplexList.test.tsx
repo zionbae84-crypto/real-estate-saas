@@ -52,6 +52,7 @@ function entry(
 function renderList(overrides: Partial<ComplexListResult> = {}, props = {}) {
   const result: ComplexListResult = {
     withinSafe: [],
+    unverified: [],
     beyondSafe: [],
     affordablePrice: 500_000_000,
     safePrice: 350_000_000,
