@@ -81,6 +81,18 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 보고 답하는 문진인지와 "다 지나가도 안전하다고 말하지 않아요"는
   // 종이에서도 뜻이 있어 남는다.
   ".rights-check-action",
+  // 구매 유형 라디오. 종이에서는 고를 수 없다 — 대신 고른 유형이
+  // `.purchase-type-print` 한 줄로 남는다(PurchaseTypeSelect 참고).
+  // 그 줄이 없으면 종이를 건네받은 사람은 아래 숫자들이 어떤 전제 위에
+  // 서 있는지 알 수 없다.
+  ".purchase-type-form",
+  // 갭투자·월세 수익형의 **값 입력란**(매매 예정가·보증금·현금·월세·
+  // 운영비용·대출 답). 종이에서는 채울 수 없다. 무엇을 넣었고 무엇이
+  // 나왔는지는 `PurchaseVerdict`가 결과 안에 값과 판정을 다시 적으므로
+  // 종이에서 잃는 정보가 없다 — `.purchase-verdict` 이하와, 그 위의
+  // `.purchase-loan-note`("한도는 계산하지 않아요")는 아래
+  // MUST_SURVIVE_PRINT_CLASSES가 지킨다.
+  ".purchase-form",
 ];
 
 /**
@@ -119,4 +131,16 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "rights-finding-verdict", // 그 줄의 등급 글자
   "rights-encumbrance", // 기존 권리 합계 계산
   "rights-disclaimer", // 법률 자문이 아니라는 것과 잔금 직전 재확인
+  // 구매 유형별 재무 지표. 이 화면에서 가장 무거운 말은 "이 유형의
+  // 대출 한도는 우리가 계산하지 않아요"다 — 종이에서 그것이 사라지면
+  // 남은 지표들만 보고 한도가 문제되지 않는 것으로 읽는다.
+  "purchase-type-print", // 이 종이가 어떤 구매 유형을 전제하는가
+  "purchase-loan-note", // 한도를 계산하지 않는다는 사실과 그 이유
+  "purchase-verdict", // 결과 영역 전체
+  "purchase-overall", // 전체 결론 글자
+  "purchase-metric", // 지표별 판정 줄
+  "purchase-metric-verdict", // 그 줄의 등급 글자
+  "purchase-metric-warning", // 보증금이 DSR에 안 잡힌다는 경고
+  "purchase-stage", // 역전세 하락 단계별 필요 금액과 감당 여부
+  "purchase-disclaimer", // 투자 자문이 아니라는 것과 전망하지 않는다는 것
 ];

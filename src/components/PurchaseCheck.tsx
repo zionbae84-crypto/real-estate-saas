@@ -1,0 +1,180 @@
+import type {
+  InvestmentType,
+  RentalLoanAnswer,
+  RentalTypeRule,
+} from "../lib/purchase";
+import { usePurchaseCheck } from "../state/usePurchaseCheck";
+import { MoneyInput } from "./MoneyInput";
+import { PurchaseVerdict } from "./PurchaseVerdict";
+
+const MONEY_HINT = "단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요.";
+
+const LOAN_KINDS: ReadonlyArray<RentalLoanAnswer["kind"]> = [
+  "none",
+  "known",
+  "unknown",
+];
+
+export interface PurchaseCheckProps {
+  type: InvestmentType;
+}
+
+/**
+ * 갭투자·월세 수익형의 입력과 결과.
+ *
+ * **여기서 대출 한도를 계산하지 않는다.** `rules/2026-08.json`의
+ * LTV·DSR·절대상한은 전부 실거주 매수를 전제한 값이고, 임대사업자대출·
+ * 다주택자 LTV는 그 룰셋에 없다. 그래서 화면 맨 위에서 먼저 그 사실을
+ * 말한다(룰셋의 `loanLimitNote`) — 이 문구는 이 화면에서 가장 중요한
+ * 문장이라 인쇄에서도 지우지 않는다. 실거주 예산 계산은 이 컴포넌트가
+ * 열려 있는 동안 아예 렌더되지도, 계산되지도 않는다(App.tsx 참고).
+ *
+ * 값 입력란은 인쇄에서 지운다(`.purchase-form`). 종이에서는 채울 수
+ * 없다 — 대신 `PurchaseVerdict`가 무엇을 넣었고 무엇이 나왔는지를 결과
+ * 안에 다시 적으므로 종이에서 잃는 정보가 없다.
+ */
+export function PurchaseCheck({ type }: PurchaseCheckProps) {
+  const {
+    rules,
+    gapInput,
+    rentalInput,
+    setGapField,
+    setRentalField,
+    setLoanKind,
+    setLoanAmount,
+    assessment,
+  } = usePurchaseCheck(type);
+
+  const typeRule = type === "갭투자" ? rules.types.갭투자 : rules.types.월세수익형;
+
+  return (
+    <section className="purchase-check" aria-label={`${typeRule.label} 재무 지표`}>
+      {/*
+        이 문단은 인쇄에서 살아남는다. "모른다"는 말이 이 화면의 결론
+        절반이라, 종이에서 사라지면 아래 지표들만 남아 한도가 없는 것처럼
+        읽힌다.
+      */}
+      <p className="purchase-loan-note">{typeRule.loanLimitNote}</p>
+
+      <form className="purchase-form" onSubmit={(e) => e.preventDefault()}>
+        {type === "갭투자" ? (
+          <>
+            <MoneyInput
+              id="purchase-gap-price"
+              label={rules.types.갭투자.fields.price.label}
+              hint={rules.types.갭투자.fields.price.hint}
+              value={gapInput.price}
+              onChange={(won) => setGapField("price", won)}
+            />
+            <MoneyInput
+              id="purchase-gap-deposit"
+              label={rules.types.갭투자.fields.deposit.label}
+              hint={rules.types.갭투자.fields.deposit.hint}
+              value={gapInput.deposit}
+              onChange={(won) => setGapField("deposit", won)}
+            />
+            <MoneyInput
+              id="purchase-gap-cash"
+              label={rules.types.갭투자.fields.cash.label}
+              hint={rules.types.갭투자.fields.cash.hint}
+              value={gapInput.cash}
+              onChange={(won) => setGapField("cash", won)}
+            />
+          </>
+        ) : (
+          <>
+            {(["price", "deposit", "cash", "monthlyRent", "annualOperatingCost"] as const).map(
+              (field) => (
+                <MoneyInput
+                  key={field}
+                  id={`purchase-rental-${field}`}
+                  label={rules.types.월세수익형.fields[field].label}
+                  hint={rules.types.월세수익형.fields[field].hint}
+                  value={rentalInput[field]}
+                  onChange={(won) => setRentalField(field, won)}
+                />
+              ),
+            )}
+            <LoanFields
+              rule={rules.types.월세수익형}
+              loan={rentalInput.loan}
+              onKindChange={setLoanKind}
+              onAmountChange={setLoanAmount}
+            />
+          </>
+        )}
+        <p className="hint">{MONEY_HINT}</p>
+      </form>
+
+      <PurchaseVerdict assessment={assessment} />
+    </section>
+  );
+}
+
+/**
+ * 대출을 끼는지 묻는 자리.
+ *
+ * **"대출을 끼지 않아요"와 "금액을 모르겠어요"를 갈라 둔다.** 하나로
+ * 합치면 모름이 0원으로 둔갑해 DSCR·RTI가 "갚을 게 없다"는 가장
+ * 낙관적인 모습이 된다. 권리분석 문진이 "없어요"와 "모르겠어요"를
+ * 가르는 것과 같은 이유다.
+ *
+ * 금액 입력란은 "금액을 알아요"를 고른 순간에만 나온다. 늘 띄워 두면
+ * 다른 답을 고른 사람도 거기 0을 적을 수 있게 되는데, 그 0은 "확인한
+ * 0원"과 구별되지 않는다.
+ */
+function LoanFields({
+  rule,
+  loan,
+  onKindChange,
+  onAmountChange,
+}: {
+  rule: RentalTypeRule;
+  loan: RentalLoanAnswer;
+  onKindChange: (kind: RentalLoanAnswer["kind"]) => void;
+  onAmountChange: (
+    field: "annualDebtService" | "annualInterest",
+    won: number | null,
+  ) => void;
+}) {
+  return (
+    <fieldset className="purchase-loan">
+      <legend className="purchase-loan-question">{rule.loanChoice.label}</legend>
+      <div className="purchase-loan-options">
+        {LOAN_KINDS.map((kind) => (
+          <label className="purchase-loan-option" key={kind}>
+            <input
+              type="radio"
+              name="purchase-loan-kind"
+              value={kind}
+              checked={loan.kind === kind}
+              onChange={() => onKindChange(kind)}
+            />
+            <span className="purchase-loan-option-label">
+              {rule.loanChoice[kind]}
+            </span>
+          </label>
+        ))}
+      </div>
+
+      {loan.kind === "known" && (
+        <>
+          <MoneyInput
+            id="purchase-rental-annualDebtService"
+            label={rule.fields.annualDebtService.label}
+            hint={rule.fields.annualDebtService.hint}
+            value={loan.annualDebtService}
+            onChange={(won) => onAmountChange("annualDebtService", won)}
+          />
+          <MoneyInput
+            id="purchase-rental-annualInterest"
+            label={rule.fields.annualInterest.label}
+            hint={rule.fields.annualInterest.hint}
+            value={loan.annualInterest}
+            onChange={(won) => onAmountChange("annualInterest", won)}
+          />
+        </>
+      )}
+    </fieldset>
+  );
+}
