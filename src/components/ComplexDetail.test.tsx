@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ComplexUnit } from "../data/complexes";
 import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
+import { rules } from "../state/useAffordability";
 import { ComplexDetail } from "./ComplexDetail";
 
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
@@ -179,8 +180,29 @@ describe("ComplexDetail", () => {
         onClose={vi.fn()}
       />,
     );
-    expect(screen.getByText(/취득세/)).toBeInTheDocument();
+    expect(screen.getByText("취득세 (지방교육세·농특세 포함)")).toBeInTheDocument();
     expect(screen.getByText(/320만원/)).toBeInTheDocument();
+  });
+
+  /**
+   * `calcAcquisitionCosts`는 취득자의 주택 수를 읽지 않고 언제나
+   * 무주택 기준 세율로 계산한다(acquisition-cost.ts 참고) — 단지
+   * 상세의 부대비용 내역에도 그 사실과 방향을 알리는 고지가 함께
+   * 나가야 한다.
+   */
+  it("부대비용 옆에 주택 수 고지가 함께 나온다", () => {
+    render(
+      <ComplexDetail
+        unit={unit()}
+        burden={burden()}
+        costs={costs()}
+        priceBudget={null}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(
+      screen.getByText(rules.acquisitionTax.householdCountNote),
+    ).toBeInTheDocument();
   });
 
   it("전용면적을 반영했다는 사실과 실구매력이 함께 바뀔 수 있다는 사실을 알려준다", () => {

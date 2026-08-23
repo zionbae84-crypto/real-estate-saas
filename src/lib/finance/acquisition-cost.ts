@@ -62,6 +62,29 @@ function calcHousingBondCost(price: number, rules: Rules): number {
   return Math.floor(purchase * bond.assumedDiscountRate);
 }
 
+/**
+ * **의도된 한계: 이 함수는 `profile.status`(무주택/갈아타기)를 읽지
+ * 않는다.** 실제 취득세는 취득자의 주택 수에 따라 세율이 크게
+ * 갈린다(다주택·갈아타기 중과) — 하지만 `rules/2026-08.json`에는 그
+ * 분기가 아예 없고, 여기서도 항상 `acquisitionTaxRate`가 주는 무주택
+ * 기준 누진세율(6억 이하 1%~9억 초과 3%)만 쓴다.
+ *
+ * 빠뜨린 게 아니라 **확인된 중과세율이 없어서 넣지 않은 것이다** —
+ * 확인되지 않은 규제 수치를 계산에 넣는 것이 이 저장소에서 가장 하면
+ * 안 되는 일이다(다른 미검증 값은 `_note`로 밝히고 화면에 알리는
+ * 것으로 대신한다 — `housingBond`의 `assumedPriceToStandardRatio` 등).
+ * 다주택 취득세 중과율을 확인하면, 그때 `Rules.acquisitionTax`에
+ * 주택 수별 세율 분기를 추가하고 여기서 `profile.status`를 읽어야 한다.
+ *
+ * **그래서 무엇이 과소 계상되는가:** 이미 집이 있는 구매자(갈아타기·
+ * 다주택)에게는 이 함수가 실제보다 낮은 취득세를 내고, 그 결과
+ * `calcAcquisitionCosts`의 `total`도, 그 위의 `ownFundsRequired`도
+ * 실제보다 작게 나온다 — "이 정도 현금이면 살 수 있다"는 판단이 낙관
+ * 방향으로 틀릴 수 있다는 뜻이다. 그래서 화면은 계산을 고치는 대신
+ * `rules.acquisitionTax.householdCountNote`로 이 한계와 방향을
+ * 알린다(`CostBreakdown`·`PriceCheck` 참고, `rules.ts`의
+ * `assertHouseholdCountNoteRequired`가 그 문구의 방향을 강제한다).
+ */
 function calcAcquisitionTax(
   price: number,
   profile: BuyerProfile,

@@ -1,5 +1,6 @@
 import { formatWon } from "../format/won";
 import type { CostBreakdown as CostBreakdownData } from "../lib/finance";
+import { rules } from "../state/useAffordability";
 
 export interface CostBreakdownProps {
   costs: CostBreakdownData;
@@ -21,7 +22,15 @@ interface RowMeta {
  * 두 번 다 그 실수를 할 뻔했다.
  */
 const ROW_META: Record<CostKey, RowMeta> = {
-  acquisitionTax: { label: "취득세 (지방교육세·농특세 포함)" },
+  acquisitionTax: {
+    label: "취득세 (지방교육세·농특세 포함)",
+    // 이 계산은 무주택 기준이다 — `calcAcquisitionCosts`(acquisition-cost.ts)는
+    // 취득자의 주택 수를 읽지 않는다. 문구는 `rules/2026-08.json`의
+    // `acquisitionTax.householdCountNote`에서 그대로 온다(코드에 박지
+    // 않는다) — `rules.ts`의 `parseRules`가 이 문구의 방향(부대비용이
+    // 이보다 커질 수 있다는 방향이어야 함)을 강제한다.
+    note: rules.acquisitionTax.householdCountNote,
+  },
   brokerageFee: { label: "중개보수" },
   brokerageVat: { label: "중개보수 부가세 (10%)" },
   legalFee: { label: "법무사 비용" },

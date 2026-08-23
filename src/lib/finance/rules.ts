@@ -30,6 +30,61 @@ const ACQUISITION_TAX_NUMBER_FIELDS = [
 ] as const;
 
 /**
+ * 부대비용이 **작아진다**고 말하는 표현과 **커진다**고 말하는 표현.
+ *
+ * `calcAcquisitionCosts`(acquisition-cost.ts)는 취득자의 주택 수를 읽지
+ * 않고, 이 룰셋에도 다주택 취득세 중과 분기가 없다 — 그래서 화면이 그
+ * 한계를 반대 방향(부대비용이 작아질 수 있다)으로 말하지 못하게 아래
+ * {@link assertHouseholdCountNoteRequired}·{@link assertNoOptimisticCostDirection}가
+ * 막는다.
+ *
+ * **이 두 정규식과 두 함수는 `src/lib/purchase/rules.ts`(투자 경로 룰셋)와
+ * 공유한다.** 실거주 룰셋(`rules/2026-08.json`)과 투자 룰셋
+ * (`rules/purchase-2026-08.json`)은 파일이 다르고 문구도 화면 맥락에 맞게
+ * 다르게 쓰지만, "부대비용은 무주택 기준이고 이미 집이 있으면 더 나올 수
+ * 있다"는 같은 사실을 말한다. 그 방향 검사를 두 파일에 각각 복붙하면
+ * 나중에 한쪽만 고쳐지고 다른 쪽은 옛 정규식에 머무는 식으로 어긋난다 —
+ * 그래서 검사 로직 자체는 여기 하나에만 두고 양쪽이 그대로 가져다 쓴다.
+ */
+const COST_SHRINKS = /작아질|작아져|적어질|줄어들|덜 나올|덜 나와/;
+const COST_GROWS = /커질|커지|많아질|늘어날|더 나올|더 나와/;
+
+/**
+ * 주택 수 고지 문구가 반드시 갖춰야 하는 두 가지: 주택 수를 묻지
+ * 않았다는 사실과, 부대비용이 이보다 커질 수 있다는 방향.
+ */
+export function assertHouseholdCountNoteRequired(
+  text: string,
+  path: string,
+): void {
+  if (!/주택 수/.test(text)) {
+    throw new Error(
+      `룰셋 값 오류: ${path}는 주택 수를 묻지 않았다는 사실을 말해야 해요. 취득세는 주택 수에 따라 달라지는데 이 계산에는 그 분기가 없어요.`,
+    );
+  }
+  if (!COST_GROWS.test(text)) {
+    throw new Error(
+      `룰셋 값 오류: ${path}는 부대비용이 이보다 커질 수 있다는 방향을 말해야 해요. 이미 집이 있으면 취득세가 더 나올 수 있는데, 그 방향을 말하지 않으면 화면이 한계를 반대로 말하게 돼요.`,
+    );
+  }
+}
+
+/**
+ * 부대비용 관련 문구가 "작아질 수 있다"고만 말하는 것을 막는다.
+ *
+ * 취득자의 주택 수는 묻지도 계산하지도 않았고, 이미 집이 있으면
+ * 부대비용은 오히려 커질 수 있다 — 그래서 "작아진다"는 방향은 주택
+ * 수를 함께 이름 붙이고 커지는 방향도 함께 말할 때만 허용한다.
+ */
+export function assertNoOptimisticCostDirection(text: string, path: string): void {
+  if (COST_SHRINKS.test(text) && !(COST_GROWS.test(text) && /주택 수/.test(text))) {
+    throw new Error(
+      `룰셋 값 오류: ${path}가 부대비용이 이보다 작아질 수 있다고 말해요. 취득자의 주택 수는 묻지도 계산하지도 않았고, 이미 집이 있으면 부대비용은 오히려 커질 수 있어요 — 작아지는 방향은 주택 수를 함께 이름 붙이고 커지는 방향도 함께 말할 때만 쓸 수 있어요.`,
+    );
+  }
+}
+
+/**
  * 엔진이 실제로 평가할 줄 아는 eligibility 조건의 전부.
  *
  * 이 목록이 곧 화이트리스트다. 여기에 없는 키는 isEligible이 무시하므로,
@@ -143,6 +198,20 @@ export function parseRules(raw: unknown): Rules {
     acquisitionTax,
     "acquisitionTax",
     ACQUISITION_TAX_NUMBER_FIELDS,
+  );
+  // 이 계산이 무주택 기준이라는 사실과, 이미 집이 있으면 부대비용이
+  // 이보다 커질 수 있다는 방향을 사용자에게 알리는 고지. 왜 필요한지는
+  // acquisition-cost.ts의 calcAcquisitionCosts 주석 참고.
+  if (typeof acquisitionTax.householdCountNote !== "string") {
+    throw new Error("룰셋 필드 누락 또는 타입 오류: acquisitionTax.householdCountNote");
+  }
+  assertHouseholdCountNoteRequired(
+    acquisitionTax.householdCountNote,
+    "acquisitionTax.householdCountNote",
+  );
+  assertNoOptimisticCostDirection(
+    acquisitionTax.householdCountNote,
+    "acquisitionTax.householdCountNote",
   );
 
   if (!Array.isArray(r.policyLoans)) {

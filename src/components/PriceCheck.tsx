@@ -92,7 +92,7 @@ export function PriceCheck({ unit, budget }: PriceCheckProps) {
         <p className="hint">{MONEY_HINT}</p>
       </form>
 
-      <PriceVerdict assessment={assessment} unit={unit} />
+      <PriceVerdict assessment={assessment} unit={unit} budget={budget} />
     </section>
   );
 }
@@ -106,9 +106,12 @@ export function PriceCheck({ unit, budget }: PriceCheckProps) {
 function PriceVerdict({
   assessment,
   unit,
+  budget,
 }: {
   assessment: PriceAssessment;
   unit: ComplexUnit;
+  /** 예산 줄의 부대비용 옆에 주택 수 고지를 붙이는 데 쓴다({@link FindingValues} 참고) */
+  budget: PriceBudgetInput | null;
 }) {
   return (
     <div className="price-verdict">
@@ -156,7 +159,11 @@ function PriceVerdict({
                 </span>
                 <span className="price-finding-name">{finding.label}</span>
               </p>
-              <FindingValues finding={finding} askingPrice={assessment.askingPrice} />
+              <FindingValues
+                finding={finding}
+                askingPrice={assessment.askingPrice}
+                budget={budget}
+              />
               {/*
                 유보한 줄의 문구는 바로 위 근거 설명과 같은 문장이다
                 (엔진이 "왜 유보하는가"를 두 자리에 같은 값으로 싣는다 —
@@ -237,13 +244,23 @@ function percent(value: number | null): string | null {
  * 위치 줄에서 내는 숫자는 호가와 **초과분**뿐이다 — 초과분은 관측된
  * 최고가와 호가의 차이일 뿐이고, 어떤 값이 적당한지에 대한 추정이
  * 아니다.
+ *
+ * **부대비용(`budgetCosts`) 바로 아래에는 주택 수 고지가 함께 나간다.**
+ * `finding.costs`는 `calcAcquisitionCosts`가 낸 값인데, 그 함수는
+ * 취득자의 주택 수를 읽지 않고 언제나 무주택 기준 세율로 계산한다
+ * (`acquisition-cost.ts`의 `calcAcquisitionTax` 주석 참고). 문구는
+ * `budget.financeRules.acquisitionTax.householdCountNote`에서 그대로
+ * 온다 — `CostBreakdown`과 같은 룰셋 필드를 같은 방식으로 읽으므로,
+ * 두 화면이 서로 다른 문구를 갖게 될 위험이 없다.
  */
 function FindingValues({
   finding,
   askingPrice,
+  budget,
 }: {
   finding: PriceFinding;
   askingPrice: number | null;
+  budget: PriceBudgetInput | null;
 }) {
   if (finding.id === "position") {
     return (
@@ -258,43 +275,54 @@ function FindingValues({
     );
   }
 
+  // 이 줄(finding.id === "budget")은 assessPrice가 budget !== null일
+  // 때만 만든다(assess.ts의 budgetFinding 호출부 참고) — 그래서 여기
+  // 도달했다면 budget은 항상 존재한다.
+  const householdCountNote =
+    budget?.financeRules.acquisitionTax.householdCountNote;
+
   return (
-    <dl className="price-finding-values">
-      <Row
-        field="ownFunds"
-        label="이 호가에 필요한 현금"
-        value={won(finding.ownFunds)}
-      />
-      <Row
-        field="budgetCosts"
-        label="그중 부대비용"
-        value={won(finding.costs.total)}
-      />
-      <Row field="availableCash" label="보유 현금" value={won(finding.availableCash)} />
-      <Row
-        field="shortfall"
-        label="모자란 금액"
-        value={finding.shortfall === 0 ? null : formatWon(finding.shortfall)}
-      />
-      <Row field="neededLoan" label="필요 대출액" value={won(finding.neededLoan)} />
-      {/*
-        대출이 0원이면 월 상환액과 부담률 줄을 만들지 않는다. 현금만으로
-        덮이는 가격이라 값 자체는 정확히 0이지만, "월 0원 · 부담률 0.0%"는
-        계산이 안 된 것처럼도 읽히고 표에 박힌 0은 언제나 가장 낙관적으로
-        읽힌다 — `ComplexList`가 같은 경우에 숫자 대신 "대출 없이 살 수
-        있어요"라고 말하는 것과 같은 판단이다. 여기서는 바로 위
-        "필요 대출액 0원"이 그 자리를 대신한다.
-      */}
-      <Row
-        field="monthlyPayment"
-        label="월 상환액"
-        value={finding.neededLoan === 0 ? null : won(finding.monthlyPayment)}
-      />
-      <Row
-        field="burdenRatio"
-        label="부담률"
-        value={finding.neededLoan === 0 ? null : percent(finding.burdenRatio)}
-      />
-    </dl>
+    <>
+      <dl className="price-finding-values">
+        <Row
+          field="ownFunds"
+          label="이 호가에 필요한 현금"
+          value={won(finding.ownFunds)}
+        />
+        <Row
+          field="budgetCosts"
+          label="그중 부대비용"
+          value={won(finding.costs.total)}
+        />
+        <Row field="availableCash" label="보유 현금" value={won(finding.availableCash)} />
+        <Row
+          field="shortfall"
+          label="모자란 금액"
+          value={finding.shortfall === 0 ? null : formatWon(finding.shortfall)}
+        />
+        <Row field="neededLoan" label="필요 대출액" value={won(finding.neededLoan)} />
+        {/*
+          대출이 0원이면 월 상환액과 부담률 줄을 만들지 않는다. 현금만으로
+          덮이는 가격이라 값 자체는 정확히 0이지만, "월 0원 · 부담률 0.0%"는
+          계산이 안 된 것처럼도 읽히고 표에 박힌 0은 언제나 가장 낙관적으로
+          읽힌다 — `ComplexList`가 같은 경우에 숫자 대신 "대출 없이 살 수
+          있어요"라고 말하는 것과 같은 판단이다. 여기서는 바로 위
+          "필요 대출액 0원"이 그 자리를 대신한다.
+        */}
+        <Row
+          field="monthlyPayment"
+          label="월 상환액"
+          value={finding.neededLoan === 0 ? null : won(finding.monthlyPayment)}
+        />
+        <Row
+          field="burdenRatio"
+          label="부담률"
+          value={finding.neededLoan === 0 ? null : percent(finding.burdenRatio)}
+        />
+      </dl>
+      {householdCountNote !== undefined && (
+        <p className="price-household-count-note">{householdCountNote}</p>
+      )}
+    </>
   );
 }

@@ -1,6 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { AffordableResult } from "../lib/finance";
+import { rules } from "../state/useAffordability";
 import { BudgetResult } from "./BudgetResult";
 
 function result(overrides: Partial<AffordableResult> = {}): AffordableResult {
@@ -67,6 +68,21 @@ describe("BudgetResult", () => {
     // Task 4에서 costs.total에 brokerageVat·housingBondCost가 더해지며
     // 13,060,000 → 14,247,840으로 바뀌었다("1,306만원" → "1,424만 7,840원").
     expect(screen.getByText("1,424만 7,840원")).toBeInTheDocument();
+  });
+
+  /**
+   * `calcAcquisitionCosts`는 취득자의 주택 수를 읽지 않고 언제나
+   * 무주택 기준 세율로 계산한다(acquisition-cost.ts 참고) — 부대비용이
+   * 나오는 이 자리에도 그 사실과 방향을 알리는 고지가 반드시 함께
+   * 나가야 한다. `CostBreakdown.test.tsx`가 이미 문구 자체와 방향을
+   * 잠그므로, 여기서는 이 화면이 실제로 그 컴포넌트를 통해 고지를
+   * 보여주는지만 확인한다.
+   */
+  it("부대비용 옆에 주택 수 고지가 함께 나온다", () => {
+    renderResult();
+    expect(
+      screen.getByText(rules.acquisitionTax.householdCountNote),
+    ).toBeInTheDocument();
   });
 
   it("무엇이 막았는지 한 줄로 보여준다", () => {
