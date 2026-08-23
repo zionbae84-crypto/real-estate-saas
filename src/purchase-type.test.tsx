@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
@@ -7,6 +7,7 @@ import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { calcAffordablePrice, type BuyerProfile } from "./lib/finance";
 import { rules } from "./state/useAffordability";
 import { purchaseRules } from "./state/usePurchaseCheck";
+import { PURCHASE_TYPE_STORAGE_KEY } from "./state/usePurchaseType";
 
 /**
  * 구매 유형을 고르는 자리와, 유형에 따라 화면이 갈리는 흐름.
@@ -69,6 +70,65 @@ describe("구매 유형 선택", () => {
         screen.getByLabelText(new RegExp(purchaseRules.types[type].label)),
       ).toBeInTheDocument();
     }
+  });
+});
+
+/**
+ * 리뷰 밖에서 찾은 결함(P1): 새로고침하면 유형이 사라지고 실거주 숫자가
+ * 되돌아왔다. 나머지 프로필은 전부 저장되는데 유형만 저장되지 않아서다.
+ */
+describe("구매 유형을 기억한다", () => {
+  it("고른 유형이 저장된다", async () => {
+    render(<App />);
+    await choose("갭투자");
+    expect(window.localStorage.getItem(PURCHASE_TYPE_STORAGE_KEY)).toBe("갭투자");
+  });
+
+  it("새로 그려도 고른 유형이 남는다 — 실거주 예산 화면이 되돌아오지 않는다", async () => {
+    render(<App />);
+    await fillProfile();
+    await choose("갭투자");
+    // unmount만으로는 컨테이너가 body에 남아 다음 render와 겹친다.
+    cleanup();
+
+    // 새로고침과 같은 상태: 저장된 프로필과 저장된 유형만 남아 있다.
+    render(<App />);
+    // 라디오로 좁힌다 — 갭투자 화면이 떠 있으면 그 섹션의 aria-label
+    // ("갭투자 재무 지표")도 같은 글자를 갖는다.
+    expect(
+      screen.getByRole("radio", {
+        name: new RegExp(purchaseRules.types.갭투자.label),
+      }),
+    ).toBeChecked();
+    // 저장된 현금·소득으로 계산한 실거주 한도가 다시 뜨지 않는다.
+    expect(document.querySelector(".affordable-price")).toBeNull();
+    expect(
+      screen.getByText(purchaseRules.types.갭투자.loanLimitNote),
+    ).toBeInTheDocument();
+  });
+
+  it("저장된 값이 모르는 값이면 실거주로 떨어지고 그 사실을 말한다", () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "전세");
+    render(<App />);
+    expect(
+      screen.getByLabelText(new RegExp(purchaseRules.types.실거주.label)),
+    ).toBeChecked();
+    expect(
+      document.querySelector(".purchase-type-restore-notice")?.textContent,
+    ).toMatch(/읽지 못해서 실거주로 시작했어요/);
+  });
+
+  it("사용자가 다시 고르면 그 안내는 사라진다", async () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "전세");
+    render(<App />);
+    await choose("월세수익형");
+    expect(document.querySelector(".purchase-type-restore-notice")).toBeNull();
+  });
+
+  it("정상적으로 복원됐을 때는 안내가 뜨지 않는다(오탐 방지 확인)", () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "갭투자");
+    render(<App />);
+    expect(document.querySelector(".purchase-type-restore-notice")).toBeNull();
   });
 });
 

@@ -4,6 +4,14 @@ export interface PurchaseTypeSelectProps {
   rules: PurchaseRules;
   value: PurchaseType;
   onChange: (type: PurchaseType) => void;
+  /**
+   * 저장해 둔 유형을 읽지 못해 실거주로 떨어졌는가.
+   *
+   * 떨어지는 것 자체는 안전한 방향이지만 **조용히 떨어지면 안 된다** —
+   * 기억한 것처럼 보이는 화면이 실거주 기준 한도를 다시 보여주게 되고,
+   * 그건 이 선택이 애초에 막으려던 오해다.
+   */
+  restoreFailed?: boolean;
 }
 
 /**
@@ -25,6 +33,12 @@ export interface PurchaseTypeSelectProps {
  * 처음 값은 실거주다. 지금까지 이 화면이 이미 계산해 오던 바로 그
  * 유형이라, 기본값을 바꾸면 기존 사용자의 숫자가 이유 없이 사라진다.
  *
+ * **고른 유형은 저장된다**(`usePurchaseType`). 나머지 프로필이 전부
+ * localStorage에 남는데 유형만 남지 않으면, 갭투자를 고른 사람이
+ * 새로고침했을 때 화면이 실거주로 되돌아가 자기 매수에 해당하지 않는
+ * 한도를 다시 보여준다. 저장된 값을 읽지 못하면 실거주로 떨어지되,
+ * 아래 안내가 그 사실을 말한다.
+ *
  * 인쇄에서는 라디오(`.purchase-type-form`)가 지워지고 — 종이에서는
  * 고를 수 없다 — 대신 고른 유형이 평문 한 줄로 남는다. 그 줄이 없으면
  * 종이를 건네받은 사람은 아래 숫자들이 어떤 전제 위에 서 있는지 알 수
@@ -34,9 +48,20 @@ export function PurchaseTypeSelect({
   rules,
   value,
   onChange,
+  restoreFailed = false,
 }: PurchaseTypeSelectProps) {
   return (
     <section className="purchase-type">
+      {/*
+        복원 실패 안내. 인쇄에서도 남는다 — 이 종이가 어떤 전제 위에
+        서 있는지를 말하는 문장이라, 라디오와 함께 지우면 안 된다.
+      */}
+      {restoreFailed && (
+        <p className="purchase-type-restore-notice">
+          저장해 둔 구매 유형을 읽지 못해서 실거주로 시작했어요. 아래 숫자는
+          실거주 기준이니, 목적이 다르면 다시 골라 주세요.
+        </p>
+      )}
       <form className="purchase-type-form" onSubmit={(e) => e.preventDefault()}>
         <fieldset className="purchase-type-fieldset">
           <legend className="purchase-type-question">

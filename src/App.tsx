@@ -19,6 +19,7 @@ import { calcAcquisitionCosts, calcBurdenAt } from "./lib/finance";
 import type { PurchaseType } from "./lib/purchase";
 import { rules, useAffordability } from "./state/useAffordability";
 import { purchaseRules } from "./state/usePurchaseCheck";
+import { usePurchaseType } from "./state/usePurchaseType";
 import type { AssumableField } from "./state/useProfileForm";
 import { useProfileForm } from "./state/useProfileForm";
 
@@ -31,9 +32,12 @@ export function App() {
   const [openField, setOpenField] = useState<AssumableField | null>(null);
   /**
    * 구매 유형. 지금까지 이 화면이 말없이 전제하던 값이라 실거주에서
-   * 시작한다(PurchaseTypeSelect 문서 참고).
+   * 시작하고, 한 번 고르면 기억한다(usePurchaseType 문서 참고) —
+   * 나머지 프로필이 전부 저장되는데 유형만 저장되지 않으면, 새로고침한
+   * 뒤 화면이 실거주로 되돌아가 자기 매수에 해당하지 않는 한도를 다시
+   * 보여준다.
    */
-  const [purchaseType, setPurchaseType] = useState<PurchaseType>("실거주");
+  const { purchaseType, setPurchaseType, restoreFailed } = usePurchaseType();
   const [regionCodes, setRegionCodes] = useState<string[]>([]);
   // ComplexList의 PAGE_SIZE와 같은 값이다 — 각 덩어리에서 이만큼씩 보여준다.
   const [visibleCount, setVisibleCount] = useState(10);
@@ -214,6 +218,7 @@ export function App() {
           rules={purchaseRules}
           value={purchaseType}
           onChange={handlePurchaseTypeChange}
+          restoreFailed={restoreFailed}
         />
 
         {/*

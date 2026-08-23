@@ -909,6 +909,29 @@ body {
   padding: 0 0.25rem;
 }
 
+/*
+ * 저장해 둔 유형을 읽지 못했다는 안내. 뜻은 전부 글자가 말하고, 색은
+ * 눈에 띄게 하는 역할만 한다(색만으로 전달하는 정보가 없다).
+ */
+.purchase-type-restore-notice {
+  border-left: 4px solid var(--caution);
+  background: var(--seed-color-bg-warning-weak);
+  padding: 0.75rem 1rem;
+  margin: 0 0 1rem;
+  font-weight: 600;
+}
+
+/*
+ * 투자 경로 인쇄물 요약(PurchasePrintSummary)의 머리줄. 화면에서는
+ * 부모가 숨겨져 보이지 않고, 종이에서 이 종이가 어떤 룰셋·언제 기준인지를
+ * 말한다.
+ */
+.purchase-print-summary-meta {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
 .purchase-type-why {
   margin: 0.35rem 0 0.75rem;
   font-size: 0.875rem;
