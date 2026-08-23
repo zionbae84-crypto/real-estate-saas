@@ -86,6 +86,14 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 그 줄이 없으면 종이를 건네받은 사람은 아래 숫자들이 어떤 전제 위에
   // 서 있는지 알 수 없다.
   ".purchase-type-form",
+  // 호가 입력란. 종이에서는 채울 수 없다. 무엇을 넣었고 무엇이
+  // 나왔는지는 `PriceCheck`의 결과가 호가와 근거(거래 건수·실거래
+  // 범위·평형)를 다시 적으므로 종이에서 잃는 정보가 없다 —
+  // `.price-verdict` 이하와, 입력란 **위**의 "적절한 값이 얼마인지
+  // 매기지 않아요"(`.price-no-estimate`)는 아래 MUST_SURVIVE_PRINT_CLASSES가
+  // 지킨다. 그 한 줄이 사라지면 종이를 건네받은 사람이 아래 판정을
+  // "적정가 판정"으로 읽는다.
+  ".price-check-form",
   // 갭투자·월세 수익형의 **값 입력란**(매매 예정가·보증금·현금·월세·
   // 운영비용·대출 답). 종이에서는 채울 수 없다. 무엇을 넣었고 무엇이
   // 나왔는지는 `PurchaseVerdict`가 결과 안에 값과 판정을 다시 적으므로
@@ -144,4 +152,16 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "purchase-metric-warning", // 보증금이 DSR에 안 잡힌다는 경고
   "purchase-stage", // 역전세 하락 단계별 필요 금액과 감당 여부
   "purchase-disclaimer", // 투자 자문이 아니라는 것과 전망하지 않는다는 것
+  // 호가 위치 확인. 이 화면에서 가장 무거운 말은 판정이 아니라
+  // **고지**다 — 층·향이 이 범위에 없다는 사실과 실거래 신고가 늦다는
+  // 사실이 종이에서 사라지면, 남은 판정만 보고 우리가 틀린 확신을 준다.
+  "price-no-estimate", // 이 화면이 값을 매기지 않는다는 사실
+  "price-verdict", // 결과 영역 전체
+  "price-overall", // 전체 결론 글자(멈춰 주세요 / 유보했어요 / …)
+  "price-evidence", // 이 판단이 몇 건에 근거하는가(거래 건수·실거래 범위)
+  "price-finding", // 줄별 판정
+  "price-finding-verdict", // 그 줄의 등급 글자
+  "price-budget-absent", // 예산 줄을 계산하지 않았다는 사실
+  "price-disclosure", // 층·향 미반영·신고 지연·"바가지라는 뜻이 아니다"
+  "price-disclaimer", // 감정평가가 아니라는 것과 전망하지 않는다는 것
 ];

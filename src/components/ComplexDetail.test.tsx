@@ -52,26 +52,33 @@ function costs(overrides: Partial<CostBreakdownData> = {}): CostBreakdownData {
 describe("ComplexDetail", () => {
   it("단지명·평형·법정동·가격범위·거래 건수를 목록과 같은 규칙으로 보여준다", () => {
     const { container } = render(
-      <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+      <ComplexDetail unit={unit()} burden={burden()} costs={costs()} priceBudget={null} onClose={vi.fn()} />,
     );
     const title = container.querySelector(".complex-detail-title")?.textContent ?? "";
     expect(title).toMatch(/테스트아파트/);
     expect(title).toMatch(/59㎡/);
     expect(title).toMatch(/대치동/);
-    expect(screen.getByText(/2억 8,000만원 ~ 3억 2,000만원/)).toBeInTheDocument();
-    expect(screen.getByText(/거래 5건/)).toBeInTheDocument();
+    /*
+     * 범위·거래 건수는 이제 화면에 두 번 나온다 — 여기 머리말과, 아래
+     * 호가 위치 확인이 "이 판단이 몇 건에 근거하는가"로 다시 적는
+     * 자리다(PriceCheck 참고). 그 자리는 판정 바로 옆에 있어야 뜻이
+     * 서므로 지우지 않고, 이 검사만 머리말로 좁힌다.
+     */
+    const range = container.querySelector(".complex-detail-range")?.textContent ?? "";
+    expect(range).toMatch(/2억 8,000만원 ~ 3억 2,000만원/);
+    expect(range).toMatch(/거래 5건/);
   });
 
   it("변동률을 화면에 내지 않는다", () => {
     const { container } = render(
-      <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+      <ComplexDetail unit={unit()} burden={burden()} costs={costs()} priceBudget={null} onClose={vi.fn()} />,
     );
     expect(container.textContent).not.toMatch(/상승|하락|변동률|수익률/);
   });
 
   it("어느 가격 기준인지 문구로 드러낸다", () => {
     const { container } = render(
-      <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+      <ComplexDetail unit={unit()} burden={burden()} costs={costs()} priceBudget={null} onClose={vi.fn()} />,
     );
     const basis = container.querySelector(".complex-detail-loan")?.textContent ?? "";
     expect(basis).toMatch(/범위 위쪽인/);
@@ -84,6 +91,7 @@ describe("ComplexDetail", () => {
         unit={unit()}
         burden={burden({ neededLoan: 250_000_000 })}
         costs={costs()}
+        priceBudget={null}
         onClose={vi.fn()}
       />,
     );
@@ -106,6 +114,7 @@ describe("ComplexDetail", () => {
           },
         })}
         costs={costs()}
+        priceBudget={null}
         onClose={vi.fn()}
       />,
     );
@@ -127,6 +136,7 @@ describe("ComplexDetail", () => {
           },
         })}
         costs={costs()}
+        priceBudget={null}
         onClose={vi.fn()}
       />,
     );
@@ -151,6 +161,7 @@ describe("ComplexDetail", () => {
           },
         })}
         costs={costs()}
+        priceBudget={null}
         onClose={vi.fn()}
       />,
     );
@@ -164,6 +175,7 @@ describe("ComplexDetail", () => {
         unit={unit()}
         burden={burden()}
         costs={costs({ acquisitionTax: 3_200_000, total: 7_160_000 })}
+        priceBudget={null}
         onClose={vi.fn()}
       />,
     );
@@ -173,7 +185,7 @@ describe("ComplexDetail", () => {
 
   it("전용면적을 반영했다는 사실과 실구매력이 함께 바뀔 수 있다는 사실을 알려준다", () => {
     render(
-      <ComplexDetail unit={unit({ areaBucket: 59 })} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+      <ComplexDetail unit={unit({ areaBucket: 59 })} burden={burden()} costs={costs()} priceBudget={null} onClose={vi.fn()} />,
     );
     expect(screen.getByText(/59㎡.*반영해서 계산했어요/)).toBeInTheDocument();
     expect(screen.getByText(/실구매 가능 가격도 함께 바뀌었을 수 있어요/)).toBeInTheDocument();
@@ -184,7 +196,7 @@ describe("ComplexDetail", () => {
       // 상세 화면에는 헤드라인 배지(최대로 빌렸을 때)와 이 배지가 함께
       // 뜬다. 라벨이 없으면 어느 쪽이 이 매물의 답인지 알 수 없다.
       const { container } = render(
-        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} priceBudget={null} onClose={vi.fn()} />,
       );
       expect(container.querySelector(".safety-badge-label")?.textContent).toMatch(
         /이 집을 샀을 때/,
@@ -195,7 +207,7 @@ describe("ComplexDetail", () => {
       // .complex-detail-loan[data-level=…]에 대응하는 CSS도 없고
       // .complex-level 자식도 없었다 — 아무것도 하지 않는 속성이다.
       const { container } = render(
-        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} priceBudget={null} onClose={vi.fn()} />,
       );
       const loan = container.querySelector(".complex-detail-loan");
       expect(loan).not.toBeNull();
@@ -206,7 +218,7 @@ describe("ComplexDetail", () => {
       // 목록이 사라지고 이 화면이 그 자리에 나타난다. 포커스가 사라진
       // 버튼 자리에 남으면 스크린리더 사용자는 화면이 바뀐 것을 모른다.
       render(
-        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} priceBudget={null} onClose={vi.fn()} />,
       );
       expect(document.activeElement).toBe(
         screen.getByRole("region", { name: "단지 상세" }),
@@ -217,7 +229,7 @@ describe("ComplexDetail", () => {
   it("목록으로 버튼을 누르면 닫는다", () => {
     const onClose = vi.fn();
     render(
-      <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={onClose} />,
+      <ComplexDetail unit={unit()} burden={burden()} costs={costs()} priceBudget={null} onClose={onClose} />,
     );
     screen.getByRole("button", { name: /목록으로/ }).click();
     expect(onClose).toHaveBeenCalledOnce();
