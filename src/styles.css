@@ -548,6 +548,41 @@ body {
 }
 
 /*
+ * 토지임대부 표시(LandLeaseNote). 목록 행·단지 상세·호가 위치 세 화면이
+ * 같은 컴포넌트를 쓰므로 규칙도 한 벌이다.
+ *
+ * `<span>`인 이유는 LandLeaseNote.tsx 문서에 있다 — 목록의 행은 onSelect가
+ * 있으면 통째로 <button> 안으로 들어가고, button의 콘텐츠 모델은 phrasing
+ * content라 <p>가 유효하지 않다. 블록 모양과 여백을 여기서 준다.
+ *
+ * **뜻은 색이 아니라 글자가 진다.** `.land-lease-badge`("토지임대부" /
+ * "토지임대부인지 확인이 필요해요")가 언제나 글자로 있어서, 색이 하나도
+ * 적용되지 않아도(흑백 인쇄·색각 이상) 그대로 읽힌다. 아래 색은 눈에
+ * 걸리게 하는 거들기일 뿐이다.
+ *
+ * **--safe를 쓰지 않는다.** 어느 상태에서도 이 표시는 "괜찮다"는 말이
+ * 아니다 — 하나는 매달 나가는 돈이 우리 계산 밖에 더 있다는 뜻이고,
+ * 다른 하나는 그것조차 모른다는 뜻이다. 예산 배지의 "안전" 색을 빌려
+ * 오면 화면에서 먼저 읽히는 색이 문장을 되돌려 준다(권리분석 결론에
+ * 같은 규칙이 걸려 있다 — scripts/rights-color.test.ts).
+ */
+.land-lease-note {
+  display: block;
+  margin: 0.4rem 0;
+  padding: 0.5rem 0.6rem;
+  border-left: 3px solid var(--caution);
+  background: var(--seed-color-bg-warning-weak);
+  font-size: 0.875rem;
+  font-weight: 400;
+  line-height: 1.5;
+}
+
+.land-lease-badge {
+  font-weight: 700;
+  color: var(--caution);
+}
+
+/*
  * onSelect가 있을 때 행을 감싸는 버튼. 브라우저 기본 버튼 모양(테두리·
  * 배경·가운데 정렬)을 지워 지금까지의 <li> 행과 똑같이 보이게 한다 —
  * 버튼이 됐다는 사실이 "누를 수 있다"는 것 말고 다른 시각적 차이를

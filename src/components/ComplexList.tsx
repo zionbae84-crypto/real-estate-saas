@@ -3,6 +3,7 @@ import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import type { ComplexListEntry, ComplexListResult } from "../lib/complex-list";
 import type { SafetyLevel } from "../lib/finance";
+import { LandLeaseNote } from "./LandLeaseNote";
 
 /**
  * 각 덩어리에서 한 번에 보여주는 최대 행 수.
@@ -173,6 +174,18 @@ function ComplexRow({
             <span className="complex-level">{LEVEL_LABELS[level]}</span>
           </>
         )}
+        {/*
+          토지임대부 표시는 이 숫자 **안**에 붙는다. 부담률·등급을 읽는
+          바로 그 자리에서 "이 월 상환액 밖에 매달 나가는 돈이 더 있다"를
+          알아야 한다 — 행 이름 옆이나 목록 아래 각주로 밀면 읽히지 않고,
+          그러면 이 행은 아무 표시 없이 "무리 없이 살 수 있어요" 덩어리에
+          들어앉는다.
+
+          `neededLoan === 0`(대출 없이 사는 경우)에도 그대로 붙는다. 오히려
+          그쪽이 더 낙관적으로 읽히는 자리다 — 대출이 없다고 매달 나가는
+          돈이 없는 것이 아니다.
+        */}
+        <LandLeaseNote landLeasehold={unit.landLeasehold} />
       </span>
     </>
   );

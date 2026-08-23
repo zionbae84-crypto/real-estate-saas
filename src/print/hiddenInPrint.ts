@@ -116,6 +116,14 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "safety-level", // 등급 글자(안전/주의/위험) — SafetyBadge
   "complex-level", // 목록 행의 등급 글자 — ComplexList
   "complex-burden", // 등급을 감싸는 행 요소 자체
+  // 토지임대부 표시. 종이에서 사라지면 안 되는 것 중에서도 무거운
+  // 축이다 — 이 종이의 월 상환액에는 매달 나가는 토지 사용료가 들어
+  // 있지 않고(우리 데이터에 금액이 없다), 그 사실이 빠지면 종이를
+  // 건네받은 사람은 남은 숫자를 매달 나가는 돈 전부로 읽는다.
+  // 모른다는 표시(`unknown`)도 같은 이유로 남아야 한다 — 빈 자리는
+  // "토지임대부가 아니다"로 읽힌다.
+  "land-lease-note", // 표시 전체(목록 행·상세·호가 세 화면 공용)
+  "land-lease-badge", // 색이 아니라 글자로 존재하는 그 표시
   "safety-badge", // 등급 배지 섹션 전체
   "warning-list", // 엔진이 낸 경고
   "disclaimer", // 면책 문구(footer)

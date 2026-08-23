@@ -9,6 +9,7 @@ import type {
 } from "../lib/price";
 import { usePriceCheck } from "../state/usePriceCheck";
 import { formatRange } from "./ComplexList";
+import { LandLeaseNote } from "./LandLeaseNote";
 import { MoneyInput } from "./MoneyInput";
 
 const MONEY_HINT = "단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요.";
@@ -85,6 +86,22 @@ export function PriceCheck({ unit, budget }: PriceCheckProps) {
       <p className="price-no-estimate">
         {assessment.disclosure.noPointEstimateNote}
       </p>
+
+      {/*
+        토지임대부 표시는 입력란 **위**에 붙는다 — 값을 적기 전에
+        알아야 하는 사실이기 때문이다. 토지임대부면 이 호가가 가리키는
+        물건 자체가 다르고(땅을 사는 것이 아니다), 아래 예산 줄의 월
+        상환액에도 토지 사용료가 들어 있지 않다. 적고 나서야 말하면
+        이미 기대를 만든 뒤다 — 바로 위 `price-no-estimate`가 같은
+        이유로 입력란 위에 있다.
+
+        예산 줄(월 상환액이 실제로 찍히는 자리)이 아니라 여기에 두는
+        이유: 그 줄은 호가를 넣어야 생기고(`assessPrice`는 호가가
+        없으면 findings를 아예 만들지 않는다), 실거주 프로필이 없으면
+        아예 만들어지지 않는다. 거기에만 붙이면 이 화면에서 표시가
+        사라지는 경로가 둘 생긴다.
+      */}
+      <LandLeaseNote landLeasehold={unit.landLeasehold} variant="price" />
 
       <form className="price-check-form" onSubmit={(e) => e.preventDefault()}>
         <MoneyInput

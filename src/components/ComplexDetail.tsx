@@ -6,6 +6,7 @@ import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/f
 import type { PriceBudgetInput } from "../lib/price";
 import { formatRange } from "./ComplexList";
 import { CostBreakdown } from "./CostBreakdown";
+import { LandLeaseNote } from "./LandLeaseNote";
 import { PriceCheck } from "./PriceCheck";
 import { SafetyBadge } from "./SafetyBadge";
 
@@ -105,6 +106,19 @@ export function ComplexDetail({
       </p>
 
       <SafetyBadge safety={burden.safety} label="이 집을 샀을 때예요" />
+
+      {/*
+        토지임대부 표시는 배지 **바로 아래**에 붙는다. 배지가 "월
+        상환액"과 "부담률"을 말한 직후의 자리라, 방금 읽은 그 숫자에
+        토지 사용료가 빠져 있다는 사실이 정정처럼 이어 읽힌다. 부대비용
+        내역 아래나 화면 끝으로 밀면 숫자와 떨어져 읽히지 않는다.
+
+        금액을 채워 넣지는 않는다 — 토지 사용료는 우리 데이터에 없다.
+        `CostBreakdown`에도 넣지 않는 이유가 같다: 없는 값을 0으로 두면
+        부대비용 합계가 실제보다 작아지고, 지어낸 값을 두면 화면이 없는
+        근거로 계산한다.
+      */}
+      <LandLeaseNote landLeasehold={unit.landLeasehold} />
 
       <CostBreakdown costs={costs} />
 
