@@ -66,6 +66,13 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 정책대출·상세 설명", "네 가지 한도")는 펼쳐진 내용의 제목으로 여전히
   // 뜻이 있어 남긴다.
   ".fold-more-hint",
+  // 권리분석 문진의 **답하는 자리**(매매 예정가 입력란·항목별 라디오·
+  // 금액 입력란). 종이에서는 고를 수도 적을 수도 없다. 대신 문진이
+  // 무엇을 물었고 무엇이라 답했고 무엇이 걸렸는지는 `RightsVerdict`가
+  // 결과 안에 질문·답·판정·근거를 모두 다시 적으므로(그 컴포넌트 문서
+  // 참고) 종이에서 잃는 정보가 없다 — `.rights-verdict` 이하는 아래
+  // MUST_SURVIVE_PRINT_CLASSES가 지킨다.
+  ".rights-check-form",
 ];
 
 /**
@@ -95,4 +102,13 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "cost-breakdown", // 부대비용 내역
   "policy-loan-list", // 정책대출 목록
   "no-budget", // 예산 0원 안내
+  // 권리분석 문진의 결과. 이 앱에서 가장 무거운 경고가 여기 있다 —
+  // 종이에서 사라지면 안 되는 것의 목록에 등급 글자·항목별 판정·
+  // 기존 권리 합계·면책 문구를 모두 올린다.
+  "rights-verdict", // 결과 영역 전체
+  "rights-overall", // 전체 결론 글자(사면 안 돼요 / … / 걸리는 게 없었어요)
+  "rights-finding", // 항목별 판정 줄
+  "rights-finding-verdict", // 그 줄의 등급 글자
+  "rights-encumbrance", // 기존 권리 합계 계산
+  "rights-disclaimer", // 법률 자문이 아니라는 것과 잔금 직전 재확인
 ];
