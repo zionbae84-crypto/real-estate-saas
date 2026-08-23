@@ -6,6 +6,7 @@ import {
 } from "../finance";
 import type {
   CapRateResult,
+  InvestmentType,
   DscrResult,
   GapInput,
   JeonseRatioResult,
@@ -80,7 +81,6 @@ export function assessPurchase(
     overallNote: overallNoteFor(copy, overall, metrics),
     loanLimitNote: typeRule.loanLimitNote,
     metrics,
-    hasUnknownMetric: metrics.some((metric) => metric.verdict === "unknown"),
     disclaimer: rules.disclaimer,
   };
 }
@@ -151,6 +151,14 @@ function positiveMoney(value: number | null): number | null {
  * 참고). 나머지 필드는 그 함수가 읽지 않는 자리 채우기이며, 어떤
  * 판정에도 쓰이지 않는다. 그 함수를 고치지 않고 재사용하기 위한
  * 최소한의 형태다.
+ *
+ * **`status`도 그 읽히지 않는 자리 중 하나다.** 여기 "무주택"이 적혀
+ * 있다고 해서 무주택 취득세로 계산되는 것이 아니라, 주택 수에 따른
+ * 취득세 분기가 `rules/2026-08.json`에도 `calcAcquisitionCosts`에도
+ * 아예 없다(5억 기준 무주택과 갈아타기의 취득세가 같은 값으로 나온다).
+ * 2026년 8월의 중과율을 확인하지 못했으므로 그 숫자를 넣지 않는다 —
+ * 대신 룰셋의 `acquisition.householdCountNote`가 묻지 않았다는 사실과
+ * 부대비용이 이보다 커질 수 있다는 방향을 화면에서 말한다.
  */
 function costProfile(rules: PurchaseRules): BuyerProfile {
   return {
@@ -164,12 +172,25 @@ function costProfile(rules: PurchaseRules): BuyerProfile {
   };
 }
 
+/**
+ * 필요 자기자금 계산에 쓰는 대출 정보.
+ *
+ * `none`(대출을 끼지 않는다 — **확인한 0원**)과 `unknown`(원금을 모른다)이
+ * 갈라져 있다. 합치면 모름이 0원으로 둔갑해 대출이 없는 것으로 계산된다.
+ */
+type LoanFunding =
+  | { kind: "none" }
+  | { kind: "known"; principal: number }
+  | { kind: "unknown" };
+
 interface FundsContext {
   price: number | null;
   deposit: number | null;
   cash: number | null;
   costs: CostBreakdown | null;
-  /** 매매 예정가 − 보증금 + 부대비용(원) */
+  /** 계산에서 뺀 대출 원금(원). 대출이 없으면 0, 모르면 null */
+  loanPrincipal: number | null;
+  /** max(0, 매매 예정가 − 보증금 − 대출 원금) + 부대비용(원) */
   required: number | null;
   /** 모자란 금액(원). 모자라지 않으면 0 */
   shortfall: number | null;
@@ -177,14 +198,37 @@ interface FundsContext {
   remainingCash: number | null;
 }
 
+/**
+ * 대출 답을 필요 자기자금 계산에 쓸 수 있는 형태로 좁힌다.
+ *
+ * **원금을 역산하지 않는다.** 사용자가 알려주는 것은 연간 원리금과 연간
+ * 이자이지 원금이 아니고, 금리·기간을 모르면 그 둘에서 원금이 나오지
+ * 않는다. 모르면 `unknown`이고, 그때 필요 자기자금은 아예 내지 않는다 —
+ * 0으로 두면 대출이 없는 것으로 계산돼 필요 자기자금이 과대, 남는 현금이
+ * 과소로 나온다(반대로 화면이 스스로 물어서 받은 답을 무시하게 된다).
+ */
+function loanFundingOf(loan: RentalLoanAnswer): LoanFunding {
+  if (loan.kind === "none") return { kind: "none" };
+  if (loan.kind === "unknown") return { kind: "unknown" };
+  const principal = money(loan.principal);
+  return principal === null
+    ? { kind: "unknown" }
+    : { kind: "known", principal };
+}
+
+/** 대출을 묻지 않는 유형(갭투자)이 쓰는 값. **확인한 0원이 아니라 산식에서 빠진다** */
+const NO_LOAN: LoanFunding = { kind: "none" };
+
 function fundsContextOf(
   rules: PurchaseRules,
   financeRules: Rules,
   raw: { price: number | null; deposit: number | null; cash: number | null },
+  loan: LoanFunding = NO_LOAN,
 ): FundsContext {
   const price = positiveMoney(raw.price);
   const deposit = money(raw.deposit);
   const cash = money(raw.cash);
+  const loanPrincipal = loan.kind === "unknown" ? null : loan.kind === "none" ? 0 : loan.principal;
 
   const costs =
     price === null
@@ -192,29 +236,61 @@ function fundsContextOf(
       : calcAcquisitionCosts(price, costProfile(rules), financeRules);
 
   /*
-   * 보증금이 매매가보다 큰 경우(이른바 무피·플피) `price - deposit`이
-   * 음수가 된다. 그대로 두면 계약 때 돈을 돌려받는 것으로 계산되어
-   * 남는 현금이 보유 현금보다 커지는데, 그건 낙관 방향이다. 0에서
-   * 끊는다 — 그런 조건은 어차피 전세가율이 먼저 stop을 낸다.
+   * 보증금·대출이 매매가보다 큰 경우(이른바 무피·플피) `price - deposit
+   * - loanPrincipal`이 음수가 된다. 그대로 두면 계약 때 돈을 돌려받는
+   * 것으로 계산되어 남는 현금이 보유 현금보다 커지는데, 그건 낙관
+   * 방향이다. 0에서 끊는다 — 그런 조건은 어차피 전세가율이 먼저 stop을
+   * 낸다.
+   *
+   * **부대비용은 그 0에서 끊은 뒤에 더한다.** 취득세·중개보수는 대출이
+   * 아무리 커도 계약 때 현금으로 나가는 돈이라, 큰 대출이 부대비용까지
+   * 상쇄하는 것으로 계산하면 그게 낙관 방향이다.
    */
   const required =
-    price === null || deposit === null || costs === null
+    price === null || deposit === null || costs === null || loanPrincipal === null
       ? null
-      : Math.max(0, price - deposit + costs.total);
+      : Math.max(0, price - deposit - loanPrincipal) + costs.total;
 
   const shortfall =
     required === null || cash === null ? null : Math.max(0, required - cash);
   const remainingCash =
     required === null || cash === null ? null : cash - required;
 
-  return { price, deposit, cash, costs, required, shortfall, remainingCash };
+  return {
+    price,
+    deposit,
+    cash,
+    costs,
+    loanPrincipal,
+    required,
+    shortfall,
+    remainingCash,
+  };
 }
 
+/**
+ * 필요 자기자금.
+ *
+ * 문구는 유형별로 갈린다({@link OwnFundsRule}) — 월세 화면의 필드 라벨은
+ * "보증금"인데 결과가 "전세보증금"이라고 말하면 사용자가 방금 적은 값과
+ * 다른 것을 가리키는 말이 된다.
+ *
+ * 대출 원금을 모르면(`funds.loanPrincipal === null`) 판정은 `unknown`이고
+ * 문구는 왜 낼 수 없는지를 말한다. **대출을 0원으로 두지 않는다.**
+ */
 function ownFundsMetric(
   rules: PurchaseRules,
   funds: FundsContext,
+  copy: {
+    stop: string;
+    checked: string;
+    unknown: string;
+    /** 대출을 낀다는데 원금을 몰라 아예 내지 않는 경우(월세 수익형에만 있다) */
+    loanUnknown?: string;
+  },
 ): OwnFundsResult {
   const rule = rules.metrics.ownFunds;
+  const loanUnknown = funds.loanPrincipal === null;
   const verdict: PurchaseVerdict =
     funds.required === null || funds.shortfall === null
       ? "unknown"
@@ -222,20 +298,30 @@ function ownFundsMetric(
         ? "stop"
         : "checked";
 
-  const messageKey = verdict === "unknown" ? "unknown" : verdict;
+  const message =
+    loanUnknown && copy.loanUnknown !== undefined
+      ? copy.loanUnknown
+      : copy[verdict === "unknown" ? "unknown" : verdict];
 
   return {
     id: "ownFunds",
     label: rule.label,
     verdict,
     verdictLabel: rules.verdictLabels[verdict],
-    message: rule.messages[messageKey],
+    message,
     required: funds.required,
+    loanPrincipal: funds.loanPrincipal,
     costs: funds.costs,
     cash: funds.cash,
     shortfall: funds.shortfall,
     remainingCash: funds.remainingCash,
     acquisitionNote: rules.acquisition.note,
+    acquisitionHouseholdCountNote: rules.acquisition.householdCountNote,
+    // 대출 원금을 실제로 뺐을 때만 붙인다. 뺀 적이 없으면 전제도 없다.
+    loanAssumptionNote:
+      funds.loanPrincipal !== null && funds.loanPrincipal > 0
+        ? rule.loanAssumptionNote
+        : null,
   };
 }
 
@@ -256,7 +342,7 @@ function gapMetrics(
       case "reverseJeonse":
         return reverseJeonseMetric(rules, funds);
       default:
-        return ownFundsMetric(rules, funds);
+        return ownFundsMetric(rules, funds, rules.metrics.ownFunds.messages.갭투자);
     }
   });
 }
@@ -368,7 +454,12 @@ function rentalMetrics(
   input: RentalInput,
   ids: readonly PurchaseMetricId[],
 ): PurchaseMetricResult[] {
-  const funds = fundsContextOf(rules, financeRules, input);
+  const funds = fundsContextOf(
+    rules,
+    financeRules,
+    input,
+    loanFundingOf(input.loan),
+  );
 
   const monthlyRent = money(input.monthlyRent);
   const annualRentIncome =
@@ -394,7 +485,11 @@ function rentalMetrics(
       case "rti":
         return rtiMetric(rules, annualRentIncome, input.loan);
       default:
-        return ownFundsMetric(rules, funds);
+        return ownFundsMetric(
+          rules,
+          funds,
+          rules.metrics.ownFunds.messages.월세수익형,
+        );
     }
   });
 }

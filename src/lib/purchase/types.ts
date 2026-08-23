@@ -127,6 +127,7 @@ export type RentalFieldId =
   | "cash"
   | "monthlyRent"
   | "annualOperatingCost"
+  | "loanPrincipal"
   | "annualDebtService"
   | "annualInterest";
 
@@ -164,8 +165,18 @@ export interface PurchaseOverallCopy {
 export interface AcquisitionAssumption {
   isFirstTimeBuyer: boolean;
   assumedExclusiveAreaSqm: number;
-  /** 이 전제를 화면에 밝히는 문구 */
+  /** 이름 붙인 두 전제(면적·생애최초)를 화면에 밝히는 문구 */
   note: string;
+  /**
+   * **이름 붙이지 않은 세 번째 전제** — 취득자의 주택 수.
+   *
+   * `calcAcquisitionCosts`는 `profile.status`를 읽지 않고,
+   * `rules/2026-08.json`에는 다주택 취득세 중과 분기가 없다. 그 중과율을
+   * 확인하지 못했으므로 숫자를 넣지 않고, 대신 **묻지 않았다는 사실과
+   * 부대비용이 이보다 커질 수 있다는 방향**을 이 문구가 말한다.
+   * 파서가 방향을 강제한다(작아진다고만 말하는 문구는 거부된다).
+   */
+  householdCountNote: string;
 }
 
 export interface JeonseRatioRule {
@@ -177,9 +188,23 @@ export interface JeonseRatioRule {
   messages: Record<"stop" | "expert" | "checked" | "unknown", string>;
 }
 
+/**
+ * 필요 자기자금 규칙.
+ *
+ * **문구가 유형별로 갈린다.** 산식은 같아도 화면에 적히는 이름이 다르다 —
+ * 월세 화면의 필드 라벨은 "보증금"인데 결과가 "전세보증금"이라고 말하면
+ * 사용자가 방금 적은 값과 다른 것을 가리키는 말이 된다. 파서가
+ * 월세수익형 문구에 "전세보증금"이 들어오는 것을 거부한다.
+ */
 export interface OwnFundsRule {
   label: string;
-  messages: Record<"stop" | "checked" | "unknown", string>;
+  /** 대출 원금을 뺀 계산이 그 대출을 전제한다는 사실을 밝히는 문구 */
+  loanAssumptionNote: string;
+  messages: {
+    갭투자: Record<"stop" | "checked" | "unknown", string>;
+    /** `loanUnknown`: 대출을 낀다는데 원금을 몰라 아예 내지 않는 경우 */
+    월세수익형: Record<"stop" | "checked" | "unknown" | "loanUnknown", string>;
+  };
 }
 
 export interface ReverseJeonseStageRule {
@@ -273,6 +298,14 @@ export type RentalLoanAnswer =
   | { kind: "none" }
   | {
       kind: "known";
+      /**
+       * 대출 원금(원). `null`은 0원이 아니라 모름이다.
+       *
+       * **아래 두 값에서 역산하지 않는다.** 금리와 기간을 모르면 연간
+       * 원리금·이자에서 원금이 나오지 않는다. 모르면 필요 자기자금을
+       * 아예 내지 않는다 — 0으로 두면 대출이 없는 것으로 계산된다.
+       */
+      principal: number | null;
       /** 연간 원리금 상환액(원). `null`은 0원이 아니라 모름이다 */
       annualDebtService: number | null;
       /** 연간 이자비용(원). `null`은 0원이 아니라 모름이다 */
@@ -327,16 +360,26 @@ export interface JeonseRatioResult extends MetricResultBase {
 
 export interface OwnFundsResult extends MetricResultBase {
   id: "ownFunds";
-  /** 매매 예정가 − 보증금 + 부대비용(원). 낼 수 없으면 null */
+  /** 매매 예정가 − 보증금 − 대출 원금 + 부대비용(원). 낼 수 없으면 null */
   required: number | null;
+  /**
+   * 이 계산에서 뺀 대출 원금(원). 대출을 끼지 않으면 0, 모르면 null.
+   *
+   * `null`이면 필요 자기자금도 내지 않는다 — 0으로 대신 두지 않는다.
+   */
+  loanPrincipal: number | null;
   costs: CostBreakdown | null;
   cash: number | null;
   /** 모자란 금액(원). 모자라지 않으면 0, 낼 수 없으면 null */
   shortfall: number | null;
   /** 매수에 쓰고 남는 현금(원). 음수일 수 있다. 낼 수 없으면 null */
   remainingCash: number | null;
-  /** 부대비용 전제를 밝히는 문구 */
+  /** 부대비용 전제(면적·생애최초)를 밝히는 문구 */
   acquisitionNote: string;
+  /** 주택 수를 묻지 않았고 부대비용이 이보다 커질 수 있다는 문구 */
+  acquisitionHouseholdCountNote: string;
+  /** 대출 원금을 뺐을 때만 붙는, 그 대출을 전제한다는 문구. 아니면 null */
+  loanAssumptionNote: string | null;
 }
 
 export interface ReverseJeonseStageResult {
@@ -403,7 +446,5 @@ export interface PurchaseAssessment {
   /** "이 유형의 대출 한도는 우리가 계산하지 않아요 …" */
   loanLimitNote: string;
   metrics: PurchaseMetricResult[];
-  /** 아직 낼 수 없는 지표가 있는가 */
-  hasUnknownMetric: boolean;
   disclaimer: readonly string[];
 }

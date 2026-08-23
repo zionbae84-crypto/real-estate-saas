@@ -123,6 +123,19 @@ function MetricValues({ metric }: { metric: PurchaseMetricResult }) {
               label="그중 부대비용"
               value={won(metric.costs === null ? null : metric.costs.total)}
             />
+            {/*
+              대출을 실제로 뺐을 때만 그 금액을 적는다. 0원(대출을 끼지
+              않음)은 뺀 것이 없다는 뜻이라 줄을 만들지 않는다.
+            */}
+            <Row
+              field="ownFundsLoanPrincipal"
+              label="그중 대출 원금(뺀 금액)"
+              value={
+                metric.loanPrincipal === null || metric.loanPrincipal === 0
+                  ? null
+                  : formatWon(metric.loanPrincipal)
+              }
+            />
             <Row field="ownFundsCash" label="보유 현금" value={won(metric.cash)} />
             <Row
               field="ownFundsShortfall"
@@ -144,6 +157,17 @@ function MetricValues({ metric }: { metric: PurchaseMetricResult }) {
             />
           </dl>
           <p className="purchase-metric-note">{metric.acquisitionNote}</p>
+          {/*
+            이름 붙이지 않은 세 번째 전제 — 취득자의 주택 수. 이 계산에
+            들어 있지 않고, 이미 집이 있으면 부대비용은 이보다 커질 수
+            있다. 위 문구와 방향이 반대라 반드시 함께 나가야 한다.
+          */}
+          <p className="purchase-metric-note">
+            {metric.acquisitionHouseholdCountNote}
+          </p>
+          {metric.loanAssumptionNote !== null && (
+            <p className="purchase-metric-note">{metric.loanAssumptionNote}</p>
+          )}
         </>
       );
     case "reverseJeonse":
@@ -159,10 +183,21 @@ function MetricValues({ metric }: { metric: PurchaseMetricResult }) {
                   : formatWon(metric.remainingCash)
               }
             />
+            {/*
+              리뷰 수정(Minor 4): 분자를 감추고 비율만 내지 않는다. 남는
+              현금이 음수면 위 줄은 사라지는데, 그때 "보증금 반환 여력"만
+              −0.42배 같은 음수 배수로 남으면 무엇을 무엇으로 나눈
+              숫자인지가 종이에서 사라진다. 못 막는다는 사실은 아래 단계별
+              "남는 현금으로 못 막아요"가 글자로 말한다.
+            */}
             <Row
               field="reverseCoverage"
               label="보증금 반환 여력(가장 큰 하락 기준)"
-              value={times(metric.coverageRatio)}
+              value={
+                metric.remainingCash === null || metric.remainingCash < 0
+                  ? null
+                  : times(metric.coverageRatio)
+              }
             />
           </dl>
           {metric.stages.length > 0 && (

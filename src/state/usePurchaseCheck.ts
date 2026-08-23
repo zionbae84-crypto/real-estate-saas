@@ -20,7 +20,10 @@ export const purchaseRules: PurchaseRules = parsePurchaseRules(rawPurchaseRules)
 
 export type GapMoneyField = keyof GapInput;
 export type RentalMoneyField = "price" | "deposit" | "cash" | "monthlyRent" | "annualOperatingCost";
-export type LoanMoneyField = "annualDebtService" | "annualInterest";
+export type LoanMoneyField =
+  | "principal"
+  | "annualDebtService"
+  | "annualInterest";
 
 export interface PurchaseCheckState {
   rules: PurchaseRules;
@@ -91,7 +94,12 @@ export function usePurchaseCheck(type: InvestmentType): PurchaseCheckState {
       ...current,
       loan:
         kind === "known"
-          ? { kind, annualDebtService: null, annualInterest: null }
+          ? {
+              kind,
+              principal: null,
+              annualDebtService: null,
+              annualInterest: null,
+            }
           : { kind },
     }));
   }, []);

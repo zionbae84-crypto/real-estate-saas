@@ -133,7 +133,7 @@ function LoanFields({
   loan: RentalLoanAnswer;
   onKindChange: (kind: RentalLoanAnswer["kind"]) => void;
   onAmountChange: (
-    field: "annualDebtService" | "annualInterest",
+    field: "principal" | "annualDebtService" | "annualInterest",
     won: number | null,
   ) => void;
 }) {
@@ -159,6 +159,19 @@ function LoanFields({
 
       {loan.kind === "known" && (
         <>
+          {/*
+            대출 원금을 **따로 묻는다.** 아래 두 값(연간 원리금·이자)에서
+            원금을 역산할 수 없기 때문이다 — 금리와 기간을 모르면 그 둘로는
+            원금이 나오지 않는다. 원금이 비어 있으면 필요 자기자금을 아예
+            내지 않는다(0으로 두면 대출이 없는 것으로 계산된다).
+          */}
+          <MoneyInput
+            id="purchase-rental-loanPrincipal"
+            label={rule.fields.loanPrincipal.label}
+            hint={rule.fields.loanPrincipal.hint}
+            value={loan.principal}
+            onChange={(won) => onAmountChange("principal", won)}
+          />
           <MoneyInput
             id="purchase-rental-annualDebtService"
             label={rule.fields.annualDebtService.label}

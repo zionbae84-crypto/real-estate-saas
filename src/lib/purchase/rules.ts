@@ -26,9 +26,19 @@ const RENTAL_FIELD_IDS = [
   "cash",
   "monthlyRent",
   "annualOperatingCost",
+  "loanPrincipal",
   "annualDebtService",
   "annualInterest",
 ] as const;
+
+/**
+ * 부대비용이 **작아진다**고 말하는 표현과 **커진다**고 말하는 표현.
+ *
+ * 부대비용 전제 문구가 한 방향으로만 단언하는 것을 막는 데 쓴다 —
+ * {@link parseAcquisition} 참고.
+ */
+const COST_SHRINKS = /작아질|작아져|적어질|줄어들|덜 나올|덜 나와/;
+const COST_GROWS = /커질|커지|많아질|늘어날|더 나올|더 나와/;
 
 /**
  * 구매 유형 룰셋 JSON을 검증해 {@link PurchaseRules}로 바꾼다.
@@ -55,6 +65,15 @@ const RENTAL_FIELD_IDS = [
  *    못 막는 쪽이 30% 하락을 못 막는 쪽보다 위험하다.
  * 6. **RTI는 stop 임계값을 가질 수 없다.** 그 기준값의 출처를 확인하지
  *    못했다 — 확인되지 않은 숫자로 거래를 멈추라고 말할 수는 없다.
+ * 7. **DSCR의 stopBelow는 1보다 작을 수 없다.** 6번과 반대 방향의 같은
+ *    이유다 — DSCR이 1 미만이라는 것은 임대료로 원리금을 못 갚는다는
+ *    뜻 그 자체라, 참고선이 아니라 산식이 직접 말하는 사실이다.
+ * 8. **부대비용 전제는 한 방향으로 단언할 수 없다.** 취득자의 주택 수는
+ *    묻지도 계산하지도 않았고, 이미 집이 있으면 부대비용은 오히려
+ *    커진다({@link parseAcquisition}).
+ * 9. **필요 자기자금 문구는 유형별로 갈린다.** 월세 수익형 문구가
+ *    "전세보증금"이라고 말하면 사용자가 방금 적은 값과 다른 것을
+ *    가리키는 말이 된다({@link parseOwnFunds}).
  */
 export function parsePurchaseRules(raw: unknown): PurchaseRules {
   const r = plainObject(raw, "룰셋");
@@ -96,6 +115,25 @@ export function parsePurchaseRules(raw: unknown): PurchaseRules {
   return raw as PurchaseRules;
 }
 
+/**
+ * 부대비용 전제를 검증한다.
+ *
+ * **여기서 지키는 것은 숫자가 아니라 문구의 방향이다.**
+ * `calcAcquisitionCosts`는 취득자의 주택 수를 읽지 않고,
+ * `rules/2026-08.json`에는 다주택 취득세 중과 분기가 없다. 그 중과율을
+ * 확인하지 못했으므로 숫자를 넣지 않는다 — 대신 화면이 그 한계를
+ * **반대 방향으로 말하지 못하게** 막는다.
+ *
+ * 1. `householdCountNote`가 반드시 있어야 하고, 주택 수를 묻지 않았다는
+ *    사실과 부대비용이 **이보다 커질 수 있다**는 방향을 말해야 한다.
+ * 2. "부대비용이 이보다 작아질 수 있다"는 말은 **주택 수를 함께 이름
+ *    붙이고 커지는 방향도 함께 말할 때만** 쓸 수 있다. 그 말 자체는
+ *    이름 붙인 두 전제(면적·생애최초)에 대해서만 참이고, 이름 붙이지
+ *    않은 세 번째 전제(주택 수)에 대해서는 정확히 반대이기 때문이다.
+ *    앞쪽에서 "전제는 비용이 커지는 쪽으로 잡았다"고 덧붙이는 것만으로는
+ *    부족하다 — 실제로 화면에 나가던 옛 문구가 정확히 그 모양이었고,
+ *    거기서 독자가 가져가는 결론은 뒤쪽의 "이보다 작아질 수 있어요"다.
+ */
 function parseAcquisition(raw: unknown): void {
   const a = plainObject(raw, "acquisition");
   if (typeof a.isFirstTimeBuyer !== "boolean") {
@@ -103,6 +141,25 @@ function parseAcquisition(raw: unknown): void {
   }
   requirePositive(a, "assumedExclusiveAreaSqm", "acquisition.assumedExclusiveAreaSqm");
   requireText(a, "note", "acquisition.note");
+  requireText(a, "householdCountNote", "acquisition.householdCountNote");
+
+  const household = a.householdCountNote as string;
+  if (!/주택 수/.test(household)) {
+    throw new Error("룰셋 값 오류: acquisition.householdCountNote는 주택 수를 묻지 않았다는 사실을 말해야 해요. 취득세는 주택 수에 따라 달라지는데 이 계산에는 그 분기가 없어요.");
+  }
+  if (!COST_GROWS.test(household)) {
+    throw new Error("룰셋 값 오류: acquisition.householdCountNote는 부대비용이 이보다 커질 수 있다는 방향을 말해야 해요. 이미 집이 있으면 취득세가 더 나올 수 있는데, 그 방향을 말하지 않으면 화면이 한계를 반대로 말하게 돼요.");
+  }
+
+  for (const key of ["note", "householdCountNote"] as const) {
+    const text = a[key] as string;
+    if (
+      COST_SHRINKS.test(text) &&
+      !(COST_GROWS.test(text) && /주택 수/.test(text))
+    ) {
+      throw new Error(`룰셋 값 오류: acquisition.${key}가 부대비용이 이보다 작아질 수 있다고 말해요. 취득자의 주택 수는 묻지도 계산하지도 않았고, 이미 집이 있으면 부대비용은 오히려 커질 수 있어요 — 작아지는 방향은 주택 수를 함께 이름 붙이고 커지는 방향도 함께 말할 때만 쓸 수 있어요.`);
+    }
+  }
 }
 
 /** 유형별 정의를 검증하고, 어느 지표가 실제로 쓰이는지 모아 돌려준다 */
@@ -205,11 +262,7 @@ function parseMetrics(raw: unknown, used: Set<PurchaseMetricId>): void {
     throw new Error(`룰셋 값 오류: metrics.jeonseRatio.expertFrom은 stopFrom 이하여야 해요 (${expertFrom} / ${stopFrom}). 뒤집히면 더 위험한 상황이 더 약한 판정을 받아요.`);
   }
 
-  requireMessages(plainObject(m.ownFunds, "metrics.ownFunds"), "metrics.ownFunds", [
-    "stop",
-    "checked",
-    "unknown",
-  ]);
+  parseOwnFunds(plainObject(m.ownFunds, "metrics.ownFunds"));
 
   parseReverseJeonse(plainObject(m.reverseJeonse, "metrics.reverseJeonse"));
 
@@ -226,6 +279,16 @@ function parseMetrics(raw: unknown, used: Set<PurchaseMetricId>): void {
     const expertBelow = requireFinite(rule, "expertBelow", `metrics.${id}.expertBelow`);
     if (!(stopBelow <= expertBelow)) {
       throw new Error(`룰셋 값 오류: metrics.${id}.stopBelow는 expertBelow 이하여야 해요 (${stopBelow} / ${expertBelow}). 뒤집히면 더 위험한 상황이 더 약한 판정을 받아요.`);
+    }
+    /*
+     * DSCR의 stopBelow는 참고선이 아니라 **산식이 직접 말하는 사실**이다:
+     * 순영업소득 ÷ 연간 원리금이 1.0보다 작다는 것은 임대료로 원리금을
+     * 못 갚는다는 뜻 그 자체다. 그래서 그 사실을 룰셋 편집으로 지울 수
+     * 없게 막는다(RTI의 stopBelow 금지 가드와 같은 자리, 반대 방향이다).
+     * 1보다 크게 두는 것 — 더 일찍 멈추는 것 — 은 막지 않는다.
+     */
+    if (id === "dscr" && !(stopBelow >= 1)) {
+      throw new Error(`룰셋 값 오류: metrics.dscr.stopBelow는 1 이상이어야 해요 (${stopBelow}). 1보다 작게 두면 임대료로 원리금을 못 갚는 상태가 stop이 아니게 되는데, 그건 참고선이 아니라 산식이 직접 말하는 사실이에요.`);
     }
   }
 
@@ -244,6 +307,35 @@ function parseMetrics(raw: unknown, used: Set<PurchaseMetricId>): void {
   }
 }
 
+/**
+ * 필요 자기자금 규칙.
+ *
+ * 산식은 두 유형이 같지만 **문구는 갈라야 한다.** 월세 화면의 필드
+ * 라벨은 "보증금"인데 결과가 "전세보증금"이라고 말하면, 사용자가 방금
+ * 적은 값과 다른 것을 가리키는 말이 된다. 문구를 다시 하나로 합치면
+ * 여기서 거부된다.
+ */
+function parseOwnFunds(rule: Record<string, unknown>): void {
+  requireText(rule, "loanAssumptionNote", "metrics.ownFunds.loanAssumptionNote");
+  const messages = plainObject(rule.messages, "metrics.ownFunds.messages");
+
+  const gap = plainObject(messages["갭투자"], "metrics.ownFunds.messages.갭투자");
+  for (const key of ["stop", "checked", "unknown"] as const) {
+    requireText(gap, key, `metrics.ownFunds.messages.갭투자.${key}`);
+  }
+
+  const rental = plainObject(
+    messages["월세수익형"],
+    "metrics.ownFunds.messages.월세수익형",
+  );
+  for (const key of ["stop", "checked", "unknown", "loanUnknown"] as const) {
+    requireText(rental, key, `metrics.ownFunds.messages.월세수익형.${key}`);
+    if (/전세보증금/.test(rental[key] as string)) {
+      throw new Error(`룰셋 값 오류: metrics.ownFunds.messages.월세수익형.${key}가 '전세보증금'이라고 말해요. 월세 수익형 화면의 필드 라벨은 '보증금'이라, 사용자가 방금 적은 값과 다른 것을 가리키는 말이 돼요.`);
+    }
+  }
+}
+
 function parseReverseJeonse(rule: Record<string, unknown>): void {
   requireMessages(rule, "metrics.reverseJeonse", [
     "stop",
@@ -253,9 +345,15 @@ function parseReverseJeonse(rule: Record<string, unknown>): void {
   ]);
   requireText(rule, "depositIsNotDebtNote", "metrics.reverseJeonse.depositIsNotDebtNote");
 
+  /*
+   * **두 단계 이상이어야 한다.** 예전에는 "한 단계 이상"만 강제했는데,
+   * 바로 아래 오류 문구와 룰셋의 `_note`가 말하는 이유("단일 시나리오는
+   * '그 숫자만 피하면 된다'로 읽힌다")를 그 불변식이 실제로는 막지
+   * 못했다 — 강제하는 것과 적어 둔 이유가 어긋나 있던 자리다.
+   */
   const stages = rule.stages;
-  if (!Array.isArray(stages) || stages.length === 0) {
-    throw new Error("룰셋 값 오류: metrics.reverseJeonse.stages는 한 단계 이상이어야 해요. 단일 시나리오는 '그 숫자만 피하면 된다'로 읽혀요.");
+  if (!Array.isArray(stages) || stages.length < 2) {
+    throw new Error("룰셋 값 오류: metrics.reverseJeonse.stages는 두 단계 이상이어야 해요. 단일 시나리오는 '그 숫자만 피하면 된다'로 읽혀요.");
   }
 
   let previousDrop = 0;

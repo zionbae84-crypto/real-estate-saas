@@ -315,13 +315,14 @@ describe("갭투자 — 역전세", () => {
   });
 
   it("하락 단계를 룰셋에서 바꾸면 계산이 따라 바뀐다", () => {
-    const oneStage = withRules((draft) => {
+    const twoStages = withRules((draft) => {
       const metrics = draft.metrics as Record<string, Record<string, unknown>>;
       (metrics.reverseJeonse as Record<string, unknown>).stages = [
         { drop: 0.5, uncoveredVerdict: "stop" },
+        { drop: 0.6, uncoveredVerdict: "expert" },
       ];
     });
-    const assessment = assessPurchase(oneStage, financeRules, {
+    const assessment = assessPurchase(twoStages, financeRules, {
       type: "갭투자",
       price,
       deposit,
@@ -329,7 +330,7 @@ describe("갭투자 — 역전세", () => {
     });
     const metric = metricOf(assessment.metrics, "reverseJeonse");
     if (metric.id !== "reverseJeonse") throw new Error("지표가 뒤바뀌었다");
-    expect(metric.stages).toHaveLength(1);
+    expect(metric.stages).toHaveLength(2);
     expect(metric.stages[0]?.needed).toBe(deposit - Math.round(deposit * 0.5));
   });
 });
@@ -431,7 +432,7 @@ describe("월세 수익형 — DSCR", () => {
     const metric = metricOf(
       rental({
         ...base,
-        loan: { kind: "known", annualDebtService: 2000 * 만, annualInterest: null },
+        loan: { kind: "known", principal: null, annualDebtService: 2000 * 만, annualInterest: null },
       }).metrics,
       "dscr",
     );
@@ -443,7 +444,7 @@ describe("월세 수익형 — DSCR", () => {
     const metric = metricOf(
       rental({
         ...base,
-        loan: { kind: "known", annualDebtService: noi, annualInterest: null },
+        loan: { kind: "known", principal: null, annualDebtService: noi, annualInterest: null },
       }).metrics,
       "dscr",
     );
@@ -456,7 +457,7 @@ describe("월세 수익형 — DSCR", () => {
     const metric = metricOf(
       rental({
         ...base,
-        loan: { kind: "known", annualDebtService: noi + 1, annualInterest: null },
+        loan: { kind: "known", principal: null, annualDebtService: noi + 1, annualInterest: null },
       }).metrics,
       "dscr",
     );
@@ -467,7 +468,7 @@ describe("월세 수익형 — DSCR", () => {
     const metric = metricOf(
       rental({
         ...base,
-        loan: { kind: "known", annualDebtService: null, annualInterest: null },
+        loan: { kind: "known", principal: null, annualDebtService: null, annualInterest: null },
       }).metrics,
       "dscr",
     );
@@ -481,19 +482,48 @@ describe("월세 수익형 — DSCR", () => {
     expect(metric.message).toContain("좋다는 뜻이 아니에요");
   });
 
-  it("임계값은 코드가 아니라 룰셋에서 온다", () => {
-    const lenient = withRules((draft) => {
+  it("참고선은 코드가 아니라 룰셋에서 온다", () => {
+    const strict = withRules((draft) => {
       const metrics = draft.metrics as Record<string, Record<string, unknown>>;
-      const dscr = metrics.dscr as Record<string, unknown>;
-      dscr.stopBelow = 0.5;
-      dscr.expertBelow = 0.6;
+      (metrics.dscr as Record<string, unknown>).expertBelow = 3;
     });
-    const assessment = assessPurchase(lenient, financeRules, {
+    const assessment = assessPurchase(strict, financeRules, {
       type: "월세수익형",
       ...base,
-      loan: { kind: "known", annualDebtService: 2000 * 만, annualInterest: null },
+      // 순영업소득 1,800만 ÷ 원리금 1,200만 = 1.5배.
+      loan: { kind: "known", principal: null, annualDebtService: 1200 * 만, annualInterest: null },
     });
-    // 기본 룰셋에서는 stop이던 0.9가 여기서는 checked다.
+    // 기본 룰셋(1.25)에서는 checked였던 1.5가 여기서는 expert다.
+    expect(metricOf(assessment.metrics, "dscr").verdict).toBe("expert");
+  });
+
+  /*
+   * 리뷰 수정(Minor 2): stopBelow=1은 참고선이 아니라 산식이 직접 말하는
+   * 사실이다 — 그 사실을 룰셋 편집으로 지울 수 있으면 assess.ts의 주석이
+   * 거짓이 된다. RTI의 stopBelow 금지 가드와 같은 자리, 반대 방향이다.
+   */
+  it("stopBelow를 1보다 낮추는 편집은 룰셋 파서가 막는다", () => {
+    for (const stopBelow of [0, 0.5]) {
+      expect(() =>
+        withRules((draft) => {
+          const metrics = draft.metrics as Record<string, Record<string, unknown>>;
+          (metrics.dscr as Record<string, unknown>).stopBelow = stopBelow;
+        }),
+      ).toThrow(/stopBelow는 1 이상/);
+    }
+  });
+
+  it("더 일찍 멈추는 쪽(1보다 큰 stopBelow)은 막지 않는다(오탐 방지 확인)", () => {
+    const strict = withRules((draft) => {
+      const metrics = draft.metrics as Record<string, Record<string, unknown>>;
+      (metrics.dscr as Record<string, unknown>).stopBelow = 1.1;
+    });
+    const assessment = assessPurchase(strict, financeRules, {
+      type: "월세수익형",
+      ...base,
+      // 1.5배는 기본 룰셋에서 checked지만 stopBelow=1.1에서도 여전히 위다.
+      loan: { kind: "known", principal: null, annualDebtService: 1200 * 만, annualInterest: null },
+    });
     expect(metricOf(assessment.metrics, "dscr").verdict).toBe("checked");
   });
 });
@@ -511,7 +541,7 @@ describe("월세 수익형 — RTI", () => {
     const metric = metricOf(
       rental({
         ...base,
-        loan: { kind: "known", annualDebtService: null, annualInterest: 2000 * 만 },
+        loan: { kind: "known", principal: null, annualDebtService: null, annualInterest: 2000 * 만 },
       }).metrics,
       "rti",
     );
@@ -527,7 +557,7 @@ describe("월세 수익형 — RTI", () => {
       const metric = metricOf(
         rental({
           ...base,
-          loan: { kind: "known", annualDebtService: null, annualInterest: interest },
+          loan: { kind: "known", principal: null, annualDebtService: null, annualInterest: interest },
         }).metrics,
         "rti",
       );
@@ -540,14 +570,14 @@ describe("월세 수익형 — RTI", () => {
     const below = metricOf(
       rental({
         ...base,
-        loan: { kind: "known", annualDebtService: null, annualInterest: 2000 * 만 },
+        loan: { kind: "known", principal: null, annualDebtService: null, annualInterest: 2000 * 만 },
       }).metrics,
       "rti",
     ).message;
     const above = metricOf(
       rental({
         ...base,
-        loan: { kind: "known", annualDebtService: null, annualInterest: 1000 * 만 },
+        loan: { kind: "known", principal: null, annualDebtService: null, annualInterest: 1000 * 만 },
       }).metrics,
       "rti",
     ).message;
@@ -564,7 +594,7 @@ describe("월세 수익형 — RTI", () => {
     const assessment = assessPurchase(lower, financeRules, {
       type: "월세수익형",
       ...base,
-      loan: { kind: "known", annualDebtService: null, annualInterest: 2000 * 만 },
+      loan: { kind: "known", principal: null, annualDebtService: null, annualInterest: 2000 * 만 },
     });
     // 기본 룰셋(1.25)에서는 belowReference였던 1.2가 여기서는 위쪽이다.
     expect(metricOf(assessment.metrics, "rti").message).toBe(
@@ -576,7 +606,7 @@ describe("월세 수익형 — RTI", () => {
     const metric = metricOf(
       rental({
         ...base,
-        loan: { kind: "known", annualDebtService: null, annualInterest: null },
+        loan: { kind: "known", principal: null, annualDebtService: null, annualInterest: null },
       }).metrics,
       "rti",
     );
@@ -633,5 +663,394 @@ describe("전체 결론", () => {
       cash: 3 * 억,
     });
     expect(assessment.overallLabel).toBe("여기서 멈춰요");
+  });
+});
+
+/**
+ * 리뷰 수정(Critical 1): 부대비용 계산에 취득자의 주택 수가 들어 있지
+ * 않다는 사실이 화면까지 실제로 나가는지 확인한다. 룰셋 파서가 문구의
+ * 방향을 잠그고(rules.test.ts), 여기서는 그 문구가 지표에 실려 나가는
+ * 배선을 잠근다 — 룰셋에만 있고 화면에 안 나가면 아무 일도 안 한다.
+ */
+describe("부대비용 전제 — 주택 수", () => {
+  const price = 5 * 억;
+
+  it("두 문구가 모두 필요 자기자금에 실려 나간다", () => {
+    for (const metric of [
+      metricOf(gap({ price, deposit: 3 * 억, cash: 2 * 억 }).metrics, "ownFunds"),
+      metricOf(
+        rental({ price, deposit: 3000 * 만, cash: 2 * 억, loan: { kind: "none" } })
+          .metrics,
+        "ownFunds",
+      ),
+    ]) {
+      if (metric.id !== "ownFunds") throw new Error("지표가 뒤바뀌었다");
+      expect(metric.acquisitionNote).toBe(rules.acquisition.note);
+      expect(metric.acquisitionHouseholdCountNote).toBe(
+        rules.acquisition.householdCountNote,
+      );
+      expect(metric.acquisitionHouseholdCountNote).toContain("주택 수");
+    }
+  });
+
+  it("어느 문구도 부대비용이 이보다 작아진다고 말하지 않는다", () => {
+    const metric = metricOf(
+      gap({ price, deposit: 3 * 억, cash: 2 * 억 }).metrics,
+      "ownFunds",
+    );
+    if (metric.id !== "ownFunds") throw new Error("지표가 뒤바뀌었다");
+    for (const text of [
+      metric.acquisitionNote,
+      metric.acquisitionHouseholdCountNote,
+    ]) {
+      expect(text).not.toMatch(/작아질 수 있어요/);
+    }
+  });
+});
+
+/**
+ * 리뷰 수정(Important 1): 화면이 스스로 "대출을 끼나요?"라고 묻고도 그
+ * 답을 필요 자기자금에서 무시하고 있었다.
+ *
+ * **원금을 역산하지 않는다.** 사용자가 알려주는 것은 연간 원리금과 연간
+ * 이자이지 원금이 아니고, 금리·기간을 모르면 그 둘에서 원금이 나오지
+ * 않는다. 그래서 원금을 따로 묻고, 모르면 이 지표를 아예 내지 않는다 —
+ * 0으로 두면 대출이 없는 것으로 계산된다.
+ */
+describe("월세 수익형 — 필요 자기자금과 대출", () => {
+  const price = 5 * 억;
+  const base = { price, deposit: 5000 * 만, cash: 2 * 억 };
+
+  it("대출이 있다고만 답하면 필요 자기자금을 내지 않는다 — 0으로 두지 않는다", () => {
+    const metric = metricOf(
+      rental({ ...base, loan: { kind: "unknown" } }).metrics,
+      "ownFunds",
+    );
+    if (metric.id !== "ownFunds") throw new Error("지표가 뒤바뀌었다");
+    expect(metric.verdict).toBe("unknown");
+    expect(metric.required).toBeNull();
+    expect(metric.loanPrincipal).toBeNull();
+    expect(metric.message).toBe(
+      rules.metrics.ownFunds.messages.월세수익형.loanUnknown,
+    );
+  });
+
+  it("원리금·이자만 알고 원금을 모르면 그때도 내지 않는다", () => {
+    const metric = metricOf(
+      rental({
+        ...base,
+        loan: {
+          kind: "known",
+          principal: null,
+          annualDebtService: 1500 * 만,
+          annualInterest: 1200 * 만,
+        },
+      }).metrics,
+      "ownFunds",
+    );
+    expect(metric.verdict).toBe("unknown");
+    expect(metric.id === "ownFunds" && metric.required).toBeNull();
+  });
+
+  it("원금을 알려주면 그만큼 빼고 낸다", () => {
+    const principal = 2 * 억;
+    const metric = metricOf(
+      rental({
+        ...base,
+        loan: {
+          kind: "known",
+          principal,
+          annualDebtService: 1500 * 만,
+          annualInterest: 1200 * 만,
+        },
+      }).metrics,
+      "ownFunds",
+    );
+    if (metric.id !== "ownFunds") throw new Error("지표가 뒤바뀌었다");
+    expect(metric.required).toBe(
+      price - 5000 * 만 - principal + costsAt(price),
+    );
+    expect(metric.loanPrincipal).toBe(principal);
+    // 대출을 무시하던 예전 계산보다 반드시 작다.
+    expect(metric.required).toBeLessThan(price - 5000 * 만 + costsAt(price));
+  });
+
+  it("원금을 뺐다는 사실과 그 대출이 나온다는 보장이 없다는 사실을 함께 말한다", () => {
+    const metric = metricOf(
+      rental({
+        ...base,
+        loan: {
+          kind: "known",
+          principal: 2 * 억,
+          annualDebtService: 1500 * 만,
+          annualInterest: 1200 * 만,
+        },
+      }).metrics,
+      "ownFunds",
+    );
+    if (metric.id !== "ownFunds") throw new Error("지표가 뒤바뀌었다");
+    expect(metric.loanAssumptionNote).toBe(
+      rules.metrics.ownFunds.loanAssumptionNote,
+    );
+    expect(metric.loanAssumptionNote).toContain("금융기관");
+  });
+
+  it("대출을 끼지 않는다고 답하면 확인한 0원으로 계산한다", () => {
+    const metric = metricOf(
+      rental({ ...base, loan: { kind: "none" } }).metrics,
+      "ownFunds",
+    );
+    if (metric.id !== "ownFunds") throw new Error("지표가 뒤바뀌었다");
+    expect(metric.loanPrincipal).toBe(0);
+    expect(metric.required).toBe(price - 5000 * 만 + costsAt(price));
+    // 뺀 것이 없으면 전제도 없다.
+    expect(metric.loanAssumptionNote).toBeNull();
+  });
+
+  it("대출이 매매가를 넘어도 부대비용은 남는다 — 상쇄되지 않는다", () => {
+    const metric = metricOf(
+      rental({
+        ...base,
+        loan: {
+          kind: "known",
+          principal: 10 * 억,
+          annualDebtService: 1500 * 만,
+          annualInterest: 1200 * 만,
+        },
+      }).metrics,
+      "ownFunds",
+    );
+    if (metric.id !== "ownFunds") throw new Error("지표가 뒤바뀌었다");
+    expect(metric.required).toBe(costsAt(price));
+  });
+
+  it("갭투자 문구와 월세 문구가 다르다 — 월세 화면은 '전세보증금'이라고 말하지 않는다", () => {
+    const gapMetric = metricOf(
+      gap({ price, deposit: 3 * 억, cash: 2 * 억 }).metrics,
+      "ownFunds",
+    );
+    const rentalMetric = metricOf(
+      rental({ ...base, loan: { kind: "none" } }).metrics,
+      "ownFunds",
+    );
+    expect(gapMetric.message).not.toBe(rentalMetric.message);
+    expect(rentalMetric.message).not.toContain("전세보증금");
+  });
+});
+
+/**
+ * 리뷰 수정(Important 5): 변이 검사에서 살아남은 낙관 방향 변이 넷.
+ *
+ * 넷 다 "모르는 값·성립하지 않는 값이 조용히 통과가 되는" 자리다.
+ * 각각을 아래 한 블록씩 잠근다.
+ */
+describe("낙관 방향으로 뒤집히면 안 되는 자리들", () => {
+  const price = 5 * 억;
+
+  describe("연간 금액이 0원이면 통과가 아니라 '낼 수 없어요'다", () => {
+    const base = {
+      price,
+      deposit: 3000 * 만,
+      cash: 2 * 억,
+      monthlyRent: 200 * 만,
+      annualOperatingCost: 600 * 만,
+    };
+
+    it("연간 원리금이 0원이면 DSCR은 checked가 아니다", () => {
+      // 0으로 나누면 ∞가 되어 어떤 임계값도 넘는다 — 가장 낙관적인 모습이다.
+      const metric = metricOf(
+        rental({
+          ...base,
+          loan: {
+            kind: "known",
+            principal: null,
+            annualDebtService: 0,
+            annualInterest: 1000 * 만,
+          },
+        }).metrics,
+        "dscr",
+      );
+      expect(metric.verdict).toBe("unknown");
+      expect(metric.verdict).not.toBe("checked");
+      expect(metric.message).toBe(rules.metrics.dscr.messages.noLoan);
+      expect(metric.id === "dscr" && metric.ratio).toBeNull();
+    });
+
+    it("연간 이자가 0원이면 RTI도 마찬가지다", () => {
+      const metric = metricOf(
+        rental({
+          ...base,
+          loan: {
+            kind: "known",
+            principal: null,
+            annualDebtService: 1000 * 만,
+            annualInterest: 0,
+          },
+        }).metrics,
+        "rti",
+      );
+      expect(metric.verdict).toBe("unknown");
+      expect(metric.message).toBe(rules.metrics.rti.messages.noLoan);
+      expect(metric.id === "rti" && metric.ratio).toBeNull();
+    });
+  });
+
+  describe("금액으로 성립하지 않는 값은 엔진 경계에서 막는다", () => {
+    /*
+     * 지금은 src/format/parseMoney.ts가 UI에서 막아 실제 도달 경로가
+     * 없지만, 엔진에 직접 넣으면 NaN이 비교를 전부 false로 만들어
+     * (`NaN >= 0.8 === false`) 지표가 조용히 checked가 된다. 엔진은
+     * 자기 경계에서 스스로 막아야 한다.
+     */
+    for (const bad of [NaN, Infinity, -1]) {
+      it(`매매가가 ${String(bad)}이면 전세가율을 내지 않는다`, () => {
+        const metric = metricOf(
+          gap({ price: bad, deposit: 3 * 억, cash: 2 * 억 }).metrics,
+          "jeonseRatio",
+        );
+        expect(metric.verdict).toBe("unknown");
+        expect(metric.id === "jeonseRatio" && metric.ratio).toBeNull();
+      });
+
+      it(`전세보증금이 ${String(bad)}이면 전세가율을 내지 않는다`, () => {
+        const metric = metricOf(
+          gap({ price, deposit: bad, cash: 2 * 억 }).metrics,
+          "jeonseRatio",
+        );
+        expect(metric.verdict).toBe("unknown");
+        expect(metric.id === "jeonseRatio" && metric.ratio).toBeNull();
+      });
+
+      it(`보유 현금이 ${String(bad)}이면 필요 자기자금을 통과시키지 않는다`, () => {
+        const metric = metricOf(
+          gap({ price, deposit: 3 * 억, cash: bad }).metrics,
+          "ownFunds",
+        );
+        expect(metric.verdict).toBe("unknown");
+      });
+
+      it(`월세가 ${String(bad)}이면 Cap Rate를 내지 않는다`, () => {
+        const metric = metricOf(
+          rental({
+            price,
+            deposit: 3000 * 만,
+            cash: 2 * 억,
+            monthlyRent: bad,
+            annualOperatingCost: 600 * 만,
+            loan: { kind: "none" },
+          }).metrics,
+          "capRate",
+        );
+        expect(metric.verdict).toBe("unknown");
+        expect(metric.id === "capRate" && metric.rate).toBeNull();
+      });
+    }
+  });
+
+  describe("분모가 0이면 지표가 성립하지 않는다", () => {
+    it("매매가가 0원이면 Cap Rate는 ∞가 아니라 '낼 수 없어요'다", () => {
+      // 0으로 나누면 Infinity가 되어 어떤 참고선도 넘는다 — "확인했어요"가 된다.
+      const metric = metricOf(
+        rental({
+          price: 0,
+          deposit: 0,
+          cash: 2 * 억,
+          monthlyRent: 200 * 만,
+          annualOperatingCost: 600 * 만,
+          loan: { kind: "none" },
+        }).metrics,
+        "capRate",
+      );
+      expect(metric.verdict).toBe("unknown");
+      expect(metric.verdict).not.toBe("checked");
+      expect(metric.id === "capRate" && metric.rate).toBeNull();
+    });
+
+    it("매매가가 0원이면 필요 자기자금도 내지 않는다", () => {
+      expect(
+        metricOf(gap({ price: 0, deposit: 0, cash: 2 * 억 }).metrics, "ownFunds")
+          .verdict,
+      ).toBe("unknown");
+    });
+  });
+
+  describe("Cap Rate 경계는 미만(<)이다", () => {
+    /*
+     * DSCR의 1.0·1.25와 전세가율의 0.7·0.8에는 경계 테스트가 있는데
+     * Cap Rate만 없었다. `<`를 `<=`로 바꾸면 참고선에 정확히 걸친 값이
+     * expert로 내려가는 대신 checked로 올라가는 자리다.
+     */
+    // 6억이면 참고선(4%)의 순영업소득 2,400만원이 12로 나누어떨어져,
+    // 월세를 반올림하지 않고 경계에 정확히 걸칠 수 있다.
+    const capPrice = 6 * 억;
+
+    /** 순영업소득이 정확히 `rate × 매매가`가 되도록 월세·운영비를 맞춘다 */
+    function capRateAt(rate: number) {
+      const noi = Math.round(capPrice * rate);
+      return metricOf(
+        rental({
+          price: capPrice,
+          deposit: 0,
+          cash: 2 * 억,
+          // 월세×12 − 운영비 = noi가 되도록 운영비를 0으로 두고 월세로 맞춘다.
+          monthlyRent: noi / 12,
+          annualOperatingCost: 0,
+          loan: { kind: "none" },
+        }).metrics,
+        "capRate",
+      );
+    }
+
+    it("expertBelow에 정확히 걸치면 checked다", () => {
+      const metric = capRateAt(rules.metrics.capRate.expertBelow);
+      if (metric.id !== "capRate") throw new Error("지표가 뒤바뀌었다");
+      expect(metric.rate).toBe(rules.metrics.capRate.expertBelow);
+      expect(metric.verdict).toBe("checked");
+    });
+
+    it("expertBelow에서 아주 조금 모자라면 expert다", () => {
+      const metric = capRateAt(rules.metrics.capRate.expertBelow - 0.0001);
+      expect(metric.verdict).toBe("expert");
+    });
+
+    it("stopBelow(순영업소득 0원)에 정확히 걸치면 stop이 아니라 expert다", () => {
+      const metric = capRateAt(rules.metrics.capRate.stopBelow);
+      if (metric.id !== "capRate") throw new Error("지표가 뒤바뀌었다");
+      expect(metric.noi).toBe(0);
+      expect(metric.verdict).toBe("expert");
+    });
+
+    it("순영업소득이 1원이라도 마이너스면 stop이다", () => {
+      const metric = metricOf(
+        rental({
+          price: capPrice,
+          deposit: 0,
+          cash: 2 * 억,
+          monthlyRent: 100 * 만,
+          annualOperatingCost: 1200 * 만 + 1,
+          loan: { kind: "none" },
+        }).metrics,
+        "capRate",
+      );
+      expect(metric.verdict).toBe("stop");
+    });
+
+    it("참고선은 코드가 아니라 룰셋에서 온다(경계도 함께 따라간다)", () => {
+      const stricter = withRules((draft) => {
+        const m = draft.metrics as Record<string, Record<string, unknown>>;
+        (m.capRate as Record<string, unknown>).expertBelow = 0.08;
+      });
+      const assessment = assessPurchase(stricter, financeRules, {
+        type: "월세수익형",
+        price: capPrice,
+        deposit: 0,
+        cash: 2 * 억,
+        monthlyRent: Math.round(capPrice * 0.04) / 12,
+        annualOperatingCost: 0,
+        loan: { kind: "none" },
+      });
+      // 기본 룰셋(0.04)에서는 checked였던 4.0%가 여기서는 expert다.
+      expect(metricOf(assessment.metrics, "capRate").verdict).toBe("expert");
+    });
   });
 });
