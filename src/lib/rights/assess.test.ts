@@ -301,6 +301,18 @@ describe("권리분석 판정", () => {
       );
     });
 
+    it("합계 계산의 등급 글자도 항목과 같은 verdictLabels에서 온다", () => {
+      const clean = assessRights(rules, bestCaseAnswers(), PRICE);
+      expect(clean.encumbranceLabel).toBe(rules.verdictLabels.checked);
+
+      const unknownMortgage = assessRights(
+        rules,
+        { ...bestCaseAnswers(), mortgage: { optionId: "unknown", amountWon: null } },
+        PRICE,
+      );
+      expect(unknownMortgage.encumbranceLabel).toBe(rules.verdictLabels.expert);
+    });
+
     it("각 판정 라벨은 룰셋의 verdictLabels에서 온다", () => {
       const result = assessRights(rules, bestCaseAnswers(), PRICE);
       for (const finding of result.findings) {

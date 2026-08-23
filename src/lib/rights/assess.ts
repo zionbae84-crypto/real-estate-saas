@@ -30,6 +30,14 @@ export interface RightsAssessment {
   /** 매매 예정가를 아직 모르는가 */
   priceMissing: boolean;
   encumbrance: EncumbranceResult;
+  /**
+   * 합계 계산의 등급 글자.
+   *
+   * 항목별 {@link RightsFinding.label}과 같은 출처(룰셋의 `verdictLabels`)를
+   * 쓴다 — 화면이 등급을 색이 아니라 글자로 말해야 하는데, 그 글자를
+   * 컴포넌트가 스스로 지어내면 여기서만 다른 말이 나온다.
+   */
+  encumbranceLabel: string;
   /** 결론과 늘 함께 보여야 하는 문구 */
   disclaimer: readonly string[];
 }
@@ -84,6 +92,7 @@ export function assessRights(
     unansweredItemIds,
     priceMissing,
     encumbrance,
+    encumbranceLabel: rules.verdictLabels[encumbrance.verdict],
     disclaimer: rules.disclaimer,
   };
 }

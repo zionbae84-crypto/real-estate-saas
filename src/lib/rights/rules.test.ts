@@ -41,6 +41,7 @@ function minimalRules(): Record<string, unknown> {
         question: "q",
         where: "w",
         why: "y",
+        amountLabel: "채권최고액 합계",
         options: [
           { id: "none", label: "없어요", verdict: "checked", amount: "zero" },
           { id: "known", label: "알아요", verdict: "checked", amount: "input" },
@@ -204,6 +205,22 @@ describe("권리분석 룰셋 파싱", () => {
         const unknown = items[0]?.options.find((o) => o.amount === "unknown");
         if (unknown) unknown.amount = "zero";
       });
+    });
+
+    it("금액 입력 선택지가 있는데 amountLabel이 없으면 거부한다", () => {
+      expectRejected((r) => {
+        const items = r.items as RightsItem[];
+        const item = items[0];
+        if (item) delete item.amountLabel;
+      });
+    });
+
+    it("실제 룰셋에서 금액을 넣는 항목마다 amountLabel이 있다", () => {
+      const rules = parseRightsRules(rawRightsRules);
+      for (const id of rules.encumbrance.sourceItemIds) {
+        const item = rules.items.find((candidate) => candidate.id === id);
+        expect(item?.amountLabel, id).toBeTruthy();
+      }
     });
 
     it("expertRatio가 stopRatio보다 크면 거부한다", () => {

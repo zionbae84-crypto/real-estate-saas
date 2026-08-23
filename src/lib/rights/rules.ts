@@ -113,7 +113,18 @@ function parseItems(rawItems: unknown): RightsItem[] {
       throw new Error(`룰셋 값 오류: ${path}.section은 ${SECTIONS.join("·")} 중 하나여야 해요 (${String(item.section)})`);
     }
 
-    items.push({ ...(item as unknown as RightsItem), options: parseOptions(item.options, path) });
+    const options = parseOptions(item.options, path);
+
+    // 금액을 넣는 항목은 그 금액이 무엇인지 화면에 적을 이름이 있어야
+    // 한다. 없으면 입력란이 "얼마?"만 묻는 빈 상자가 된다.
+    if (
+      options.some((option) => option.amount === "input") &&
+      !isText(item.amountLabel)
+    ) {
+      throw new Error(`룰셋 값 오류: ${path}에 금액 입력 선택지가 있는데 amountLabel이 없어요`);
+    }
+
+    items.push({ ...(item as unknown as RightsItem), options });
   });
 
   return items;

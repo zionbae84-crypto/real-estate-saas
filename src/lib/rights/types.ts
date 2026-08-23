@@ -66,6 +66,14 @@ export interface RightsItem {
   where: string;
   /** 왜 위험한가 */
   why: string;
+  /**
+   * 금액 입력란에 붙일 이름(예: "채권최고액 합계").
+   *
+   * `amount: "input"` 선택지가 있는 항목에는 **반드시** 있어야 한다 —
+   * 없으면 입력란이 무슨 금액을 묻는지 화면에서 사라진다. 룰셋 검증이
+   * 이 짝을 강제한다.
+   */
+  amountLabel?: string;
   options: RightsOption[];
 }
 
