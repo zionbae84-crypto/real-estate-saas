@@ -361,3 +361,57 @@ body {
   border-radius: 0.375rem;
   color: #555;
 }
+
+/*
+ * 모션은 상태가 바뀔 때만 쓴다. 가만히 있는 것은 움직이지 않는다.
+ *
+ * 값은 SEED 토큰을 쓴다 — 직접 정하면 이 저장소만의 감각이 되고,
+ * SEED 컴포넌트의 전환과 어긋난다.
+ *
+ * 금액에는 카운트업을 넣지 않는다. 숫자가 굴러 올라가면 게임처럼 보이고,
+ * 무엇보다 읽을 수 있는 순간이 늦어진다. 사용자가 기다려야 하는 숫자가
+ * 아니다.
+ *
+ * 대상은 같은 DOM 노드 위에서 실제로 색이 바뀌는 지점만 골랐다(다른
+ * 후보는 확인 결과 제외했다 — task-3-report.md 참고):
+ * - .safety-level: SafetyBadge의 data-level 속성이 바뀔 때(같은 <p>가
+ *   유지된 채 색만 safe/caution/danger로 갈린다) — 이 태스크가 고치려는
+ *   "등급이 바뀔 때 색이 튀는" 지점 그 자체다.
+ * - .safe-line: SafeLine이 안전선 없음(--none)에서 안전선=최대가
+ *   병합(--merged)으로 바뀔 때 둘 다 <p>라 같은 노드를 재사용한다(색이
+ *   danger에서 safe로, 배경이 없음에서 positive-weak로 바뀐다). --split은
+ *   <div>라 이 두 상태와는 다른 노드로 갈리지만, 셀렉터 자체는 안전하다.
+ * - .assumption-item: hover 시 배경이 바뀐다(존재 가정 항목은 warning
+ *   계열 hover 배경도 별도로 있다).
+ * - .slider-price: 슬라이더가 최댓값에 닿으면 같은 <p>에 --max 클래스가
+ *   붙어 브랜드색으로 바뀐다(값을 다시 내리면 원래 색으로 돌아간다).
+ */
+.safety-level,
+.safe-line,
+.assumption-item,
+.slider-price {
+  transition:
+    color var(--seed-duration-color-transition) var(--seed-timing-function-easing),
+    background-color var(--seed-duration-color-transition) var(--seed-timing-function-easing);
+}
+
+/*
+ * prefers-reduced-motion은 취향이 아니라 접근성 요구사항이다. 전정기관
+ * 장애가 있는 사용자에게 모션은 불편이 아니라 증상을 유발한다.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    /*
+     * `transition-duration: 0.01ms`가 아니라 `transition: none`을 쓴다 —
+     * 앞의 형태는 값이 남아 있는 값(0.01ms)이라 motion-guard의 "전환
+     * 시간을 직접 쓰지 않는다" 검사에 "transition..."+숫자 패턴으로
+     * 걸린다. `none`은 숫자를 쓰지 않고도 전환을 완전히 없애 같은
+     * 접근성 효과(모션 없음)를 낸다.
+     */
+    transition: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
