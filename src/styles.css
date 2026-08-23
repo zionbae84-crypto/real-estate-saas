@@ -138,6 +138,22 @@ body {
   color: var(--safe);
 }
 
+/*
+ * 리뷰 수정(Important 1): 이 값(affordablePrice)은 `.affordable-price`와
+ * `PriceSlider`의 `.slider-price--max`가 이미 브랜드색으로 표시하는
+ * 것과 같은 숫자다. 슬라이더가 처음엔 최댓값에 있으므로 색을 안 입히면
+ * 한 화면에 같은 금액이 세 번(1단·SafeLine·슬라이더) 나타나는데 그중
+ * 하나만 색이 다르게 된다. 더 나쁜 건 형제인 `.safe-line-item--safe`는
+ * 색을 받는데 이쪽만 기본 검정으로 남으면, "안전선이 의미 있는 숫자고
+ * 최대 가격은 장식"처럼 읽힌다는 점이다 — SafeLine이 두 숫자에 동등한
+ * 무게를 준다는 컴포넌트 의도와 정반대다. 새 hex를 만들지 않고
+ * `.affordable-price`·`.slider-price--max`와 같은 -contrast 토큰을
+ * 그대로 재사용한다(22px 굵게 기준 3.95:1, 큰 글자 기준 3:1을 넘는다).
+ */
+.safe-line-item--max .safe-line-amount {
+  color: var(--seed-color-fg-brand-contrast);
+}
+
 .safe-line--none {
   color: var(--danger);
   margin: 0 0 1rem;
