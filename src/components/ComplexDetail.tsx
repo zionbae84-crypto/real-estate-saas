@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
@@ -83,7 +84,7 @@ export function ComplexDetail({
 
       <p className="complex-detail-range">
         {formatRange(unit.minPrice, unit.maxPrice)}
-        <span className="complex-trades"> · 최근 1년 거래 {unit.tradeCount}건</span>
+        <span className="complex-trades"> · {AGGREGATION_WINDOW_LABEL} 거래 {unit.tradeCount}건</span>
       </p>
 
       <p className="complex-detail-area-note">
@@ -110,7 +111,7 @@ export function ComplexDetail({
       {/*
         호가 위치 확인은 **여기**에 붙는다. 위 계산은 전부 이 평형의
         범위 위쪽(`unit.maxPrice`)을 전제로 한 것이고, 사용자가 실제로
-        들은 가격은 그와 다르다 — 그 가격이 이 평형의 최근 1년 실거래
+        들은 가격은 그와 다르다 — 그 가격이 이 평형의 최근 6개월 실거래
         범위 어디에 있는지는 그 평형이 정해진 이 화면에서만 물을 수
         있는 질문이다(목록의 행 하나는 아직 어떤 매물도 아니고, 권리분석
         문진처럼 독립된 자리에 두면 어느 평형의 범위와 견줄지가 없다).

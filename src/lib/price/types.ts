@@ -6,7 +6,7 @@
  * 이 앱이 `medianPrice`를 `ComplexUnit` 타입에서부터 빼고 가격을
  * `minPrice ~ maxPrice` 범위로만 말해 온 것도 같은 이유다. 그래서 이
  * 모듈이 내는 것은 **점 추정이 아니라 위치**다 — 제시받은 호가가 그
- * 평형의 최근 1년 실거래 범위의 어디에 있는가.
+ * 평형의 최근 6개월 실거래 범위의 어디에 있는가.
  *
  * 판정에 쓰이는 **값**(최소 거래 건수·임계값·문구)은 여기 없다 — 전부
  * `rules/price-2026-08.json`에 있다. 이 파일은 그 데이터의 모양만
@@ -110,14 +110,14 @@ export interface AskingPriceCopy {
 /**
  * 판정을 낼 수 있는 표본인지 가르는 조건.
  *
- * **이 두 값이 이 기능의 심장이다.** 번들 데이터의 절반은 최근 1년
+ * **이 두 값이 이 기능의 심장이다.** 번들 데이터의 절반은 최근 6개월
  * 거래가 한 건뿐이고 51.7%는 범위가 아예 한 점이다. 그런 표본으로
  * "범위 위라서 비싸다"고 말하면 그냥 틀린다. 그래서 조건을 못 넘으면
  * 위치를 계산하고도 **말하지 않는다.**
  */
 export interface PriceEvidenceRule {
   label: string;
-  /** 최근 1년 거래가 이 건수 미만이면 유보 */
+  /** 최근 6개월 거래가 이 건수 미만이면 유보 */
   minTradeCount: number;
   /** (max − min) / max 가 이 값 미만이면 거래 건수와 무관하게 유보 */
   minRangeWidthRatio: number;
@@ -243,7 +243,7 @@ export interface PriceRules {
  * 그 순간 눈에 띈다.
  */
 export interface PriceEvidence {
-  /** 최근 1년 거래 건수 */
+  /** 최근 6개월 거래 건수 */
   tradeCount: number;
   minPrice: number;
   maxPrice: number;

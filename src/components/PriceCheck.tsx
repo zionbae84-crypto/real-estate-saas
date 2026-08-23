@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import type {
@@ -26,7 +27,7 @@ export interface PriceCheckProps {
 }
 
 /**
- * 제시받은 호가가 이 평형의 최근 1년 실거래 범위 어디에 있는가.
+ * 제시받은 호가가 이 평형의 최근 6개월 실거래 범위 어디에 있는가.
  *
  * **적정가를 말하지 않는다.** 이 화면에는 "이 집은 얼마가 적당해요"가
  * 없고, 앞으로 생기지도 않는다 — 특정 물건의 적정가를 단정하면
@@ -36,7 +37,7 @@ export interface PriceCheckProps {
  * 적고 나서야 "그건 안 알려줘요"라고 하면 이미 기대를 만든 뒤다.
  *
  * **가장 중요한 동작은 말하지 않는 것이다.** 번들 데이터의 절반은
- * 최근 1년 거래가 한 건뿐이고 51.7%는 범위가 아예 한 점이라, 실제
+ * 최근 6개월 거래가 한 건뿐이고 51.7%는 범위가 아예 한 점이라, 실제
  * 룰셋 값에서는 86.8%의 평형이 판정 유보가 된다. 그때 화면은 빈칸을
  * 남기는 대신 **왜 유보하는지**를 말한다.
  *
@@ -131,7 +132,7 @@ function PriceVerdict({
       */}
       <dl className="price-evidence">
         <div>
-          <dt>최근 1년 거래</dt>
+          <dt>{AGGREGATION_WINDOW_LABEL} 거래</dt>
           <dd data-field="tradeCount">{assessment.evidence.tradeCount}건</dd>
         </div>
         <div>

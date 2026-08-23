@@ -189,7 +189,7 @@ describe("ComplexList", () => {
       ],
     });
     const range = container.querySelector(".complex-range")?.textContent ?? "";
-    expect(range).toMatch(/1억 3,500만원 · 최근 1년 거래 1건/);
+    expect(range).toMatch(/1억 3,500만원 · 최근 6개월 거래 1건/);
     expect(range).not.toMatch(/~/);
   });
 
