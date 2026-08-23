@@ -1,5 +1,9 @@
 node_modules/
-data/
+# 파이프라인의 원시 캐시와 실행 로그. 산출물(complexes/regions/manifest/README)은
+# 앱이 번들에 넣으므로 추적한다 — 무시하면 새로 클론한 저장소에서 빌드가 깨진다.
+data/raw/
+data/fetch-log.json
+data/report.md
 dist/
 .DS_Store
 .superpowers/
