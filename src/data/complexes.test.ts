@@ -84,3 +84,48 @@ describe("토지임대부 표시", () => {
   });
 });
 
+describe("단지 키 — 국토부 단지 ID(aptSeq)", () => {
+  it("모든 키가 시군구코드-일련번호 형태다", () => {
+    for (const u of COMPLEX_UNITS) {
+      expect(u.complexKey, u.complexKey).toMatch(/^\d{5}-\d+$/);
+    }
+  });
+
+  it("키의 앞 5자리가 그 평형의 지역코드와 같다", () => {
+    for (const u of COMPLEX_UNITS) {
+      expect(u.complexKey.slice(0, 5), u.complexKey).toBe(u.regionCode);
+    }
+  });
+
+  it("키에 이름이 들어 있지 않다 — 표기가 흔들려도 단지가 갈리지 않는다", () => {
+    for (const u of COMPLEX_UNITS) {
+      expect(u.complexKey, u.complexKey).not.toContain("|");
+    }
+  });
+
+  it("한 단지의 모든 평형이 같은 이름·법정동·준공년도를 쓴다", () => {
+    // 키가 aptSeq로 바뀌면서 이름은 파이프라인이 골라 붙인다. 같은 단지의
+    // 84㎡ 행과 101㎡ 행에 다른 이름이 뜨면 화면이 한 단지를 둘로 보여 준다.
+    const byKey = new Map<string, { complexName: string; legalDongName: string; builtYear: number }>();
+    for (const u of COMPLEX_UNITS) {
+      const seen = byKey.get(u.complexKey);
+      if (seen === undefined) {
+        byKey.set(u.complexKey, u);
+        continue;
+      }
+      expect(u.complexName, u.complexKey).toBe(seen.complexName);
+      expect(u.legalDongName, u.complexKey).toBe(seen.legalDongName);
+      expect(u.builtYear, u.complexKey).toBe(seen.builtYear);
+    }
+  });
+
+  it("키를 aptSeq로 바꿔도 단지 수·평형 수가 그대로다 — 옛 키와 1:1이었다", () => {
+    // 바꾸기 전 실제 산출물이 단지 907개 / 평형 1,692개였다. 옛 키
+    // (지역|법정동|준공년도|정규화명)와 aptSeq가 이 데이터에서 정확히 1:1이라
+    // 숫자가 변하지 않는 것이 **의도한 결과**다. 이 값이 흔들리면 키 교체가
+    // 단지를 조용히 합치거나 갈랐다는 뜻이므로 사람이 봐야 한다.
+    expect(COMPLEX_UNITS.length).toBe(1692);
+    expect(new Set(COMPLEX_UNITS.map((u) => u.complexKey)).size).toBe(907);
+  });
+});
+

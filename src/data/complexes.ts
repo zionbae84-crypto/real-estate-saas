@@ -31,6 +31,19 @@ export const AGGREGATION_WINDOW_LABEL = `최근 ${AGGREGATION_WINDOW_MONTHS}개�
  * 것이 156개 있다. 타입에서 빼 두면 실수로 화면에 흘리기 어려워진다.
  */
 export interface ComplexUnit {
+  /**
+   * 단지를 가르는 키. **국토부가 주는 단지 고유 ID**(`"11680-314"` =
+   * 시군구코드-일련번호)다.
+   *
+   * 예전에는 `지역코드|법정동|건축년도|정규화한 이름`을 이어붙인 값이었다.
+   * 이름이 키에 들어 있어 표기가 조금만 흔들려도 한 단지가 여러 개로
+   * 갈렸고(갈리면 각 조각의 거래 건수가 줄어 화면이 실제보다 근거가 튼튼한
+   * 척하게 된다), 같은 이름의 다른 단지는 한 덩어리로 뭉쳤다.
+   *
+   * **화면에 내지 않는다.** 사용자가 찾는 것은 ID가 아니라 이름이다. 이
+   * 값은 묶고 구분하는 데에만 쓴다 — React 키를 만들 때는 평형까지 붙여야
+   * 유일해진다(`ComplexList.tsx`의 `unitKey` 참고).
+   */
   complexKey: string;
   complexName: string;
   regionCode: string;

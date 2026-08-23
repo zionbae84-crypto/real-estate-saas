@@ -1,4 +1,5 @@
 import type { ComplexUnit } from "./aggregate";
+import { normalizeName } from "./normalize";
 import type { FetchLogEntry } from "./fetch";
 import type { ReportConfig } from "./types";
 
@@ -6,80 +7,117 @@ import type { ReportConfig } from "./types";
 const ADVISORY =
   "이 목록은 '합쳐라'가 아니라 **'확인하라'**는 뜻이다. 파이프라인은 자동으로 병합하지 않는다.";
 
-/** 표준 레벤슈타인 거리. 외부 의존성 없이 직접 구현한다. */
-export function editDistance(a: string, b: string): number {
-  if (a === b) return 0;
-  let prev = Array.from({ length: b.length + 1 }, (_, i) => i);
-  for (let i = 1; i <= a.length; i++) {
-    const curr = [i, ...Array<number>(b.length).fill(0)];
-    for (let j = 1; j <= b.length; j++) {
-      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      const del = (prev[j] ?? 0) + 1;
-      const ins = (curr[j - 1] ?? 0) + 1;
-      const sub = (prev[j - 1] ?? 0) + cost;
-      curr[j] = Math.min(del, ins, sub);
-    }
-    prev = curr;
-  }
-  return prev[b.length] ?? 0;
-}
-
-/** complexKey를 `지역|법정동|건축년도|정규화명`으로 가른다. */
-function splitKey(key: string): { group: string; name: string } | null {
-  const parts = key.split("|");
-  if (parts.length !== 4) return null;
-  return { group: parts.slice(0, 3).join("|"), name: parts[3] ?? "" };
-}
-
 /**
- * 과소병합 후보. 같은 `지역|법정동|건축년도` 안에서만 이름을 비교한다.
- * 전체 쌍 비교는 O(n²)이라 1.5만 개에서 감당이 안 된다.
+ * 한 단지 ID에 이름이 여러 개인 경우.
+ *
+ * **"과소병합 후보"(이름 편집거리 비교)를 대신한다.** 그 신호는 키가
+ * `지역|법정동|준공년도|이름`이던 시절, 표기가 흔들려 한 단지가 여러 키로
+ * 갈리는 것을 사람이 잡으라고 있었다. 키가 `aptSeq`가 된 지금 그 갈림은
+ * 일어날 수 없고, 실제로 그 절은 이 데이터에서 67쌍을 내놓았는데 **67쌍
+ * 전부가 국토부 기준으로 서로 다른 단지**였다(예: "반포훼미리102동" /
+ * "반포훼미리103동"). 100% 거짓 양성만 내는 목록은 사람 눈을 마비시켜,
+ * 진짜 신호가 끼어들어도 못 보게 만든다. 그래서 지웠다.
+ *
+ * 대신 `aptSeq` 키 체제에서 **실제로 일어날 수 있는** 것을 본다: 국토부가
+ * 같은 ID에 서로 다른 이름을 붙여 보내는 경우다. 그러면 화면에 뜨는 이름을
+ * {@link pickComplexName}이 골라야 하는데, 그 선택이 무엇이었는지 사람이
+ * 알아야 한다 — 개명인지 오타인지는 데이터가 말해 주지 않는다.
+ *
+ * 정규화 후에도 다른 이름만 센다. 공백·괄호 차이뿐이면 화면에 어느 쪽이
+ * 떠도 사용자가 같은 단지로 알아보므로 사람을 부를 일이 아니다.
  */
-export function findUnderMergeCandidates(
-  units: ComplexUnit[],
-  config: ReportConfig,
-): Array<{ a: string; b: string; distance: number }> {
-  const byGroup = new Map<string, Set<string>>();
-  for (const unit of units) {
-    const split = splitKey(unit.complexKey);
-    if (split === null) continue;
-    const names = byGroup.get(split.group) ?? new Set<string>();
-    names.add(split.name);
-    byGroup.set(split.group, names);
+export function findNameConflicts(
+  trades: readonly { complexKey: string; complexName: string }[],
+): Array<{ complexKey: string; names: string[] }> {
+  const byKey = new Map<string, Map<string, string>>();
+  for (const t of trades) {
+    const names = byKey.get(t.complexKey) ?? new Map<string, string>();
+    // 정규화명 → 원본 표기 하나. 표기 흔들림은 접고 진짜 다른 이름만 남긴다.
+    names.set(normalizeName(t.complexName), t.complexName);
+    byKey.set(t.complexKey, names);
   }
 
-  const found: Array<{ a: string; b: string; distance: number }> = [];
-  for (const [group, nameSet] of byGroup) {
-    const names = [...nameSet];
-    for (let i = 0; i < names.length; i++) {
-      for (let j = i + 1; j < names.length; j++) {
-        const a = names[i];
-        const b = names[j];
-        if (a === undefined || b === undefined) continue;
-        const distance = editDistance(a, b);
-        const prefix = a.startsWith(b) || b.startsWith(a);
-        if (distance <= config.underMergeMaxEditDistance || prefix) {
-          found.push({ a: `${group}|${a}`, b: `${group}|${b}`, distance });
-        }
-      }
-    }
+  const found: Array<{ complexKey: string; names: string[] }> = [];
+  for (const [complexKey, names] of byKey) {
+    if (names.size > 1) found.push({ complexKey, names: [...names.values()].sort() });
   }
-  return found.sort((x, y) => x.distance - y.distance);
+  return found.sort((a, b) => (a.complexKey < b.complexKey ? -1 : 1));
 }
 
 /**
- * 과대병합 의심. 같은 키·같은 평형인데 가격이 지나치게 벌어진 그룹.
+ * 화면에서 서로 구분되지 않는 동명 단지.
+ *
+ * `aptSeq`는 **파이프라인**이 단지를 가르는 문제를 풀었지만 **사용자**가
+ * 가르는 문제는 풀지 못한다 — 화면에 뜨는 것은 ID가 아니라 이름이다.
+ * 같은 법정동에 이름까지 같은 다른 단지가 둘 있으면, 목록에 똑같이 생긴
+ * 행이 둘 뜨고 사용자는 어느 쪽이 자기가 본 매물인지 알 수 없다.
+ *
+ * 준공년도가 다르면 화면이 연도를 덧붙여 가른다
+ * (`src/lib/complex-list.ts`의 `needsBuiltYear`). 그래서 **연도까지 같은
+ * 경우**는 화면에 지금 아무 대책이 없다는 뜻이라 따로 표시한다.
+ *
+ * 이것이 옛 "과대병합 의심"이 걱정하던 것의 정직한 후계다. 옛 신호는
+ * "다른 단지가 한 키로 뭉쳤을지 모른다"였는데 그 일은 이제 일어나지
+ * 않는다. 남은 위험은 뭉치는 것이 아니라 **똑같아 보이는** 것이다.
+ */
+export function findAmbiguousDisplayNames(
+  units: ComplexUnit[],
+): Array<{ legalDongName: string; complexName: string; keys: string[]; sameBuiltYear: boolean }> {
+  const byName = new Map<string, Map<string, number>>();
+  for (const u of units) {
+    const key = `${u.legalDongName}|${u.complexName}`;
+    const keys = byName.get(key) ?? new Map<string, number>();
+    keys.set(u.complexKey, u.builtYear);
+    byName.set(key, keys);
+  }
+
+  const found: Array<{
+    legalDongName: string;
+    complexName: string;
+    keys: string[];
+    sameBuiltYear: boolean;
+  }> = [];
+  for (const [nameKey, keys] of byName) {
+    if (keys.size < 2) continue;
+    const [legalDongName = "", complexName = ""] = nameKey.split("|");
+    found.push({
+      legalDongName,
+      complexName,
+      keys: [...keys.keys()].sort(),
+      sameBuiltYear: new Set(keys.values()).size === 1,
+    });
+  }
+  // 화면에 대책이 없는 것(연도까지 같은 것)을 위로 올린다.
+  return found.sort((a, b) => Number(b.sameBuiltYear) - Number(a.sameBuiltYear));
+}
+
+/**
+ * 같은 단지·같은 평형인데 가격 범위가 지나치게 넓은 그룹.
+ *
+ * **뜻이 바뀌었다.** 옛 이름은 "과대병합 의심"이었고 설명은 "다른 단지가
+ * 섞였을 수 있다"였다. 키가 `aptSeq`가 된 지금 그 설명은 **틀렸다** — 국토부가
+ * 단지 하나에 ID 하나를 매기므로 다른 단지가 섞일 수는 없다. 틀린 설명을
+ * 단 목록은 사람을 엉뚱한 곳으로 보낸다(다른 단지가 섞였나 확인하러 갔다가
+ * 아무것도 못 찾고 돌아온다).
+ *
+ * 그렇다고 지우지는 않는다. 이 검사가 잡는 **사실** 자체는 여전히 참이고,
+ * 이 제품에는 오히려 더 직접적으로 중요하다: 화면은 시세를 `minPrice ~
+ * maxPrice` 범위로만 말하는데, 그 범위가 2배 넘게 벌어져 있으면 화면이 내는
+ * 숫자가 사용자에게 사실상 아무것도 알려 주지 못한다는 뜻이다. 같은 단지
+ * 같은 평형에서 왜 그렇게 벌어졌는지(층·향·특수관계 거래·리모델링)는
+ * 사람이 볼 일이다.
+ *
  * 거래 건수가 적으면 우연히 벌어질 수 있으므로 하한을 둔다.
  */
-export function findOverMergeSuspects(
+export function findWidePriceRangeUnits(
   units: ComplexUnit[],
   config: ReportConfig,
 ): ComplexUnit[] {
   return units.filter(
     (u) =>
-      u.tradeCount >= config.overMergeMinTradeCount &&
+      u.tradeCount >= config.widePriceRangeMinTradeCount &&
       u.minPrice > 0 &&
-      u.maxPrice / u.minPrice >= config.overMergeMinPriceRatio,
+      u.maxPrice / u.minPrice >= config.widePriceRangeMinRatio,
   );
 }
 
@@ -307,7 +345,14 @@ function renderEmptyRegionMonthSection(
 function renderSummary(
   units: ComplexUnit[],
   config: ReportConfig,
-  counts: { underMerge: number; overMerge: number; splitArea: number; lowConfidence: number },
+  counts: {
+    nameConflict: number;
+    ambiguousDisplay: number;
+    ambiguousSameYear: number;
+    widePriceRange: number;
+    splitArea: number;
+    lowConfidence: number;
+  },
   issues: {
     failed: number;
     truncated: number;
@@ -326,9 +371,8 @@ function renderSummary(
     "",
     "## 적용된 임계값",
     "",
-    `- 과소병합 편집거리 상한: ${config.underMergeMaxEditDistance}`,
-    `- 과대병합 최고÷최저 하한: ${config.overMergeMinPriceRatio}`,
-    `- 과대병합 최소 거래 건수: ${config.overMergeMinTradeCount}`,
+    `- 가격 범위 최고÷최저 하한: ${config.widePriceRangeMinRatio}`,
+    `- 가격 범위 판정 최소 거래 건수: ${config.widePriceRangeMinTradeCount}`,
     `- 저신뢰 판정 거래 건수 미만: ${config.lowConfidenceMinTrades}`,
     `- 거래 0건 비율 경고 임계값: ${(config.emptyRatioWarnThreshold * 100).toFixed(0)}%`,
     "",
@@ -339,8 +383,9 @@ function renderSummary(
     `- 평형 수: ${units.length}`,
     `- 단지 수: ${new Set(units.map((u) => u.complexKey)).size}`,
     `- 저신뢰 평형: ${counts.lowConfidence} (${ratio.toFixed(1)}%)`,
-    `- 과소병합 후보: ${counts.underMerge}쌍`,
-    `- 과대병합 의심: ${counts.overMerge}건`,
+    `- 한 단지 ID에 이름 여러 개: ${counts.nameConflict}건`,
+    `- 화면에서 구분 안 되는 동명 단지: ${counts.ambiguousDisplay}건 (그중 준공년도까지 같아 대책 없음: ${counts.ambiguousSameYear}건)`,
+    `- 가격 범위가 지나치게 넓은 평형: ${counts.widePriceRange}건`,
     `- 평형 분할 의심: ${counts.splitArea}건`,
     `- 수집 실패: ${issues.failed}건`,
     `- 파싱 실패 레코드: ${issues.parseFailures}건`,
@@ -353,13 +398,20 @@ function renderSummary(
   ];
 }
 
+/**
+ * @param trades 이름 충돌을 보려면 **집계 전 거래**가 필요하다. `units`에는
+ *   단지마다 대표 이름 하나만 남아 있어서, 국토부가 같은 ID에 다른 이름을
+ *   붙여 보냈다는 사실이 이미 지워진 뒤다.
+ */
 export function buildReport(
   units: ComplexUnit[],
   log: FetchLogEntry[],
   config: ReportConfig,
+  trades: readonly { complexKey: string; complexName: string }[] = [],
 ): string {
-  const underMerge = findUnderMergeCandidates(units, config);
-  const overMerge = findOverMergeSuspects(units, config);
+  const nameConflicts = findNameConflicts(trades);
+  const ambiguous = findAmbiguousDisplayNames(units);
+  const widePriceRange = findWidePriceRangeUnits(units, config);
   const splitArea = findSplitAreaSuspects(units, config);
   const lowConfidence = units.filter((u) => u.lowConfidence).length;
   const { failed, truncated, cacheCorrupted, cacheSchemaMismatch } = splitFetchIssues(log);
@@ -374,7 +426,14 @@ export function buildReport(
     ...renderSummary(
       units,
       config,
-      { underMerge: underMerge.length, overMerge: overMerge.length, splitArea: splitArea.length, lowConfidence },
+      {
+        nameConflict: nameConflicts.length,
+        ambiguousDisplay: ambiguous.length,
+        ambiguousSameYear: ambiguous.filter((a) => a.sameBuiltYear).length,
+        widePriceRange: widePriceRange.length,
+        splitArea: splitArea.length,
+        lowConfidence,
+      },
       {
         failed: failed.length,
         truncated: truncated.length,
@@ -387,23 +446,56 @@ export function buildReport(
       },
     ),
     ...renderListSection(
-      "과소병합 후보",
+      "한 단지 ID에 이름 여러 개",
       [
         ADVISORY,
         "",
-        "같은 법정동·같은 건축년도인데 이름이 비슷한 서로 다른 키다.",
-        '주의: `"우성1차"`와 `"우성2차"`는 편집거리 1이지만 **실제로 다른 단지다.**',
+        "국토부가 같은 `aptSeq`에 서로 다른 단지명을 붙여 보냈다. 파이프라인은 " +
+          "가장 많이 쓰인 이름(같으면 더 최근 계약, 그래도 같으면 사전순)을 골라 " +
+          "화면에 낸다 — 아래 **대표**가 그 선택이다.",
+        "",
+        "개명인지 오표기인지는 데이터가 말해 주지 않는다. 고른 이름이 사용자가 " +
+          "그 단지를 찾을 때 쓰는 이름인지 사람이 확인하라. 표기만 다른 경우" +
+          "(공백·괄호 차이)는 여기 오지 않는다.",
       ],
-      underMerge,
-      ["| 거리 | A | B |", "|---|---|---|"],
-      ({ a, b, distance }) => `| ${distance} | ${escapeCell(a)} | ${escapeCell(b)} |`,
-      100,
-      "쌍",
+      nameConflicts,
+      ["| 단지 ID | 대표 | 그 밖의 표기 |", "|---|---|---|"],
+      ({ complexKey, names }) =>
+        `| ${escapeCell(complexKey)} | ${escapeCell(names[0] ?? "")} | ${escapeCell(names.slice(1).join(", "))} |`,
+      50,
     ),
     ...renderListSection(
-      "과대병합 의심",
-      [ADVISORY, "", "같은 키·같은 평형인데 가격이 지나치게 벌어졌다. 다른 단지가 섞였을 수 있다."],
-      overMerge,
+      "화면에서 구분 안 되는 동명 단지",
+      [
+        ADVISORY,
+        "",
+        "같은 법정동에 이름까지 같은 **다른** 단지다(`aptSeq`가 다르다). " +
+          "파이프라인은 제대로 갈랐지만 **화면에는 똑같이 생긴 행이 둘 뜬다** — " +
+          "사용자는 어느 쪽이 자기가 본 매물인지 알 수 없다.",
+        "",
+        "준공년도가 다르면 화면이 연도를 덧붙여 가른다. **`대책` 열이 `없음`인 " +
+          "행은 연도까지 같아 화면에 지금 아무 대책이 없다는 뜻이다** — 그때는 " +
+          "화면에 무엇을 더 보여 줄지 정해야 한다.",
+      ],
+      ambiguous,
+      ["| 법정동 | 단지명 | 단지 ID | 대책 |", "|---|---|---|---|"],
+      ({ legalDongName, complexName, keys, sameBuiltYear }) =>
+        `| ${escapeCell(legalDongName)} | ${escapeCell(complexName)} | ${escapeCell(keys.join(", "))} | ${sameBuiltYear ? "**없음**" : "준공년도 표기"} |`,
+      50,
+    ),
+    ...renderListSection(
+      "가격 범위가 지나치게 넓은 평형",
+      [
+        ADVISORY,
+        "",
+        "같은 단지·같은 평형인데 최고가가 최저가의 몇 배다. **다른 단지가 " +
+          "섞인 것은 아니다** — 키가 `aptSeq`라 그럴 수 없다.",
+        "",
+        "화면은 시세를 `최저 ~ 최고` 범위로만 말한다. 그 범위가 이만큼 벌어져 " +
+          "있으면 화면이 내는 숫자가 사용자에게 사실상 아무것도 알려 주지 " +
+          "못한다는 뜻이다. 층·향·특수관계 거래·리모델링 중 무엇 때문인지 확인하라.",
+      ],
+      widePriceRange,
       ["| 단지 | 건축년도 | 평형 | 건수 | 최저 | 최고 | 배율 |", "|---|---|---|---|---|---|---|"],
       (u) =>
         `| ${escapeCell(u.complexName)} (${escapeCell(u.legalDongName)}) | ${u.builtYear} | ${u.areaBucket}㎡ | ${u.tradeCount} | ${won(u.minPrice)} | ${won(u.maxPrice)} | ${(u.maxPrice / u.minPrice).toFixed(2)} |`,

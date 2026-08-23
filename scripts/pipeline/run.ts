@@ -229,7 +229,9 @@ export function runPipeline(asOf: Date, rawDir: string = RAW_DIR): void {
   const monthly = buildMonthlySeries(normalized, asOf);
   emitMonthly(monthly, DATA_DIR);
 
-  const report = buildReport(units, loadFetchLog(), config);
+  // normalized(집계 전 거래)를 함께 넘긴다 — units에는 단지마다 대표 이름
+  // 하나만 남아 있어 "한 단지 ID에 이름이 여러 개"를 볼 수 없다.
+  const report = buildReport(units, loadFetchLog(), config, normalized);
   writeFileSync(join(DATA_DIR, "report.md"), report);
 
   console.log(

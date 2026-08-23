@@ -59,7 +59,7 @@ describe("buildMonthlySeries", () => {
 
   it("키 형식은 complexKey|areaBucket이다 — aggregate와 같은 조인 키", () => {
     const series = buildMonthlySeries(normalizeAll([trade({ exclusiveAreaSqm: 84.4 })]), AS_OF);
-    expect(Object.keys(series)[0]).toMatch(/^11680\|대치동\|1979\|.+\|84$/);
+    expect(Object.keys(series)[0]).toBe("11680-100|84");
   });
 
   it("각 키 안에서 월이 오름차순으로 정렬된다", () => {

@@ -34,7 +34,7 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
   const areaBucket = overrides.areaBucket ?? 84;
   return {
-    complexKey: "11680|대치동|2015|테스트",
+    complexKey: "11680-9001",
     complexName: "테스트",
     regionCode: "11680",
     legalDongName: "대치동",
@@ -354,7 +354,7 @@ describe("buildComplexList", () => {
         exclusiveAreaSqm: 59,
       });
       const wide = unit({
-        complexKey: "송파삼성래미안",
+        complexKey: "11710-9001",
         complexName: "송파삼성래미안아파트",
         legalDongName: "송파동",
         areaBucket: 88,
@@ -375,9 +375,7 @@ describe("buildComplexList", () => {
 
       // 그러므로 "무리 없이 살 수 있어요" 덩어리에 들어가면 안 된다.
       expect(r.withinSafe).toEqual([]);
-      expect(r.beyondSafe.map((e) => e.unit.complexKey)).toEqual([
-        "송파삼성래미안",
-      ]);
+      expect(r.beyondSafe.map((e) => e.unit.complexKey)).toEqual(["11710-9001"]);
     });
 
     it("반대 방향: 프로필보다 좁은 평형은 헤드라인 안전선을 넘어도 자기 기준으로 안전하면 첫 덩어리다", () => {

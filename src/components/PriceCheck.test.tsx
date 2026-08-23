@@ -37,7 +37,7 @@ const budget: PriceBudgetInput = { profile: profile(), financeRules };
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
   const areaBucket = overrides.areaBucket ?? 59;
   return {
-    complexKey: "11680|대치동|2015|테스트",
+    complexKey: "11680-9001",
     complexName: "테스트아파트",
     regionCode: "11680",
     legalDongName: "대치동",

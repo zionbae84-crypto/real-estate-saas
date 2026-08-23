@@ -105,12 +105,16 @@ export interface ParseResult {
 }
 
 export interface ReportConfig {
-  /** 과소병합 후보로 볼 정규화명 편집거리 상한 */
-  underMergeMaxEditDistance: number;
-  /** 과대병합 의심으로 볼 최고가/최저가 비율 하한 */
-  overMergeMinPriceRatio: number;
-  /** 과대병합 판정에 필요한 최소 거래 건수 */
-  overMergeMinTradeCount: number;
+  /**
+   * 가격 범위가 "지나치게 넓다"고 볼 최고가/최저가 비율 하한.
+   *
+   * 옛 이름은 `overMergeMinPriceRatio`("과대병합")였다. 단지 키가 `aptSeq`가
+   * 되면서 다른 단지가 한 키로 뭉치는 일 자체가 없어져, 이 임계값이 재는
+   * 것은 이제 병합 사고가 아니라 **화면이 내는 가격 범위의 넓이**다.
+   */
+  widePriceRangeMinRatio: number;
+  /** 가격 범위 판정에 필요한 최소 거래 건수. 거래가 적으면 우연히 벌어진다 */
+  widePriceRangeMinTradeCount: number;
   /** lowConfidence 판정 기준 (최근 6개월 거래 건수 미만) */
   lowConfidenceMinTrades: number;
   /**

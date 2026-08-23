@@ -1,9 +1,5 @@
 import type { RawTrade } from "./types";
 
-export interface NormalizedTrade extends RawTrade {
-  complexKey: string;
-}
-
 /**
  * 단지명 최소 정규화.
  *
@@ -11,8 +7,10 @@ export interface NormalizedTrade extends RawTrade {
  * **차수("1차")·단지 번호("1단지")·"아파트" 접미사는 건드리지 않는다** —
  * "우성1차"와 "우성2차"는 실제로 다른 단지이고, 접미사를 떼면 조용히 합쳐진다.
  *
- * 기본값이 "안 합침"이므로 틀리는 방향이 안전하다. 합쳤어야 할 것을 못 합친 경우는
- * 이상 신호 리포트의 "과소병합 후보"가 잡아 사람이 확인하게 한다.
+ * **더 이상 단지 키를 만들지 않는다.** 키는 국토부가 주는 `aptSeq`다
+ * ({@link buildComplexKey} 참고). 이 함수가 남아 있는 이유는 이름을 **비교**할
+ * 일이 여전히 있어서다 — 이상 신호 리포트가 "같은 단지 ID에 이름이 여러 개"인
+ * 경우를 표기 흔들림과 진짜 개명으로 가를 때 쓴다.
  */
 export function normalizeName(name: string): string {
   return name
@@ -21,14 +19,43 @@ export function normalizeName(name: string): string {
     .replace(/[\s\-_.()[\]{},'"·]/g, "");
 }
 
-/** 법정동 + 건축년도 + 정규화명. 셋이 모두 같아야 같은 단지로 본다. */
+export interface NormalizedTrade extends RawTrade {
+  complexKey: string;
+}
+
+/**
+ * 단지 키. **국토부가 주는 단지 고유 ID(`aptSeq`)를 그대로 쓴다.**
+ *
+ * 예전 키는 `지역코드|법정동|준공년도|정규화한 단지명`이었다. 이름이 키의
+ * 일부라 두 방향으로 틀렸다:
+ *
+ * - **과소병합**: 같은 단지인데 표기가 조금만 달라도("반포훼미리102동" /
+ *   "반포훼미리103동") 다른 키가 되어 한 단지가 여러 개로 갈렸다. 갈리면
+ *   각 조각의 거래 건수가 줄어 저신뢰가 되고, 가격 범위도 좁아져 화면이
+ *   실제보다 근거가 튼튼한 척하게 된다.
+ * - **과대병합**: 같은 법정동·같은 준공년도에 이름까지 같은 다른 단지는
+ *   한 키로 뭉쳤다. 서로 다른 단지의 가격이 한 범위에 섞인다.
+ *
+ * 그 두 위험을 사람이 눈으로 잡으라고 이상 신호 리포트에 "과소병합 후보"
+ * 절을 뒀었다. `aptSeq`를 키로 쓰면 문제 자체가 사라진다 — 국토부가 단지
+ * 하나에 ID 하나를 매기기 때문이다.
+ *
+ * 이 저장소의 실제 데이터(강남·서초·송파 12개월, 활성 거래 9,274건)로
+ * 확인한 것:
+ * - `aptSeq`가 없는 거래 **0건** (형태는 전부 `시군구코드-일련번호`)
+ * - `aptSeq` 접두가 그 거래의 `sggCd`와 다른 건 **0건** — 그래서 지역코드를
+ *   따로 붙이지 않아도 전국에서 유일하다
+ * - 같은 `aptSeq`에 단지명이 둘 이상인 경우 **0건** (준공년도·법정동도 각각 0건)
+ * - 옛 키 하나가 여러 `aptSeq`로 갈리는 경우 **0건**
+ *
+ * 즉 지금 데이터에서는 옛 키와 `aptSeq`가 정확히 1:1이라 **단지 수도 평형
+ * 수도 변하지 않는다**(단지 907개 / 평형 1,692개 그대로). 바꾸는 이유는 지금
+ * 숫자가 달라져서가 아니라, 지금 맞는 것이 **우연**이기 때문이다 — 3개 구가
+ * 아니라 수도권 66개 시군구로 넓히는 순간 같은 이름의 다른 단지와 표기가
+ * 흔들리는 같은 단지가 훨씬 많아진다.
+ */
 export function buildComplexKey(trade: RawTrade): string {
-  return [
-    trade.regionCode,
-    trade.legalDongName,
-    trade.builtYear,
-    normalizeName(trade.complexName),
-  ].join("|");
+  return trade.aptSeq;
 }
 
 export function normalizeAll(trades: RawTrade[]): NormalizedTrade[] {
