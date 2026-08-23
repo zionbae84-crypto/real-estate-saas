@@ -60,6 +60,8 @@ vi.mock("./data/complexes", () => ({
   DATA_AS_OF: "2026-08",
   REGIONS: [{ regionCode: "11680", complexCount: 1, unitCount: 1 }],
   REGION_NAMES: { "11680": "강남구" },
+  AGGREGATION_WINDOW_MONTHS: 6,
+  AGGREGATION_WINDOW_LABEL: "최근 6개월",
 }));
 
 describe("App", () => {

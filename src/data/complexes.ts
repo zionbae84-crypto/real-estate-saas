@@ -3,6 +3,24 @@ import rawManifest from "../../data/manifest.json";
 import rawRegions from "../../data/regions.json";
 
 /**
+ * `scripts/pipeline/aggregate.ts`의 `recent`(대표가·건수 창)가 최근 몇
+ * 개월인가. `tradeCount`·`minPrice`·`maxPrice`·`lowConfidence`·층 범위가
+ * 전부 이 창 안의 거래로 낸 값이다(`data/README.md` 기준).
+ *
+ * **화면 문구는 반드시 이 상수(또는 {@link AGGREGATION_WINDOW_LABEL})로
+ * 만들어야 한다.** 직접 "최근 1년"·"최근 12개월" 같은 문구를 박아 넣으면
+ * 표본 기간을 실제보다 부풀려 말하게 되고, 이 앱은 "사지 말아야 할
+ * 때를 말해주는 것"이 방침이라 근거를 실제보다 튼튼해 보이게 하는
+ * 오표기가 가장 나쁘다. `scripts/window-label.test.ts`가 이 값이
+ * 파이프라인 값과 같은지, 화면·룰셋 문구가 이 값에서 갈라져 나왔는지를
+ * 소스에서 직접 확인한다.
+ */
+export const AGGREGATION_WINDOW_MONTHS = 6;
+
+/** 화면에 그대로 쓰는 라벨. "최근 6개월" 같은 문구를 이 값에서만 만든다 */
+export const AGGREGATION_WINDOW_LABEL = `최근 ${AGGREGATION_WINDOW_MONTHS}개월`;
+
+/**
  * 파이프라인이 만든 단지×평형 한 건.
  *
  * 필드 정의는 `data/README.md`에 있다 — 파이프라인이 산출물과 함께 만든다.

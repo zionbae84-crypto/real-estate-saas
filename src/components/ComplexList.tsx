@@ -1,3 +1,4 @@
+import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import type { ComplexListEntry, ComplexListResult } from "../lib/complex-list";
@@ -154,7 +155,7 @@ function ComplexRow({
       </span>
       <span className="complex-range">
         {formatRange(unit.minPrice, unit.maxPrice)}
-        <span className="complex-trades"> · 최근 1년 거래 {unit.tradeCount}건</span>
+        <span className="complex-trades"> · {AGGREGATION_WINDOW_LABEL} 거래 {unit.tradeCount}건</span>
       </span>
       <span className="complex-burden" data-level={level}>
         범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
