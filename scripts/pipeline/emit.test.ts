@@ -14,6 +14,7 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     builtYear: 1979,
     areaBucket: 84,
     maxExclusiveAreaSqm: 84.3,
+    landLeasehold: "N",
     medianPrice: 2_000_000_000,
     tradeCount: 5,
     minPrice: 1_900_000_000,

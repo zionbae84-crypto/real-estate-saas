@@ -1,4 +1,4 @@
-import type { ParseResult, RawTrade } from "./types";
+import type { LandLeasehold, ParseResult, RawAddress, RawTrade } from "./types";
 
 /** 공공데이터포털·국토부 API가 성공으로 보는 resultCode 값들. */
 const SUCCESS_RESULT_CODES = new Set(["00", "000"]);
@@ -20,6 +20,12 @@ function truncate(message: string, max: number): string {
  * - `cdealType`이 문자열이 아니면(필드 없음/undefined/null/숫자 등) 해제
  *   여부를 판정할 수 없다 — 정상 거래로 관대하게 봐주지 않고 failures로 센다.
  *   (아래 classifyDealStatus 참고)
+ * - `aptSeq`(단지 고유 ID)가 없거나 공백뿐이면 failures로 센다. 그 거래를
+ *   어느 단지에 넣을지 알 수 없기 때문이다(아래 toRequiredText 참고).
+ * - `landLeaseholdGbn`이 `"Y"`/`"N"`이 아니면 `null`(모름)로 남긴다. 실패도
+ *   아니고 "아님"도 아니다 — 모르는 것은 모른다고 남긴다(toLandLeasehold 참고).
+ * - 주소 필드는 없어도 실패가 아니다. 가격·부담 계산에 쓰이지 않으므로
+ *   없다고 그 거래의 근거가 나빠지지 않는다(toAddress 참고).
  * - 응답 자체가 성공이 아니면(JSON이 아니거나, resultCode가 성공이 아니거나,
  *   예상한 모양이 전혀 아니면) trades는 항상 빈 배열이고 error에 사유를
  *   담는다. 호출자는 trades를 쓰기 전에 반드시 error부터 확인해야 한다 —
@@ -144,6 +150,7 @@ function parseItem(item: unknown): RawTrade | null {
   const r = item as Record<string, unknown>;
 
   const regionCode = toRegionCode(r.sggCd);
+  const aptSeq = toRequiredText(r.aptSeq);
   const legalDongName = typeof r.umdNm === "string" ? r.umdNm : null;
   const complexName = typeof r.aptNm === "string" ? r.aptNm : null;
   const builtYear = toFiniteNumber(r.buildYear);
@@ -154,6 +161,7 @@ function parseItem(item: unknown): RawTrade | null {
 
   if (
     regionCode === null ||
+    aptSeq === null ||
     legalDongName === null ||
     complexName === null ||
     builtYear === null ||
@@ -167,6 +175,7 @@ function parseItem(item: unknown): RawTrade | null {
 
   return {
     regionCode,
+    aptSeq,
     legalDongName,
     complexName,
     builtYear,
@@ -174,7 +183,81 @@ function parseItem(item: unknown): RawTrade | null {
     floor,
     price,
     contractDate,
+    landLeasehold: toLandLeasehold(r.landLeaseholdGbn),
+    address: toAddress(r),
   };
+}
+
+/**
+ * 있어야만 하는 텍스트 필드(지금은 `aptSeq`)를 읽는다.
+ *
+ * 국토부 응답의 여러 필드는 "값 없음"을 `null`이 아니라 **공백 한 칸(`" "`)**
+ * 으로 보낸다(`aptDong`·`cdealType`·`rgstDate`가 실제로 그렇다). 그래서
+ * `typeof v === "string"`만 보면 공백 한 칸이 멀쩡한 값으로 통과해 단지 키가
+ * `""`가 되고, 서로 아무 상관 없는 거래들이 그 빈 키 하나로 전부 뭉친다 —
+ * 과대병합 중에서도 최악이다. trim한 뒤 빈 문자열이면 없는 것으로 본다.
+ *
+ * 앞뒤 공백은 떼고 돌려준다. `" 11680-314 "`와 `"11680-314"`가 서로 다른
+ * 단지로 갈리면 안 된다.
+ */
+function toRequiredText(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed === "" ? null : trimmed;
+}
+
+/**
+ * `landLeaseholdGbn`을 {@link LandLeasehold}로 읽는다.
+ *
+ * **`"N"`이 아닌 것을 전부 "아님"으로 접지 않는다.** `"Y"`면 `"Y"`, `"N"`이면
+ * `"N"`, 그 밖의 모든 것(공백 한 칸, 필드 없음, 숫자, 예상 못한 코드)은
+ * `null`(모름)이다. 토지임대부를 놓치는 것이 낙관 방향이므로, 모르는 값을
+ * 안전한 쪽("아님")으로 밀어 넣는 실수를 타입 단계에서 막는다.
+ *
+ * 대소문자와 앞뒤 공백만 정규화한다(`" y "` → `"Y"`). 이건 뜻을 추측하는 게
+ * 아니라 이미 아는 코드의 표기를 맞추는 것이고, 방향도 안전한 쪽이다 —
+ * `"y"`를 모름으로 버리면 실재하는 토지임대부 경고를 놓친다.
+ */
+function toLandLeasehold(value: unknown): LandLeasehold {
+  if (typeof value !== "string") return null;
+  const code = value.trim().toUpperCase();
+  return code === "Y" || code === "N" ? code : null;
+}
+
+/**
+ * 주소 필드들을 읽는다. 여기서는 **아무것도 실패로 만들지 않는다** —
+ * 주소가 없다고 그 거래의 가격·면적·계약일이 덜 믿을 만해지지는 않기
+ * 때문이다({@link RawAddress} 참고). 모르는 값은 `null`로 남긴다.
+ */
+function toAddress(r: Record<string, unknown>): RawAddress {
+  return {
+    roadNm: toOptionalText(r.roadNm),
+    roadNmCd: toOptionalText(r.roadNmCd),
+    bonbun: toOptionalText(r.bonbun),
+    bubun: toOptionalText(r.bubun),
+    jibun: toOptionalText(r.jibun),
+    umdCd: toOptionalText(r.umdCd),
+  };
+}
+
+/**
+ * 있으면 좋고 없어도 그만인 텍스트 필드를 읽는다. 없거나 공백뿐이면 `null`.
+ *
+ * 숫자로 와도 문자열로 보존한다 — `bonbun`은 `"0746"`(문자열)과 `1284`(숫자)가
+ * 실제로 섞여 오고, `bubun`의 `"0000"`은 숫자로 바꾸면 선행 0이 사라져 다른
+ * 값이 된다. 반대로 숫자를 문자열로 만들면서 잃는 것은 없다.
+ *
+ * **빈 문자열을 만들어 채우지 않는다.** `""`는 "주소가 빈 문자열"이라는 없는
+ * 사실이고, `null`은 "모른다"는 사실이다. 나중에 지오코딩이 이 둘을 구분해야
+ * 한다.
+ */
+function toOptionalText(value: unknown): string | null {
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "" ? null : trimmed;
+  }
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return null;
 }
 
 /** 시군구 코드는 API에서 숫자로 오지만 우리 타입은 문자열이다(선행 0 보존). */

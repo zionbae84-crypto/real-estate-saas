@@ -5,7 +5,7 @@ import type { ComplexUnit } from "./aggregate";
 import { aggregate } from "./aggregate";
 import { DATA_DIR, RAW_DIR, loadReportConfig, loadRegions } from "./config";
 import { emit } from "./emit";
-import type { FetchLogEntry } from "./fetch";
+import { CACHE_SCHEMA_VERSION, type FetchLogEntry } from "./fetch";
 import { buildMonthlySeries, emitMonthly } from "./monthly";
 import { normalizeAll } from "./normalize";
 import { buildReport } from "./report";
@@ -19,6 +19,7 @@ const RULES_PATH = join(DATA_DIR, "..", "rules", "2026-03.json");
  * 여기서 형식 판정 기준만 다시 정의한다.
  */
 interface CacheEnvelope {
+  schemaVersion: number;
   trades: RawTrade[];
   failures: number;
   cancelled: number;
@@ -30,6 +31,10 @@ interface CacheEnvelope {
  * 봉투로 본다. failures/cancelled는 없으면 0으로 취급하는 하위호환이 양쪽
  * 다 있으므로(readCache 참고) 여기서 존재를 강제하지 않는다 — 강제하면 옛
  * 캐시 파일이 한쪽에서만 손상으로 갈리게 된다.
+ *
+ * `schemaVersion`은 이 모양 판정에 넣지 **않는다.** 버전이 다른 파일은 "봉투가
+ * 아니다"가 아니라 "봉투는 맞는데 옛 형식이다"이고, 사람이 받아야 할 안내가
+ * 전혀 다르기 때문이다 — 아래 loadRawTrades가 따로 검사해 따로 설명한다.
  */
 function isCacheEnvelope(value: unknown): value is CacheEnvelope {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
@@ -81,6 +86,22 @@ export function loadRawTrades(dir: string = RAW_DIR, regions: string[] = loadReg
           `npm run pipeline:fetch 로 다시 받으세요.`,
       );
     }
+    // 봉투 모양은 맞아도 형식 버전이 다르면 **읽지 않고 멈춘다.** 옛 봉투(v1)의
+    // 거래에는 aptSeq가 없어서, 그대로 읽으면 단지 키가 전부 undefined가 되어
+    // 서로 아무 상관 없는 거래들이 키 하나로 뭉친다 — 조용히 넘어가면
+    // complexes.json이 "정상"인 얼굴로 완전히 틀린 단지 묶음을 담게 된다.
+    if (parsed.schemaVersion !== CACHE_SCHEMA_VERSION) {
+      throw new Error(
+        `${file}: 캐시 봉투의 schemaVersion이 ${JSON.stringify(parsed.schemaVersion)}입니다 ` +
+          `— 지금 코드는 ${CACHE_SCHEMA_VERSION}을 씁니다. 이 파일은 파서가 ` +
+          `aptSeq·landLeasehold·주소를 남기기 전에 쓰인 것이라 단지 키를 만들 수 없습니다. ` +
+          `그대로 읽으면 키가 undefined인 거래들이 하나로 뭉쳐 완전히 틀린 단지 ` +
+          `묶음이 조용히 산출물로 나가므로, 건너뛰지 않고 여기서 멈춥니다. ` +
+          `npm run pipeline:fetch 를 실행해 다시 받으세요(옛 형식 파일은 자동으로 ` +
+          `다시 받습니다).`,
+      );
+    }
+
     for (const t of parsed.trades) {
       if (!allowedRegions.has(t.regionCode)) {
         throw new Error(

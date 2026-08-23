@@ -21,6 +21,7 @@ describe("parseResponse", () => {
     expect(first).toBeDefined();
     expect(first).toEqual({
       regionCode: "11680",
+      aptSeq: "11680-314",
       legalDongName: "수서동",
       complexName: "까치마을",
       builtYear: 1993,
@@ -28,6 +29,15 @@ describe("parseResponse", () => {
       floor: 6,
       price: 1_450_000_000,
       contractDate: "2026-06-20",
+      landLeasehold: "N",
+      address: {
+        roadNm: "광평로19길",
+        roadNmCd: "4166071",
+        bonbun: "0746",
+        bubun: "0000",
+        jibun: "746",
+        umdCd: "11500",
+      },
     });
   });
 
@@ -209,5 +219,164 @@ describe("parseResponse", () => {
     const result = parseResponse(serviceError);
     expect(typeof result.error).toBe("string");
     expect((result.error ?? "").length).toBeLessThan(1000);
+  });
+});
+
+/** 실제 응답 한 건의 모양. 개별 필드 규칙을 볼 때 이 위에 덮어쓴다. */
+function item(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    sggCd: 11680,
+    aptSeq: "11680-314",
+    umdNm: "수서동",
+    aptNm: "까치마을",
+    buildYear: 1993,
+    excluUseAr: 34.44,
+    floor: 6,
+    dealAmount: "145,000",
+    dealYear: 2026,
+    dealMonth: 6,
+    dealDay: 20,
+    cdealType: " ",
+    landLeaseholdGbn: "N",
+    roadNm: "광평로19길",
+    roadNmCd: 4166071,
+    bonbun: "0746",
+    bubun: "0000",
+    jibun: 746,
+    umdCd: 11500,
+    ...overrides,
+  };
+}
+
+function bodyOf(...items: Array<Record<string, unknown>>): string {
+  return JSON.stringify({
+    response: { header: { resultCode: "000" }, body: { items: { item: items } } },
+  });
+}
+
+/** 거래 한 건만 든 응답을 파싱해 그 거래를 돌려준다. 실패했으면 null. */
+function parseOne(overrides: Record<string, unknown> = {}) {
+  const { trades } = parseResponse(bodyOf(item(overrides)));
+  return trades[0] ?? null;
+}
+
+describe("aptSeq — 단지 고유 ID", () => {
+  it("실제 응답의 모든 거래에 aptSeq가 담긴다", () => {
+    const { trades } = parseResponse(SAMPLE);
+    for (const t of trades) {
+      expect(t.aptSeq).toMatch(/^\d+-\d+$/);
+    }
+  });
+
+  it("aptSeq가 없으면 파싱 실패로 센다 — 어느 단지인지 모르는 거래는 넣을 곳이 없다", () => {
+    const { trades, failures } = parseResponse(bodyOf(item({ aptSeq: undefined })));
+    expect(trades).toHaveLength(0);
+    expect(failures).toBe(1);
+  });
+
+  it("aptSeq가 공백 한 칸이면 파싱 실패로 센다 — 빈 키 하나로 온 단지가 뭉치면 안 된다", () => {
+    const { trades, failures } = parseResponse(bodyOf(item({ aptSeq: " " })));
+    expect(trades).toHaveLength(0);
+    expect(failures).toBe(1);
+  });
+
+  it("aptSeq가 문자열이 아니면 파싱 실패로 센다", () => {
+    const { trades, failures } = parseResponse(bodyOf(item({ aptSeq: 11680314 })));
+    expect(trades).toHaveLength(0);
+    expect(failures).toBe(1);
+  });
+
+  it("aptSeq 앞뒤 공백을 떼어 같은 단지가 갈리지 않게 한다", () => {
+    expect(parseOne({ aptSeq: " 11680-314 " })?.aptSeq).toBe("11680-314");
+  });
+});
+
+describe("landLeaseholdGbn — 토지임대부", () => {
+  it('"Y"면 "Y"로 남긴다', () => {
+    expect(parseOne({ landLeaseholdGbn: "Y" })?.landLeasehold).toBe("Y");
+  });
+
+  it('"N"이면 "N"으로 남긴다', () => {
+    expect(parseOne({ landLeaseholdGbn: "N" })?.landLeasehold).toBe("N");
+  });
+
+  it.each([
+    ["공백 한 칸", " "],
+    ["빈 문자열", ""],
+    ["예상 못한 코드", "X"],
+    ["숫자", 0],
+    ["null", null],
+    ["필드 없음", undefined],
+  ])('%s이면 null(모름)로 남긴다 — "N"(아님)으로 접지 않는다', (_label, value) => {
+    expect(parseOne({ landLeaseholdGbn: value })?.landLeasehold).toBeNull();
+  });
+
+  it("모르는 값을 절대 \"N\"으로 만들지 않는다 — 토지임대부를 놓치는 것이 낙관 방향이다", () => {
+    for (const value of [" ", "", "X", "1", 0, null, undefined, {}]) {
+      expect(parseOne({ landLeaseholdGbn: value })?.landLeasehold).not.toBe("N");
+    }
+  });
+
+  it("대소문자·앞뒤 공백만 맞춘다 — 표기 때문에 경고를 놓치지 않는다", () => {
+    expect(parseOne({ landLeaseholdGbn: " y " })?.landLeasehold).toBe("Y");
+    expect(parseOne({ landLeaseholdGbn: "n" })?.landLeasehold).toBe("N");
+  });
+
+  it("거래 자체는 살린다 — 모른다고 시세 근거가 나빠지지는 않는다", () => {
+    const { trades, failures } = parseResponse(bodyOf(item({ landLeaseholdGbn: " " })));
+    expect(trades).toHaveLength(1);
+    expect(failures).toBe(0);
+  });
+});
+
+describe("주소 — 저장만 하고 화면에 쓰지 않는다", () => {
+  it("숫자로 와도 문자열로 보존한다", () => {
+    const address = parseOne()?.address;
+    expect(address?.roadNmCd).toBe("4166071");
+    expect(address?.jibun).toBe("746");
+    expect(address?.umdCd).toBe("11500");
+  });
+
+  it("선행 0을 잃지 않는다 — 숫자로 바꾸면 다른 값이 된다", () => {
+    expect(parseOne({ bonbun: "0746" })?.address.bonbun).toBe("0746");
+    expect(parseOne({ bubun: "0000" })?.address.bubun).toBe("0000");
+  });
+
+  it('"107-44" 같은 문자열 지번도 그대로 남긴다', () => {
+    expect(parseOne({ jibun: "107-44" })?.address.jibun).toBe("107-44");
+  });
+
+  it("공백 한 칸은 null이다 — 빈 문자열로 채우지 않는다", () => {
+    const address = parseOne({ roadNm: " ", bonbun: " ", jibun: " " })?.address;
+    expect(address?.roadNm).toBeNull();
+    expect(address?.bonbun).toBeNull();
+    expect(address?.jibun).toBeNull();
+  });
+
+  it("필드가 아예 없으면 null이다", () => {
+    const address = parseOne({
+      roadNm: undefined,
+      roadNmCd: undefined,
+      bonbun: undefined,
+      bubun: undefined,
+      jibun: undefined,
+      umdCd: undefined,
+    })?.address;
+    expect(address).toEqual({
+      roadNm: null,
+      roadNmCd: null,
+      bonbun: null,
+      bubun: null,
+      jibun: null,
+      umdCd: null,
+    });
+  });
+
+  it("주소가 통째로 없어도 거래는 실패가 아니다 — 가격·부담 계산에 쓰이지 않는다", () => {
+    const { trades, failures } = parseResponse(
+      bodyOf(item({ roadNm: undefined, bonbun: undefined, jibun: undefined, umdCd: undefined })),
+    );
+    expect(trades).toHaveLength(1);
+    expect(failures).toBe(0);
   });
 });

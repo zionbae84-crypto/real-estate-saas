@@ -1,5 +1,5 @@
 import type { NormalizedTrade } from "./normalize";
-import type { ReportConfig } from "./types";
+import type { LandLeasehold, ReportConfig } from "./types";
 
 export interface ComplexUnit {
   complexKey: string;
@@ -30,6 +30,20 @@ export interface ComplexUnit {
    * 알려준다면 반영해야 더 정확(하고 여전히 보수적인 방향)해진다.
    */
   maxExclusiveAreaSqm: number;
+  /**
+   * 이 단지가 **토지임대부**인가. `"Y"` / `"N"` / `null`(모름).
+   *
+   * 토지 소유권이 없는 집이라 사는 사람이 반드시 알아야 하는 "사지 말아야 할"
+   * 신호다. 그래서 판정 방향이 한쪽으로 기울어 있다 —
+   * {@link mergeLandLeasehold} 참고.
+   *
+   * 창(window)은 `recent`가 아니라 그룹 **전체**다. 토지임대부는
+   * `maxExclusiveAreaSqm`처럼 시간과 무관한 그 단지의 성질이지 "최근 6개월의
+   * 사실"이 아니다.
+   *
+   * **`!== "Y"`를 "토지임대부 아님"으로 읽지 말 것.** "아님"은 `=== "N"`뿐이다.
+   */
+  landLeasehold: LandLeasehold;
   /** 최근 6개월 거래의 중위값(원) */
   medianPrice: number;
   tradeCount: number;
@@ -142,6 +156,27 @@ export function areaBucket(sqm: number): number {
  */
 export function isTrustworthyFloor(floor: number): boolean {
   return Number.isInteger(floor) && floor >= 1;
+}
+
+/**
+ * 한 단지의 거래들이 말하는 토지임대부 여부를 하나로 합친다.
+ *
+ * 우선순위가 대칭이 아니다. 이 순서가 이 함수의 전부다:
+ * 1. 한 건이라도 `"Y"`면 `"Y"`다. 나머지가 전부 `"N"`이어도 `"Y"`다.
+ * 2. `"Y"`가 없고 모르는 값(`null`)이 하나라도 있으면 `null`(모름)이다.
+ * 3. 모든 거래가 `"N"`일 때만 `"N"`(아님)이다.
+ *
+ * 다수결이나 최빈값을 쓰지 않는 이유: 토지임대부를 **놓치는 쪽이 낙관
+ * 방향**이기 때문이다. 화면이 "토지 소유권이 있는 집"이라고 잘못 말하면
+ * 사용자는 없는 근거로 안심한다. 반대로 실제로는 아닌 집을 토지임대부라고
+ * 말하면 사용자는 확인하러 간다 — 확인 비용은 들지만 잘못 사지는 않는다.
+ *
+ * 빈 배열이면 `null`이다 — 아무 근거도 없는데 "아님"이라고 단정하지 않는다.
+ */
+export function mergeLandLeasehold(values: readonly LandLeasehold[]): LandLeasehold {
+  if (values.includes("Y")) return "Y";
+  if (values.length === 0 || values.includes(null)) return null;
+  return "N";
 }
 
 /** 주어진 연/월의 마지막 날짜(일). month는 0-indexed이며 범위를 벗어나도 Date.UTC가 정규화한다. */
@@ -258,6 +293,8 @@ export function aggregate(
       builtYear: first.builtYear,
       areaBucket: areaBucket(first.exclusiveAreaSqm),
       maxExclusiveAreaSqm: Math.max(...group.map((t) => t.exclusiveAreaSqm)),
+      // 창은 recent가 아니라 group 전체 — 시간과 무관한 그 단지의 성질이다.
+      landLeasehold: mergeLandLeasehold(group.map((t) => t.landLeasehold)),
       medianPrice: median(recentPrices),
       tradeCount: recent.length,
       minPrice: Math.min(...recentPrices),

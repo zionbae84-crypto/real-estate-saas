@@ -147,11 +147,13 @@ function splitFetchIssues(log: FetchLogEntry[]): {
   failed: FetchLogEntry[];
   truncated: FetchLogEntry[];
   cacheCorrupted: FetchLogEntry[];
+  cacheSchemaMismatch: FetchLogEntry[];
 } {
   return {
     failed: log.filter((e) => e.status === "failed"),
     truncated: log.filter((e) => e.truncated === true),
     cacheCorrupted: log.filter((e) => e.cacheCorrupted === true),
+    cacheSchemaMismatch: log.filter((e) => e.cacheSchemaMismatch === true),
   };
 }
 
@@ -310,6 +312,7 @@ function renderSummary(
     failed: number;
     truncated: number;
     cacheCorrupted: number;
+    cacheSchemaMismatch: number;
     cancelled: number;
     parseFailures: number;
     emptyCount: number;
@@ -344,6 +347,7 @@ function renderSummary(
     `- 거래 0건 시군구·월: ${issues.emptyCount} / 전체 ${issues.totalTargets} (${(emptyRatio * 100).toFixed(1)}%, 캐시 적중 포함)`,
     `- 데이터 잘림 위험: ${issues.truncated}건`,
     `- 캐시 손상(재수집됨): ${issues.cacheCorrupted}건`,
+    `- 캐시 형식 불일치(재수집됨): ${issues.cacheSchemaMismatch}건`,
     `- 해제(취소)된 거래: ${issues.cancelled}건`,
     "",
   ];
@@ -358,7 +362,7 @@ export function buildReport(
   const overMerge = findOverMergeSuspects(units, config);
   const splitArea = findSplitAreaSuspects(units, config);
   const lowConfidence = units.filter((u) => u.lowConfidence).length;
-  const { failed, truncated, cacheCorrupted } = splitFetchIssues(log);
+  const { failed, truncated, cacheCorrupted, cacheSchemaMismatch } = splitFetchIssues(log);
   const cancelled = totalCancelled(log);
   const parseFailureEntries = log.filter((e) => (e.failures ?? 0) > 0);
   const parseFailuresTotal = totalFailures(log);
@@ -375,6 +379,7 @@ export function buildReport(
         failed: failed.length,
         truncated: truncated.length,
         cacheCorrupted: cacheCorrupted.length,
+        cacheSchemaMismatch: cacheSchemaMismatch.length,
         cancelled,
         parseFailures: parseFailuresTotal,
         emptyCount: emptyEntries.length,
@@ -430,6 +435,12 @@ export function buildReport(
       "캐시 파일이 깨져 다시 받았다. 재수집 자체는 성공했지만 디스크 상태를 점검하라.",
       cacheCorrupted,
       () => "캐시 파일 손상, 재수집으로 대체됨",
+    ),
+    ...renderFetchIssueSection(
+      "캐시 형식 불일치(재수집됨)",
+      "캐시 파일이 옛 형식(`schemaVersion` 불일치)이라 다시 받았다. 파서가 남기는 필드가 바뀐 뒤의 정상적인 한 번짜리 전환이다 — 디스크를 의심할 일은 아니다. 다음 실행에도 계속 나온다면 재수집이 실제로는 안 되고 있다는 뜻이므로 그때는 봐야 한다.",
+      cacheSchemaMismatch,
+      () => "옛 형식 캐시, 재수집으로 대체됨",
     ),
     ...renderEmptyRegionMonthSection(emptyEntries, emptyRatio, config.emptyRatioWarnThreshold),
   ];

@@ -69,3 +69,18 @@ describe("번들된 단지 데이터", () => {
     expect(DATA_AS_OF).toMatch(/^\d{4}-\d{2}$/);
   });
 });
+
+describe("토지임대부 표시", () => {
+  it("모든 평형이 Y·N·null 중 하나다 — undefined가 섞이면 화면이 아무것도 못 그린다", () => {
+    for (const u of COMPLEX_UNITS) {
+      expect(["Y", "N", null], u.complexKey).toContain(u.landLeasehold);
+    }
+  });
+
+  it("토지임대부 단지가 실제로 잡혀 있다 — 전부 N이면 판정이 죽은 것이다", () => {
+    // 강남·서초의 토지임대부 아파트(강남브리즈힐·호반써밋서초파크뷰)가
+    // 데이터에 있다. 0이 되면 파서나 집계가 이 신호를 잃은 것이다.
+    expect(COMPLEX_UNITS.filter((u) => u.landLeasehold === "Y").length).toBeGreaterThan(0);
+  });
+});
+

@@ -13,12 +13,18 @@ function trade(overrides: Partial<RawTrade> = {}): RawTrade {
   return {
     regionCode: "11680",
     legalDongName: "대치동",
+    aptSeq: "11680-100",
     complexName: "은마",
     builtYear: 1979,
     exclusiveAreaSqm: 84.4,
     floor: 5,
     price: 2_000_000_000,
     contractDate: "2026-07-10",
+    landLeasehold: "N",
+    address: {
+      roadNm: "삼성로", roadNmCd: "3122005", bonbun: "0316",
+      bubun: "0000", jibun: "316", umdCd: "10600",
+    },
     ...overrides,
   };
 }

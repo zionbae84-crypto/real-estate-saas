@@ -6,12 +6,18 @@ function trade(overrides: Partial<RawTrade> = {}): RawTrade {
   return {
     regionCode: "11680",
     legalDongName: "대치동",
+    aptSeq: "11680-4394",
     complexName: "래미안대치팰리스",
     builtYear: 2015,
     exclusiveAreaSqm: 84.97,
     floor: 10,
     price: 3_000_000_000,
     contractDate: "2026-06-15",
+    landLeasehold: "N",
+    address: {
+      roadNm: "삼성로", roadNmCd: "3122005", bonbun: "0316",
+      bubun: "0000", jibun: "316", umdCd: "10600",
+    },
     ...overrides,
   };
 }

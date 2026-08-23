@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { aggregate, areaBucket, median } from "./aggregate";
+import { aggregate, areaBucket, median, mergeLandLeasehold } from "./aggregate";
 import { normalizeAll } from "./normalize";
 import type { RawTrade, ReportConfig } from "./types";
 
@@ -17,12 +17,18 @@ function trade(overrides: Partial<RawTrade> = {}): RawTrade {
   return {
     regionCode: "11680",
     legalDongName: "대치동",
+    aptSeq: "11680-100",
     complexName: "은마",
     builtYear: 1979,
     exclusiveAreaSqm: 84.43,
     floor: 5,
     price: 2_000_000_000,
     contractDate: "2026-07-10",
+    landLeasehold: "N",
+    address: {
+      roadNm: "삼성로", roadNmCd: "3122005", bonbun: "0316",
+      bubun: "0000", jibun: "316", umdCd: "10600",
+    },
     ...overrides,
   };
 }
@@ -556,3 +562,72 @@ describe("층 범위", () => {
     expect(low[0]?.minFloor).toBe(1);
   });
 });
+
+describe("mergeLandLeasehold", () => {
+  it("한 건이라도 Y면 Y다 — 나머지가 전부 N이어도", () => {
+    expect(mergeLandLeasehold(["N", "N", "Y", "N"])).toBe("Y");
+  });
+
+  it("Y가 모름과 섞여도 Y다", () => {
+    expect(mergeLandLeasehold([null, "Y", null])).toBe("Y");
+  });
+
+  it("Y가 없고 모르는 값이 하나라도 있으면 모름(null)이다 — N으로 접지 않는다", () => {
+    expect(mergeLandLeasehold(["N", "N", null])).toBeNull();
+  });
+
+  it("모두 N일 때만 N이다", () => {
+    expect(mergeLandLeasehold(["N", "N", "N"])).toBe("N");
+  });
+
+  it("빈 배열은 모름이다 — 근거 없이 '아님'이라고 단정하지 않는다", () => {
+    expect(mergeLandLeasehold([])).toBeNull();
+  });
+
+  it("다수결이 아니다 — Y 한 건이 N 아흔아홉 건을 이긴다", () => {
+    const values = [...Array<"N">(99).fill("N"), "Y" as const];
+    expect(mergeLandLeasehold(values)).toBe("Y");
+  });
+});
+
+describe("aggregate — 토지임대부", () => {
+  it("그 단지 거래 중 한 건이라도 Y면 평형이 Y로 나온다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ landLeasehold: "N", contractDate: "2026-07-01" }),
+        trade({ landLeasehold: "Y", contractDate: "2026-07-02" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.landLeasehold).toBe("Y");
+  });
+
+  it("모르는 값이 섞이면 모름(null)으로 나온다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ landLeasehold: "N", contractDate: "2026-07-01" }),
+        trade({ landLeasehold: null, contractDate: "2026-07-02" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.landLeasehold).toBeNull();
+  });
+
+  it("창이 최근 6개월이 아니라 그룹 전체다 — 오래된 Y 거래도 그 단지의 사실이다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 6개월 창 밖(대표가에는 안 들어간다)
+        trade({ landLeasehold: "Y", contractDate: "2025-09-01" }),
+        // 창 안
+        trade({ landLeasehold: "N", contractDate: "2026-07-02" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.tradeCount).toBe(1);
+    expect(units[0]?.landLeasehold).toBe("Y");
+  });
+});
+
