@@ -54,25 +54,35 @@ export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProp
         {formatWon(price)}
       </p>
 
-      <Slider
-        label="이 가격에 산다면"
-        min={0}
-        max={max}
-        step={PRICE_STEP}
-        values={[price]}
-        getAriaLabel={() => "이 가격에 산다면"}
-        getAriaValuetext={(value) => formatWon(value)}
-        // 기본값은 원 단위 정수(예: 476100000)를 그대로 보여준다 — 드래그
-        // 중 썸 위에 뜨는 값 표시(value indicator)에도 같은 한국식 표기를
-        // 입힌다. 실제 브라우저 확인에서 이걸 빼먹으면 화면에 그 raw
-        // 숫자가 그대로 노출되는 게 실제로 보인다.
-        getValueIndicatorLabel={({ value }) => formatWon(value)}
-        markers={markers}
-        onValuesChange={(values) => {
-          const next = toPrice(values, max);
-          if (next !== undefined) onChange(next);
-        }}
-      />
+      {/*
+        인쇄 시 지우는 부분을 이 wrapper 하나로 한정한다
+        (`src/print/hiddenInPrint.ts`의 `.price-slider-control`).
+        드래그로 값을 바꾸는 장치는 종이 위에서 무의미하지만, 지금 가리키는
+        **값**(위의 `.slider-price`)과 한계 안내(아래 `.slider-warning`)는
+        바로 아래 대출 배지가 이 가격을 기준으로 계산되므로(전제) 남긴다 —
+        그래서 Slider만 별도 div로 감싼다.
+      */}
+      <div className="price-slider-control">
+        <Slider
+          label="이 가격에 산다면"
+          min={0}
+          max={max}
+          step={PRICE_STEP}
+          values={[price]}
+          getAriaLabel={() => "이 가격에 산다면"}
+          getAriaValuetext={(value) => formatWon(value)}
+          // 기본값은 원 단위 정수(예: 476100000)를 그대로 보여준다 — 드래그
+          // 중 썸 위에 뜨는 값 표시(value indicator)에도 같은 한국식 표기를
+          // 입힌다. 실제 브라우저 확인에서 이걸 빼먹으면 화면에 그 raw
+          // 숫자가 그대로 노출되는 게 실제로 보인다.
+          getValueIndicatorLabel={({ value }) => formatWon(value)}
+          markers={markers}
+          onValuesChange={(values) => {
+            const next = toPrice(values, max);
+            if (next !== undefined) onChange(next);
+          }}
+        />
+      </div>
 
       {price === max && (
         <p className="slider-warning">

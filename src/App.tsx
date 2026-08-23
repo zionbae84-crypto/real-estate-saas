@@ -5,6 +5,7 @@ import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
+import { PrintSummary, type AreaSource } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
 import { RegionFilter } from "./components/RegionFilter";
 import { SafetyBadge } from "./components/SafetyBadge";
@@ -101,6 +102,27 @@ export function App() {
     setSelectedUnit(unit);
   }
 
+  /**
+   * 인쇄물의 "전용면적" 전제가 어디서 왔는지(PrintSummary가 문구 방향을
+   * 가르는 데 쓴다).
+   *
+   * `effectiveProfile`과 같은 우선순위를 따른다 — 상세가 열려 있으면
+   * 그 평형의 실제 면적이 이미 화면 전체의 계산을 바꿔치기하고 있으므로
+   * (위 `effectiveProfile` 주석 참고), 인쇄물도 그 사실을 "선택한 매물의
+   * 실제 면적"이라고 밝혀야 한다 — 그렇지 않으면 사용자가 실제로는
+   * 값을 확정한 적 없는데 "직접 입력"이라고 오인시키게 된다.
+   */
+  const areaSource: AreaSource =
+    selectedUnit !== null
+      ? "selectedUnit"
+      : state.touched.includes("area")
+        ? "touched"
+        : "assumed";
+
+  /** PrintSummary에 넘길, 지금 실제로 계산에 쓰이는 전용면적(㎡). */
+  const effectiveAreaSqm =
+    selectedUnit !== null ? selectedUnit.areaBucket : state.exclusiveAreaSqm;
+
   const detail = useMemo(() => {
     if (effectiveProfile === null || selectedUnit === null) return null;
     return {
@@ -132,6 +154,19 @@ export function App() {
           </p>
         ) : (
           <>
+            {/*
+              화면에서는 숨고 인쇄에서만 나온다(styles.css의 .print-summary).
+              지금 화면 그대로 인쇄되는 이 리포트가 배우자·부모님처럼 화면을
+              보지 않은 사람에게 건네지므로, 계산의 전제(보유 현금·연
+              소득·생애최초 여부·기존 대출·규제지역 여부·전용면적)와
+              룰셋 기준·인쇄일을 종이에도 남긴다.
+            */}
+            <PrintSummary
+              state={state}
+              effectiveAreaSqm={effectiveAreaSqm}
+              areaSource={areaSource}
+              rules={rules}
+            />
             <AssumptionLine
               state={state}
               onOpen={setOpenField}
@@ -193,6 +228,19 @@ export function App() {
                 )}
               </>
             )}
+
+            {/*
+              지금 보고 있는 화면 상태 그대로(상세가 열려 있으면 그 매물,
+              아니면 목록) 인쇄한다 — 별도 인쇄 화면을 만들지 않는다.
+              버튼 자신은 인쇄에서 지운다(styles.css의 .print-button).
+            */}
+            <button
+              type="button"
+              className="print-button"
+              onClick={() => window.print()}
+            >
+              인쇄하기
+            </button>
           </>
         )}
       </ErrorBoundary>

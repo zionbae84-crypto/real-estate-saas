@@ -595,3 +595,118 @@ body {
 .complex-detail-loan {
   margin: 0.5rem 0 1.5rem;
 }
+
+/*
+ * 인쇄 버튼. 화면 어조("해요체")를 그대로 쓴다 — 버튼 문구는 짧은 동사형
+ * 명사구("인쇄하기")라 tone-guard의 대상(문장 종결)이 아니다.
+ */
+.print-button {
+  margin: 1.5rem 0 0;
+  padding: 0.625rem 1.25rem;
+  font: inherit;
+  font-weight: 600;
+  color: #fff;
+  background: var(--seed-color-bg-brand-solid);
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+}
+
+/*
+ * 인쇄물 전용 요약(PrintSummary). 화면에서는 숨긴다 — 화면은 이미
+ * ProfileForm의 되비추기·AssumptionLine으로 같은 값을 보여주고 있어
+ * 여기까지 보이면 같은 정보가 세 번 반복된다. `@media print`에서만
+ * 드러낸다(아래).
+ */
+.print-summary {
+  display: none;
+}
+
+/*
+ * 인쇄 전용 CSS.
+ *
+ * 이 서비스의 제품 방침은 "사지 말아야 할 때를 말해주는 것"이다 — 인쇄물은
+ * 배우자·부모님처럼 화면을 보지 않은 사람에게 건네지므로, 등급·경고·
+ * 면책·전제가 화면보다 더 엄격하게 살아남아야 한다.
+ *
+ * 1. 등급·경고는 이미 글자다(SafetyBadge의 "안전"/"주의"/"위험",
+ *    ComplexList의 같은 라벨, WarningList의 경고 문장). 색만으로 뜻을
+ *    전달하는 자리가 없으므로, 브라우저가 배경 그래픽을 기본으로 끄고
+ *    인쇄해도(`-webkit-print-color-adjust`) 의미가 사라지지 않는다 —
+ *    그래서 이 블록은 색을 강제로 켜지 않는다(그럴 필요가 없다).
+ * 2. `src/print/hiddenInPrint.ts`의 PRINT_HIDDEN_SELECTORS가 여기서
+ *    숨기는 선택자의 유일한 출처다. 지우는 것은 전부 종이 위에서 조작할
+ *    수 없는 장치(입력 폼·슬라이더 드래그·지역 필터·버튼들)이지, 값이나
+ *    문구가 아니다 — `src/print/printCss.test.ts`가 이 약속을 구조로
+ *    잠근다.
+ */
+@media print {
+  .profile-form,
+  .price-slider-control,
+  .region-filter,
+  .print-button,
+  .complex-more,
+  .complex-detail-back {
+    display: none;
+  }
+
+  /*
+   * 가정 문구(AssumptionLine)는 인쇄에서도 남지만, 대시 테두리·호버
+   * 배경은 "눌러서 고칠 수 있다"는 신호다. 종이 위에서는 누를 수 없으니
+   * 그 신호(조작 장치의 겉모양)만 지우고 문구(정보)는 그대로 둔다.
+   */
+  .assumption-item {
+    border: none;
+    background: none;
+    padding: 0;
+    cursor: default;
+  }
+
+  /* 인쇄물 전용 요약을 이제 드러낸다. */
+  .print-summary {
+    display: block;
+  }
+
+  /*
+   * <details>는 접힌 채로 인쇄되면 부대비용·정책대출·상세 설명 같은
+   * 근거가 통째로 빠진다. summary를 뺀 모든 자식을 강제로 펼친다 —
+   * 중첩된 <details>(CostBreakdown, BindingExplainer의 "네 가지 한도
+   * 모두 보기")에도 이 선택자가 각 단계마다 그대로 적용된다.
+   */
+  details {
+    display: block;
+  }
+
+  details:not([open]) > *:not(summary) {
+    display: block !important;
+  }
+
+  /*
+   * 쪽 넘김: 한 행·배지·경고가 페이지 경계에서 잘리면 근거 없는 숫자만
+   * 남는다. break-inside(신 문법)와 함께 이 CSS가 실제 지원 대상으로
+   * 삼는 Chrome/Chromium 계열 인쇄 엔진에서 함께 쓰이는 -webkit- 접두
+   * 구문도 둔다.
+   */
+  .complex-row,
+  .safety-badge,
+  .warning-list li,
+  .no-budget,
+  .binding-explainer,
+  .policy-loan-list li,
+  .assumption-item,
+  .assumption-notice,
+  .safe-line-item,
+  .print-summary dl > div {
+    break-inside: avoid;
+    -webkit-column-break-inside: avoid;
+    page-break-inside: avoid;
+  }
+
+  /* 제목이 페이지 맨 아래 혼자 남지 않게 한다. */
+  h1,
+  h2,
+  h3 {
+    break-after: avoid-page;
+    page-break-after: avoid;
+  }
+}
