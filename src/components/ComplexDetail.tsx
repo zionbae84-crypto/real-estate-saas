@@ -7,6 +7,7 @@ import type { PriceBudgetInput } from "../lib/price";
 import { formatRange } from "./ComplexList";
 import { CostBreakdown } from "./CostBreakdown";
 import { LandLeaseNote } from "./LandLeaseNote";
+import { LocationFacts } from "./LocationFacts";
 import { NoLoanLine } from "./NoLoanLine";
 import { PriceCheck } from "./PriceCheck";
 import { SafetyBadge } from "./SafetyBadge";
@@ -153,6 +154,30 @@ export function ComplexDetail({
         unit={unit}
         budget={priceBudget}
       />
+
+      {/*
+        입지 사실은 **여기, 맨 뒤**에 붙는다. 이유가 셋이다.
+
+        1. 이건 평형이 아니라 **단지**의 성질이다. 같은 단지의 59㎡와
+           84㎡는 같은 자리에 있으므로 `complexKey` 하나로 묻는다. 위의
+           모든 계산이 평형별인 것과 결이 다르니 그 덩어리 안에 끼우지
+           않는다.
+        2. 이 앱의 방침은 "사지 말아야 할 때를 말해주는 것"이라 화면의
+           무게 순서가 곧 위험 순서다. 부담·호가 같은 "멈춰야 할 이유"가
+           앞이고, 거리라는 사실은 그 자체로 판단이 아니므로 뒤다.
+        3. 그 결과 이 화면이 **마지막으로 하는 말**이 "우리가 재지 못하는
+           것"(직선거리는 도보거리가 아니라는 것, 배정은 거리순이 아니라는
+           것)이 된다. 종이로 인쇄해도 그 순서가 그대로 남는다.
+
+        목록의 행이 아니라 상세에 두는 이유는 `PriceCheck`와 같다 — 목록
+        행에 거리를 붙이면 그 숫자가 곧바로 행끼리 견주는 눈금이 되고,
+        그건 우리가 매기지 않기로 한 순위를 사용자가 대신 매기게 만든다.
+
+        `key`를 주지 않는 이유: 이 컴포넌트에는 사용자가 넣는 값이 없어
+        다른 단지로 갈아탈 때 남을 상태가 없다. `complexKey`가 바뀌면
+        그대로 다시 계산된다.
+      */}
+      <LocationFacts complexKey={unit.complexKey} />
     </section>
   );
 }
