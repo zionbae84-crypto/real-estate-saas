@@ -18,7 +18,6 @@ import { useProfileForm } from "./state/useProfileForm";
 
 export function App() {
   const { state, setField, reset, profile } = useProfileForm();
-  const affordability = useAffordability(profile);
   // AssumptionLine이 어떤 가정 항목을 눌렀는지 여기서 받아, ProfileForm에
   // "그 항목만 제자리(폼 안)에서 열어라"고 전달한다. 이 상태가 없으면
   // AssumptionLine의 버튼도 ProfileForm의 openField 분기도 도달할 방법이
@@ -29,6 +28,25 @@ export function App() {
   const [visibleCount, setVisibleCount] = useState(10);
   // 상세(상환 시뮬레이션)를 연 평형. null이면 목록 화면이다.
   const [selectedUnit, setSelectedUnit] = useState<ComplexUnit | null>(null);
+
+  /**
+   * 상세가 열려 있는 동안 화면 전체(위 실구매 가능 가격·안전선·상세의
+   * 모든 수치)가 고른 평형의 실제 전용면적을 반영해야 한다.
+   *
+   * **프로필(state)에는 저장하지 않는다.** 저장하면(예전처럼
+   * `setField("exclusiveAreaSqm", …)`를 호출하면) localStorage까지
+   * 영구히 남아, 상세를 닫은 뒤에도(심지어 다음 세션까지) 헤드라인이
+   * 계산한 적 없는 좁은 면적으로 낙관적으로 남는다 — 부담은 실제보다
+   * 작게, 실구매력은 실제보다 크게 보이는, 이 제품이 가장 피해야 하는
+   * 방향의 오답이다. 그래서 화면이 쓰는 프로필만 상세가 열려 있는
+   * 동안 이 값으로 바꿔치기하고, 닫으면 원래 프로필로 즉시 되돌아간다.
+   */
+  const effectiveProfile = useMemo(() => {
+    if (profile === null || selectedUnit === null) return profile;
+    return { ...profile, exclusiveAreaSqm: selectedUnit.areaBucket };
+  }, [profile, selectedUnit]);
+
+  const affordability = useAffordability(effectiveProfile);
 
   const complexList = useMemo(
     () =>
@@ -67,28 +85,24 @@ export function App() {
   /**
    * 단지 목록의 행을 누르면 그 평형의 상세(상환 시뮬레이션)를 연다.
    *
-   * 지역과 같은 패턴이다: 목록 전용 값을 따로 만들지 않고 **폼 상태에
-   * 직접** 반영한다. 그래야 위쪽 실구매 가능 가격과 상세 안의 계산이
-   * 같은 프로필을 보게 된다 — 따로 두면 "상세에서는 이 평형 기준인데
-   * 위쪽은 다른 면적 기준"인 화면이 나온다.
-   *
-   * `setField`가 `exclusiveAreaSqm`을 `ASSUMABLE_KEY_MAP`으로 이미
-   * "area"에 매핑해 두었으므로, 이 한 번의 호출로 `touched`에도 함께
-   * 기록돼 `AssumptionLine`에서 전용면적 가정 항목이 빠진다.
+   * 화면 상태(`selectedUnit`)만 바꾼다 — 프로필에는 아무것도 쓰지
+   * 않는다. 위 `effectiveProfile`이 `selectedUnit`을 보고 화면 전체의
+   * 계산을 바꿔치기하므로, 위쪽 실구매 가능 가격과 상세 안의 계산은
+   * 여전히 같은(바꿔치기된) 프로필을 본다 — 다만 그 반영이 화면 상태에
+   * 한정돼, 상세를 닫으면 원래 프로필로 되돌아간다.
    */
   function handleSelectUnit(unit: ComplexUnit) {
     setSelectedUnit(unit);
-    setField("exclusiveAreaSqm", unit.areaBucket);
   }
 
   const detail = useMemo(() => {
-    if (profile === null || selectedUnit === null) return null;
+    if (effectiveProfile === null || selectedUnit === null) return null;
     return {
       unit: selectedUnit,
-      burden: calcBurdenAt(profile, rules, selectedUnit.maxPrice),
-      costs: calcAcquisitionCosts(selectedUnit.maxPrice, profile, rules),
+      burden: calcBurdenAt(effectiveProfile, rules, selectedUnit.maxPrice),
+      costs: calcAcquisitionCosts(selectedUnit.maxPrice, effectiveProfile, rules),
     };
-  }, [profile, selectedUnit]);
+  }, [effectiveProfile, selectedUnit]);
 
   return (
     <main className="app">
@@ -107,7 +121,11 @@ export function App() {
           </p>
         ) : (
           <>
-            <AssumptionLine state={state} onOpen={setOpenField} />
+            <AssumptionLine
+              state={state}
+              onOpen={setOpenField}
+              areaOverridden={selectedUnit !== null}
+            />
             <BudgetResult
               result={affordability.result}
               safePrice={affordability.safePrice}

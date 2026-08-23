@@ -21,6 +21,7 @@ const EXPECTED_FUNCTIONS = [
   "matchPolicyLoans",
   "maxPrincipal",
   "monthlyPayment",
+  "ownFundsRequired",
   "parseRules",
 ] as const;
 

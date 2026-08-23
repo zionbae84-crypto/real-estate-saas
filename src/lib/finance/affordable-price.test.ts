@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import rawRules from "../../../rules/2026-03.json";
 import { calcAcquisitionCosts } from "./acquisition-cost";
-import { calcAffordablePrice, PRICE_STEP } from "./affordable-price";
+import { calcAffordablePrice, ownFundsRequired, PRICE_STEP } from "./affordable-price";
 import { calcAvailableCash } from "./available-cash";
 import { calcMaxLoan } from "./loan-limit";
 import { matchPolicyLoans } from "./policy-loans";
@@ -732,5 +732,28 @@ describe("캡이 올라가는 구간에서 분할이 실제로 안전망 역할�
     expect(ownFundsAt(next, buyer, ascendingCapRules)).toBeGreaterThan(
       calcAvailableCash(buyer).amount,
     );
+  });
+});
+
+describe("ownFundsRequired export", () => {
+  // buildComplexList가 행마다 이 술어를 직접 불러 구매 가능 여부를
+  // 판정한다(이분 탐색 없이 한 번에). export만 새로 붙인 것이지 계산은
+  // 한 글자도 바뀌지 않았다는 것을, 이 파일이 이미 갖고 있던 독립
+  // 재구현(ownFundsAt)과 값이 같다는 사실로 잠근다.
+  const p = profile();
+
+  it("모듈 내부 계산(ownFundsAt)과 같은 값을 돌려준다", () => {
+    for (const price of [0, 100_000_000, 500_000_000, 1_200_000_000]) {
+      expect(ownFundsRequired(price, p, rules)).toBe(ownFundsAt(price, p, rules));
+    }
+  });
+
+  it("calcAffordablePrice가 찾은 가격에서 참이고, 한 스텝 위에서는 거짓이다", () => {
+    const cash = calcAvailableCash(p).amount;
+    const result = calcAffordablePrice(p, rules);
+    expect(ownFundsRequired(result.affordablePrice, p, rules)).toBeLessThanOrEqual(cash);
+    expect(
+      ownFundsRequired(result.affordablePrice + PRICE_STEP, p, rules),
+    ).toBeGreaterThan(cash);
   });
 });

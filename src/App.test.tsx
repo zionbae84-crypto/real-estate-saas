@@ -136,7 +136,7 @@ describe("App - 단지 상세(화면 4)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("평형을 고르면 그 평형의 전용면적이 프로필에 반영돼 가정 문구에서 빠진다", async () => {
+  it("평형을 고르면 그 평형의 전용면적이 화면 계산에 반영돼 가정 문구에서 빠진다", async () => {
     render(<App />);
     await fillProfile();
 
@@ -146,23 +146,52 @@ describe("App - 단지 상세(화면 4)", () => {
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
     // 이 평형(전용 59㎡)을 반영했으므로 가정 문구 자체가 더 이상
-    // 화면에 없다 — AssumptionLine은 사용자가 값을 확정한 항목을
-    // 빼기 때문이다.
+    // 화면에 없다 — 상세가 열려 있는 동안 areaOverridden이 참이 되어
+    // AssumptionLine이 전용면적 항목을 빼기 때문이다.
     expect(screen.queryByText(/전용면적 86㎡로 가정하고 계산했어요/)).not.toBeInTheDocument();
     expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
   });
 
-  it("전용면적 반영으로 실구매 가능 가격도 함께 바뀐다", async () => {
+  it("상세가 열린 동안에는 실구매 가능 가격이 그 평형 기준으로 바뀌고, 목록으로 돌아가면 원래 값으로 되돌아간다", async () => {
     const { container } = render(<App />);
     await fillProfile();
 
     const priceBefore = container.querySelector(".affordable-price")?.textContent;
 
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-    await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
+    const priceWhileOpen = container.querySelector(".affordable-price")?.textContent;
+    // 상세가 열려 있는 동안에는 이 평형(전용 59㎡)의 실제 면적 기준으로
+    // 다시 계산되므로 원래 가정(86㎡) 기준 가격과 달라야 한다.
+    expect(priceWhileOpen).not.toBe(priceBefore);
 
+    await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
     const priceAfter = container.querySelector(".affordable-price")?.textContent;
 
-    expect(priceAfter).not.toBe(priceBefore);
+    // 결함이었던 지점: 프로필에 영구히 저장하면 목록으로 돌아와도
+    // priceAfter가 priceWhileOpen에 머물러 있어(원래 값으로 돌아오지
+    // 않아) 실구매력이 실제보다 크게 보인다. 프로필에 저장하지 않았다면
+    // 닫는 즉시 원래 가정 기준으로 되돌아가야 한다.
+    expect(priceAfter).toBe(priceBefore);
+  });
+
+  it("상세를 열었다 목록으로 돌아오면 전용면적 가정 문구가 다시 나타나고, localStorage에는 상세에서 본 면적이 쓰이지 않는다", async () => {
+    render(<App />);
+    await fillProfile();
+
+    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+    expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
+
+    // 목록으로 돌아오면 다시 가정이므로 문구도 다시 나타나야 한다 —
+    // 원래 가정 면적(86㎡) 그대로다.
+    expect(screen.getByText(/전용면적 86㎡로 가정하고 계산했어요/)).toBeInTheDocument();
+
+    // 프로필(및 localStorage)에는 상세에서 본 59㎡가 전혀 쓰이지
+    // 않았어야 한다 — touched에도 "area"가 없고, 저장된 exclusiveAreaSqm도
+    // 원래 가정값(86)이다.
+    const stored = JSON.parse(window.localStorage.getItem("budget-profile-v1") ?? "{}");
+    expect(stored.touched ?? []).not.toContain("area");
+    expect(stored.exclusiveAreaSqm).not.toBe(59);
   });
 });

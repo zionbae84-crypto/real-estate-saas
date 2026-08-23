@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 import rawRules from "../../rules/2026-08.json";
 import { COMPLEX_UNITS, type ComplexUnit } from "../data/complexes";
 import { buildComplexList } from "./complex-list";
+import { calcAffordablePrice, ownFundsRequired } from "./finance/affordable-price";
+import { calcAvailableCash } from "./finance/available-cash";
 import { parseRules } from "./finance/rules";
 import type { BuyerProfile } from "./finance/types";
 
@@ -181,5 +183,61 @@ describe("buildComplexList", () => {
     for (const e of [...r.withinSafe, ...r.beyondSafe]) {
       expect(e.unit.maxPrice).toBeLessThanOrEqual(r.affordablePrice);
     }
+  });
+
+  describe("리뷰 수정: 목록이 행마다 그 행의 실제 면적을 쓴다", () => {
+    it("실제 번들 데이터: 어떤 행도 그 행 자신의 면적 기준 필요 자기자금이 가용 현금을 넘는데 구매 가능으로 보이지 않는다", () => {
+      const p = profile();
+      const cash = calcAvailableCash(p).amount;
+      const r = build([...COMPLEX_UNITS], p);
+      for (const e of [...r.withinSafe, ...r.beyondSafe]) {
+        const rowProfile = { ...p, exclusiveAreaSqm: e.unit.areaBucket };
+        expect(
+          ownFundsRequired(e.unit.maxPrice, rowProfile, rules),
+        ).toBeLessThanOrEqual(cash);
+      }
+    });
+
+    it("같은 가격이라도 85㎡ 초과 행과 이하 행의 부담이 다르다(농특세)", () => {
+      const price = 300_000_000;
+      const r = build([
+        unit({ complexKey: "small", areaBucket: 84, maxPrice: price, minPrice: price }),
+        unit({ complexKey: "large", areaBucket: 130, maxPrice: price, minPrice: price }),
+      ]);
+      const entries = [...r.withinSafe, ...r.beyondSafe];
+      const small = entries.find((e) => e.unit.complexKey === "small");
+      const large = entries.find((e) => e.unit.complexKey === "large");
+      expect(small).toBeDefined();
+      expect(large).toBeDefined();
+      // 농특세가 붙는 만큼 부대비용이 늘어 같은 가격에서도 더 많이
+      // 빌려야 한다 — neededLoan = price + costs.total - cash.
+      expect(large?.burden.neededLoan).toBeGreaterThan(small?.burden.neededLoan ?? 0);
+    });
+
+    it("결함 회귀 잠금: 프로필 하나의 면적으로 모든 행을 봐주면 넓은 평형이 부당하게 통과했다", () => {
+      // 프로필은 농특세가 붙지 않는 면적(84㎡)으로 가정했지만, 실제
+      // 행(130㎡)은 초과라 농특세가 붙는다. 프로필 면적만으로 감당
+      // 가능 여부를 판정하면(옛 결함), 이 단지는 실제로는 가용현금을
+      // 넘는데도 목록에 나타난다.
+      const p = profile({ exclusiveAreaSqm: 84 });
+      const baseAffordable = calcAffordablePrice(p, rules).affordablePrice;
+      const cash = calcAvailableCash(p).amount;
+
+      const wideUnit = unit({
+        areaBucket: 130,
+        maxPrice: baseAffordable,
+        minPrice: baseAffordable,
+      });
+
+      // 전제 확인: 130㎡ 기준으로 다시 재면 이 가격은 실제로 가용현금을 넘는다.
+      const rowProfile = { ...p, exclusiveAreaSqm: wideUnit.areaBucket };
+      expect(ownFundsRequired(wideUnit.maxPrice, rowProfile, rules)).toBeGreaterThan(cash);
+      // 그리고 프로필 하나(84㎡)만으로 판정하면 옛 결함처럼 통과했을
+      // 가격이라는 것도 함께 확인한다.
+      expect(wideUnit.maxPrice).toBeLessThanOrEqual(baseAffordable);
+
+      const r = build([wideUnit], p);
+      expect(allKeys(r)).not.toContain(wideUnit.complexKey);
+    });
   });
 });

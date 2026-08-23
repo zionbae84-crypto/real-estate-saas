@@ -221,6 +221,39 @@ describe("AssumptionLine", () => {
     });
   });
 
+  describe("상세가 열려 있는 동안 전용면적 가정이 사라진다", () => {
+    // touched를 건드리지 않고도(App.tsx가 프로필에 저장하지 않으므로)
+    // areaOverridden 플래그만으로 항목이 빠져야 한다.
+    it("areaOverridden이 참이면 buildAssumptionItems가 area 항목을 만들지 않는다", () => {
+      const items = buildAssumptionItems(
+        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 86 },
+        85,
+        true,
+      );
+      expect(items.find((item) => item.field === "area")).toBeUndefined();
+    });
+
+    it("areaOverridden이 거짓(기본값)이면 여느 때처럼 area 항목이 있다", () => {
+      const items = buildAssumptionItems(
+        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 86 },
+        85,
+      );
+      expect(items.find((item) => item.field === "area")).toBeDefined();
+    });
+
+    it("컴포넌트에 areaOverridden=true를 주면 전용면적 문구가 화면에서 빠진다", () => {
+      render(
+        <AssumptionLine state={DEFAULT_FORM_STATE} onOpen={vi.fn()} areaOverridden />,
+      );
+      expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
+    });
+
+    it("areaOverridden을 주지 않으면(기본값 false) 전용면적 문구가 그대로 있다", () => {
+      render(<AssumptionLine state={DEFAULT_FORM_STATE} onOpen={vi.fn()} />);
+      expect(screen.getByText(/전용면적.*로 가정하고 계산했어요/)).toBeInTheDocument();
+    });
+  });
+
   describe("리뷰 수정: data-field ↔ CSS 선택자 짝을 잠근다 (Minor)", () => {
     // styles.css의 `.assumption-item[data-field="existingDebt"]`는 경고색을
     // 이 리터럴 문자열에 걸어 둔다. CSS는 타입 검사를 받지 않으므로
