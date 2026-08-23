@@ -180,4 +180,17 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "price-budget-absent", // 예산 줄을 계산하지 않았다는 사실
   "price-disclosure", // 층·향 미반영·신고 지연·"바가지라는 뜻이 아니다"
   "price-disclaimer", // 감정평가가 아니라는 것과 전망하지 않는다는 것
+  // 입지 사실. 이 영역에는 조작 장치가 하나도 없어 숨길 것이 없고,
+  // 여기서 가장 무거운 말인 **고지**는 종이에서 더 중요하다 — 종이를
+  // 건네받은 사람은 화면의 다른 맥락을 보지 못했다. 특히 학구도 고지가
+  // 사라지면, 남은 학교 목록이 배정 결과처럼 읽힌다.
+  "location-facts", // 영역 전체
+  "location-state", // 지금이 "아직 위치를 몰라요"인지 아닌지의 글자
+  "location-state-note", // 왜 그 상태인지(좌표를 못 구했다는 사실)
+  "location-fact", // 역·학교 줄
+  "location-fact-message", // 그 줄이 못 쟀으면 왜 못 쟀는지
+  "location-school-list", // 반경 안의 학교들
+  "location-distance", // 거리 값과 그 옆의 "직선거리" 라벨
+  "location-disclosure", // 직선거리·학구도·소음 등 미반영·등급 아님
+  "location-disclaimer", // 입지 평가가 아니라는 것과 반경이 법정 기준이 아니라는 것
 ];
