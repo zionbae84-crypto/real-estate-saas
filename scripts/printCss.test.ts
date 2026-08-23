@@ -162,6 +162,233 @@ describe("인쇄 CSS", () => {
     });
   });
 
+  describe("숨기기로 한 것이 실제로 숨겨진다(특정도까지 계산한다)", () => {
+    /**
+     * 리뷰 밖에서 찾은 결함(P2, 브라우저로 실측): `.rights-check-form`은
+     * `display: none` 규칙이 분명히 있는데도 인쇄에서 **실제로는 숨겨지지
+     * 않았다.** 같은 블록 안 뒤쪽의
+     * `details:not([open]) > *:not(summary) { display: block !important }`가
+     * 특정도 (0,1,1) + !important로 (0,1,0)짜리 숨김 규칙을 이겼기
+     * 때문이다. 문진 폼은 <details>의 직계 자식이라 그 선택자에 그대로
+     * 걸린다 — 종이에 라디오 선택지("모르겠어요", "'대지권의 표시'가
+     * 있고…")가 전부 나왔다.
+     *
+     * **문자열 존재 확인으로는 이걸 못 잡는다.** 숨김 규칙은 파일에
+     * 멀쩡히 있었고 위의 동기화 검사도 통과했다. 그래서 여기서는 실제
+     * 캐스케이드(중요도 → 특정도 → 순서)를 계산해, 각 숨김 규칙이 같은
+     * 블록의 어떤 "펼치는" 규칙에도 지지 않는지 확인한다.
+     */
+
+    /** `:where(...)`처럼 괄호가 균형 잡힌 함수 표기를 잘라낸다 */
+    function cutFunctional(
+      selector: string,
+      name: string,
+      keepInner: boolean,
+    ): string {
+      let out = "";
+      let i = 0;
+      while (i < selector.length) {
+        const start = selector.indexOf(name, i);
+        if (start === -1) {
+          out += selector.slice(i);
+          break;
+        }
+        out += selector.slice(i, start);
+        let depth = 0;
+        let j = start + name.length - 1;
+        for (; j < selector.length; j++) {
+          if (selector[j] === "(") depth++;
+          else if (selector[j] === ")") {
+            depth--;
+            if (depth === 0) break;
+          }
+        }
+        if (keepInner) {
+          out += ` ${selector.slice(start + name.length, j)} `;
+        }
+        i = j + 1;
+      }
+      return out;
+    }
+
+    /**
+     * 선택자의 특정도 [id, class, type]를 낸다.
+     *
+     * 완전한 CSS 파서는 아니다 — 이 파일의 `@media print` 블록이 실제로
+     * 쓰는 문법(클래스, 타입, `*`, `>`, `:not()`, `:where()`, 의사
+     * 요소)만 다룬다. 여기서 다루지 못하는 문법이 들어오면 아래 자기
+     * 검사(specificityOf 단위 테스트)가 먼저 어긋난다.
+     */
+    function specificityOf(selector: string): [number, number, number] {
+      // :where()는 특정도에 0을 기여한다 — 통째로 지운다.
+      let flat = cutFunctional(selector, ":where(", false);
+      // :not()/:is()/:has()는 안쪽에서 가장 큰 것을 그대로 기여한다.
+      for (const name of [":not(", ":is(", ":has(", ":matches("]) {
+        flat = cutFunctional(flat, name, true);
+      }
+
+      const count = (re: RegExp) => (flat.match(re) ?? []).length;
+      const ids = count(/#[\w-]+/g);
+      const pseudoElements = count(/::[\w-]+/g);
+      const withoutPseudoElements = flat.replace(/::[\w-]+/g, " ");
+      const classes =
+        (withoutPseudoElements.match(/\.[\w-]+/g) ?? []).length +
+        (withoutPseudoElements.match(/\[[^\]]*\]/g) ?? []).length +
+        (withoutPseudoElements.match(/:[\w-]+/g) ?? []).length;
+      const types =
+        (withoutPseudoElements
+          .replace(/\.[\w-]+/g, " ")
+          .replace(/#[\w-]+/g, " ")
+          .replace(/\[[^\]]*\]/g, " ")
+          .replace(/:[\w-]+/g, " ")
+          .match(/[a-zA-Z][\w-]*/g) ?? []).length + pseudoElements;
+
+      return [ids, classes, types];
+    }
+
+    function compareSpecificity(
+      a: [number, number, number],
+      b: [number, number, number],
+    ): number {
+      for (let i = 0; i < 3; i++) {
+        const left = a[i] ?? 0;
+        const right = b[i] ?? 0;
+        if (left !== right) return left - right;
+      }
+      return 0;
+    }
+
+    interface DisplayDeclaration {
+      selector: string;
+      value: string;
+      important: boolean;
+      specificity: [number, number, number];
+      order: number;
+    }
+
+    /** 블록 안의 모든 `display:` 선언을 선택자 단위로 펼친다 */
+    function displayDeclarations(block: string): DisplayDeclaration[] {
+      const out: DisplayDeclaration[] = [];
+      parseRules(block).forEach((rule, order) => {
+        const match = /display\s*:\s*([\w-]+)\s*(!important)?/i.exec(rule.body);
+        if (match === null) return;
+        for (const selector of rule.selectors) {
+          out.push({
+            selector,
+            value: (match[1] ?? "").toLowerCase(),
+            important: match[2] !== undefined,
+            specificity: specificityOf(selector),
+            order,
+          });
+        }
+      });
+      return out;
+    }
+
+    /** a가 캐스케이드에서 b를 이기는가(중요도 → 특정도 → 순서) */
+    function wins(a: DisplayDeclaration, b: DisplayDeclaration): boolean {
+      if (a.important !== b.important) return a.important;
+      const bySpecificity = compareSpecificity(a.specificity, b.specificity);
+      if (bySpecificity !== 0) return bySpecificity > 0;
+      return a.order >= b.order;
+    }
+
+    /**
+     * 이 숨김 규칙과 같은 요소에 함께 걸릴 수 있는 "펼치는" 규칙인가.
+     *
+     * 클래스를 하나라도 가진 선택자는 서로 다른 클래스면 같은 요소를
+     * 겨눈다고 보지 않는다(그렇게 보면 `.print-summary { display: block }`
+     * 같은 무관한 규칙이 전부 위협으로 잡혀 오탐이 된다). 반대로 타입·
+     * 전체 선택자처럼 클래스가 없는 규칙은 **아무 요소에나 걸릴 수
+     * 있으므로** 언제나 위협으로 본다 — 이번 결함이 정확히 그 모양이었다.
+     */
+    function couldCollide(hiddenSelector: string, unhide: DisplayDeclaration): boolean {
+      const classes = unhide.selector.match(/\.[\w-]+/g);
+      if (classes === null) return true;
+      return classes.some((cls) => hiddenSelector.includes(cls));
+    }
+
+    /** 숨기기로 한 선택자 중, 실제로는 숨겨지지 않는 것들 */
+    function notActuallyHidden(
+      block: string,
+      canonical: readonly string[],
+    ): Array<[string, string]> {
+      const declarations = displayDeclarations(block);
+      const unhides = declarations.filter((d) => d.value !== "none");
+      const out: Array<[string, string]> = [];
+
+      for (const selector of canonical) {
+        const hide = declarations.find(
+          (d) => d.selector === selector && d.value === "none",
+        );
+        // 숨김 규칙 자체가 없는 경우는 위쪽 동기화 검사가 잡는다.
+        if (hide === undefined) continue;
+        for (const unhide of unhides) {
+          if (!couldCollide(selector, unhide)) continue;
+          if (!wins(hide, unhide)) out.push([selector, unhide.selector]);
+        }
+      }
+      return out;
+    }
+
+    it("특정도 계산기가 실제로 맞다(전제)", () => {
+      expect(specificityOf(".rights-check-form")).toEqual([0, 1, 0]);
+      // details(0,0,1) + :not([open])(0,1,0) + *(0,0,0) + :not(summary)(0,0,1)
+      expect(specificityOf("details:not([open]) > *:not(summary)")).toEqual([
+        0, 1, 2,
+      ]);
+      expect(
+        specificityOf(":where(details:not([open])) > :where(:not(summary))"),
+      ).toEqual([0, 0, 0]);
+      expect(specificityOf("details")).toEqual([0, 0, 1]);
+      expect(specificityOf("details:not([open])::details-content")).toEqual([
+        0, 1, 2,
+      ]);
+    });
+
+    it("숨기기로 한 선택자가 전부 실제로 이긴다", () => {
+      expect(
+        notActuallyHidden(printBlock ?? "", PRINT_HIDDEN_SELECTORS),
+        "display:none 규칙이 있는데도 같은 블록의 다른 규칙에 져서 " +
+          "인쇄에서 실제로는 숨겨지지 않는 선택자입니다.",
+      ).toEqual([]);
+    });
+
+    it("옛 레거시 규칙(특정도 0,1,1 + !important)을 되살리면 잡아낸다(변이 검사)", () => {
+      // 이 커밋 직전 styles.css에 실제로 있던 규칙이다. 브라우저에서
+      // .rights-check-form의 computed display가 block이었다.
+      const poisoned = `
+        .profile-form,
+        .rights-check-form {
+          display: none;
+        }
+        details:not([open]) > *:not(summary) {
+          display: block !important;
+        }
+      `;
+      expect(notActuallyHidden(poisoned, [".rights-check-form", ".profile-form"])).toEqual([
+        [".rights-check-form", "details:not([open]) > *:not(summary)"],
+        [".profile-form", "details:not([open]) > *:not(summary)"],
+      ]);
+    });
+
+    it("!important 없이 특정도만 높아도 잡아낸다(변이 검사)", () => {
+      const poisoned = `
+        .rights-check-form { display: none; }
+        details:not([open]) > *:not(summary) { display: block; }
+      `;
+      expect(notActuallyHidden(poisoned, [".rights-check-form"])).toHaveLength(1);
+    });
+
+    it("무관한 클래스 규칙은 위협으로 세지 않는다(오탐 방지 확인)", () => {
+      const fine = `
+        .rights-check-form { display: none; }
+        .print-summary { display: block; }
+      `;
+      expect(notActuallyHidden(fine, [".rights-check-form"])).toEqual([]);
+    });
+  });
+
   describe("<details>는 인쇄 시 내용이 강제로 펼쳐진다(레거시 자식-display 규칙)", () => {
     /**
      * **이 describe 블록의 한계(리뷰 지적, 실측으로 확인):** 아래 검사는

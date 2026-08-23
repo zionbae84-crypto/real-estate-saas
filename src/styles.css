@@ -1291,9 +1291,20 @@ body {
    * 옛 구현)으로 렌더링하는 비-Chromium 엔진에서는 이 형태가 실제로
    * 먹힐 수 있고, 남겨서 드는 비용이 없다. 실제로 펼치는 규칙은 바로
    * 아래 ::details-content 쪽이다.
+   *
+   * **선택자를 :where()로 감싸고 !important를 뺀 이유(리뷰 밖 결함 P2,
+   * 브라우저로 실측).** 예전 형태 `details:not([open]) > *:not(summary)`는
+   * 특정도가 (0,1,1)이라, 위 숨김 규칙의 `.rights-check-form`(0,1,0)을
+   * 이기고 있었다 — 게다가 !important까지 붙어 있었다. 그래서 권리분석
+   * 문진 폼은 인쇄에서 실제로는 숨겨지지 않았고, 종이에 라디오 선택지가
+   * 전부 나왔다(computed display가 block인 것을 MCP 브라우저로 확인했다).
+   * :where()는 특정도를 0으로 만들고, !important는 원래 필요가 없다 —
+   * 이 규칙이 이겨야 하는 상대는 UA 스타일시트인데 작성자 스타일은
+   * 특정도와 무관하게 UA 스타일보다 먼저다. printCss.test.ts가 이제
+   * 특정도까지 계산해 이 관계를 잠근다.
    */
-  details:not([open]) > *:not(summary) {
-    display: block !important;
+  :where(details:not([open])) > :where(:not(summary)) {
+    display: block;
   }
 
   /*
