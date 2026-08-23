@@ -265,7 +265,7 @@ export function searchMaxPrice(
  * 정책대출 한도는 calcMaxLoan이 가격에서 직접 도출하므로, 탐색 중에
  * 별도로 넘겨줄 값이 없다 — 엔진 안팎이 같은 숫자를 쓰게 된다.
  */
-function ownFundsRequired(
+export function ownFundsRequired(
   price: number,
   profile: BuyerProfile,
   rules: Rules,

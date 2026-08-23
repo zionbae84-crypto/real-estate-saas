@@ -181,6 +181,18 @@ body {
 .safety-badge[data-level="caution"] .safety-level { color: var(--caution); }
 .safety-badge[data-level="danger"] .safety-level { color: var(--danger); }
 
+/*
+ * 배지가 둘 뜨는 화면(단지 상세)에서 각 배지가 무엇에 답하는지 말하는
+ * 줄. 등급 색과 겹치지 않게 중립색·작은 글자로 두고, 구분은 오로지
+ * 글자가 한다 — 색만으로 의미를 전달하지 않는다.
+ */
+.safety-badge-label {
+  margin: 0 0 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
 .safety-level {
   font-size: 1.5rem;
   font-weight: 700;
@@ -480,7 +492,16 @@ body {
   padding: 0.75rem 0;
 }
 
-.complex-row p {
+/*
+ * 행의 세 줄은 <span>이다 — onSelect가 있으면 이 마크업이 <button>
+ * 안으로 들어가는데 button의 콘텐츠 모델은 phrasing content라 <p>가
+ * 유효하지 않다. <p>였을 때와 같은 블록 배치·여백을 여기서 그대로
+ * 준다(마크업만 바뀌고 화면은 같아야 한다).
+ */
+.complex-row .complex-name,
+.complex-row .complex-range,
+.complex-row .complex-burden {
+  display: block;
   margin: 0.15rem 0;
 }
 
@@ -511,12 +532,66 @@ body {
 }
 
 .complex-empty,
+.complex-list-note,
 .complex-freshness {
   color: var(--seed-color-fg-neutral-muted);
   font-size: 0.9rem;
 }
 
+.complex-list-note {
+  margin: 0 0 0.5rem;
+}
+
 .complex-no-loan {
   color: var(--safe);
   font-weight: 600;
+}
+
+/*
+ * onSelect가 있을 때 행을 감싸는 버튼. 브라우저 기본 버튼 모양(테두리·
+ * 배경·가운데 정렬)을 지워 지금까지의 <li> 행과 똑같이 보이게 한다 —
+ * 버튼이 됐다는 사실이 "누를 수 있다"는 것 말고 다른 시각적 차이를
+ * 만들면 안 된다.
+ */
+.complex-row-button {
+  display: block;
+  width: 100%;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.complex-detail-back {
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0 0 1rem;
+  font: inherit;
+  color: var(--seed-color-fg-brand-contrast);
+  cursor: pointer;
+}
+
+.complex-detail-title {
+  margin: 0 0 0.25rem;
+}
+
+.complex-detail-built,
+.complex-detail-area-note {
+  color: var(--seed-color-fg-neutral-muted);
+  font-size: 0.9rem;
+  margin: 0.15rem 0;
+}
+
+.complex-detail-range {
+  font-weight: 600;
+  margin: 0.75rem 0 0.5rem;
+}
+
+.complex-detail-loan {
+  margin: 0.5rem 0 1.5rem;
 }

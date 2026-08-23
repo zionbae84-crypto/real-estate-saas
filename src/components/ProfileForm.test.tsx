@@ -72,6 +72,7 @@ function renderForm(
   overrides: {
     initial?: Partial<ProfileFormState>;
     openField?: AssumableField | null;
+    areaOverridden?: boolean;
     onFirstTimeBuyerChange?: (value: boolean) => void;
     onExistingDebtChange?: (value: number | null) => void;
   } = {},
@@ -100,6 +101,7 @@ function renderForm(
         state={state}
         setField={setField}
         openField={overrides.openField ?? null}
+        areaOverridden={overrides.areaOverridden ?? false}
       />
     );
   }
@@ -255,6 +257,26 @@ describe("ProfileForm", () => {
       const checkbox = screen.getByRole("checkbox", { name: /규제지역/ });
       await userEvent.click(checkbox);
       expect(checkbox).not.toBeChecked();
+    });
+  });
+
+  describe("리뷰 수정: 상세가 열려 있으면 전용면적을 묻지 않는다", () => {
+    // 상세가 열려 있는 동안 화면 계산은 그 평형의 실제 면적을 쓴다.
+    // 입력란을 남겨 두면 값을 넣어도 화면이 꿈쩍하지 않는다 — 입력이
+    // 조용히 무시되는 상태다. 무시할 거라면 물어보지 않는다.
+    it("areaOverridden이면 openField가 area여도 입력란을 내보내지 않는다", () => {
+      renderForm({ openField: "area", areaOverridden: true });
+      expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
+    });
+
+    it("areaOverridden이면 touched에 area가 있어도 입력란을 내보내지 않는다", () => {
+      renderForm({ initial: { touched: ["area"] }, areaOverridden: true });
+      expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
+    });
+
+    it("areaOverridden이 아니면 원래대로 보인다", () => {
+      renderForm({ openField: "area", areaOverridden: false });
+      expect(screen.getByLabelText("전용면적 (㎡)")).toBeInTheDocument();
     });
   });
 

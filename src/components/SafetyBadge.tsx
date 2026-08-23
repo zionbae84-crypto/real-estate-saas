@@ -3,6 +3,22 @@ import type { SafetyLevel, SafetyScore } from "../lib/finance";
 
 export interface SafetyBadgeProps {
   safety: SafetyScore;
+  /**
+   * 이 배지가 어느 질문에 답하는지 알려주는 한 줄.
+   *
+   * 단지 상세 화면에서는 배지가 **둘** 뜬다: 위(헤드라인)는 한도까지
+   * 최대로 빌렸을 때, 아래(상세)는 이 집을 샀을 때다. 마크업이 같고
+   * 라벨이 없으면 어느 쪽이 "이 집을 사면"의 답인지 알 수 없는데,
+   * 하필 더 낙관적인 쪽이 매물 옆에 붙어 읽히기 쉽다.
+   *
+   * 라벨은 색이 아니라 **글자**로 구분한다 — 색만으로 의미를 전달하지
+   * 않는다는 이 앱의 규칙이자, 배지 색은 이미 등급(안전·주의·위험)이
+   * 쓰고 있어 겹칠 자리도 없다.
+   *
+   * 배지가 화면에 하나뿐일 때(목록 화면)는 비워 둔다 — 구분할 것이
+   * 없는데 라벨이 붙으면 잡음이다.
+   */
+  label?: string;
 }
 
 const LABELS: Record<SafetyLevel, string> = {
@@ -11,9 +27,10 @@ const LABELS: Record<SafetyLevel, string> = {
   danger: "위험",
 };
 
-export function SafetyBadge({ safety }: SafetyBadgeProps) {
+export function SafetyBadge({ safety, label }: SafetyBadgeProps) {
   return (
     <section className="safety-badge" data-level={safety.level}>
+      {label !== undefined && <p className="safety-badge-label">{label}</p>}
       <p className="safety-level">{LABELS[safety.level]}</p>
 
       <dl>

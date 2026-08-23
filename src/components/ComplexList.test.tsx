@@ -206,4 +206,64 @@ describe("ComplexList", () => {
     });
     expect(container.querySelector(".complex-range")?.textContent).toMatch(/~/);
   });
+
+  // onSelect가 없으면(예: 위의 테스트들처럼 이 컴포넌트만 단독으로
+  // 렌더링하는 자리) 행은 버튼이 아니다 — 누를 곳이 없는데 버튼처럼
+  // 보이면 그 자체가 거짓말이다.
+  it("onSelect가 없으면 행이 버튼이 아니다", () => {
+    renderList({ withinSafe: [entry(unit())] });
+    expect(screen.queryByRole("button", { name: /테스트아파트/ })).not.toBeInTheDocument();
+  });
+
+  it("onSelect가 있으면 행을 눌러 그 평형을 알려준다", () => {
+    const onSelect = vi.fn();
+    const u = unit();
+    renderList({ withinSafe: [entry(u)] }, { onSelect });
+
+    screen.getByRole("button", { name: /테스트아파트/ }).click();
+
+    expect(onSelect).toHaveBeenCalledWith(u);
+  });
+
+  describe("리뷰 수정: 목록이 어느 면적 기준인지 밝힌다", () => {
+    it("각 줄은 실제 전용면적, 위 숫자는 가정 면적이라는 것을 목록 상단에서 말한다", () => {
+      // 헤드라인은 가정 면적(기본 86㎡)으로, 각 행은 그 평형의 실제
+      // 면적으로 계산한다. 85㎡ 이하 행은 농특세가 붙지 않아 헤드라인
+      // 실구매 가능 가격보다 비싼 가격까지 통과하는데, 그 차이를
+      // 밝히지 않으면 화면이 서로 모순돼 보인다.
+      const { container } = renderList({ withinSafe: [entry(unit())] });
+      const note = container.querySelector(".complex-list-note")?.textContent ?? "";
+      expect(note).toMatch(/실제 전용면적/);
+      expect(note).toMatch(/가정한 면적/);
+    });
+
+    it("0개일 때는 이 안내를 붙이지 않는다", () => {
+      // 보여줄 행이 없으면 기준을 밝힐 행도 없다.
+      const { container } = renderList();
+      expect(container.querySelector(".complex-list-note")).toBeNull();
+    });
+  });
+
+  describe("리뷰 수정: 버튼 안의 마크업이 유효하다", () => {
+    it("행 버튼 안에 <p>가 없다", () => {
+      // button의 콘텐츠 모델은 phrasing content라 <p>는 유효하지 않다.
+      const { container } = renderList({ withinSafe: [entry(unit())] }, { onSelect: vi.fn() });
+      const button = container.querySelector(".complex-row-button");
+      expect(button).not.toBeNull();
+      expect(button?.querySelector("p")).toBeNull();
+    });
+
+    it("보이는 내용은 그대로다 — 버튼일 때와 아닐 때가 같다", () => {
+      const withButton = renderList(
+        { withinSafe: [entry(unit())] },
+        { onSelect: vi.fn() },
+      ).container;
+      const plain = renderList({ withinSafe: [entry(unit())] }).container;
+      for (const cls of [".complex-name", ".complex-range", ".complex-burden"]) {
+        expect(withButton.querySelector(cls)?.textContent).toBe(
+          plain.querySelector(cls)?.textContent,
+        );
+      }
+    });
+  });
 });

@@ -30,6 +30,13 @@ export interface ComplexListProps {
   /** 더 보기로 늘린 행 수. 기본은 PAGE_SIZE */
   visibleCount?: number;
   onShowMore?: () => void;
+  /**
+   * 있으면 각 행이 눌러서 상세(상환 시뮬레이션)를 열 수 있는 버튼이
+   * 된다. 없으면(App.tsx 밖에서 이 컴포넌트만 렌더링하는 기존
+   * 테스트처럼) 행은 그냥 텍스트다 — 누를 곳이 없는데 버튼처럼
+   * 보이면 그 자체가 거짓말이다(AssumptionLine의 같은 원칙).
+   */
+  onSelect?: (unit: ComplexUnit) => void;
 }
 
 /**
@@ -54,6 +61,7 @@ export function ComplexList({
   noRepaymentCapacity,
   visibleCount = PAGE_SIZE,
   onShowMore,
+  onSelect,
 }: ComplexListProps) {
   const total = result.withinSafe.length + result.beyondSafe.length;
 
@@ -78,13 +86,14 @@ export function ComplexList({
   return (
     <section className="complex-list" aria-label="살 수 있는 단지">
       <h2>살 수 있는 단지</h2>
+      <BasisNote />
 
       {safeShown.length > 0 && (
         <>
           <h3 className="complex-group complex-group--safe">무리 없이 살 수 있어요</h3>
           <ul className="complex-rows">
             {safeShown.map((e) => (
-              <ComplexRow key={unitKey(e.unit)} entry={e} />
+              <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
             ))}
           </ul>
         </>
@@ -95,7 +104,7 @@ export function ComplexList({
           <h3 className="complex-group complex-group--beyond">살 수는 있지만 부담이 커요</h3>
           <ul className="complex-rows">
             {beyondShown.map((e) => (
-              <ComplexRow key={unitKey(e.unit)} entry={e} />
+              <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
             ))}
           </ul>
         </>
@@ -123,21 +132,31 @@ function unitKey(unit: ComplexUnit): string {
   return `${unit.complexKey}|${unit.areaBucket}`;
 }
 
-function ComplexRow({ entry }: { entry: ComplexListEntry }) {
+function ComplexRow({
+  entry,
+  onSelect,
+}: {
+  entry: ComplexListEntry;
+  onSelect?: (unit: ComplexUnit) => void;
+}) {
   const { unit, burden, needsBuiltYear } = entry;
   const level = burden.safety.level;
 
-  return (
-    <li className="complex-row">
-      <p className="complex-name">
+  // 각 줄은 <p>가 아니라 <span>이다. onSelect가 있으면 이 마크업이
+  // 그대로 <button> 안으로 들어가는데, button의 콘텐츠 모델은
+  // phrasing content라 <p>는 유효하지 않다. 블록 모양과 여백은
+  // styles.css가 그대로 유지한다 — 마크업만 바뀌고 화면은 같다.
+  const rows = (
+    <>
+      <span className="complex-name">
         <strong>{unit.complexName}</strong> {unit.areaBucket}㎡ · {unit.legalDongName}
         {needsBuiltYear && <span className="complex-built"> · {unit.builtYear}년 준공</span>}
-      </p>
-      <p className="complex-range">
+      </span>
+      <span className="complex-range">
         {formatRange(unit.minPrice, unit.maxPrice)}
         <span className="complex-trades"> · 최근 1년 거래 {unit.tradeCount}건</span>
-      </p>
-      <p className="complex-burden" data-level={level}>
+      </span>
+      <span className="complex-burden" data-level={level}>
         범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
         {burden.neededLoan === 0 ? (
           // 현금만으로 덮이는 가격이다. "월 0원 · 부담률 0%"만 보여주면
@@ -153,7 +172,23 @@ function ComplexRow({ entry }: { entry: ComplexListEntry }) {
             <span className="complex-level">{LEVEL_LABELS[level]}</span>
           </>
         )}
-      </p>
+      </span>
+    </>
+  );
+
+  if (onSelect === undefined) {
+    return <li className="complex-row">{rows}</li>;
+  }
+
+  return (
+    <li className="complex-row">
+      <button
+        type="button"
+        className="complex-row-button"
+        onClick={() => onSelect(unit)}
+      >
+        {rows}
+      </button>
     </li>
   );
 }
@@ -169,7 +204,7 @@ function ComplexRow({ entry }: { entry: ComplexListEntry }) {
  * 같지만(`formatWon`은 반올림하지 않고 나머지를 그대로 쓴다), 사용자가
  * 보는 것은 숫자가 아니라 문자열이므로 판단 기준을 화면에 맞춘다.
  */
-function formatRange(minPrice: number, maxPrice: number): string {
+export function formatRange(minPrice: number, maxPrice: number): string {
   const low = formatWon(minPrice);
   const high = formatWon(maxPrice);
   return low === high ? high : `${low} ~ ${high}`;
@@ -207,6 +242,27 @@ function EmptyMessage({
     <p className="complex-empty">
       지금 예산으로 살 수 있는 단지가 이 데이터에는 없어요. 현금이 더
       있으면 선택지가 생겨요.
+    </p>
+  );
+}
+
+/**
+ * 이 목록의 숫자가 어느 면적 기준인지 밝힌다.
+ *
+ * 헤드라인(실구매 가능 가격·안전선)은 아직 매물을 고르기 전이라
+ * **가정한 전용면적**으로 계산되고, 목록의 각 행은 **그 평형의 실제
+ * 면적**으로 계산된다. 행 쪽이 정확하지만, 둘이 다르면 85㎡ 이하
+ * 행은 헤드라인보다 비싼 가격까지 통과한다(농특세가 붙지 않아
+ * 부대비용이 적기 때문이다). 그런 행을 보고 사용자가 화면이 서로
+ * 모순된다고 읽지 않게, 기준을 먼저 말한다. `ComplexDetail`에는 이미
+ * 같은 안내가 있지만 목록 화면에는 없었다.
+ */
+function BasisNote() {
+  return (
+    <p className="complex-list-note">
+      각 줄은 그 평형의 실제 전용면적으로 계산했어요. 위에 보이는
+      실구매 가능 가격과 안전선은 가정한 면적 기준이라, 그보다 비싼 집이
+      여기 보일 수 있어요. 이 목록 쪽이 더 정확해요.
     </p>
   );
 }

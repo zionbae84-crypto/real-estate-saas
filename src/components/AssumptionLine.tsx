@@ -5,6 +5,18 @@ export interface AssumptionLineProps {
   state: ProfileFormState;
   /** 사용자가 어떤 가정 항목을 눌렀는지 알려준다. 그 항목만 제자리에서 연다. */
   onOpen: (field: AssumableField) => void;
+  /**
+   * 지금 화면이 특정 평형의 상세를 보여주고 있어, 그 평형의 실제
+   * 전용면적으로 계산 중인가.
+   *
+   * `state.touched`(사용자가 폼에서 직접 값을 정했는지)와는 별개다.
+   * 상세를 열었다고 프로필에 값을 영구히 저장하지 않으므로(App.tsx),
+   * `touched`는 그대로 비어 있다 — 하지만 화면은 이미 실제 면적을 쓰고
+   * 있으므로 "가정 중"이라는 문구는 거짓말이 된다. 그래서 이 플래그로
+   * 별도로 전용면적 항목만 감춘다. 상세를 닫으면(목록으로 돌아가면)
+   * 다시 가정으로 돌아가므로 문구도 다시 나타나야 한다.
+   */
+  areaOverridden?: boolean;
 }
 
 interface AssumptionItem {
@@ -54,10 +66,18 @@ interface AssumptionItem {
  * 고정해 두면(항상 "이하면 늘어난다"만 말하면) 가정 면적이 이미 임계값
  * 이하인 프로필에서 진실을 말해도 부대비용이 줄어들 수 없는데 그럴 수
  * 있다고 거짓말하게 된다.
+ *
+ * `areaOverridden`이 참이면 전용면적 항목을 아예 넣지 않는다 — 단지
+ * 상세를 열어 실제 평형의 면적으로 계산 중일 때다(App.tsx가 프로필에는
+ * 저장하지 않고 화면 계산에만 반영한다). `state.touched`와는 독립적인
+ * 판단이다: touched는 사용자가 폼에서 직접 값을 정했는지를 기록하고,
+ * `areaOverridden`은 "지금 화면이 실제 평형을 보고 있는지"를 뜻한다 —
+ * 상세를 닫으면 이 플래그가 꺼지고 항목이 다시 나타나야 한다.
  */
 export function buildAssumptionItems(
   state: ProfileFormState,
   ruralTaxAreaThresholdSqm: number,
+  areaOverridden = false,
 ): AssumptionItem[] {
   const items: AssumptionItem[] = [];
 
@@ -81,7 +101,7 @@ export function buildAssumptionItems(
     });
   }
 
-  if (!state.touched.includes("area")) {
+  if (!state.touched.includes("area") && !areaOverridden) {
     // 리뷰 수정(Important 1): 임계값을 룰셋에서 유도하는 것만으로는
     // 부족하다 — 방향 주장도 가정 면적이 임계값의 어느 쪽에 있는지에
     // 따라 갈려야 한다. 가정 면적이 이미 임계값 이하(농특세 미부과)로
@@ -137,10 +157,15 @@ export function buildAssumptionItems(
   return items;
 }
 
-export function AssumptionLine({ state, onOpen }: AssumptionLineProps) {
+export function AssumptionLine({
+  state,
+  onOpen,
+  areaOverridden = false,
+}: AssumptionLineProps) {
   const items = buildAssumptionItems(
     state,
     rules.acquisitionTax.ruralTaxAreaThresholdSqm,
+    areaOverridden,
   );
 
   if (items.length === 0) return null;

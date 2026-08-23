@@ -147,4 +147,40 @@ describe("SafetyBadge", () => {
       ).not.toBeInTheDocument();
     });
   });
+
+  describe("리뷰 수정: 이 배지가 무엇에 답하는지 라벨로 말한다", () => {
+    it("라벨을 주면 글자로 보여준다", () => {
+      const { container } = render(
+        <SafetyBadge safety={score()} label="이 집을 샀을 때예요" />,
+      );
+      const label = container.querySelector(".safety-badge-label");
+      expect(label?.textContent).toBe("이 집을 샀을 때예요");
+    });
+
+    it("라벨을 주지 않으면 아무것도 붙지 않는다", () => {
+      // 화면에 배지가 하나뿐일 때(목록 화면) 라벨은 잡음이다.
+      const { container } = render(<SafetyBadge safety={score()} />);
+      expect(container.querySelector(".safety-badge-label")).toBeNull();
+    });
+
+    it("라벨이 색이 아니라 글자로 구분된다", () => {
+      // 등급 색은 이미 안전·주의·위험이 쓰고 있다. 두 배지의 구분은
+      // 색이 아니라 글자가 해야 한다 — 같은 등급이어도 라벨은 다르다.
+      const a = render(
+        <SafetyBadge safety={score({ level: "safe" })} label="이 집을 샀을 때예요" />,
+      ).container;
+      const b = render(
+        <SafetyBadge
+          safety={score({ level: "safe" })}
+          label="위 가격에서 최대로 빌렸을 때예요"
+        />,
+      ).container;
+      expect(a.querySelector(".safety-badge")?.getAttribute("data-level")).toBe(
+        b.querySelector(".safety-badge")?.getAttribute("data-level"),
+      );
+      expect(a.querySelector(".safety-badge-label")?.textContent).not.toBe(
+        b.querySelector(".safety-badge-label")?.textContent,
+      );
+    });
+  });
 });

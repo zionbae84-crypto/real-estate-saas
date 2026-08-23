@@ -1,8 +1,10 @@
 import type { ComplexUnit } from "../data/complexes";
 import {
   calcAffordablePrice,
+  calcAvailableCash,
   calcBurdenAt,
   calcSafePrice,
+  ownFundsRequired,
   type BurdenAtPrice,
   type BuyerProfile,
   type Rules,
@@ -30,12 +32,17 @@ export interface ComplexListEntry {
 }
 
 export interface ComplexListResult {
-  /** 안전선 이하 */
+  /** 그 행 자신의 부담 등급이 `safe`인 행 */
   withinSafe: ComplexListEntry[];
-  /** 안전선 초과 ~ 실구매력 이하 */
+  /** 살 수는 있지만 그 행의 부담 등급이 `safe`가 아닌 행 */
   beyondSafe: ComplexListEntry[];
   affordablePrice: number;
-  /** 안전한 가격이 없으면 null */
+  /**
+   * 헤드라인용 안전선. 안전한 가격이 없으면 null.
+   *
+   * 프로필의 가정 면적으로 잰 값이라 덩어리 분기에는 쓰지 않는다
+   * (아래 `buildComplexList` 문서 참고).
+   */
   safePrice: number | null;
   /**
    * 지역 필터를 풀면 보여줄 것이 생기는가.
@@ -51,14 +58,52 @@ export interface ComplexListResult {
  *
  * 모든 가격 비교와 부담 계산은 **`maxPrice`** 기준이다. 범위의 위쪽으로
  * 재면 틀리더라도 부담이 표시보다 작아지는 쪽으로 틀린다.
+ *
+ * **행마다 그 행의 실제 전용면적(`unit.areaBucket`)으로 계산한다.**
+ * 프로필 하나의 `exclusiveAreaSqm`으로 모든 행을 계산하면, 실제로는
+ * 농특세(85㎡ 초과)가 붙어야 할 넓은 평형이 프로필의 좁은 가정 면적을
+ * 빌려 부대비용을 적게 계상받는다 — 부담은 실제보다 작게, 구매 가능
+ * 여부는 실제보다 낙관적으로 나온다. 이 제품이 가장 피해야 하는 방향의
+ * 오답이다.
+ *
+ * 구매 가능 필터는 `ownFundsRequired`(반복 없이 한 번에 자기자금을
+ * 구하는 술어)를 행별 프로필로 직접 불러 판정한다 — `calcAffordablePrice`처럼
+ * 행마다 이분 탐색을 다시 돌리지 않는다. 가용현금은 면적과 무관하므로
+ * 한 번만 구해 재사용한다.
+ *
+ * **두 덩어리로 가르는 기준도 그 행 자신의 부담 등급이다**
+ * (`entry.burden.safety.level === "safe"`). 덩어리와 행 배지가 같은
+ * `entry.burden` 하나에서 나오므로 구조적으로 어긋날 수 없다.
+ *
+ * 예전에는 헤드라인 안전선(`safePrice`, 프로필의 **가정** 면적으로 잰
+ * 값)과 행의 `maxPrice`를 비교해 갈랐다. 행의 부담은 행 자신의 실제
+ * 면적으로 재는데 분기만 가정 면적으로 재니 둘이 어긋났고, 어긋나는
+ * 방향이 하필 낙관 쪽이었다 — "무리 없이 살 수 있어요" 덩어리 안에
+ * "주의" 배지가 달린 행이 들어가, 덩어리 헤더가 그 행의 배지보다
+ * 낙관적으로 말했다. 이 제품이 가장 피해야 하는 종류의 오답이다.
+ *
+ * `safePrice`는 화면 상단 헤드라인이 쓰므로 계속 계산해 돌려주지만,
+ * **분기에는 쓰지 않는다.**
+ *
+ * **알려진 한계(파이프라인):** `unit.areaBucket`은 반올림한 값이라 실제
+ * 전용면적이 85㎡ 임계값의 반대편일 수 있다(예: 85.4㎡ → 85). 그러면
+ * 농특세·정책대출 자격 판정이 낙관 방향으로 틀린다. 파이프라인이 정확한
+ * 면적을 싣기 전까지 85 버킷에 남는 한계다.
  */
 export function buildComplexList(input: ComplexListInput): ComplexListResult {
   const { units, profile, rules, regionCodes } = input;
 
   const affordablePrice = calcAffordablePrice(profile, rules).affordablePrice;
   const safePrice = calcSafePrice(profile, rules);
+  const availableCash = calcAvailableCash(profile).amount;
 
-  const affordable = (u: ComplexUnit) => u.maxPrice <= affordablePrice;
+  const rowProfile = (u: ComplexUnit): BuyerProfile => ({
+    ...profile,
+    exclusiveAreaSqm: u.areaBucket,
+  });
+
+  const affordable = (u: ComplexUnit) =>
+    ownFundsRequired(u.maxPrice, rowProfile(u), rules) <= availableCash;
   const inRegion = (u: ComplexUnit) =>
     regionCodes.length === 0 || regionCodes.includes(u.regionCode);
 
@@ -71,11 +116,11 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
   for (const unit of shown) {
     const entry: ComplexListEntry = {
       unit,
-      burden: calcBurdenAt(profile, rules, unit.maxPrice),
+      burden: calcBurdenAt(rowProfile(unit), rules, unit.maxPrice),
       needsBuiltYear: ambiguous.has(nameKey(unit)),
     };
-    const isSafe = safePrice !== null && unit.maxPrice <= safePrice;
-    (isSafe ? withinSafe : beyondSafe).push(entry);
+    // 덩어리와 배지가 같은 entry.burden에서 나온다 — 위 문서 참고.
+    (entry.burden.safety.level === "safe" ? withinSafe : beyondSafe).push(entry);
   }
 
   const byBurden = (a: ComplexListEntry, b: ComplexListEntry) =>

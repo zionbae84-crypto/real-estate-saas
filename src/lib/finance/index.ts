@@ -1,6 +1,10 @@
 export { maxPrincipal, monthlyPayment } from "./amortization";
 export { calcAcquisitionCosts } from "./acquisition-cost";
-export { calcAffordablePrice, PRICE_STEP } from "./affordable-price";
+export {
+  calcAffordablePrice,
+  ownFundsRequired,
+  PRICE_STEP,
+} from "./affordable-price";
 export type { AffordableResult } from "./affordable-price";
 export { calcAvailableCash } from "./available-cash";
 export { calcBurdenAt } from "./burden";
