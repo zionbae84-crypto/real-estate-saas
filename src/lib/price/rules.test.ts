@@ -183,6 +183,10 @@ describe("호가 위치 룰셋", () => {
   describe("판정과 함께 나가야 하는 문구", () => {
     it.each([
       "floorNote",
+      "floorRangeNote",
+      "floorSameNote",
+      "floorUnknownNote",
+      "floorPartialUnknownNote",
       "reportingLagNote",
       "notAVerdictNote",
       "noPointEstimateNote",
@@ -196,10 +200,53 @@ describe("호가 위치 룰셋", () => {
       ).toThrow(new RegExp(`disclosure.${key}`));
     });
 
-    it("층·향이 반영되지 않았다는 사실을 실제로 말한다", () => {
+    it("향·수리 상태는 여전히 반영되지 않았다는 사실을 실제로 말한다", () => {
+      // 집계가 층을 내보내게 됐다고 이 문장까지 지우면, 화면이 설명하지
+      // 못하는 남은 차이(향·수리 상태)를 사용자가 모르게 된다.
       const rules = parsePriceRules(rawPriceRules);
-      expect(rules.disclosure.floorNote).toContain("층");
       expect(rules.disclosure.floorNote).toContain("향");
+      expect(rules.disclosure.floorNote).toContain("수리");
+    });
+
+    it.each([
+      ["floorRangeNote", "{minFloor}"],
+      ["floorRangeNote", "{maxFloor}"],
+      ["floorSameNote", "{floor}"],
+      ["floorPartialUnknownNote", "{unknownFloorCount}"],
+    ])("%s에서 %s 자리표시자가 빠지면 거부한다", (key, token) => {
+      // 자리표시자가 빠져도 문장은 멀쩡해 보이는데 층수만 조용히 사라진다.
+      // 화면은 여전히 한 줄을 그리고 사용자는 고지를 읽었다고 믿는다.
+      expect(() =>
+        parsePriceRules(
+          poisoned((draft) => {
+            const disclosure = section(draft, "disclosure");
+            disclosure[key] = String(disclosure[key]).split(token).join("");
+          }),
+        ),
+      ).toThrow(new RegExp(`disclosure.${key}`));
+    });
+
+    it("층을 모를 때 쓰는 문장에 자리표시자를 넣으면 거부한다", () => {
+      // 끼워 넣을 층수가 없는 갈래라 "{minFloor}층"이 그대로 화면에 나간다.
+      expect(() =>
+        parsePriceRules(
+          poisoned((draft) => {
+            section(draft, "disclosure").floorUnknownNote =
+              "이 범위를 만든 거래는 {minFloor}층부터였어요.";
+          }),
+        ),
+      ).toThrow(/floorUnknownNote/);
+    });
+
+    it("층 고지가 실제로 층을 말한다", () => {
+      const rules = parsePriceRules(rawPriceRules);
+      for (const note of [
+        rules.disclosure.floorRangeNote,
+        rules.disclosure.floorSameNote,
+        rules.disclosure.floorUnknownNote,
+      ]) {
+        expect(note, note).toContain("층");
+      }
     });
 
     it("실거래 신고가 늦는다는 사실을 실제로 말한다", () => {

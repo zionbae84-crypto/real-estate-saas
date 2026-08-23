@@ -17,6 +17,9 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     tradeCount: 5,
     minPrice: 280_000_000,
     maxPrice: 320_000_000,
+    minFloor: 3,
+    maxFloor: 18,
+    unknownFloorCount: 0,
     lowConfidence: false,
     ...overrides,
   };

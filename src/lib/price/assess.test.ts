@@ -50,6 +50,9 @@ function evidence(overrides: Partial<PriceEvidence> = {}): PriceEvidence {
     tradeCount: 10,
     minPrice: 1_000_000_000,
     maxPrice: 1_100_000_000,
+    minFloor: 3,
+    maxFloor: 18,
+    unknownFloorCount: 0,
     ...overrides,
   };
 }
@@ -88,7 +91,7 @@ function assessmentStrings(assessment: PriceAssessment): string[] {
     assessment.evidenceLabel,
     assessment.evidenceMessage,
     assessment.budgetAbsentNote ?? "",
-    ...Object.values(assessment.disclosure),
+    ...Object.values(assessment.disclosure).map((line) => line ?? ""),
     ...assessment.disclaimer,
     ...assessment.findings.flatMap((f) => [f.label, f.verdictLabel, f.message]),
   ];
@@ -119,6 +122,9 @@ describe("호가 위치", () => {
           tradeCount: unit.tradeCount,
           minPrice: unit.minPrice,
           maxPrice: unit.maxPrice,
+          minFloor: unit.minFloor,
+          maxFloor: unit.maxFloor,
+          unknownFloorCount: unit.unknownFloorCount,
         };
         // 범위 안쪽·아래·위·한참 위까지 훑는다. 어느 자리에서도
         // 위치 판정이 나오면 안 된다.
@@ -201,6 +207,9 @@ describe("호가 위치", () => {
             tradeCount: unit.tradeCount,
             minPrice: unit.minPrice,
             maxPrice: unit.maxPrice,
+            minFloor: unit.minFloor,
+            maxFloor: unit.maxFloor,
+            unknownFloorCount: unit.unknownFloorCount,
           },
           unit.maxPrice,
           null,
@@ -236,6 +245,9 @@ describe("호가 위치", () => {
           tradeCount: unit.tradeCount,
           minPrice: unit.minPrice,
           maxPrice: unit.maxPrice,
+          minFloor: unit.minFloor,
+          maxFloor: unit.maxFloor,
+          unknownFloorCount: unit.unknownFloorCount,
         };
         return [unit.minPrice, unit.minPrice + 1, unit.maxPrice * 2].some(
           (asking) =>
@@ -380,6 +392,9 @@ describe("호가 위치", () => {
             tradeCount: unit.tradeCount,
             minPrice: unit.minPrice,
             maxPrice: unit.maxPrice,
+            minFloor: unit.minFloor,
+            maxFloor: unit.maxFloor,
+            unknownFloorCount: unit.unknownFloorCount,
           },
           unit.maxPrice * 3,
           null,
@@ -410,9 +425,11 @@ describe("호가 위치", () => {
     it("실거주 프로필이 없으면 산출물 어디에도 대출·월 상환액이 없다", () => {
       const assessment = assessPrice(rules, evidence(), 1_050_000_000, null);
       const numbers = assessmentNumbers(assessment);
-      // 남는 숫자는 호가·거래 건수·범위·초과분뿐이다.
+      // 남는 숫자는 호가·거래 건수·범위·층 범위·층 모름 건수뿐이다.
+      // 층수(3·18)와 층 모름 건수(0)는 근거(evidence)에 담겨 그대로
+      // 돌아오는 관측치이고, 어떤 계산에도 쓰이지 않는다.
       expect(numbers.sort((a, b) => a - b)).toEqual([
-        10, 1_000_000_000, 1_050_000_000, 1_100_000_000,
+        0, 3, 10, 18, 1_000_000_000, 1_050_000_000, 1_100_000_000,
       ]);
     });
 
@@ -479,6 +496,144 @@ describe("호가 위치", () => {
       expect(assessment.disclosure.noPointEstimateNote).toBe(
         rules.disclosure.noPointEstimateNote,
       );
+      // 층 고지도 예외 없이 함께 나간다 — 유보일 때도.
+      expect(assessment.disclosure.floorRangeNote).not.toBe("");
+      expect(assessment.disclosure.floorRangeNote).toMatch(/층/);
+    });
+  });
+
+  describe("층 범위는 사실로 말하고, 모르는 층은 지어내지 않는다", () => {
+    it("범위를 만든 거래가 몇 층부터 몇 층까지였는지 그대로 말한다", () => {
+      const assessment = assessPrice(
+        rules,
+        evidence({ minFloor: 4, maxFloor: 21 }),
+        1_050_000_000,
+        null,
+      );
+      expect(assessment.disclosure.floorRangeNote).toContain("4층");
+      expect(assessment.disclosure.floorRangeNote).toContain("21층");
+      expect(assessment.disclosure.floorPartialUnknownNote).toBeNull();
+    });
+
+    it("모든 거래가 같은 층이었으면 범위가 아니라 그 한 층을 말한다", () => {
+      const assessment = assessPrice(
+        rules,
+        evidence({ minFloor: 7, maxFloor: 7 }),
+        1_050_000_000,
+        null,
+      );
+      expect(assessment.disclosure.floorRangeNote).toBe(
+        rules.disclosure.floorSameNote.replaceAll("{floor}", "7"),
+      );
+    });
+
+    it("층을 하나도 모르면 모른다고 말한다 — 0층·1층을 지어내지 않는다", () => {
+      const assessment = assessPrice(
+        rules,
+        evidence({ minFloor: null, maxFloor: null, unknownFloorCount: 10 }),
+        1_050_000_000,
+        null,
+      );
+      expect(assessment.disclosure.floorRangeNote).toBe(
+        rules.disclosure.floorUnknownNote,
+      );
+      expect(assessment.disclosure.floorRangeNote).not.toMatch(/0층|1층/);
+      // 전부 모른다는 말이 이미 나갔으므로 "그중 몇 건"을 덧붙이지 않는다.
+      expect(assessment.disclosure.floorPartialUnknownNote).toBeNull();
+    });
+
+    it("층을 모르는 거래가 섞여 있으면 몇 건인지 드러낸다", () => {
+      const assessment = assessPrice(
+        rules,
+        evidence({ minFloor: 4, maxFloor: 21, unknownFloorCount: 3 }),
+        1_050_000_000,
+        null,
+      );
+      expect(assessment.disclosure.floorPartialUnknownNote).toContain("3");
+      expect(assessment.disclosure.floorRangeNote).toContain("4층");
+    });
+
+    it("어떤 층 조합에서도 고지에 자리표시자가 남지 않는다", () => {
+      for (const ev of [
+        evidence({ minFloor: 1, maxFloor: 2 }),
+        evidence({ minFloor: 9, maxFloor: 9 }),
+        evidence({ minFloor: null, maxFloor: null, unknownFloorCount: 10 }),
+        evidence({ minFloor: 2, maxFloor: 30, unknownFloorCount: 1 }),
+      ]) {
+        const d = assessPrice(rules, ev, 1_050_000_000, null).disclosure;
+        const text = `${d.floorRangeNote} ${d.floorPartialUnknownNote ?? ""}`;
+        expect(text, text).not.toMatch(/[{}]/);
+      }
+    });
+  });
+
+  describe("층으로 값을 보정하지 않는다", () => {
+    /**
+     * 층을 알게 됐다고 해서 우리가 층을 반영해 가격을 보정할 수 있게 된
+     * 것이 아니다. 층별 가격 모델을 만들면 그건 감정평가 영역이고, 이 앱이
+     * `medianPrice`를 화면에서 뺀 것과 같은 이유로 하면 안 된다. 층은
+     * 사용자가 **스스로** 견주도록 돕는 사실일 뿐이다.
+     */
+    const FLOORS: ReadonlyArray<Partial<PriceEvidence>> = [
+      { minFloor: 1, maxFloor: 1 },
+      { minFloor: 1, maxFloor: 40 },
+      { minFloor: 30, maxFloor: 40 },
+      { minFloor: null, maxFloor: null, unknownFloorCount: 10 },
+    ];
+
+    it.each([
+      ["범위 아래", 500_000_000],
+      ["범위 안", 1_050_000_000],
+      ["범위 조금 위", 1_200_000_000],
+      ["범위 한참 위", 2_000_000_000],
+    ])("%s: 층이 달라져도 판정이 한 글자도 달라지지 않는다", (_label, asking) => {
+      const judgements = FLOORS.map((floors) => {
+        const a = assessPrice(rules, evidence(floors), asking, budget);
+        const position = positionOf(a);
+        return {
+          overall: a.overall,
+          overallLabel: a.overallLabel,
+          evidenceSufficient: a.evidenceSufficient,
+          evidenceMessage: a.evidenceMessage,
+          band: position.band,
+          aboveMaxRatio: position.aboveMaxRatio,
+          verdict: position.verdict,
+          message: position.message,
+          budget: budgetOf(a),
+        };
+      });
+      for (const j of judgements) expect(j).toEqual(judgements[0]);
+    });
+
+    it("표본 조건(유보 여부)도 층을 보지 않는다", () => {
+      // 층을 알게 됐다고 임계값이 느슨해지면 안 된다.
+      for (const floors of FLOORS) {
+        expect(
+          assessPrice(
+            rules,
+            evidence({ tradeCount: 4, ...floors }),
+            1_050_000_000,
+            null,
+          ).evidenceSufficient,
+        ).toBe(false);
+      }
+    });
+
+    it("층 값이 판정 숫자에 섞여 나가지 않는다", () => {
+      // 층수가 산출물의 숫자 어딘가(초과분·대출액 등)에 나타나면 어디선가
+      // 층을 계산에 쓴 것이다.
+      const assessment = assessPrice(
+        rules,
+        evidence({ minFloor: 37, maxFloor: 41 }),
+        1_050_000_000,
+        budget,
+      );
+      const numbers = assessmentNumbers({
+        ...assessment,
+        evidence: undefined,
+      });
+      expect(numbers).not.toContain(37);
+      expect(numbers).not.toContain(41);
     });
   });
 
@@ -495,6 +650,9 @@ describe("호가 위치", () => {
           tradeCount: unit.tradeCount,
           minPrice: unit.minPrice,
           maxPrice: unit.maxPrice,
+          minFloor: unit.minFloor,
+          maxFloor: unit.maxFloor,
+          unknownFloorCount: unit.unknownFloorCount,
         };
         for (const asking of [
           null,

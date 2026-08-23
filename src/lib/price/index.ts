@@ -22,6 +22,7 @@ export type {
   PriceBudgetInput,
   PriceBudgetSituation,
   PriceDisclosure,
+  PriceDisclosureText,
   PriceEvidence,
   PriceFinding,
   PriceFindingId,

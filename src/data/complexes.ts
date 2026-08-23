@@ -33,6 +33,28 @@ export interface ComplexUnit {
   tradeCount: number;
   minPrice: number;
   maxPrice: number;
+  /**
+   * `minPrice`~`maxPrice`를 만든 바로 그 거래들의 최저층. 층을 믿을 수
+   * 있는 거래가 하나도 없었으면 `null`.
+   *
+   * **값을 보정하는 데 쓰지 않는다.** "이 층이면 얼마쯤"을 계산하면 그건
+   * 감정평가 영역이고, 이 앱이 `medianPrice`를 타입에서부터 뺀 것과 같은
+   * 이유로 하면 안 된다. 화면이 이 값으로 하는 일은 하나뿐이다 — 이
+   * 범위를 만든 거래가 몇 층부터 몇 층까지였는지 **사실로 말해서**
+   * 사용자가 자기가 보는 매물의 층과 스스로 견주게 하는 것.
+   */
+  minFloor: number | null;
+  /** 같은 창·같은 규칙의 최고층. 같은 조건에서 `null` */
+  maxFloor: number | null;
+  /**
+   * 그 창의 거래 중 층을 믿을 수 없었던 건수(지하 표기 등).
+   *
+   * 모르는 층을 0층·1층으로 채우지 않는 대신 몇 건이 그랬는지를 남긴다.
+   * 화면은 이 값이 0이 아니면 그 사실을 함께 말해야 한다 — 층을 모르는
+   * 거래가 섞인 범위를 "N층부터 M층까지"로만 말하면 우리가 아는 것보다
+   * 많이 아는 척하는 것이 된다.
+   */
+  unknownFloorCount: number;
   lowConfidence: boolean;
 }
 

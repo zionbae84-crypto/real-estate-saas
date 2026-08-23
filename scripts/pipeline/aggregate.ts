@@ -36,6 +36,34 @@ export interface ComplexUnit {
   minPrice: number;
   maxPrice: number;
   /**
+   * `minPrice`~`maxPrice`를 만든 바로 그 거래들(최근 6개월 창) 중 층을
+   * 믿을 수 있는 거래의 **최저층**. 믿을 수 있는 층이 하나도 없으면 `null`.
+   *
+   * **가격을 보정하기 위한 값이 아니다.** 층별 가격 모델을 만들거나
+   * "이 층이면 얼마쯤"을 계산하면 그건 감정평가 영역이고, 이 앱이
+   * `medianPrice`를 산출물에서 뺀 것과 같은 이유로 하면 안 된다. 이 값이
+   * 있는 이유는 하나뿐이다 — 사용자가 자기가 보는 매물의 층과 이 범위를
+   * 만든 거래들의 층을 **스스로** 견줄 수 있게 하는 것이다.
+   *
+   * 창(window)이 `recent`인 것은 의도적이다. `maxExclusiveAreaSqm`은
+   * 시간과 무관한 물리적 속성이라 그룹 전체에서 보지만, 층 범위는
+   * "이 가격 범위를 만든 거래들"에 대한 사실이라 그 범위를 만든 창과
+   * 정확히 같아야 한다. 창 밖 거래의 층을 섞으면 화면이 범위에 들어
+   * 있지도 않은 거래의 층을 말하게 된다.
+   */
+  minFloor: number | null;
+  /** {@link minFloor}와 같은 창·같은 규칙의 **최고층**. 같은 조건에서 `null`. */
+  maxFloor: number | null;
+  /**
+   * 그 창의 거래 중 층을 믿을 수 없었던 건수({@link isTrustworthyFloor} 참고).
+   *
+   * **모르는 층을 0층이나 1층으로 채우지 않는다.** 채우면 그 거래가 층
+   * 범위를 조용히 아래로 늘려 화면이 없는 사실을 말하게 된다. 대신 범위에서
+   * 빼고 몇 건이 그랬는지를 여기 남긴다 — 층을 모르는 거래가 섞여 있다는
+   * 사실 자체가 화면까지 드러나야 한다.
+   */
+  unknownFloorCount: number;
+  /**
    * (최근 3개월 중위값 − 그 이전 3개월 중위값) ÷ 그 이전 3개월 중위값.
    * 분모는 "그 이전 3개월"이다 — 한국어 "X 대비 Y"는 X가 기준(분모)이라는
    * 뜻이라 "최근 대비 이전"이라고 쓰면 정반대로 읽힌다. 양수면 최근이 더
@@ -93,6 +121,27 @@ export function median(values: number[]): number {
  */
 export function areaBucket(sqm: number): number {
   return Math.round(sqm);
+}
+
+/**
+ * 이 층 값을 화면에 사실로 말해도 되는가.
+ *
+ * 실제 캐시(9,276건)에는 1~65층의 정수만 들어 있지만, 국토부 응답은 지하를
+ * 0이나 음수로 보내기도 하고 `parse-response.ts`의 `toFiniteNumber`는 그런
+ * 값을 그대로 통과시킨다. 1층 미만이거나 정수가 아닌 값은 "저층"이라고
+ * 부를 수도, 무시하고 넘어갈 수도 없다 — **모른다고 말해야 한다.**
+ *
+ * 관대하게 봐주지 않는 방향으로 실패한다(`classifyDealStatus`와 같은 태도):
+ * 못 믿을 값을 1층으로 반올림해 범위에 넣으면 화면이 "1층부터"라고 없는
+ * 사실을 말하고, 사용자는 자기 매물이 그보다 높다는 이유로 안심한다.
+ *
+ * 상한은 두지 않는다. "몇 층까지가 정상인가"는 우리가 아는 값이 아니라
+ * 그때그때의 건물에 달린 값이라, 임의의 상한을 두면 실재하는 초고층 거래를
+ * 조용히 "모름"으로 만든다 — 모르는 것을 채우지 않는 것과 같은 이유로,
+ * 아는 것을 지우지도 않는다.
+ */
+export function isTrustworthyFloor(floor: number): boolean {
+  return Number.isInteger(floor) && floor >= 1;
 }
 
 /** 주어진 연/월의 마지막 날짜(일). month는 0-indexed이며 범위를 벗어나도 Date.UTC가 정규화한다. */
@@ -194,6 +243,10 @@ export function aggregate(
       .filter((t) => at(t) < sixMonthsAgo && at(t) >= twelveMonthsAgo && at(t) <= asOf)
       .map((t) => t.price);
 
+    // 층 범위는 가격 범위를 만든 바로 그 거래들(recent)에서만 낸다. 못 믿을
+    // 값은 채우지 않고 빼되, 몇 건이었는지는 남긴다.
+    const knownFloors = recent.map((t) => t.floor).filter(isTrustworthyFloor);
+
     const rate3m = changeRateWithConfidence(last3m, prior3m, config.lowConfidenceMinTrades);
     const rate12m = changeRateWithConfidence(recentPrices, prior12m, config.lowConfidenceMinTrades);
 
@@ -209,6 +262,9 @@ export function aggregate(
       tradeCount: recent.length,
       minPrice: Math.min(...recentPrices),
       maxPrice: Math.max(...recentPrices),
+      minFloor: knownFloors.length === 0 ? null : Math.min(...knownFloors),
+      maxFloor: knownFloors.length === 0 ? null : Math.max(...knownFloors),
+      unknownFloorCount: recent.length - knownFloors.length,
       changeRate3m: rate3m.rate,
       changeRate3mRecentCount: rate3m.recentCount,
       changeRate3mPriorCount: rate3m.priorCount,

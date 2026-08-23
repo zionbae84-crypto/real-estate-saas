@@ -10,6 +10,7 @@ import type {
   PriceBudgetFinding,
   PriceBudgetInput,
   PriceBudgetSituation,
+  PriceDisclosureText,
   PriceEvidence,
   PriceFinding,
   PriceOverall,
@@ -41,6 +42,16 @@ type EvidenceGate =
  * 저촉될 위험이 있고, 이 앱이 `medianPrice`를 타입에서부터 빼 온 것도
  * 같은 이유다. 내는 것은 관측된 `minPrice`·`maxPrice`와, 호가가 그
  * 위로 얼마나 벗어났는지의 **초과분**뿐이다.
+ *
+ * **층으로 값을 보정하지 않는다.** 집계가 층 범위(`minFloor`·`maxFloor`)를
+ * 함께 내보내게 됐지만, 그건 고지 문장에만 들어간다 — 표본 조건
+ * (`evidenceGate`)도, 호가가 놓인 자리(`bandOf`)도, 초과분도 층을 보지
+ * 않는다. 층별 가격 모델을 만들거나 "이 층이면 얼마쯤"을 계산하면 그건
+ * 감정평가이고, `medianPrice`를 화면에서 뺀 것과 같은 이유로 하지 않는다.
+ * 층을 아는 것과 층을 반영해 값을 매기는 것은 다른 일이고, 우리가 하는
+ * 것은 앞의 것뿐이다 — 사용자가 자기가 보는 매물의 층과 **스스로**
+ * 견주도록. `scripts/price-guard.test.ts`가 그 경로가 소스에 없는지
+ * 구조로 확인한다.
  *
  * 이 함수가 낼 수 있는 가장 좋은 결론은 `clear`이고, 그것은 "안전하다"도
  * "싸다"도 아니라 **"이 계산이 확인한 범위에서는 걸리는 게 없었다"**이다.
@@ -102,8 +113,67 @@ export function assessPrice(
     evidenceSufficient: gate.sufficient,
     findings,
     budgetAbsentNote: budget === null ? rules.budget.absentNote : null,
-    disclosure: rules.disclosure,
+    disclosure: resolveDisclosure(rules, evidence),
     disclaimer: rules.disclaimer,
+  };
+}
+
+/**
+ * 룰셋의 틀에 실제 층수를 끼워 넣는다. 문장 자체는 한 글자도 여기서
+ * 만들지 않는다 — 이 파일에 사용자에게 보일 문자열이 없다는 규칙은 그대로다.
+ */
+function fill(template: string, values: Readonly<Record<string, string>>): string {
+  let out = template;
+  for (const [key, value] of Object.entries(values)) {
+    out = out.split(`{${key}}`).join(value);
+  }
+  return out;
+}
+
+/**
+ * 판정과 언제나 함께 나가는 고지를 짓는다.
+ *
+ * 층 문장은 **세 갈래 중 하나가 반드시 나간다.** 층을 모르면 그 자리를
+ * 비우는 대신 "모른다"고 말한다 — 빈 자리는 "층은 문제없다"로 읽힌다.
+ *
+ * **여기서 층으로 값을 계산하지 않는다.** 층수는 문자열로 바뀌어 문장에
+ * 들어갈 뿐이고, 가격·밴드·표본 조건 어느 쪽도 이 값을 보지 않는다.
+ * 층별 가격 모델을 만드는 순간 그건 감정평가이고, 이 앱이 `medianPrice`를
+ * 화면에서 뺀 것과 같은 이유로 하지 않는다.
+ */
+function resolveDisclosure(
+  rules: PriceRules,
+  evidence: PriceEvidence,
+): PriceDisclosureText {
+  const d = rules.disclosure;
+  const { minFloor, maxFloor, unknownFloorCount } = evidence;
+
+  const known = minFloor !== null && maxFloor !== null;
+  const floorRangeNote = !known
+    ? d.floorUnknownNote
+    : minFloor === maxFloor
+      ? fill(d.floorSameNote, { floor: String(minFloor) })
+      : fill(d.floorRangeNote, {
+          minFloor: String(minFloor),
+          maxFloor: String(maxFloor),
+        });
+
+  // 전부 모르면 위 문장이 이미 그 말을 했다. 덧붙이면 같은 사실을 두 번
+  // 읽히게 하면서 "일부만 모른다"로 오히려 약하게 들린다.
+  const partial =
+    known && unknownFloorCount > 0
+      ? fill(d.floorPartialUnknownNote, {
+          unknownFloorCount: String(unknownFloorCount),
+        })
+      : null;
+
+  return {
+    floorNote: d.floorNote,
+    floorRangeNote,
+    floorPartialUnknownNote: partial,
+    reportingLagNote: d.reportingLagNote,
+    notAVerdictNote: d.notAVerdictNote,
+    noPointEstimateNote: d.noPointEstimateNote,
   };
 }
 

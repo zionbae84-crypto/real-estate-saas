@@ -59,6 +59,10 @@ export function PriceCheck({ unit, budget }: PriceCheckProps) {
       tradeCount: unit.tradeCount,
       minPrice: unit.minPrice,
       maxPrice: unit.maxPrice,
+      // 층은 고지 문장에만 쓰인다 — 판정도 가격도 이 값을 보지 않는다.
+      minFloor: unit.minFloor,
+      maxFloor: unit.maxFloor,
+      unknownFloorCount: unit.unknownFloorCount,
     }),
     [unit],
   );
@@ -182,10 +186,22 @@ function PriceVerdict({
 
       {/*
         판정과 **언제나 함께** 나가는 고지. 유보든 통과든 예외가 없다.
-        특히 층·향 고지가 빠지면 우리가 틀린 확신을 준다 — 우리 집계에는
-        층이 없어서 같은 평형의 저층과 로열층이 한 범위에 섞여 있다.
+
+        층 줄이 맨 앞이다. 예전에는 이 자리가 "우리 집계에는 층이 없어요"
+        라는 사과였는데, 이제 집계가 층 범위를 함께 내보내므로 그 범위를
+        만든 거래가 몇 층부터 몇 층까지였는지를 **사실로** 말한다 —
+        사용자가 자기가 보는 매물의 층과 스스로 견줄 수 있게. 층을 모르면
+        자리를 비우는 대신 모른다고 말한다(빈 자리는 "층은 문제없다"로
+        읽힌다). 층으로 값을 보정해 주지는 않으며, 향·수리 상태는 여전히
+        이 범위에 없다는 사실이 바로 다음 줄에 남는다.
       */}
       <ul className="price-disclosure">
+        <li data-field="floorRange">{assessment.disclosure.floorRangeNote}</li>
+        {assessment.disclosure.floorPartialUnknownNote !== null && (
+          <li data-field="floorPartialUnknown">
+            {assessment.disclosure.floorPartialUnknownNote}
+          </li>
+        )}
         <li>{assessment.disclosure.floorNote}</li>
         <li>{assessment.disclosure.reportingLagNote}</li>
         <li>{assessment.disclosure.notAVerdictNote}</li>
