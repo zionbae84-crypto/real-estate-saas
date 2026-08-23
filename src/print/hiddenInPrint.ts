@@ -135,6 +135,7 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   // 대출 한도는 우리가 계산하지 않아요"다 — 종이에서 그것이 사라지면
   // 남은 지표들만 보고 한도가 문제되지 않는 것으로 읽는다.
   "purchase-type-print", // 이 종이가 어떤 구매 유형을 전제하는가
+  "purchase-print-summary", // 입력값·인쇄일·어느 구매 유형 룰셋 기준인가
   "purchase-loan-note", // 한도를 계산하지 않는다는 사실과 그 이유
   "purchase-verdict", // 결과 영역 전체
   "purchase-overall", // 전체 결론 글자

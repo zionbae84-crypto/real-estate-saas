@@ -1179,6 +1179,15 @@ body {
 }
 
 /*
+ * 투자 경로(갭투자·월세 수익형)의 인쇄물 전용 요약. 위 .print-summary와
+ * 같은 이유로 화면에서는 숨긴다 — 화면에는 입력란이 그 값을 이미
+ * 되비추고 있다. 인쇄에서만 드러낸다(아래 @media print).
+ */
+.purchase-print-summary {
+  display: none;
+}
+
+/*
  * 인쇄 전용 CSS.
  *
  * 이 서비스의 제품 방침은 "사지 말아야 할 때를 말해주는 것"이다 — 인쇄물은
@@ -1232,7 +1241,8 @@ body {
   }
 
   /* 인쇄물 전용 요약을 이제 드러낸다. */
-  .print-summary {
+  .print-summary,
+  .purchase-print-summary {
     display: block;
   }
 
@@ -1295,6 +1305,7 @@ body {
   .assumption-notice,
   .safe-line-item,
   .print-summary dl > div,
+  .purchase-print-summary dl > div,
   .rights-finding,
   .rights-encumbrance,
   .purchase-metric,

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
 import { formatWon } from "./format/won";
+import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { calcAffordablePrice, type BuyerProfile } from "./lib/finance";
 import { rules } from "./state/useAffordability";
 import { purchaseRules } from "./state/usePurchaseCheck";
@@ -144,6 +145,99 @@ describe("투자 목적 유형", () => {
     render(<App />);
     await choose("갭투자");
     expect(screen.getByRole("button", { name: "인쇄하기" })).toBeInTheDocument();
+  });
+});
+
+/**
+ * 리뷰 수정(Important 3·Minor 5): 화면 부제와 푸터는 **실거주 룰셋**을
+ * 전제한 문장이었다. 투자 경로는 바로 그 기준으로 한도를 계산하지
+ * 않는다고 말하는 화면이라, 그 위아래에 그대로 남으면 뜻이 어긋난다.
+ */
+describe("어느 기준인지·무엇을 계산하지 않는지가 유형에 따라 갈린다", () => {
+  it("실거주에서는 실거주 룰셋 기준이 부제에 남는다", () => {
+    render(<App />);
+    expect(document.querySelector(".subtitle")?.textContent).toContain(
+      formatRuleVersionLabel(rules),
+    );
+  });
+
+  it.each(["갭투자", "월세수익형"] as const)(
+    "%s에서는 실거주 룰셋 기준 대신 구매 유형 룰셋을 적는다",
+    async (type) => {
+      render(<App />);
+      await choose(type);
+      const subtitle = document.querySelector(".subtitle")?.textContent ?? "";
+      expect(subtitle).not.toContain(formatRuleVersionLabel(rules));
+      expect(subtitle).toContain(purchaseRules.version);
+    },
+  );
+
+  it("실거주 푸터는 그대로다", () => {
+    render(<App />);
+    expect(document.querySelector(".disclaimer")?.textContent).toContain(
+      "실제 대출한도는 금융기관 심사 결과에 따릅니다",
+    );
+  });
+
+  it.each(["갭투자", "월세수익형"] as const)(
+    "%s 푸터는 대출한도 추정치가 있는 것처럼 말하지 않는다",
+    async (type) => {
+      render(<App />);
+      await choose(type);
+      const footer = document.querySelector(".disclaimer")?.textContent ?? "";
+      expect(footer).not.toContain("대출한도는 금융기관 심사 결과");
+      expect(footer).toContain("대출한도를 계산하지 않아요");
+    },
+  );
+});
+
+/**
+ * 리뷰 수정(Minor 6): 유형을 오갈 때 앞 유형의 금액이 다른 뜻으로
+ * 되살아나면 안 된다. `usePurchaseCheck` 문서가 명시적으로 경계하는
+ * 자리인데 이를 잠그는 테스트가 없었다.
+ */
+describe("유형을 오갈 때의 입력 보존", () => {
+  it("갭투자 → 월세로 가면 전세보증금이 월세 보증금으로 되살아나지 않는다", async () => {
+    render(<App />);
+    await choose("갭투자");
+    await userEvent.type(screen.getByLabelText("전세보증금"), "40000");
+
+    await choose("월세수익형");
+    expect(screen.getByLabelText("보증금")).toHaveValue("");
+  });
+
+  it("갭↔월세를 오가도 각 유형의 값은 자기 자리에 남는다", async () => {
+    render(<App />);
+    await choose("갭투자");
+    await userEvent.type(screen.getByLabelText("전세보증금"), "40000");
+    await choose("월세수익형");
+    await userEvent.type(screen.getByLabelText("월세"), "200");
+
+    await choose("갭투자");
+    // MoneyInput은 포커스를 잃기 전까지 입력 원문을 그대로 들고 있다.
+    expect(screen.getByLabelText("전세보증금")).toHaveValue("40000");
+    await choose("월세수익형");
+    expect(screen.getByLabelText("월세")).toHaveValue("200");
+  });
+
+  it("실거주를 거치면 투자 입력은 비워진다 — 되살아나는 것보다 안전하다", async () => {
+    render(<App />);
+    await choose("갭투자");
+    await userEvent.type(screen.getByLabelText("전세보증금"), "40000");
+
+    await choose("실거주");
+    await choose("갭투자");
+    expect(screen.getByLabelText("전세보증금")).toHaveValue("");
+  });
+
+  it("실거주 프로필은 투자 유형을 거쳐도 그대로다(대조군)", async () => {
+    render(<App />);
+    await fillProfile();
+    const before = document.querySelector(".affordable-price")?.textContent;
+
+    await choose("월세수익형");
+    await choose("실거주");
+    expect(document.querySelector(".affordable-price")?.textContent).toBe(before);
   });
 });
 

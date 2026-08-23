@@ -5,6 +5,7 @@ import type {
 } from "../lib/purchase";
 import { usePurchaseCheck } from "../state/usePurchaseCheck";
 import { MoneyInput } from "./MoneyInput";
+import { PurchasePrintSummary } from "./PurchasePrintSummary";
 import { PurchaseVerdict } from "./PurchaseVerdict";
 
 const MONEY_HINT = "단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요.";
@@ -30,8 +31,12 @@ export interface PurchaseCheckProps {
  * 열려 있는 동안 아예 렌더되지도, 계산되지도 않는다(App.tsx 참고).
  *
  * 값 입력란은 인쇄에서 지운다(`.purchase-form`). 종이에서는 채울 수
- * 없다 — 대신 `PurchaseVerdict`가 무엇을 넣었고 무엇이 나왔는지를 결과
- * 안에 다시 적으므로 종이에서 잃는 정보가 없다.
+ * 없다 — 대신 `PurchasePrintSummary`가 무엇을 넣었는지를 인쇄물 전용
+ * 요약으로 다시 적는다. 예전에는 "결과가 다시 적으므로 잃는 정보가
+ * 없다"고 적어 두었지만 실제로는 그렇지 않았다: 갭투자는 전세가율
+ * 지표가 매매가·전세보증금을 다시 적어 살아남지만, 월세 수익형
+ * 인쇄물에는 매매 예정가·보증금·월세·연간 운영비용이 한 번도 나오지
+ * 않았다. 인쇄일과 어느 룰셋 기준인지도 같은 자리에서 남긴다.
  */
 export function PurchaseCheck({ type }: PurchaseCheckProps) {
   const {
@@ -105,6 +110,18 @@ export function PurchaseCheck({ type }: PurchaseCheckProps) {
         )}
         <p className="hint">{MONEY_HINT}</p>
       </form>
+
+      {/*
+        화면에서는 숨고 인쇄에서만 나온다(styles.css의
+        .purchase-print-summary). 실거주 경로의 PrintSummary와 같은
+        패턴이다 — 조작 장치(입력란)는 종이에서 지우고, 그 장치가 담고
+        있던 값은 평문으로 남긴다.
+      */}
+      <PurchasePrintSummary
+        rules={rules}
+        type={type}
+        input={type === "갭투자" ? gapInput : rentalInput}
+      />
 
       <PurchaseVerdict assessment={assessment} />
     </section>
