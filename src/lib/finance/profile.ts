@@ -62,9 +62,7 @@ export function assertValidProfile(profile: BuyerProfile): void {
  */
 export function assertNonNegativeFinite(value: number, path: string): void {
   if (!Number.isFinite(value)) {
-    throw new RangeError(
-      `유효한 숫자가 아닙니다: ${path} (${String(value)})`,
-    );
+    throw new RangeError(`유효한 숫자가 아닙니다: ${path} (${String(value)})`);
   }
   if (value < 0) {
     throw new RangeError(`0 이상이어야 합니다: ${path} (${String(value)})`);
@@ -82,8 +80,6 @@ export function assertNonNegativeFinite(value: number, path: string): void {
  */
 function assertBoolean(value: boolean, path: string): void {
   if (typeof value !== "boolean") {
-    throw new RangeError(
-      `유효한 불리언이 아닙니다: ${path} (${String(value)})`,
-    );
+    throw new RangeError(`유효한 불리언이 아닙니다: ${path} (${String(value)})`);
   }
 }

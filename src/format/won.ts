@@ -9,9 +9,7 @@ const MAN = 10_000;
  */
 export function formatWon(won: number): string {
   if (!Number.isFinite(won)) {
-    throw new RangeError(
-      `유효한 숫자가 아닙니다: formatWon 인자 (${String(won)})`,
-    );
+    throw new RangeError(`유효한 숫자가 아닙니다: formatWon 인자 (${String(won)})`);
   }
 
   const rounded = Math.round(won);
