@@ -18,6 +18,9 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     tradeCount: 5,
     minPrice: 1_900_000_000,
     maxPrice: 2_100_000_000,
+    minFloor: 3,
+    maxFloor: 18,
+    unknownFloorCount: 0,
     changeRate3m: 0.02,
     changeRate3mRecentCount: 3,
     changeRate3mPriorCount: 3,
@@ -112,6 +115,9 @@ describe("buildSchemaDoc (I7)", () => {
       "complexKey",
       "areaBucket",
       "maxExclusiveAreaSqm",
+      "minFloor",
+      "maxFloor",
+      "unknownFloorCount",
       "lowConfidence",
       "dataAsOf",
       "generatedAt",
@@ -149,6 +155,22 @@ describe("buildSchemaDoc (I7)", () => {
     // "내보내지 않는 필드" 절과 별개로 monthly.json 절도 그 규칙을 되짚는다.
     const monthlySection = doc.slice(doc.indexOf("## monthly.json"));
     expect(monthlySection).toMatch(/medianPrice/);
+  });
+
+  it("층 범위 행이 '가격 보정용이 아니다'와 null 의미를 함께 적는다", () => {
+    // 이 문서를 읽고 화면을 만드는 사람이 minFloor로 값을 보정하는 것이
+    // 이 데이터의 용도라고 오해하면, 산출물은 맞는데 화면이 감정평가를
+    // 하게 된다 — changeRate12m 이름 오해를 막으려고 이 문서를 만든 것과
+    // 같은 이음매다.
+    const doc = buildSchemaDoc();
+    const lines = doc.split("\n");
+    const row = lines.find((l) => l.startsWith("| minFloor / maxFloor "));
+    expect(row).toBeDefined();
+    expect(row).toMatch(/보정/);
+    expect(row).toMatch(/null/);
+    const unknownRow = lines.find((l) => l.startsWith("| unknownFloorCount "));
+    expect(unknownRow).toBeDefined();
+    expect(unknownRow).toMatch(/채우지 않는다|채워 넣지 않는다/);
   });
 
   it("dataAsOf가 계약월 기준이며 신고 지연으로 과소 보고될 수 있음을 설명한다", () => {
@@ -256,5 +278,39 @@ describe("emit — complexes.json에는 화면에 낼 수 없는 필드를 담�
     ) as Array<{ areaBucket: number; maxExclusiveAreaSqm: number }>;
     expect(written[0]?.areaBucket).toBe(85);
     expect(written[0]?.maxExclusiveAreaSqm).toBe(85.4);
+  });
+
+  it("층 범위는 화면이 쓰는 값이므로 그대로 담긴다", () => {
+    emit(
+      [unit({ minFloor: 2, maxFloor: 21, unknownFloorCount: 3 })],
+      new Date("2026-08-22T00:00:00Z"),
+      "2026-08",
+      "2026-03",
+      root,
+    );
+    const written = JSON.parse(
+      readFileSync(join(root, "complexes.json"), "utf8"),
+    ) as Array<{
+      minFloor: number | null;
+      maxFloor: number | null;
+      unknownFloorCount: number;
+    }>;
+    expect(written[0]?.minFloor).toBe(2);
+    expect(written[0]?.maxFloor).toBe(21);
+    expect(written[0]?.unknownFloorCount).toBe(3);
+  });
+
+  it("층을 하나도 못 믿은 평형은 null이 그대로 담긴다 — 0으로 채우지 않는다", () => {
+    emit(
+      [unit({ minFloor: null, maxFloor: null, unknownFloorCount: 5 })],
+      new Date("2026-08-22T00:00:00Z"),
+      "2026-08",
+      "2026-03",
+      root,
+    );
+    const raw = readFileSync(join(root, "complexes.json"), "utf8");
+    expect(raw).toContain('"minFloor":null');
+    expect(raw).toContain('"maxFloor":null');
+    expect(raw).not.toContain('"minFloor":0');
   });
 });

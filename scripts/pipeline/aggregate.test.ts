@@ -454,3 +454,105 @@ describe("aggregate", () => {
     expect(units[1]?.areaBucket).toBe(101);
   });
 });
+
+describe("층 범위", () => {
+  /**
+   * 이 범위(minPrice~maxPrice)를 만든 거래들이 몇 층부터 몇 층까지였는지.
+   *
+   * 화면이 층을 반영해 값을 보정하기 위한 것이 **아니다** — 사용자가 자기가
+   * 보는 매물의 층과 스스로 견주도록 사실을 하나 더 주는 것뿐이다.
+   */
+  it("범위를 만든 거래들의 최저층과 최고층을 낸다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ floor: 3, contractDate: "2026-07-01" }),
+        trade({ floor: 15, contractDate: "2026-06-01" }),
+        trade({ floor: 7, contractDate: "2026-05-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.minFloor).toBe(3);
+    expect(units[0]?.maxFloor).toBe(15);
+    expect(units[0]?.unknownFloorCount).toBe(0);
+  });
+
+  it("가격 범위를 만든 창(최근 6개월) 밖의 거래는 층 범위에 넣지 않는다", () => {
+    // 층 범위는 minPrice~maxPrice를 만든 바로 그 거래들에 대한 사실이어야
+    // 한다. 창 밖 거래를 섞으면 화면이 "이 범위를 만든 거래"라고 말하면서
+    // 그 범위에 들어 있지도 않은 거래의 층을 보여주게 된다.
+    const units = aggregate(
+      normalizeAll([
+        trade({ floor: 10, contractDate: "2026-07-01" }),
+        trade({ floor: 1, contractDate: "2025-01-01" }),
+        trade({ floor: 40, contractDate: "2025-01-02" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.tradeCount).toBe(1);
+    expect(units[0]?.minFloor).toBe(10);
+    expect(units[0]?.maxFloor).toBe(10);
+  });
+
+  it.each([
+    ["0층", 0],
+    ["음수(지하)", -1],
+    ["정수가 아닌 값", 3.5],
+  ])("%s은 못 믿을 값으로 보고 층 범위에서 뺀다", (_label, badFloor) => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ floor: badFloor, contractDate: "2026-07-01" }),
+        trade({ floor: 12, contractDate: "2026-06-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    // 못 믿을 값을 0층이나 1층으로 채우지 않는다 — 범위는 믿을 수 있는
+    // 거래만으로 만들고, 못 믿은 건수를 따로 드러낸다.
+    expect(units[0]?.minFloor).toBe(12);
+    expect(units[0]?.maxFloor).toBe(12);
+    expect(units[0]?.unknownFloorCount).toBe(1);
+    expect(units[0]?.tradeCount).toBe(2);
+  });
+
+  it("믿을 수 있는 층이 하나도 없으면 범위를 비우고 건수로 드러낸다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ floor: 0, contractDate: "2026-07-01" }),
+        trade({ floor: -2, contractDate: "2026-06-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.minFloor).toBeNull();
+    expect(units[0]?.maxFloor).toBeNull();
+    expect(units[0]?.unknownFloorCount).toBe(2);
+  });
+
+  it("층이 달라져도 가격 집계는 한 글자도 달라지지 않는다", () => {
+    // 층으로 가격을 보정하지 않는다는 약속. 층은 사용자가 스스로 견주도록
+    // 돕는 사실일 뿐이고, 우리가 그것으로 값을 깎거나 올리는 순간 감정평가가
+    // 된다 — 이 앱이 medianPrice를 화면에서 뺀 것과 같은 이유다.
+    const trades = [
+      trade({ floor: 1, price: 1_000_000_000, contractDate: "2026-07-01" }),
+      trade({ floor: 2, price: 1_500_000_000, contractDate: "2026-06-01" }),
+    ];
+    const low = aggregate(normalizeAll(trades), AS_OF, config);
+    const high = aggregate(
+      normalizeAll(trades.map((t) => ({ ...t, floor: t.floor + 30 }))),
+      AS_OF,
+      config,
+    );
+    const prices = (units: ReturnType<typeof aggregate>) =>
+      units.map((u) => ({
+        minPrice: u.minPrice,
+        maxPrice: u.maxPrice,
+        medianPrice: u.medianPrice,
+        tradeCount: u.tradeCount,
+      }));
+    expect(prices(high)).toEqual(prices(low));
+    expect(high[0]?.minFloor).toBe(31);
+    expect(low[0]?.minFloor).toBe(1);
+  });
+});

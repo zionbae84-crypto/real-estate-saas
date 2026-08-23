@@ -32,10 +32,30 @@ const EVIDENCE_MESSAGE_KEYS = [
 
 const DISCLOSURE_KEYS = [
   "floorNote",
+  "floorRangeNote",
+  "floorSameNote",
+  "floorUnknownNote",
+  "floorPartialUnknownNote",
   "reportingLagNote",
   "notAVerdictNote",
   "noPointEstimateNote",
 ] as const;
+
+/**
+ * 층 고지 틀이 반드시 품어야 하는 자리표시자.
+ *
+ * 빠져도 문장은 멀쩡해 보이는데 층수만 조용히 사라진다 — 화면은 여전히
+ * 한 줄을 그리고 사용자는 고지를 읽었다고 믿는다. 그 실패는 눈에 띄지
+ * 않으므로 데이터 수준에서 막는다.
+ */
+const DISCLOSURE_PLACEHOLDERS: ReadonlyArray<{
+  key: (typeof DISCLOSURE_KEYS)[number];
+  tokens: readonly string[];
+}> = [
+  { key: "floorRangeNote", tokens: ["{minFloor}", "{maxFloor}"] },
+  { key: "floorSameNote", tokens: ["{floor}"] },
+  { key: "floorPartialUnknownNote", tokens: ["{unknownFloorCount}"] },
+];
 
 /**
  * 거래 건수 하한의 하한.
@@ -110,6 +130,20 @@ export function parsePriceRules(raw: unknown): PriceRules {
   const disclosure = plainObject(r.disclosure, "disclosure");
   for (const key of DISCLOSURE_KEYS) {
     requireText(disclosure, key, `disclosure.${key}`);
+  }
+  for (const { key, tokens } of DISCLOSURE_PLACEHOLDERS) {
+    const text = String(disclosure[key]);
+    for (const token of tokens) {
+      if (!text.includes(token)) {
+        throw new Error(`룰셋 값 오류: disclosure.${key}에 ${token} 자리표시자가 없어요. 자리표시자가 빠지면 문장은 멀쩡해 보이는데 층수만 조용히 사라지고, 사용자는 고지를 읽었다고 믿게 돼요.`);
+      }
+    }
+  }
+  // 층을 하나도 모를 때 쓰는 문장은 끼워 넣을 층수가 없다. 자리표시자가
+  // 남아 있으면 화면에 "{minFloor}층"이 그대로 나간다.
+  const unknownNote = String(disclosure.floorUnknownNote);
+  if (/[{}]/.test(unknownNote)) {
+    throw new Error("룰셋 값 오류: disclosure.floorUnknownNote에는 자리표시자를 쓸 수 없어요. 층을 하나도 모를 때 쓰는 문장이라 끼워 넣을 층수가 없어요.");
   }
 
   if (

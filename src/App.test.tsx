@@ -48,6 +48,9 @@ const { DETAIL_TEST_UNIT } = vi.hoisted(() => ({
     tradeCount: 3,
     minPrice: 190_000_000,
     maxPrice: 210_000_000,
+    minFloor: 3,
+    maxFloor: 18,
+    unknownFloorCount: 0,
     lowConfidence: false,
   } satisfies ComplexUnit,
 }));

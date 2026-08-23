@@ -47,6 +47,9 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     tradeCount: 10,
     minPrice: 1_000_000_000,
     maxPrice: 1_100_000_000,
+    minFloor: 3,
+    maxFloor: 18,
+    unknownFloorCount: 0,
     lowConfidence: false,
     ...overrides,
   };
@@ -179,6 +182,10 @@ describe("PriceCheck", () => {
       expect(disclosure).toContain(priceRules.disclosure.floorNote);
       expect(disclosure).toContain(priceRules.disclosure.reportingLagNote);
       expect(disclosure).toContain(priceRules.disclosure.notAVerdictNote);
+      // 층 범위 줄도 예외 없이 같은 자리에 있다 — 유보든 통과든.
+      expect(
+        document.querySelector('[data-field="floorRange"]')?.textContent,
+      ).toMatch(/\d+층/);
       unmount();
     });
 
@@ -188,6 +195,79 @@ describe("PriceCheck", () => {
         document.querySelector(".price-disclosure")?.textContent ?? "";
       expect(disclosure).toMatch(/층/);
       expect(disclosure).toMatch(/향/);
+    });
+  });
+
+  describe("층 고지는 막연한 사과가 아니라 구체적인 사실이다", () => {
+    it("이 범위를 만든 거래가 몇 층부터 몇 층까지였는지 적는다", () => {
+      render(
+        <PriceCheck unit={unit({ minFloor: 2, maxFloor: 24 })} budget={null} />,
+      );
+      const line =
+        document.querySelector('[data-field="floorRange"]')?.textContent ?? "";
+      expect(line).toContain("2층");
+      expect(line).toContain("24층");
+    });
+
+    it("층을 모르는 거래가 섞여 있으면 몇 건인지 함께 적는다", () => {
+      render(
+        <PriceCheck
+          unit={unit({ minFloor: 2, maxFloor: 24, unknownFloorCount: 4 })}
+          budget={null}
+        />,
+      );
+      expect(
+        document.querySelector('[data-field="floorPartialUnknown"]')?.textContent,
+      ).toContain("4");
+    });
+
+    it("층을 다 아는 평형에는 그 덧말을 붙이지 않는다", () => {
+      render(<PriceCheck unit={unit({ unknownFloorCount: 0 })} budget={null} />);
+      expect(
+        document.querySelector('[data-field="floorPartialUnknown"]'),
+      ).toBeNull();
+    });
+
+    it("층을 하나도 모르면 모른다고 적는다 — 0층·1층을 지어내지 않는다", () => {
+      render(
+        <PriceCheck
+          unit={unit({ minFloor: null, maxFloor: null, unknownFloorCount: 10 })}
+          budget={null}
+        />,
+      );
+      const line =
+        document.querySelector('[data-field="floorRange"]')?.textContent ?? "";
+      expect(line).toBe(priceRules.disclosure.floorUnknownNote);
+      expect(line).not.toMatch(/0층|1층/);
+    });
+
+    it("층 고지에 자리표시자가 그대로 새어 나가지 않는다", () => {
+      for (const u of [
+        unit({ minFloor: 2, maxFloor: 24, unknownFloorCount: 4 }),
+        unit({ minFloor: 9, maxFloor: 9 }),
+        unit({ minFloor: null, maxFloor: null, unknownFloorCount: 10 }),
+      ]) {
+        const { container, unmount } = render(
+          <PriceCheck unit={u} budget={null} />,
+        );
+        const text =
+          container.querySelector(".price-disclosure")?.textContent ?? "";
+        expect(text, text).not.toMatch(/[{}]/);
+        unmount();
+      }
+    });
+
+    it("보이는 층 고지가 룰셋 문구에서 온다(코드에 박혀 있지 않다)", () => {
+      render(
+        <PriceCheck unit={unit({ minFloor: 5, maxFloor: 12 })} budget={null} />,
+      );
+      expect(
+        document.querySelector('[data-field="floorRange"]')?.textContent,
+      ).toBe(
+        priceRules.disclosure.floorRangeNote
+          .replaceAll("{minFloor}", "5")
+          .replaceAll("{maxFloor}", "12"),
+      );
     });
   });
 

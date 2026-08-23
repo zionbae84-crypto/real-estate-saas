@@ -161,14 +161,60 @@ export interface PriceBudgetRule {
 }
 
 /**
- * 판정과 **언제나 함께** 나가야 하는 문구들.
+ * 판정과 **언제나 함께** 나가야 하는 문구들(룰셋에 적힌 원문).
  *
- * 유보든 통과든 예외가 없다. 특히 {@link floorNote}가 빠지면 우리가
- * 틀린 확신을 준다 — 우리 집계에는 층이 없어서 같은 평형의 저층과
- * 로열층이 한 범위에 섞여 있다.
+ * 유보든 통과든 예외가 없다. 층 관련 문구가 빠지면 우리가 틀린 확신을
+ * 준다 — 같은 평형이라도 저층과 로열층은 값이 다른데, 화면은 그 차이를
+ * 값으로 보정해 주지 않기 때문이다.
+ *
+ * 층 문구 넷은 **자리표시자를 품은 틀**이다. 실제 층수를 끼워 넣은
+ * 결과가 {@link PriceDisclosureText}이고, 화면이 읽는 것은 그쪽이다.
+ * 셋 중 어느 틀을 쓸지는 관측된 층 범위가 정한다(`assess.ts` 참고).
  */
 export interface PriceDisclosure {
+  /**
+   * 층이 아니라 **향·수리 상태**에 대한 고지.
+   *
+   * 층은 이제 집계에 있지만 향과 수리 상태는 여전히 없다. 층이 생겼다고
+   * 이 문장까지 지우면, 화면이 설명하지 못하는 남은 차이를 사용자가
+   * 모르게 된다.
+   */
   floorNote: string;
+  /** 최저층 ≠ 최고층일 때. `{minFloor}`·`{maxFloor}`를 품는다 */
+  floorRangeNote: string;
+  /** 관측된 층이 한 층뿐일 때. `{floor}`를 품는다 */
+  floorSameNote: string;
+  /** 믿을 수 있는 층이 하나도 없을 때. 자리표시자가 없다 */
+  floorUnknownNote: string;
+  /** 일부 거래만 층을 모를 때 덧붙인다. `{unknownFloorCount}`를 품는다 */
+  floorPartialUnknownNote: string;
+  reportingLagNote: string;
+  notAVerdictNote: string;
+  noPointEstimateNote: string;
+}
+
+/**
+ * 실제 층수를 끼워 넣은 뒤의 고지. 화면이 그대로 그린다.
+ *
+ * **여기 담긴 층수는 관측된 사실이지 보정 재료가 아니다.** 이 앱은
+ * 층으로 값을 깎거나 올리지 않는다 — 그건 감정평가 영역이고, 이 앱이
+ * `medianPrice`를 화면에서 뺀 것과 같은 이유로 하지 않는다. 층을
+ * 내보내는 목적은 하나뿐이다: 사용자가 자기가 보는 매물의 층과
+ * **스스로** 견주게 하는 것.
+ */
+export interface PriceDisclosureText {
+  /** {@link PriceDisclosure.floorNote} 그대로 — 향·수리 상태 고지 */
+  floorNote: string;
+  /**
+   * 이 범위를 만든 거래가 몇 층이었는지. **언제나 문장이 있다** —
+   * 층을 모르면 "모른다"고 말하지 빈 문자열이 되지 않는다.
+   */
+  floorRangeNote: string;
+  /**
+   * 층을 모르는 거래가 **섞여** 있을 때만. 전부 모르거나 전부 알면 `null`
+   * (전부 모르면 {@link floorRangeNote}가 이미 그 말을 한다).
+   */
+  floorPartialUnknownNote: string | null;
   reportingLagNote: string;
   notAVerdictNote: string;
   noPointEstimateNote: string;
@@ -201,6 +247,23 @@ export interface PriceEvidence {
   tradeCount: number;
   minPrice: number;
   maxPrice: number;
+  /**
+   * 이 범위를 만든 거래들의 최저층. 믿을 수 있는 층이 하나도 없으면 `null`.
+   *
+   * **판정에 쓰이지 않는다.** 표본 조건(`evidenceGate`)도, 호가가 놓인
+   * 자리(`bandOf`)도 이 값을 보지 않는다 — 층을 알게 됐다고 임계값이
+   * 느슨해지거나 가격이 보정되지 않는다. 오직 고지 문장에만 들어간다.
+   */
+  minFloor: number | null;
+  /** 같은 창의 최고층. 같은 조건에서 `null`, 같은 이유로 판정에 쓰이지 않는다 */
+  maxFloor: number | null;
+  /**
+   * 그 창의 거래 중 층을 믿을 수 없었던 건수.
+   *
+   * 모르는 층을 0층·1층으로 채우지 않는 대신 몇 건이 그랬는지를 화면까지
+   * 들고 간다 — 층을 모르는 거래가 섞여 있다는 사실이 드러나야 한다.
+   */
+  unknownFloorCount: number;
 }
 
 /**
@@ -301,7 +364,7 @@ export interface PriceAssessment {
   findings: PriceFinding[];
   /** 실거주 프로필이 없어 예산 줄을 만들지 않았을 때만. 아니면 null */
   budgetAbsentNote: string | null;
-  /** 판정과 언제나 함께 나가는 문구들 */
-  disclosure: PriceDisclosure;
+  /** 판정과 언제나 함께 나가는 문구들. 층수를 끼워 넣은 뒤의 문장이다 */
+  disclosure: PriceDisclosureText;
   disclaimer: readonly string[];
 }
