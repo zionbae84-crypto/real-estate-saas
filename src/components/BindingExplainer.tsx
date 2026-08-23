@@ -130,15 +130,24 @@ export function BindingExplainer({
       <p className="binding-amount">{formatWon(loanLimit.amount)}</p>
       <p className="binding-advice">{explanation.advice}</p>
 
+      {/*
+        리뷰 수정(가드 사각지대 Minor 1): "라벨은 조사 없이 이어 붙인다"는
+        원래 문법 장치가 "~입니다"라는 합니다체 계사에 기대고 있었다. 그걸
+        "~이에요/예요"로 해요체 전환하려면 라벨 받침 유무에 따라 이에요/예요를
+        분기해야 하는데, 그러면 LABELS 맵 자체를 두 벌로 늘려야 한다(리뷰어
+        판단, 확인 완료). 계사를 통째로 빼고 줄표로 라벨을 붙이면 조사·계사
+        분기 문제 자체가 사라지고, 뒤따르는 "여유가 있어요"와 같은 해요체로
+        한 문단 안에서 목소리가 갈리지 않는다.
+      */}
       {runnerUp && runnerUp.headroom === 0 && (
         <p className="runner-up-tied">
-          {`다음으로 가까운 한도는 ${LABELS[runnerUp.constraint]}입니다. 같은 금액에서 다시 걸리므로 한도가 늘어나지 않아요.`}
+          {`다음으로 가까운 한도 — ${LABELS[runnerUp.constraint]}. 같은 금액에서 다시 걸리므로 한도가 늘어나지 않아요.`}
         </p>
       )}
 
       {runnerUp && runnerUp.headroom > 0 && (
         <p className="runner-up">
-          {`다음으로 가까운 한도는 ${LABELS[runnerUp.constraint]}입니다. ${formatWon(runnerUp.headroom)} 여유가 있어요.`}
+          {`다음으로 가까운 한도 — ${LABELS[runnerUp.constraint]}. ${formatWon(runnerUp.headroom)} 여유가 있어요.`}
         </p>
       )}
 

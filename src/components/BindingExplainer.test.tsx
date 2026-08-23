@@ -157,7 +157,7 @@ describe("BindingExplainer", () => {
       expect(tied).toHaveTextContent("늘어나지 않아요");
     });
 
-    it("2순위 라인은 조사 없이 라벨 뒤에 '입니다'가 오는 문장 전체를 정확히 렌더링한다", () => {
+    it("2순위 라인은 줄표로 라벨을 붙여 조사·계사 분기 없이 문장 전체를 정확히 렌더링한다", () => {
       const loanLimit: LoanLimit = {
         amount: 172_290_000,
         binding: "DSR",
@@ -170,10 +170,13 @@ describe("BindingExplainer", () => {
       };
       const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
       const runnerUp = container.querySelector(".runner-up");
-      // "담보 가치(LTV)" 뒤에 은/는/이/가 같은 조사가 붙지 않고 '입니다'가
-      // 바로 이어지므로, 받침 유무와 무관하게 항상 문법적으로 안전하다.
+      // "담보 가치(LTV)" 앞뒤로 조사도 계사("~입니다"/"~이에요")도 붙지 않고
+      // 줄표(—)로만 이어지므로, 받침 유무와 무관하게 항상 문법적으로
+      // 안전하다(리뷰 수정: 예전에는 "~입니다"라는 합니다체 계사에 기대던
+      // 장치였는데, 해요체로 통일하면서 라벨별 이에요/예요 분기 없이 계사
+      // 자체를 뺐다).
       expect(runnerUp?.textContent).toBe(
-        "다음으로 가까운 한도는 담보 가치(LTV)입니다. 1억 7,771만원 여유가 있어요.",
+        "다음으로 가까운 한도 — 담보 가치(LTV). 1억 7,771만원 여유가 있어요.",
       );
     });
 
