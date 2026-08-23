@@ -1,4 +1,5 @@
 import type { ComplexUnit } from "../data/complexes";
+import { burdenGradeLevel } from "./burden-grade";
 import {
   calcAffordablePrice,
   calcAvailableCash,
@@ -42,9 +43,20 @@ export interface ComplexListEntry {
 }
 
 export interface ComplexListResult {
-  /** 그 행 자신의 부담 등급이 `safe`인 행 */
+  /** 그 행에 보이는 등급이 `safe`인 행 */
   withinSafe: ComplexListEntry[];
-  /** 살 수는 있지만 그 행의 부담 등급이 `safe`가 아닌 행 */
+  /**
+   * 우리 숫자가 그 행의 매달 부담을 다 담지 못하는 행
+   * (`landLeasehold`가 `"Y"`이거나 `null`이면서, 우리가 낸 등급이
+   * `safe`였던 행).
+   *
+   * **`beyondSafe`로 보내지 않는다.** 그 덩어리의 헤더는 "살 수는
+   * 있지만 부담이 커요"인데, 우리는 부담이 크다는 것을 모른다 — 아는
+   * 것은 다 재지 못했다는 것뿐이다. 행 배지가 "확인 필요"인데 덩어리
+   * 헤더가 "부담이 커요"라고 말하면 그 자체가 어긋남이다.
+   */
+  unverified: ComplexListEntry[];
+  /** 살 수는 있지만 그 행에 보이는 등급이 `caution`·`danger`인 행 */
   beyondSafe: ComplexListEntry[];
   affordablePrice: number;
   /**
@@ -81,9 +93,16 @@ export interface ComplexListResult {
  * 행마다 이분 탐색을 다시 돌리지 않는다. 가용현금은 면적과 무관하므로
  * 한 번만 구해 재사용한다.
  *
- * **두 덩어리로 가르는 기준도 그 행 자신의 부담 등급이다**
- * (`entry.burden.safety.level === "safe"`). 덩어리와 행 배지가 같은
- * `entry.burden` 하나에서 나오므로 구조적으로 어긋날 수 없다.
+ * **덩어리로 가르는 기준도 그 행에 실제로 보이는 등급이다**
+ * (`burdenGradeLevel`). 덩어리와 행 배지가 같은 함수 하나에서 나오므로
+ * 구조적으로 어긋날 수 없다 — 화면(`ComplexList`·`SafetyBadge`)도 배지를
+ * 그릴 때 같은 함수를 부른다.
+ *
+ * 덩어리가 셋인 이유는 그 함수가 등급을 넷으로 내기 때문이다. 토지
+ * 사용료가 우리 계산 밖에 있는 행(`landLeasehold`가 `"Y"`·`null`)은
+ * 우리가 낸 등급이 `safe`여도 `"unverified"`로 내려가고, 그 행들은
+ * 자기 덩어리에 모인다 — "무리 없이 살 수 있어요"도 아니고 "부담이
+ * 커요"도 아니다(둘 다 우리가 모르는 것을 아는 척하는 말이다).
  *
  * 예전에는 헤드라인 안전선(`safePrice`, 프로필의 **가정** 면적으로 잰
  * 값)과 행의 `maxPrice`를 비교해 갈랐다. 행의 부담은 행 자신의 실제
@@ -122,6 +141,7 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
   const ambiguous = ambiguousNames(shown);
 
   const withinSafe: ComplexListEntry[] = [];
+  const unverified: ComplexListEntry[] = [];
   const beyondSafe: ComplexListEntry[] = [];
 
   for (const unit of shown) {
@@ -130,17 +150,22 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
       burden: calcBurdenAt(rowProfile(unit), rules, unit.maxPrice),
       needsBuiltYear: ambiguous.has(nameKey(unit)),
     };
-    // 덩어리와 배지가 같은 entry.burden에서 나온다 — 위 문서 참고.
-    (entry.burden.safety.level === "safe" ? withinSafe : beyondSafe).push(entry);
+    // 덩어리와 배지가 같은 burdenGradeLevel에서 나온다 — 위 문서 참고.
+    const grade = burdenGradeLevel(entry.burden.safety.level, unit.landLeasehold);
+    if (grade === "safe") withinSafe.push(entry);
+    else if (grade === "unverified") unverified.push(entry);
+    else beyondSafe.push(entry);
   }
 
   const byBurden = (a: ComplexListEntry, b: ComplexListEntry) =>
     a.burden.safety.burdenRatio - b.burden.safety.burdenRatio;
   withinSafe.sort(byBurden);
+  unverified.sort(byBurden);
   beyondSafe.sort(byBurden);
 
   return {
     withinSafe,
+    unverified,
     beyondSafe,
     affordablePrice,
     safePrice,

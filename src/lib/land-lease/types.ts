@@ -11,6 +11,45 @@ export const LAND_LEASE_STATES = ["yes", "unknown"] as const;
 
 export type LandLeaseState = (typeof LAND_LEASE_STATES)[number];
 
+/**
+ * 우리 부담 등급이 이 집의 "매달 나가는 돈"을 다 담지 못할 때 쓰는 문구.
+ *
+ * **판정을 바꾸는 근거 문구라 코드가 아니라 룰셋에 있다.** 부담 등급은
+ * 우리가 계산한 월 상환액만으로 매기는데, `"Y"`와 `null`에서는 그 숫자에
+ * 토지 사용료가 빠져 있다 — 우리가 스스로 불완전하다고 인정하는 숫자로
+ * 최상위 안심 등급("안전")을 주지 않는다. 구매 유형 진단이 검증하지 못한
+ * 대출 원금 때문에 전체 결론을 `clear`로 내리지 않는 것과 같은 판단이다
+ * (`src/lib/purchase/assess.ts`의 `hasUnverifiedLoanPrincipal`).
+ *
+ * 두 상태(`yes`·`unknown`)가 **한 벌을 함께 쓴다.** 등급이 멈추는 이유가
+ * 둘 다 같기 때문이다 — 우리 숫자가 매달 나가는 돈을 다 담지 못한다.
+ * 무엇을 모르는지는 바로 옆 {@link LandLeaseStateCopy}가 말한다.
+ */
+export interface LandLeaseGradeCopy {
+  /**
+   * "안전" 자리에 대신 들어가는 **글자**. 색이 아니라 이 글자가 등급을
+   * 진다("사면 안 돼요"가 아니다 — 토지임대부는 알고 사면 되는 집이고,
+   * 우리가 말할 수 있는 것은 우리 숫자가 부족하다는 것뿐이다).
+   */
+  label: string;
+  /** 왜 등급이 거기서 멈췄는가. 등급 글자 바로 옆에 붙는다 */
+  note: string;
+  /**
+   * "대출 없이 살 수 있어요" **같은 자리**에 붙는 단서.
+   *
+   * 대출이 0원인 것은 사실이라 그 말을 지우지 않는다. 다만 그 말은
+   * "매달 나가는 돈이 없다"로 읽히고, 토지임대부에서는 그것이 틀린다.
+   */
+  noLoanNote: string;
+  /**
+   * 목록에서 이 행들이 모이는 덩어리의 헤더.
+   *
+   * "살 수는 있지만 부담이 커요"로 보내지 않는다 — 우리는 부담이 크다는
+   * 것을 모른다. 아는 것은 다 재지 못했다는 것뿐이다.
+   */
+  groupHeading: string;
+}
+
 /** 한 상태의 문구. 전부 룰셋에서 온다 — 코드에 문구를 박지 않는다 */
 export interface LandLeaseStateCopy {
   /**
@@ -47,6 +86,8 @@ export interface LandLeaseStateCopy {
 export interface LandLeaseRules {
   version: string;
   effectiveFrom: string;
+  /** 등급을 붙드는 문구. 두 상태가 함께 쓴다 */
+  grade: LandLeaseGradeCopy;
   states: Record<LandLeaseState, LandLeaseStateCopy>;
 }
 

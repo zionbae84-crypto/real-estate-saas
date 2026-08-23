@@ -109,6 +109,22 @@ describe("문구가 코드가 아니라 룰셋에서 온다", () => {
     expect(offenders).toEqual([]);
   });
 
+  /**
+   * 등급 이름(`grade.label`)은 짧아서 위 길이 필터(8자 초과)에 걸리지
+   * 않는다. 그런데 이 글자야말로 화면에서 "안전" 자리에 들어가는
+   * **판정 그 자체**라, 코드에 박히면 룰셋을 고쳐도 화면이 안 바뀐다.
+   * 따로 본다.
+   */
+  it("등급 이름도 소스에 박혀 있지 않다", () => {
+    const label = (rawLandLeaseRules as { grade: { label: string } }).grade.label;
+    expect(label.length).toBeGreaterThan(0);
+    // 주석은 걷어낸다 — 이 저장소의 주석은 등급 이름을 인용해 설명한다.
+    const offenders = sources.filter((file) =>
+      stripComments(readFileSync(file, "utf8")).includes(`"${label}"`),
+    );
+    expect(offenders).toEqual([]);
+  });
+
   it("검사기가 박아 넣은 문구를 실제로 잡아낸다(변이 검사)", () => {
     const badge = strings[0] ?? "";
     expect(badge.length).toBeGreaterThan(0);
@@ -184,5 +200,45 @@ describe("토지임대부 표시의 색", () => {
         expect(body, body).not.toMatch(/\b(rgb|hsl)a?\(/);
       }
     }
+  });
+});
+
+/**
+ * "어디서 확인하라"는 줄(`checkNote`)은 **월 갈래에만** 붙는다
+ * (`LandLeaseNote.tsx`). 금액을 지어내지 않는 대신 반드시 해야 하는
+ * 말이라 화면에서 사라지면 안 되는데, 호가 갈래에서 뺄 수 있는 근거는
+ * 하나뿐이다 — **호가 화면은 혼자 뜨지 않는다.** `PriceCheck`를 그리는
+ * 곳이 단지 상세 하나뿐이고, 거기서는 월 갈래가 먼저 같은 문장을
+ * 말한다. 그 전제가 깨지면(누가 `PriceCheck`를 다른 화면에 붙이면)
+ * 그 화면에서 이 문장이 통째로 사라지므로, 전제를 소스에서 잠근다.
+ */
+describe("호가 화면은 혼자 뜨지 않는다", () => {
+  const RENDERS_PRICE_CHECK = /<PriceCheck[\s/>]/;
+
+  function hostsOfPriceCheck(): string[] {
+    return uiSourceFiles("src").filter((file) =>
+      RENDERS_PRICE_CHECK.test(stripComments(readFileSync(file, "utf8"))),
+    );
+  }
+
+  it("PriceCheck를 그리는 곳은 단지 상세 하나다", () => {
+    expect(hostsOfPriceCheck()).toEqual(["src/components/ComplexDetail.tsx"]);
+  });
+
+  it("단지 상세가 월 갈래를 함께 그린다", () => {
+    const code = stripComments(
+      readFileSync("src/components/ComplexDetail.tsx", "utf8"),
+    );
+    // variant를 주지 않으면 월 갈래다(LandLeaseNote의 기본값).
+    expect(code).toMatch(/<LandLeaseNote\s+landLeasehold=\{unit\.landLeasehold\}\s*\/>/);
+  });
+
+  it("검사기가 다른 화면의 PriceCheck를 실제로 잡아낸다(변이 검사)", () => {
+    expect(RENDERS_PRICE_CHECK.test("<PriceCheck unit={u} budget={b} />")).toBe(
+      true,
+    );
+    expect(RENDERS_PRICE_CHECK.test('import { PriceCheck } from "./PriceCheck";')).toBe(
+      false,
+    );
   });
 });

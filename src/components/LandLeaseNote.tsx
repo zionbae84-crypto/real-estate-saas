@@ -64,13 +64,27 @@ export function LandLeaseNote({
       <span className="land-lease-badge">{notice.badge}</span>{" "}
       <span className="land-lease-body">
         {variant === "price" ? notice.priceNote : notice.monthlyNote}
-      </span>{" "}
+      </span>
       {/*
-        "우리가 대신 계산해 주지 못하니 어디서 확인하라"는 줄은 두 갈래
-        모두에 남는다. 금액을 지어내지 않는 대신 반드시 해야 하는 말이라,
-        화면에 따라 빼도 되는 문장이 아니다.
+        "우리가 대신 계산해 주지 못하니 어디서 확인하라"는 줄은 **월
+        갈래에만** 붙는다. 금액을 지어내지 않는 대신 반드시 해야 하는
+        말이지만, 그 말이 가리키는 것은 **매달 나가는 돈**이라(입주자
+        모집공고·분양계약서의 토지 사용료) 월 상환액 옆이 그 문장의
+        제자리다.
+
+        빼는 쪽을 택한 이유는 중복이다. 호가 갈래가 뜨는 화면은 단지
+        상세 하나뿐이고(`PriceCheck`를 그리는 곳이 거기뿐이다), 거기서는
+        월 갈래가 **먼저** 같은 문장을 이미 말한다. 한 화면에 똑같은
+        문장이 두 번 뜨면 둘 다 잡음으로 읽혀서, 정작 읽혀야 할 때
+        넘겨진다 — 이 컴포넌트가 문장을 두 벌로 가른 이유와 같다.
+        종이에서도 같은 문장이 한 번만 남는다.
       */}
-      <span className="land-lease-check">{notice.checkNote}</span>
+      {variant === "monthly" && (
+        <>
+          {" "}
+          <span className="land-lease-check">{notice.checkNote}</span>
+        </>
+      )}
     </span>
   );
 }

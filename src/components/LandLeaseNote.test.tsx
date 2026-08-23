@@ -110,6 +110,7 @@ function costs(): CostBreakdownData {
 function renderList(entries: ComplexListEntry[], onSelect?: () => void) {
   const result: ComplexListResult = {
     withinSafe: entries,
+    unverified: [],
     beyondSafe: [],
     affordablePrice: 1_000_000_000,
     safePrice: 900_000_000,
@@ -154,9 +155,25 @@ const SCREENS = [
     name: "목록",
     render: (u: ComplexUnit) => renderList([entry(u)]),
     variants: ["monthly"],
+    checkNotes: 1,
   },
-  { name: "상세", render: renderDetail, variants: ["monthly", "price"] },
-  { name: "호가", render: renderPrice, variants: ["price"] },
+  {
+    name: "상세",
+    render: renderDetail,
+    variants: ["monthly", "price"],
+    // 두 갈래를 함께 그리는데도 "어디서 확인하라"는 줄은 한 번만
+    // 나온다 — 월 갈래에만 붙기 때문이다.
+    checkNotes: 1,
+  },
+  {
+    name: "호가",
+    render: renderPrice,
+    variants: ["price"],
+    // 이 화면은 앱에서 **단독으로 뜨지 않는다**(PriceCheck를 그리는 곳은
+    // ComplexDetail 하나뿐이고, 아래 "호가 화면은 혼자 뜨지 않는다"가
+    // 그것을 소스에서 잠근다). 그래서 여기서만 0이다.
+    checkNotes: 0,
+  },
 ] as const;
 
 const YES = landLeaseRules.states.yes;
@@ -178,7 +195,9 @@ function bodyOf(state: "yes" | "unknown", variant: string): string {
 }
 
 describe("토지임대부 표시", () => {
-  describe.each(SCREENS)("$name 화면", ({ render: renderScreen, variants }) => {
+  describe.each(SCREENS)(
+    "$name 화면",
+    ({ render: renderScreen, variants, checkNotes }) => {
     it('"Y"면 표시가 나온다', () => {
       const { container } = renderScreen(unit({ landLeasehold: "Y" }));
       expect(variantsIn(container)).toEqual([...variants]);
@@ -225,8 +244,22 @@ describe("토지임대부 표시", () => {
         const text = note.textContent ?? "";
         expect(text).toContain(YES.badge);
         expect(text).toContain(bodyOf("yes", note.dataset.variant ?? ""));
-        expect(text).toContain(YES.checkNote);
       }
+    });
+
+    /**
+     * "우리가 대신 계산해 주지 못하니 어디서 확인하라"는 줄은 금액을
+     * 지어내지 않는 대신 반드시 해야 하는 말이라 **화면마다 한 번은**
+     * 있어야 한다. 다만 **두 번 있으면 안 된다** — 단지 상세는 월
+     * 갈래와 호가 갈래를 함께 그리는데, 똑같은 문장이 한 화면에 두 번
+     * 뜨면 둘 다 잡음으로 읽혀서 정작 읽혀야 할 때 넘겨진다.
+     */
+    it("어디서 확인하라는 줄이 두 번 나오지 않는다", () => {
+      const { container } = renderScreen(unit({ landLeasehold: "Y" }));
+      const checks = [
+        ...container.querySelectorAll(".land-lease-check"),
+      ].map((n) => n.textContent);
+      expect(checks).toEqual(Array.from({ length: checkNotes }, () => YES.checkNote));
     });
 
     it("토지 사용료 금액을 지어내지 않는다", () => {
@@ -235,7 +268,8 @@ describe("토지임대부 표시", () => {
         expect(note.textContent ?? "").not.toMatch(/\d\s*(원|만원|억)/);
       }
     });
-  });
+    },
+  );
 
   describe("월 상환액을 읽는 자리에 붙는다", () => {
     it("목록 행에서는 부담(월 상환액·부담률) 안에 있다", () => {

@@ -22,6 +22,26 @@ const REQUIRED_TOKENS: ReadonlyArray<{
 ];
 
 /**
+ * 등급 문구가 반드시 품어야 하는 낱말.
+ *
+ * `grade`는 화면의 **판정**을 바꾸는 문구다. "확인이 필요해요" 한 줄로
+ * 줄여 놓아도 필드는 채워져 있고 화면은 등급을 내리지만, 왜 내렸는지가
+ * 한 글자도 없으면 사용자는 무엇을 확인해야 하는지 모른 채 등급만
+ * 낯설게 읽는다. 등급을 붙드는 이유는 하나뿐이라("우리 계산 밖에 매달
+ * 나가는 돈이 있다") 그 말이 실제로 있는지 데이터 수준에서 막는다.
+ *
+ * `label`은 뺀다 — 등급 칸에 들어가는 짧은 글자라 문장이 아니다.
+ */
+const REQUIRED_GRADE_TOKENS: ReadonlyArray<{
+  key: "note" | "noLoanNote" | "groupHeading";
+  token: string;
+}> = [
+  { key: "note", token: "매달" },
+  { key: "noLoanNote", token: "매달" },
+  { key: "groupHeading", token: "매달" },
+];
+
+/**
  * 금액 추정 금지.
  *
  * 토지 사용료는 우리 데이터에 없다. 룰셋에 "월 20만원쯤"·"약 15만원"
@@ -45,12 +65,30 @@ const MONEY_ESTIMATE = /\d\s*(원|만원|억|만\s*원)/;
  *    ({@link REQUIRED_TOKENS}).
  * 3. **어떤 문구도 토지 사용료 금액을 추정하지 않는다**
  *    ({@link MONEY_ESTIMATE}).
+ * 4. **등급을 붙드는 문구(`grade`)가 다 있고, 왜 붙드는지를 말한다**
+ *    ({@link REQUIRED_GRADE_TOKENS}). `grade`가 비면 화면은 등급을 내릴
+ *    글자를 잃고 "안전"으로 되돌아간다 — 이 파일이 막으려는 바로 그
+ *    상태다.
  */
 export function parseLandLeaseRules(raw: unknown): LandLeaseRules {
   const r = plainObject(raw, "룰셋");
 
   requireText(r, "version", "version");
   requireText(r, "effectiveFrom", "effectiveFrom");
+
+  const grade = plainObject(r.grade, "grade");
+  for (const key of ["label", "note", "noLoanNote", "groupHeading"] as const) {
+    requireText(grade, key, `grade.${key}`);
+    const text = String(grade[key]);
+    if (MONEY_ESTIMATE.test(text)) {
+      throw new Error(`룰셋 값 오류: grade.${key}가 금액을 말하고 있어요. 토지 사용료는 우리 데이터에 없어서 추정하면 안 돼요 — "얼마쯤 더 나온다"가 아니라 "우리가 모르는 돈이 더 나간다"고만 말해요.`);
+    }
+  }
+  for (const { key, token } of REQUIRED_GRADE_TOKENS) {
+    if (!String(grade[key]).includes(token)) {
+      throw new Error(`룰셋 값 오류: grade.${key}에 "${token}"이 없어요. 이 등급이 내려간 이유는 우리 계산 밖에 매달 나가는 돈이 있다는 것 하나인데, 그 말이 빠지면 사용자는 무엇을 확인해야 하는지 모른 채 등급만 낯설게 읽어요.`);
+    }
+  }
 
   const states = plainObject(r.states, "states");
 

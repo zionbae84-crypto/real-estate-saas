@@ -98,6 +98,63 @@ describe("토지임대부 룰셋", () => {
     },
   );
 
+  /**
+   * 등급을 붙드는 문구(`grade`)는 화면의 **판정**을 바꾼다. 이 블록이
+   * 비면 화면은 등급을 내릴 글자를 잃고 "안전"으로 되돌아간다 — 이
+   * 룰셋이 존재하는 이유가 통째로 사라지는 경로다.
+   */
+  describe("등급을 붙드는 문구", () => {
+    it("네 필드가 모두 있다", () => {
+      const rules = parseLandLeaseRules(rawLandLeaseRules);
+      expect(rules.grade.label.length).toBeGreaterThan(0);
+      expect(rules.grade.note.length).toBeGreaterThan(0);
+      expect(rules.grade.noLoanNote.length).toBeGreaterThan(0);
+      expect(rules.grade.groupHeading.length).toBeGreaterThan(0);
+    });
+
+    it("블록이 통째로 빠지면 잡아낸다(변이 검사)", () => {
+      expect(() =>
+        parseLandLeaseRules(poisoned((draft) => { delete draft.grade; })),
+      ).toThrow(/grade/);
+    });
+
+    it.each(["label", "note", "noLoanNote", "groupHeading"] as const)(
+      "grade.%s가 빠지면 잡아낸다(변이 검사)",
+      (key) => {
+        expect(() =>
+          parseLandLeaseRules(
+            poisoned((draft) => {
+              delete (draft.grade as Record<string, unknown>)[key];
+            }),
+          ),
+        ).toThrow(new RegExp(`grade\\.${key}`));
+      },
+    );
+
+    it("이유를 말하지 않으면 잡아낸다(변이 검사)", () => {
+      // "확인이 필요해요" 한 줄로 줄여도 필드는 채워져 있고 화면은
+      // 등급을 내린다 — 그런데 왜 내렸는지가 한 글자도 없다.
+      expect(() =>
+        parseLandLeaseRules(
+          poisoned((draft) => {
+            (draft.grade as Record<string, unknown>).note = "확인이 필요해요.";
+          }),
+        ),
+      ).toThrow(/grade\.note/);
+    });
+
+    it("등급 문구가 금액을 추정하면 잡아낸다(변이 검사)", () => {
+      expect(() =>
+        parseLandLeaseRules(
+          poisoned((draft) => {
+            (draft.grade as Record<string, unknown>).note =
+              "매달 20만원쯤 더 나가서 등급이 멈췄어요.";
+          }),
+        ),
+      ).toThrow(/추정/);
+    });
+  });
+
   describe("문구가 '안전하다'·'싸다'고 말하지 않는다", () => {
     const strings = ruleStrings(rawLandLeaseRules);
 

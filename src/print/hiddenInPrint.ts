@@ -113,9 +113,17 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
  * 함께 사라지는 사고를 여기서 막는다.
  */
 export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
-  "safety-level", // 등급 글자(안전/주의/위험) — SafetyBadge
+  "safety-level", // 등급 글자(안전/주의/위험/확인 필요) — SafetyBadge
   "complex-level", // 목록 행의 등급 글자 — ComplexList
   "complex-burden", // 등급을 감싸는 행 요소 자체
+  // 등급이 "안전"까지 가지 않고 멈춘 이유(토지임대부·모름). 종이에서
+  // 사라지면 낯선 등급 글자만 남아, 종이를 건네받은 사람은 무엇이
+  // 부족해서 멈춘 것인지 알 수 없다.
+  "safety-grade-note", // 상세 배지 아래
+  "complex-grade-note", // 목록 행의 등급 옆
+  // "대출 없이 살 수 있어요" 옆의 단서. 이 단서가 빠지면 종이에는 이
+  // 앱에서 가장 강한 안심 문구만 남는다.
+  "complex-no-loan-caveat",
   // 토지임대부 표시. 종이에서 사라지면 안 되는 것 중에서도 무거운
   // 축이다 — 이 종이의 월 상환액에는 매달 나가는 토지 사용료가 들어
   // 있지 않고(우리 데이터에 금액이 없다), 그 사실이 빠지면 종이를

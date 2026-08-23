@@ -7,6 +7,7 @@ import type { PriceBudgetInput } from "../lib/price";
 import { formatRange } from "./ComplexList";
 import { CostBreakdown } from "./CostBreakdown";
 import { LandLeaseNote } from "./LandLeaseNote";
+import { NoLoanLine } from "./NoLoanLine";
 import { PriceCheck } from "./PriceCheck";
 import { SafetyBadge } from "./SafetyBadge";
 
@@ -97,7 +98,9 @@ export function ComplexDetail({
       <p className="complex-detail-loan">
         범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
         {burden.neededLoan === 0 ? (
-          <span className="complex-no-loan">대출 없이 살 수 있어요</span>
+          // 목록의 행과 같은 컴포넌트다 — 두 화면이 이 말을 다르게 하면
+          // 안 된다(NoLoanLine 참고).
+          <NoLoanLine landLeasehold={unit.landLeasehold} />
         ) : (
           <>
             필요 대출액은 <strong>{formatWon(burden.neededLoan)}</strong>이에요
@@ -105,7 +108,17 @@ export function ComplexDetail({
         )}
       </p>
 
-      <SafetyBadge safety={burden.safety} label="이 집을 샀을 때예요" />
+      {/*
+        `landLeasehold`를 넘긴다 — 이 배지는 **이 평형**에 대한 답이라,
+        우리 월 상환액이 이 집의 매달 부담을 다 담는지가 등급에 걸린다.
+        목록의 행 배지와 같은 함수에서 나오므로 두 화면이 같은 집을 두고
+        다른 등급을 말할 수 없다(`lib/burden-grade.ts`).
+      */}
+      <SafetyBadge
+        safety={burden.safety}
+        label="이 집을 샀을 때예요"
+        landLeasehold={unit.landLeasehold}
+      />
 
       {/*
         토지임대부 표시는 배지 **바로 아래**에 붙는다. 배지가 "월
