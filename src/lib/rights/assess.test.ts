@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { claimsSafety } from "../../../scripts/claims-safety";
 import rawRightsRules from "../../../rules/rights-2026-08.json";
 import { assessRights } from "./assess";
 import { parseRightsRules } from "./rules";
@@ -77,17 +78,6 @@ function forEachCombination(
 
   walk(0);
   return visited;
-}
-
-/** 결론 문구가 "안전"을 긍정으로 주장하는가 */
-function claimsSafety(phrase: string): boolean {
-  return phrase
-    .split(/(?<=[.!?)]|요|다)\s+/)
-    .some(
-      (sentence) =>
-        /안전|사도 (돼|되)|사도 좋|괜찮|문제없|이상 없/.test(sentence) &&
-        !/아니|않|없어|말아|마세|아닌/.test(sentence),
-    );
 }
 
 describe("권리분석 판정", () => {

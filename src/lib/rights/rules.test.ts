@@ -1,4 +1,9 @@
 import { describe, expect, it } from "vitest";
+import {
+  MUST_BE_ALLOWED,
+  MUST_BE_CAUGHT,
+  safetyClaimsIn,
+} from "../../../scripts/claims-safety";
 import rawRightsRules from "../../../rules/rights-2026-08.json";
 import { parseRightsRules } from "./rules";
 import type { RightsItem, RightsOption } from "./types";
@@ -532,6 +537,49 @@ describe("권리분석 룰셋 파싱", () => {
     });
 
     /**
+     * 리뷰 수정(Important 11): 면책 검사가 개수(`length >= 2`)뿐이라
+     * 내용이 통째로 비어 있었다. 리뷰가 disclaimer를
+     * `["이건 법률 자문이 아니에요.", "안심하고 진행하세요."]`로 바꿔도
+     * 1051개 테스트가 전부 통과했다 — "등기부는 언제든 바뀌어요 / 계약
+     * 직전과 잔금 직전에 각각 다시 떼어 보세요"가 사라져도 아무도
+     * 모르는 상태였다.
+     *
+     * 이 문진의 답은 **떼어 본 그 순간의 등기부**에 대한 것이다. 등기는
+     * 문진을 마친 다음 날에도 새로 들어갈 수 있어서, 다시 떼어 보라는
+     * 말이 빠지면 사용자는 지난달의 판정을 계약일에 그대로 믿는다.
+     */
+    describe("면책 문구가 반드시 담아야 하는 내용", () => {
+      const disclaimer = parseRightsRules(rawRightsRules).disclaimer;
+      const joined = disclaimer.join(" ");
+
+      it("법률 자문이 아니라고 말한다", () => {
+        expect(joined).toContain("법률 자문이 아니에요");
+      });
+
+      it("실제 판단은 법무사·변호사만 할 수 있다고 말한다", () => {
+        expect(joined).toMatch(/법무사|변호사/);
+      });
+
+      it("등기부가 언제든 바뀐다고 말한다", () => {
+        expect(joined).toContain("등기부는 언제든 바뀌어요");
+      });
+
+      it("계약 직전과 잔금 직전에 각각 다시 떼어 보라고 말한다", () => {
+        expect(joined).toContain("계약 직전");
+        expect(joined).toContain("잔금 직전");
+        expect(joined).toMatch(/다시 떼어/);
+      });
+
+      it("두 줄 이상이다", () => {
+        expect(disclaimer.length).toBeGreaterThanOrEqual(2);
+      });
+
+      it("어떤 줄도 안심을 권하지 않는다", () => {
+        expect(disclaimer.flatMap(safetyClaimsIn)).toEqual([]);
+      });
+    });
+
+    /**
      * 리뷰 수정(Important 5): expert 항목이 이미 있는데 한 항목만 미답이면
      * 헤드라인이 회색 "아직 다 답하지 않았어요"가 되고, note가 전문가
      * 확인이 필요한 항목이 있다는 사실을 한 글자도 말하지 않았다.
@@ -589,29 +637,20 @@ describe("권리분석 룰셋 파싱", () => {
 
   describe("어떤 문구도 '안전'하다고 말하지 않는다", () => {
     /**
-     * "안전"을 **긍정으로** 주장하는 문장만 골라낸다.
+     * 탐지기는 `scripts/claims-safety.ts` 한 곳에 있다.
      *
-     * 단순히 "안전"이라는 글자를 금지하면 이 제품이 가장 하고 싶은 말인
-     * "'안전하다'는 뜻이 아니에요"까지 걸린다 — 부정문은 오히려 지켜야
-     * 하는 문장이다. 그래서 문장 단위로 자른 뒤, 안전을 뜻하는 표현이
-     * 있으면서 그것을 부정·경고하는 말이 함께 있지 않은 문장만 잡는다.
+     * 예전에는 이 판단이 테스트마다 복사돼 네 벌이었고 그중 둘은 이미
+     * 서로 달랐다 — 안전 주장을 놓치는 그물이 조용히 생기는 자리라
+     * 하나로 모았다.
      */
-    function claimsSafety(phrase: string): string[] {
-      return phrase
-        .split(/(?<=[.!?)]|요|다)\s+/)
-        .filter(
-          (sentence) =>
-            /안전|사도 (돼|되)|사도 좋|괜찮|문제없|이상 없/.test(sentence) &&
-            !/아니|않|없어|말아|마세|아닌/.test(sentence),
-        );
-    }
-
-    it("안전 주장 탐지기가 실제로 뭔가를 잡는다(전제)", () => {
-      // 아래 검사가 공허하게 통과하지 않도록, 탐지기가 긍정문은 잡고
-      // 부정문은 놓아주는지 여기서 고정한다.
-      expect(claimsSafety("이 집은 안전해요")).toHaveLength(1);
-      expect(claimsSafety("사도 돼요")).toHaveLength(1);
-      expect(claimsSafety("'안전하다'는 뜻이 아니에요")).toEqual([]);
+    it("안전 주장 탐지기가 잡아야 할 것을 잡고 놓아줄 것을 놓아준다(전제)", () => {
+      // 아래 검사가 공허하게 통과하지 않도록 그물 자체를 여기서 고정한다.
+      for (const caught of MUST_BE_CAUGHT) {
+        expect(safetyClaimsIn(caught), caught).not.toEqual([]);
+      }
+      for (const allowed of MUST_BE_ALLOWED) {
+        expect(safetyClaimsIn(allowed), allowed).toEqual([]);
+      }
     });
 
     it("실제 룰셋의 어떤 문구도 '안전'하다고 말하지 않는다", () => {
@@ -629,7 +668,7 @@ describe("권리분석 룰셋 파싱", () => {
           ...item.options.flatMap((o) => [o.label, o.note ?? ""]),
         ]),
       ];
-      const offenders = everyPhrase.flatMap(claimsSafety);
+      const offenders = everyPhrase.flatMap(safetyClaimsIn);
       expect(offenders).toEqual([]);
     });
   });

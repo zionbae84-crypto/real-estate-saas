@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { safetyClaimsIn } from "../../scripts/claims-safety";
 import rawRightsRules from "../../rules/rights-2026-08.json";
 import { assessRights, parseRightsRules, type RightsAnswers } from "../lib/rights";
 import { RightsVerdict } from "./RightsVerdict";
@@ -72,15 +73,9 @@ describe("RightsVerdict", () => {
         ],
       ] as const) {
         const { container, unmount } = renderVerdict(answers, price);
-        const text = container.textContent ?? "";
-        const claims = text
-          .split(/(?<=[.!?)]|요|다)\s+/)
-          .filter(
-            (sentence) =>
-              /안전|사도 (돼|되)|괜찮|문제없/.test(sentence) &&
-              !/아니|않|없어|말아|마세|아닌/.test(sentence),
-          );
-        expect(claims).toEqual([]);
+        // 탐지기는 scripts/claims-safety.ts 한 곳에 있다 — 예전에는 이
+        // 판단이 테스트마다 복사돼 있었고 여기 사본은 이미 더 좁았다.
+        expect(safetyClaimsIn(container.textContent ?? "")).toEqual([]);
         unmount();
       }
     });

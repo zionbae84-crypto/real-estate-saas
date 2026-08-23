@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { safetyClaimsIn } from "../../scripts/claims-safety";
 import rawRightsRules from "../../rules/rights-2026-08.json";
 import { parseRightsRules, type RightsItem } from "../lib/rights";
 import { RightsCheck } from "./RightsCheck";
@@ -216,13 +217,6 @@ describe("RightsCheck", () => {
 
   it("아무 조작 없이도 화면 어디에서도 '안전'하다고 말하지 않는다", () => {
     const { container } = render(<RightsCheck />);
-    const claims = (container.textContent ?? "")
-      .split(/(?<=[.!?)]|요|다)\s+/)
-      .filter(
-        (sentence) =>
-          /안전|사도 (돼|되)|괜찮|문제없/.test(sentence) &&
-          !/아니|않|없어|말아|마세|아닌/.test(sentence),
-      );
-    expect(claims).toEqual([]);
+    expect(safetyClaimsIn(container.textContent ?? "")).toEqual([]);
   });
 });
