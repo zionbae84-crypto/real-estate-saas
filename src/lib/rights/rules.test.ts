@@ -65,6 +65,14 @@ function expectRejected(mutate: (rules: Record<string, unknown>) => void): void 
   expect(() => parseRightsRules(broken)).toThrow();
 }
 
+/** 실제 룰셋에서 항목 하나를 꺼낸다. 없으면 그 자리에서 실패한다 */
+function realItem(id: string): RightsItem {
+  const rules = parseRightsRules(rawRightsRules);
+  const item = rules.items.find((candidate) => candidate.id === id);
+  if (item === undefined) throw new Error(`룰셋에 없는 항목: ${id}`);
+  return item;
+}
+
 describe("권리분석 룰셋 파싱", () => {
   it("실제 룰셋 파일이 검증을 통과한다", () => {
     expect(() => parseRightsRules(rawRightsRules)).not.toThrow();
@@ -240,6 +248,70 @@ describe("권리분석 룰셋 파싱", () => {
       expectRejected((r) => {
         (r.encumbrance as { stopRatio: unknown }).stopRatio = "0.9";
       });
+    });
+  });
+
+  /**
+   * 리뷰 수정(Critical 1): 예전 `priorDeposit`은 "전입신고와 확정일자를
+   * 함께 갖춘 임차인"을 앞선 임차인으로 정의했다. 매수인 기준으로 틀린
+   * 정의다 — 매수인이 보증금을 인수하는지는 **대항력**(주택의 인도 +
+   * 주민등록)으로 갈리고, 대항력을 갖춘 임차인이 있으면 주택임대차보호법
+   * 제3조 제4항에 따라 양수인이 임대인의 지위를 승계한다. 확정일자는
+   * 우선변제권(같은 법 제3조의2)의 요건이라 경매·공매의 배당순위를
+   * 다투는 문제이지, 매매로 사는 사람의 인수 여부와는 다른 축이다.
+   *
+   * 그 정의 때문에 "전입은 했는데 확정일자는 없는 임차인"이 "앞선
+   * 임차인이 없어요"로 새어 나가 합계에 0원으로 들어갔고, 나머지가
+   * 깨끗하면 전체 결론이 clear가 됐다. 실제로는 그 보증금 전액을
+   * 매수인이 인수한다.
+   */
+  describe("앞선 임차인은 대항력으로 가른다 — 확정일자가 아니다", () => {
+    const item = realItem("priorDeposit");
+
+    it("답을 가르는 문구 어디에도 확정일자가 조건으로 들어가지 않는다", () => {
+      // 질문과 선택지 라벨이 사용자가 실제로 답을 고를 때 읽는 전부다.
+      // 여기에 확정일자가 조건으로 섞이는 순간 위 손실 경로가 되살아난다.
+      const decisive = [item.question, ...item.options.map((o) => o.label)];
+      for (const text of decisive) {
+        expect(text, text).not.toContain("확정일자");
+      }
+    });
+
+    it("판단 기준이 전입세대확인서의 전입 여부다", () => {
+      expect(item.question).toContain("전입");
+      expect(item.where).toContain("전입세대확인서");
+      const noneOption = item.options.find((o) => o.amount === "zero");
+      expect(noneOption?.label).toContain("전입");
+    });
+
+    it("확정일자를 언급한다면 '기준이 아니다'라는 뜻으로만 쓴다", () => {
+      // 아예 안 쓰는 것도 괜찮지만, 쓴다면 반드시 부정문이어야 한다 —
+      // 확정일자 부여현황을 함께 떼라고만 적으면 사용자는 그것을 조건으로
+      // 읽는다(예전 문구가 정확히 그랬다).
+      for (const text of [item.where, item.why]) {
+        if (!text.includes("확정일자")) continue;
+        expect(text, text).toMatch(/확정일자[^.]*(않아요|없어도|아니에요)/);
+      }
+    });
+
+    it("왜 위험한지가 대항력과 임대인 지위 승계로 설명된다", () => {
+      expect(item.why).toContain("대항력");
+      expect(item.why).toMatch(/제3조 제4항/);
+      expect(item.why).toMatch(/넘겨받|승계/);
+    });
+
+    it("'순위'가 아니라 '떠안는다'로 말한다", () => {
+      // 매수인에게 이건 배당순위 문제가 아니라 채무 인수 문제다.
+      expect(item.why).toMatch(/떠안|돌려줄 사람이 내가/);
+      expect(item.why).not.toContain("내 권리보다 앞서");
+    });
+
+    it("먼저 전입한 세대가 있다는 답은 '확인했어요'로 끝나지 않는다", () => {
+      const withTenant = item.options.filter((o) => o.amount !== "zero");
+      expect(withTenant.length).toBeGreaterThan(0);
+      for (const option of withTenant) {
+        expect(option.verdict, option.id).not.toBe("checked");
+      }
     });
   });
 
