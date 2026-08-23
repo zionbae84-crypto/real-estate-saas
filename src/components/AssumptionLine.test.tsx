@@ -220,4 +220,23 @@ describe("AssumptionLine", () => {
       expect(onOpen).toHaveBeenCalledWith("area");
     });
   });
+
+  describe("리뷰 수정: data-field ↔ CSS 선택자 짝을 잠근다 (Minor)", () => {
+    // styles.css의 `.assumption-item[data-field="existingDebt"]`는 경고색을
+    // 이 리터럴 문자열에 걸어 둔다. CSS는 타입 검사를 받지 않으므로
+    // AssumableField의 "existingDebt" 값이 바뀌어도 컴파일은 통과하고
+    // 경고색만 조용히 사라진다. data-field가 기존 부채 버튼에만 붙고
+    // 나머지 둘에는 붙지 않는다는 것을 잠가 둔다.
+    it("data-field 속성은 기존 부채 버튼에만 붙고, 규제지역·전용면적 버튼에는 붙지 않는다", () => {
+      renderLine();
+
+      const existingDebtButton = screen.getByRole("button", { name: /기존 대출/ });
+      const regulatedAreaButton = screen.getByRole("button", { name: /규제지역/ });
+      const areaButton = screen.getByRole("button", { name: /전용면적/ });
+
+      expect(existingDebtButton).toHaveAttribute("data-field", "existingDebt");
+      expect(regulatedAreaButton).not.toHaveAttribute("data-field");
+      expect(areaButton).not.toHaveAttribute("data-field");
+    });
+  });
 });

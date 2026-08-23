@@ -39,9 +39,20 @@ export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProp
       ? [{ value: safePrice, label: "무리 없는 선" }]
       : [];
 
+  // 리뷰 수정(색 일관성): 슬라이더가 최대값에 있을 때 이 숫자는
+  // BudgetResult의 `.affordable-price`가 방금 보여준 것과 같은 데이터
+  // (같은 "실구매 가능 가격")다. 같은 의미는 같은 색으로 반복한다.
+  // 슬라이더를 내려 사용자가 임의의 값을 탐색 중이 되면 더는 그
+  // 데이터가 아니므로(최대치가 아니라 지금 보는 값일 뿐) 기본색으로
+  // 되돌린다 — "최대 가격이라 파랑"이지 "지금 보는 값이라 파랑"이
+  // 아니다.
+  const isAtMax = price === max;
+
   return (
     <section className="price-slider">
-      <p className="slider-price">{formatWon(price)}</p>
+      <p className={isAtMax ? "slider-price slider-price--max" : "slider-price"}>
+        {formatWon(price)}
+      </p>
 
       <Slider
         label="이 가격에 산다면"
