@@ -124,6 +124,13 @@ export function parseRules(raw: unknown): Rules {
     (obj, path) => assertNumberField(obj, "amount", `${path}.amount`),
   );
 
+  if (
+    !Array.isArray(r.regulatedRegionCodes) ||
+    !r.regulatedRegionCodes.every((c) => typeof c === "string" && c.length > 0)
+  ) {
+    throw new Error("룰셋 필드 누락 또는 타입 오류: regulatedRegionCodes");
+  }
+
   const safetyThreshold = assertPlainObject(r.safetyThreshold, "safetyThreshold");
   assertNumberFields(
     safetyThreshold,
