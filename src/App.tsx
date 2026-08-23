@@ -50,7 +50,10 @@ export function App() {
    */
   const effectiveProfile = useMemo(() => {
     if (profile === null || selectedUnit === null) return profile;
-    return { ...profile, exclusiveAreaSqm: selectedUnit.areaBucket };
+    // areaBucket(반올림)이 아니라 maxExclusiveAreaSqm(그 평형의 실제 최대
+    // 전용면적)을 쓴다 — 반올림이 85㎡ 임계값을 잘못 넘나들게 하면 농특세
+    // 판정이 낙관 방향으로 틀린다. complex-list.ts의 rowProfile과 같은 이유.
+    return { ...profile, exclusiveAreaSqm: selectedUnit.maxExclusiveAreaSqm };
   }, [profile, selectedUnit]);
 
   const affordability = useAffordability(effectiveProfile);
@@ -119,9 +122,14 @@ export function App() {
         ? "touched"
         : "assumed";
 
-  /** PrintSummary에 넘길, 지금 실제로 계산에 쓰이는 전용면적(㎡). */
+  /**
+   * PrintSummary에 넘길, 지금 실제로 계산에 쓰이는 전용면적(㎡).
+   *
+   * `effectiveProfile`과 같은 값(`maxExclusiveAreaSqm`)을 써야 인쇄물의
+   * "전용면적" 문구가 실제로 계산에 쓰인 면적과 어긋나지 않는다.
+   */
   const effectiveAreaSqm =
-    selectedUnit !== null ? selectedUnit.areaBucket : state.exclusiveAreaSqm;
+    selectedUnit !== null ? selectedUnit.maxExclusiveAreaSqm : state.exclusiveAreaSqm;
 
   const detail = useMemo(() => {
     if (effectiveProfile === null || selectedUnit === null) return null;

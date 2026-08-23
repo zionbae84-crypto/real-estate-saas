@@ -207,6 +207,7 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     legalDongName: "대치동",
     builtYear: 1979,
     areaBucket: 84,
+    maxExclusiveAreaSqm: 84.3,
     medianPrice: 2_000_000_000,
     tradeCount: 5,
     minPrice: 1_900_000_000,
@@ -254,7 +255,14 @@ describe("runPipeline: 빈 데이터 가드 (통합)", () => {
   let root: string;
   let rawDir: string;
 
-  const OUTPUT_FILES = ["complexes.json", "regions.json", "manifest.json", "report.md", "README.md"];
+  const OUTPUT_FILES = [
+    "complexes.json",
+    "regions.json",
+    "manifest.json",
+    "monthly.json",
+    "report.md",
+    "README.md",
+  ];
 
   beforeEach(() => {
     root = mkdtempSync(join(tmpdir(), "run-pipeline-integration-"));

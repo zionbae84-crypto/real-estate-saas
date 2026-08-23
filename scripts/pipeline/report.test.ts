@@ -26,6 +26,7 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     legalDongName: "대치동",
     builtYear: 1979,
     areaBucket: 84,
+    maxExclusiveAreaSqm: 84.3,
     medianPrice: 2_000_000_000,
     tradeCount: 5,
     minPrice: 1_900_000_000,

@@ -23,15 +23,24 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   };
 }
 
+/**
+ * `maxExclusiveAreaSqm`을 명시하지 않으면 `areaBucket`과 같은 값으로
+ * 채운다 — 이 스위트의 기존 테스트 대부분은 "행의 실제 면적"이라는 뜻으로
+ * `areaBucket`을 오버라이드해 왔는데(85㎡ 임계값 테스트 등), 계산이
+ * `maxExclusiveAreaSqm`을 쓰도록 바뀌어도 그 의도가 그대로 살아 있어야
+ * 한다. 두 값이 실제로 갈리는 경우(반올림 버킷과 실제 최대 면적이 다른
+ * 경우)를 검사하는 테스트는 `maxExclusiveAreaSqm`을 따로 오버라이드한다.
+ */
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
+  const areaBucket = overrides.areaBucket ?? 84;
   return {
     complexKey: "11680|대치동|2015|테스트",
     complexName: "테스트",
     regionCode: "11680",
     legalDongName: "대치동",
     builtYear: 2015,
-    areaBucket: 84,
-    medianPrice: 300_000_000,
+    areaBucket,
+    maxExclusiveAreaSqm: areaBucket,
     tradeCount: 5,
     minPrice: 280_000_000,
     maxPrice: 320_000_000,
@@ -101,18 +110,14 @@ describe("buildComplexList", () => {
     }
   });
 
-  it("부담률을 maxPrice로 계산한다 — medianPrice가 아니다", () => {
+  it("부담률을 maxPrice로 계산한다 — 범위의 가운데값이 아니다", () => {
     // 범위가 넓은 단지에서 둘이 갈린다. 위쪽으로 계산해야 틀리더라도
     // 부담이 표시보다 작아지는 쪽으로 틀린다.
-    const wide = build([
-      unit({ minPrice: 100_000_000, medianPrice: 150_000_000, maxPrice: 300_000_000 }),
-    ]);
-    const atMedian = build([
-      unit({ minPrice: 150_000_000, medianPrice: 150_000_000, maxPrice: 150_000_000 }),
-    ]);
+    const wide = build([unit({ minPrice: 100_000_000, maxPrice: 300_000_000 })]);
+    const narrow = build([unit({ minPrice: 150_000_000, maxPrice: 150_000_000 })]);
     const wideLoan = [...wide.withinSafe, ...wide.beyondSafe][0]?.burden.neededLoan;
-    const medianLoan = [...atMedian.withinSafe, ...atMedian.beyondSafe][0]?.burden.neededLoan;
-    expect(wideLoan).toBeGreaterThan(medianLoan ?? 0);
+    const narrowLoan = [...narrow.withinSafe, ...narrow.beyondSafe][0]?.burden.neededLoan;
+    expect(wideLoan).toBeGreaterThan(narrowLoan ?? 0);
   });
 
   it("안전 덩어리의 모든 행이 안전 등급이다 — 두 계산이 같은 함수를 쓴다", () => {
@@ -121,7 +126,7 @@ describe("buildComplexList", () => {
     const prices = [50_000_000, 150_000_000, 250_000_000, 350_000_000, 450_000_000];
     const r = build(
       prices.map((maxPrice, i) =>
-        unit({ complexKey: `u${i}`, maxPrice, minPrice: maxPrice, medianPrice: maxPrice }),
+        unit({ complexKey: `u${i}`, maxPrice, minPrice: maxPrice }),
       ),
     );
     expect(r.withinSafe.length).toBeGreaterThan(0);
@@ -218,13 +223,13 @@ describe("buildComplexList", () => {
       const wouldHavePassedOldFilter = COMPLEX_UNITS.filter(
         (u) =>
           u.maxPrice <= r.affordablePrice &&
-          ownFundsRequired(u.maxPrice, { ...p, exclusiveAreaSqm: u.areaBucket }, rules) >
+          ownFundsRequired(u.maxPrice, { ...p, exclusiveAreaSqm: u.maxExclusiveAreaSqm }, rules) >
             cash,
       );
       expect(wouldHavePassedOldFilter.length).toBeGreaterThan(0);
 
       for (const e of [...r.withinSafe, ...r.beyondSafe]) {
-        const rowProfile = { ...p, exclusiveAreaSqm: e.unit.areaBucket };
+        const rowProfile = { ...p, exclusiveAreaSqm: e.unit.maxExclusiveAreaSqm };
         expect(
           ownFundsRequired(e.unit.maxPrice, rowProfile, rules),
         ).toBeLessThanOrEqual(cash);
@@ -247,6 +252,37 @@ describe("buildComplexList", () => {
       expect(large?.burden.neededLoan).toBeGreaterThan(small?.burden.neededLoan ?? 0);
     });
 
+    it("areaBucket이 같은 85여도 maxExclusiveAreaSqm이 85 초과면 농특세가 붙는다 — 반올림 경계 결함 잠금", () => {
+      // 핵심 시나리오: 실제 전용면적 85.4㎡는 Math.round(85.4) = 85로
+      // 반올림된다. areaBucket(85)만 보면 85㎡ 이하로 오판해 농특세를
+      // 빼고 계산한다 — maxExclusiveAreaSqm(85.4)을 써야 초과분이 잡힌다.
+      const price = 300_000_000;
+      const r = build([
+        unit({
+          complexKey: "over",
+          areaBucket: 85,
+          maxExclusiveAreaSqm: 85.4,
+          maxPrice: price,
+          minPrice: price,
+        }),
+        unit({
+          complexKey: "under",
+          areaBucket: 85,
+          maxExclusiveAreaSqm: 85,
+          maxPrice: price,
+          minPrice: price,
+        }),
+      ]);
+      const entries = [...r.withinSafe, ...r.beyondSafe];
+      const over = entries.find((e) => e.unit.complexKey === "over");
+      const under = entries.find((e) => e.unit.complexKey === "under");
+      expect(over).toBeDefined();
+      expect(under).toBeDefined();
+      // 농특세가 붙는 만큼 부대비용이 늘어 같은 가격·같은 areaBucket에서도
+      // 더 많이 빌려야 한다.
+      expect(over?.burden.neededLoan).toBeGreaterThan(under?.burden.neededLoan ?? 0);
+    });
+
     it("결함 회귀 잠금: 프로필 하나의 면적으로 모든 행을 봐주면 넓은 평형이 부당하게 통과했다", () => {
       // 프로필은 농특세가 붙지 않는 면적(84㎡)으로 가정했지만, 실제
       // 행(130㎡)은 초과라 농특세가 붙는다. 프로필 면적만으로 감당
@@ -263,7 +299,7 @@ describe("buildComplexList", () => {
       });
 
       // 전제 확인: 130㎡ 기준으로 다시 재면 이 가격은 실제로 가용현금을 넘는다.
-      const rowProfile = { ...p, exclusiveAreaSqm: wideUnit.areaBucket };
+      const rowProfile = { ...p, exclusiveAreaSqm: wideUnit.maxExclusiveAreaSqm };
       expect(ownFundsRequired(wideUnit.maxPrice, rowProfile, rules)).toBeGreaterThan(cash);
       // 그리고 프로필 하나(84㎡)만으로 판정하면 옛 결함처럼 통과했을
       // 가격이라는 것도 함께 확인한다.
@@ -320,7 +356,6 @@ describe("buildComplexList", () => {
         areaBucket: 88,
         minPrice: 2_070_000_000,
         maxPrice: 2_070_000_000,
-        medianPrice: 2_070_000_000,
       });
 
       const r = build([wide], p);

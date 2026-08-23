@@ -386,6 +386,48 @@ describe("aggregate", () => {
     expect(units[0]?.changeRate12mLowConfidence).toBe(false);
   });
 
+  it("maxExclusiveAreaSqm: 버킷에 실제로 들어간 거래들의 최대 전용면적을 낸다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ exclusiveAreaSqm: 84.6 }), // Math.round(84.6) = 85
+        trade({ exclusiveAreaSqm: 85.4 }), // Math.round(85.4) = 85, 실제로는 85㎡ 초과
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units).toHaveLength(1);
+    expect(units[0]?.areaBucket).toBe(85);
+    expect(units[0]?.maxExclusiveAreaSqm).toBe(85.4);
+  });
+
+  it("maxExclusiveAreaSqm: 85㎡ 이하로만 구성된 버킷은 최대값도 85 이하다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ exclusiveAreaSqm: 83.6 }), // Math.round(83.6) = 84
+        trade({ exclusiveAreaSqm: 84.2 }), // Math.round(84.2) = 84
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.maxExclusiveAreaSqm).toBe(84.2);
+  });
+
+  it("maxExclusiveAreaSqm: 최근 6개월 창 밖의(하지만 asOf 이전) 거래도 반영한다 — 물리적 면적은 시간과 무관하다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 최근 6개월 안: 84.6㎡ (버킷 85)
+        trade({ exclusiveAreaSqm: 84.6, contractDate: "2026-07-01" }),
+        // 8개월 전(중위값에서는 제외되지만 같은 버킷 85): 85.4㎡
+        trade({ exclusiveAreaSqm: 85.4, contractDate: "2025-12-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units).toHaveLength(1);
+    expect(units[0]?.tradeCount).toBe(1); // 대표가는 최근 거래 1건만
+    expect(units[0]?.maxExclusiveAreaSqm).toBe(85.4); // 하지만 면적은 그룹 전체에서 본다
+  });
+
   it("aggregate 산출물은 동일 단지 내에서 areaBucket으로 정렬된다", () => {
     // 동일 단지, 다른 평형으로 역순 입력: 101, 84
     const units = aggregate(
