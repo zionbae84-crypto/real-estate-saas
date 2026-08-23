@@ -431,3 +431,92 @@ body {
     animation-iteration-count: 1 !important;
   }
 }
+
+/* 단지 목록 — 지역 필터와 목록 */
+.region-filter {
+  margin-top: 2rem;
+}
+
+.region-filter-title {
+  font-weight: 600;
+  margin: 0 0 0.5rem;
+}
+
+.region-filter-options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.complex-list {
+  margin-top: 2rem;
+}
+
+/*
+ * 덩어리 헤더에 의미 색을 준다. 색만으로 말하지 않는다 — 헤더 문구
+ * 자체가 "무리 없이" / "부담이 커요"를 이미 말하고, 색은 그것을 반복한다.
+ */
+.complex-group {
+  margin: 1.5rem 0 0.5rem;
+  font-size: 1rem;
+}
+
+.complex-group--safe {
+  color: var(--safe);
+}
+
+.complex-group--beyond {
+  color: var(--caution);
+}
+
+.complex-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.complex-row {
+  border-top: 1px solid var(--border);
+  padding: 0.75rem 0;
+}
+
+.complex-row p {
+  margin: 0.15rem 0;
+}
+
+.complex-range {
+  font-weight: 600;
+}
+
+.complex-trades,
+.complex-built {
+  font-weight: 400;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.complex-burden {
+  font-size: 0.9rem;
+}
+
+.complex-burden[data-level="safe"] .complex-level { color: var(--safe); }
+.complex-burden[data-level="caution"] .complex-level { color: var(--caution); }
+.complex-burden[data-level="danger"] .complex-level { color: var(--danger); }
+
+.complex-level {
+  font-weight: 600;
+}
+
+.complex-more {
+  margin-top: 1rem;
+}
+
+.complex-empty,
+.complex-freshness {
+  color: var(--seed-color-fg-neutral-muted);
+  font-size: 0.9rem;
+}
+
+.complex-no-loan {
+  color: var(--safe);
+  font-weight: 600;
+}

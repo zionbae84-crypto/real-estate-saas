@@ -1,7 +1,6 @@
 import { calcAffordablePrice, searchMaxPrice } from "./affordable-price";
-import { calcMaxLoan } from "./loan-limit";
+import { calcBurdenAt } from "./burden";
 import { assertValidProfile } from "./profile";
-import { calcSafetyScore } from "./safety";
 import type { BuyerProfile, Rules } from "./types";
 
 /**
@@ -11,6 +10,13 @@ import type { BuyerProfile, Rules } from "./types";
  * 이 제품이 다른 계산기와 갈리는 지점이다. 다른 앱은 "최대 얼마까지 살 수
  * 있는가"에서 멈추지만, 그 최대치는 대개 상환 부담이 이미 위험한 가격이다.
  * 이 값은 그 옆에 나란히 놓여 "여기까지가 무리 없는 선"을 말한다.
+ *
+ * 부담은 **필요 대출**로 잰다(`calcBurdenAt`) — 받을 수 있는 최대가 아니라
+ * 그 집을 사는 데 모자란 만큼이다. 최대 대출로 재던 시절 현금 50억·소득
+ * 2천만원인 프로필의 안전선이 2억으로 나왔다. 안전한 방향이지만 쓸모가 없다.
+ *
+ * 단지 목록의 부담률도 같은 `calcBurdenAt`을 쓴다. 따로 계산하면 목록이
+ * "안전 구역에 있는데 부담률은 위험"인 행을 보여주게 된다.
  *
  * 상한은 실구매력이다 — **살 수 없는 가격을 안전하다고 말할 수 없다.**
  *
@@ -55,7 +61,6 @@ export function calcSafePrice(
 
   return searchMaxPrice(rules, (price) => {
     if (price > affordable) return false;
-    const loan = calcMaxLoan(profile, rules, price);
-    return calcSafetyScore(profile, rules, loan.amount).level === "safe";
+    return calcBurdenAt(profile, rules, price).safety.level === "safe";
   });
 }

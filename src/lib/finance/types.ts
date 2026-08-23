@@ -217,6 +217,19 @@ export interface Rules {
     /** upTo 오름차순, 마지막은 null(무한대). upTo는 포함 */
     brackets: Array<{ upTo: number | null; amount: number }>;
   };
+  /** `regulatedRegionCodes`의 근거를 사람이 읽는 문장으로 적어 둔 것 */
+  _regulatedRegionCodesNote?: string;
+  /**
+   * 규제지역인 시군구 코드.
+   *
+   * 화면이 지역을 고르면 이 목록으로 `isRegulatedArea`를 정한다. 코드에
+   * 박지 않고 룰셋에 두는 이유는 규제지역 지정이 바뀌기 때문이다 —
+   * 바뀔 때 코드를 고치게 만들면 안 된다.
+   *
+   * **여기 없는 지역은 비규제로 본다.** 한도가 높게 나오는 방향이므로,
+   * 지역을 넓힐 때 이 목록을 함께 갱신하지 않으면 위험한 쪽으로 틀린다.
+   */
+  regulatedRegionCodes: readonly string[];
   /** DSR 한도 (0.4 = 40%) */
   dsrLimit: number;
   safetyThreshold: {

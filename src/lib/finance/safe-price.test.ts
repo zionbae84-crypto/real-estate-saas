@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import rawRules from "../../../rules/2026-08.json";
 import { calcAffordablePrice, PRICE_STEP } from "./affordable-price";
-import { calcMaxLoan } from "./loan-limit";
+import { calcAcquisitionCosts } from "./acquisition-cost";
 import { parseRules } from "./rules";
 import { calcSafePrice } from "./safe-price";
 import { calcSafetyScore } from "./safety";
@@ -24,8 +24,11 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
 
 /** 그 가격에서 안전 등급이 safe인가 */
 function isSafeAt(p: BuyerProfile, price: number): boolean {
-  const loan = calcMaxLoan(p, rules, price);
-  return calcSafetyScore(p, rules, loan.amount).level === "safe";
+  // 오라클도 calcSafePrice와 같은 모델을 써야 한다 — 필요 대출이다.
+  // 받을 수 있는 최대가 아니라 그 집을 사는 데 모자란 만큼을 빌린다.
+  const costs = calcAcquisitionCosts(price, p, rules).total;
+  const neededLoan = Math.max(0, price + costs - p.cash);
+  return calcSafetyScore(p, rules, neededLoan).level === "safe";
 }
 
 /** 브루트포스로 안전 최대치를 구한다. 안전한 가격이 하나도 없으면 null */
@@ -194,5 +197,20 @@ describe("calcSafePrice", () => {
         expect(isSafeAt(p, safe)).toBe(true);
       }
     }
+  });
+
+  it("현금이 많으면 안전선이 실구매력에 가깝다", () => {
+    // 최대 대출 기준이던 시절 이 프로필의 안전선은 2.05억이었다.
+    // 현금 50억을 들고 있는 사람에게 무리 없는 선이 2억이라는 답은
+    // 안전한 방향이지만 쓸모가 없다.
+    const p = profile({
+      cash: 5_000_000_000,
+      annualIncome: 20_000_000,
+      isFirstTimeBuyer: false,
+    });
+    const safe = calcSafePrice(p, rules);
+    const affordable = calcAffordablePrice(p, rules).affordablePrice;
+    expect(safe).not.toBeNull();
+    expect(safe as number).toBeGreaterThan(affordable * 0.9);
   });
 });

@@ -1,10 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { AssumptionLine } from "./components/AssumptionLine";
 import { BudgetResult } from "./components/BudgetResult";
+import { ComplexList } from "./components/ComplexList";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { ProfileForm } from "./components/ProfileForm";
+import { RegionFilter } from "./components/RegionFilter";
 import { SafetyBadge } from "./components/SafetyBadge";
+import { COMPLEX_UNITS, DATA_AS_OF, REGIONS } from "./data/complexes";
+import { buildComplexList } from "./lib/complex-list";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { rules, useAffordability } from "./state/useAffordability";
 import type { AssumableField } from "./state/useProfileForm";
@@ -18,6 +22,43 @@ export function App() {
   // AssumptionLine의 버튼도 ProfileForm의 openField 분기도 도달할 방법이
   // 없다(둘 다 그 자체로는 완결돼 있지만 이어 주는 배선이 없었다).
   const [openField, setOpenField] = useState<AssumableField | null>(null);
+  const [regionCodes, setRegionCodes] = useState<string[]>([]);
+  // ComplexList의 PAGE_SIZE와 같은 값이다 — 각 덩어리에서 이만큼씩 보여준다.
+  const [visibleCount, setVisibleCount] = useState(10);
+
+  const complexList = useMemo(
+    () =>
+      profile === null
+        ? null
+        : buildComplexList({
+            units: COMPLEX_UNITS,
+            profile,
+            rules,
+            regionCodes,
+          }),
+    [profile, regionCodes],
+  );
+
+  /**
+   * 지역을 고르면 규제지역 여부가 그 지역에서 정해진다.
+   *
+   * **폼 상태에 직접 반영한다.** 목록 전용 프로필을 따로 만들면 위의 최대
+   * 가격과 아래 목록이 서로 다른 프로필로 계산돼, 화면이 두 개의 다른
+   * 예산을 동시에 말하게 된다.
+   *
+   * 하나라도 규제지역이면 규제지역으로 본다 — 여러 구를 골랐을 때 한쪽만
+   * 비규제라고 한도를 높게 잡으면 그 구의 단지에 대해 과대 계상이 된다.
+   */
+  function handleRegionChange(codes: string[]) {
+    setRegionCodes(codes);
+    setVisibleCount(10);
+    if (codes.length > 0) {
+      setField(
+        "isRegulatedArea",
+        codes.some((c) => rules.regulatedRegionCodes.includes(c)),
+      );
+    }
+  }
 
   return (
     <main className="app">
@@ -51,6 +92,23 @@ export function App() {
                 />
                 <SafetyBadge safety={affordability.safety} />
               </>
+            )}
+            <RegionFilter
+              regions={REGIONS}
+              selected={regionCodes}
+              onChange={handleRegionChange}
+            />
+            {complexList !== null && (
+              <ComplexList
+                result={complexList}
+                dataAsOf={DATA_AS_OF}
+                hasRegionFilter={regionCodes.length > 0}
+                noRepaymentCapacity={
+                  affordability.result.loanLimit.breakdown.DSR === 0
+                }
+                visibleCount={visibleCount}
+                onShowMore={() => setVisibleCount((n) => n + 10)}
+              />
             )}
           </>
         )}

@@ -158,4 +158,30 @@ describe("예산 계산기 통합", () => {
 
     expect(readAffordablePrice()).toBeGreaterThan(priceBefore);
   });
+
+  it("지역을 고르면 규제지역 가정이 문구에서 빠진다", async () => {
+    // 근거가 "모르니까 안전하게 규제지역"에서 "당신이 고른 지역이라서
+    // 규제지역"으로 바뀐다 — 그 순간 그것은 더 이상 가정이 아니다.
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
+
+    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /강남구/ }));
+
+    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+  });
+
+  it("지역을 고르면 목록이 그 지역만 남는다", async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
+
+    const before = screen.queryAllByRole("listitem").length;
+    await userEvent.click(screen.getByRole("checkbox", { name: /강남구/ }));
+    const after = screen.queryAllByRole("listitem").length;
+
+    expect(after).toBeLessThanOrEqual(before);
+  });
 });

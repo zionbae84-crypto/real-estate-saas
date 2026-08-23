@@ -1,0 +1,13 @@
+{
+  "generatedAt": "2026-08-22T09:14:03.592Z",
+  "dataAsOf": "2026-08",
+  "rulesVersion": "2026-03",
+  "complexCount": 907,
+  "unitCount": 1694,
+  "lowConfidenceUnitCount": 1179,
+  "regionCodes": [
+    "11650",
+    "11680",
+    "11710"
+  ]
+}
