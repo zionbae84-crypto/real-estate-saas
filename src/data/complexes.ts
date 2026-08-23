@@ -31,6 +31,19 @@ export const AGGREGATION_WINDOW_LABEL = `최근 ${AGGREGATION_WINDOW_MONTHS}개�
  * 것이 156개 있다. 타입에서 빼 두면 실수로 화면에 흘리기 어려워진다.
  */
 export interface ComplexUnit {
+  /**
+   * 단지를 가르는 키. **국토부가 주는 단지 고유 ID**(`"11680-314"` =
+   * 시군구코드-일련번호)다.
+   *
+   * 예전에는 `지역코드|법정동|건축년도|정규화한 이름`을 이어붙인 값이었다.
+   * 이름이 키에 들어 있어 표기가 조금만 흔들려도 한 단지가 여러 개로
+   * 갈렸고(갈리면 각 조각의 거래 건수가 줄어 화면이 실제보다 근거가 튼튼한
+   * 척하게 된다), 같은 이름의 다른 단지는 한 덩어리로 뭉쳤다.
+   *
+   * **화면에 내지 않는다.** 사용자가 찾는 것은 ID가 아니라 이름이다. 이
+   * 값은 묶고 구분하는 데에만 쓴다 — React 키를 만들 때는 평형까지 붙여야
+   * 유일해진다(`ComplexList.tsx`의 `unitKey` 참고).
+   */
   complexKey: string;
   complexName: string;
   regionCode: string;
@@ -48,6 +61,23 @@ export interface ComplexUnit {
    * 클수록 농특세가 붙어 부대비용이 커지고 실구매력이 작아진다.
    */
   maxExclusiveAreaSqm: number;
+  /**
+   * 이 단지가 **토지임대부**인가. `"Y"` / `"N"` / `null`(모름).
+   *
+   * 토지 소유권이 없는 집이라 사는 사람이 반드시 알아야 하는 "사지 말아야
+   * 할" 신호다. 파이프라인은 그 단지의 **모든** 거래를 보고 정하며, 한
+   * 건이라도 `"Y"`면 `"Y"`다 — 놓치는 쪽이 낙관 방향이라 판정을 한쪽으로
+   * 기울여 뒀다(`data/README.md` 참고).
+   *
+   * **`!== "Y"`를 "토지임대부 아님"으로 읽지 말 것.** "아님"은 `=== "N"`
+   * 하나뿐이고 `null`은 아직 모른다는 뜻이다. 둘을 뭉쳐 "아님"으로 그리면
+   * 화면이 "토지 소유권이 있는 집"이라는 없는 사실을 말하게 되고, 사용자는
+   * 없는 근거로 안심한다.
+   *
+   * **아직 화면에 붙이지 않았다.** 붙일 때는 `null`을 "아님"이 아니라
+   * "확인이 필요해요" 쪽으로 그려야 한다.
+   */
+  landLeasehold: "Y" | "N" | null;
   tradeCount: number;
   minPrice: number;
   maxPrice: number;
@@ -93,7 +123,30 @@ export interface RegionSummary {
  * gzip 68KB다. 수도권 66개 시군구로 넓히면 이 방식은 무효가 되고 지역별
  * 분할이 답이 된다 — 스펙 §9 참고.
  */
-export const COMPLEX_UNITS: readonly ComplexUnit[] = rawComplexes;
+/**
+ * 번들에 실린 `landLeasehold` 값을 세 값 중 하나로 좁힌다.
+ *
+ * JSON을 그대로 가져오면 이 필드의 타입이 `string`으로 넓어져 화면 코드가
+ * `"Y"`/`"N"` 말고 무엇이 올 수 있는지 알 수 없게 된다. 캐스팅으로 눌러
+ * 덮으면 타입만 좁아지고 실제 값은 그대로라 아무것도 보장하지 못한다.
+ *
+ * 그래서 값을 실제로 확인해 좁힌다. **모르는 값은 `null`(모름)로 간다 —
+ * `"N"`(아님)으로 가지 않는다.** 이 방향이 이 함수의 요점이다: 예상 못한
+ * 값을 "아님"으로 접으면 화면이 "토지 소유권이 있는 집"이라는 없는 사실을
+ * 말하고, 사용자는 없는 근거로 안심한다.
+ *
+ * 던지지 않는 이유: 값 하나가 이상하다고 앱 전체가 흰 화면이 되면 나머지
+ * 1,691개 평형의 멀쩡한 정보까지 사라진다. 모르는 것을 모른다고 표시하는
+ * 쪽이 더 정직하고 덜 파괴적이다.
+ */
+function narrowLandLeasehold(value: string | null): "Y" | "N" | null {
+  return value === "Y" || value === "N" ? value : null;
+}
+
+export const COMPLEX_UNITS: readonly ComplexUnit[] = rawComplexes.map((u) => ({
+  ...u,
+  landLeasehold: narrowLandLeasehold(u.landLeasehold),
+}));
 
 export const REGIONS: readonly RegionSummary[] = rawRegions;
 

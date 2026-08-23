@@ -2,7 +2,15 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MAX_PAGES, buildTargets, fetchOne, redactKey, runFetch, shouldSkip } from "./fetch";
+import {
+  CACHE_SCHEMA_VERSION,
+  MAX_PAGES,
+  buildTargets,
+  fetchOne,
+  redactKey,
+  runFetch,
+  shouldSkip,
+} from "./fetch";
 
 describe("buildTargets", () => {
   it("지역 × 개월 수만큼 만든다", () => {
@@ -60,6 +68,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 const SAMPLE_ITEM = {
   sggCd: "11680",
+  aptSeq: "11680-314",
   umdNm: "수서동",
   aptNm: "까치마을",
   buildYear: 1993,
@@ -878,7 +887,116 @@ describe("runFetch — I5: cancelled(해제 거래)이 로그·캐시 봉투에 
   });
 });
 
+/**
+ * 캐시 파일을 쓴다. `schemaVersion`을 명시하지 않으면 현재 버전을 붙인다 —
+ * 이 헬퍼를 쓰는 테스트 대부분은 "형식은 최신인데 내용이 이러할 때"를 본다.
+ * 버전 불일치 자체는 그것만 보는 테스트에서 직접 넘겨 확인한다.
+ */
 function mkdtempCache(rawDir: string, filename: string, data: unknown): void {
   mkdirSync(rawDir, { recursive: true });
-  writeFileSync(join(rawDir, filename), JSON.stringify(data));
+  const withVersion =
+    typeof data === "object" && data !== null && !Array.isArray(data)
+      ? { schemaVersion: CACHE_SCHEMA_VERSION, ...(data as Record<string, unknown>) }
+      : data;
+  writeFileSync(join(rawDir, filename), JSON.stringify(withVersion));
 }
+
+describe("캐시 형식 버전 — 옛 캐시를 조용히 읽지 않는다", () => {
+  let root: string;
+  let rawDir: string;
+  let dataDir: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "fetch-schema-test-"));
+    rawDir = join(root, "raw");
+    dataDir = root;
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+    vi.unstubAllGlobals();
+  });
+
+  /** 닫힌 달(캐시 적중 경로가 도는 달)에 봉투를 심어 두고 fetch를 돌린다. */
+  async function runWithCache(envelope: Record<string, unknown>) {
+    mkdirSync(rawDir, { recursive: true });
+    writeFileSync(join(rawDir, "11680-202607.json"), JSON.stringify(envelope));
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(sampleBody(1))));
+    vi.stubGlobal("fetch", fetchMock);
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now: new Date("2026-08-15T00:00:00Z"),
+      months: 2,
+      key: "k",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+    return { log, fetchMock, entry: log.find((e) => e.yearMonth === "202607") };
+  }
+
+  it("schemaVersion이 없는 옛 봉투는 캐시 없음으로 보고 다시 받는다", async () => {
+    const { entry } = await runWithCache({ trades: [{ dummy: true }], failures: 0, cancelled: 0 });
+    expect(entry?.status).toBe("fetched");
+    expect(entry?.cacheSchemaMismatch).toBe(true);
+  });
+
+  it("schemaVersion이 다르면 캐시 없음으로 보고 다시 받는다", async () => {
+    const { entry } = await runWithCache({
+      schemaVersion: CACHE_SCHEMA_VERSION + 1,
+      trades: [{ dummy: true }],
+      failures: 0,
+      cancelled: 0,
+    });
+    expect(entry?.status).toBe("fetched");
+    expect(entry?.cacheSchemaMismatch).toBe(true);
+  });
+
+  it("형식 불일치를 캐시 손상으로 세지 않는다 — 사람이 할 일이 다르다", async () => {
+    const { entry } = await runWithCache({ trades: [{ dummy: true }], failures: 0, cancelled: 0 });
+    expect(entry?.cacheCorrupted).toBeUndefined();
+  });
+
+  it("진짜 손상은 여전히 cacheCorrupted로 센다 — 형식 불일치와 뭉치지 않는다", async () => {
+    mkdirSync(rawDir, { recursive: true });
+    writeFileSync(join(rawDir, "11680-202607.json"), "{ 깨진 JSON");
+    const fetchMock = vi.fn(() => Promise.resolve(jsonResponse(sampleBody(1))));
+    vi.stubGlobal("fetch", fetchMock);
+    const log = await runFetch({
+      rawDir,
+      dataDir,
+      regions: ["11680"],
+      now: new Date("2026-08-15T00:00:00Z"),
+      months: 2,
+      key: "k",
+      wait: NO_WAIT,
+      throttle: NO_WAIT,
+    });
+    const entry = log.find((e) => e.yearMonth === "202607");
+    expect(entry?.cacheCorrupted).toBe(true);
+    expect(entry?.cacheSchemaMismatch).toBeUndefined();
+  });
+
+  it("현재 버전 봉투는 그대로 캐시 적중이다 — 매번 다시 받지 않는다", async () => {
+    const { entry, fetchMock } = await runWithCache({
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      trades: [{ dummy: true }],
+      failures: 0,
+      cancelled: 0,
+    });
+    expect(entry?.status).toBe("cached");
+    expect(entry?.cacheSchemaMismatch).toBeUndefined();
+    // 이번 달(202608)만 부르고 닫힌 달은 캐시를 썼다.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("새로 쓰는 봉투에는 현재 schemaVersion이 박힌다", async () => {
+    await runWithCache({ trades: [{ dummy: true }], failures: 0, cancelled: 0 });
+    const written = JSON.parse(readFileSync(join(rawDir, "11680-202607.json"), "utf8")) as {
+      schemaVersion?: unknown;
+    };
+    expect(written.schemaVersion).toBe(CACHE_SCHEMA_VERSION);
+  });
+});
+

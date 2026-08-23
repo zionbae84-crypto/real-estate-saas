@@ -23,9 +23,8 @@ export function loadReportConfig(): ReportConfig {
   ) as Record<string, unknown>;
 
   const keys = [
-    "underMergeMaxEditDistance",
-    "overMergeMinPriceRatio",
-    "overMergeMinTradeCount",
+    "widePriceRangeMinRatio",
+    "widePriceRangeMinTradeCount",
     "lowConfidenceMinTrades",
     "emptyRatioWarnThreshold",
   ] as const;

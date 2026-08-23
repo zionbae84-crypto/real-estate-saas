@@ -1,12 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { aggregate, areaBucket, median } from "./aggregate";
+import { aggregate, areaBucket, median, mergeLandLeasehold, pickComplexName } from "./aggregate";
 import { normalizeAll } from "./normalize";
 import type { RawTrade, ReportConfig } from "./types";
 
 const config: ReportConfig = {
-  underMergeMaxEditDistance: 2,
-  overMergeMinPriceRatio: 2.0,
-  overMergeMinTradeCount: 4,
+  widePriceRangeMinRatio: 2.0,
+  widePriceRangeMinTradeCount: 4,
   lowConfidenceMinTrades: 3,
   emptyRatioWarnThreshold: 0.2,
 };
@@ -17,12 +16,18 @@ function trade(overrides: Partial<RawTrade> = {}): RawTrade {
   return {
     regionCode: "11680",
     legalDongName: "대치동",
+    aptSeq: "11680-100",
     complexName: "은마",
     builtYear: 1979,
     exclusiveAreaSqm: 84.43,
     floor: 5,
     price: 2_000_000_000,
     contractDate: "2026-07-10",
+    landLeasehold: "N",
+    address: {
+      roadNm: "삼성로", roadNmCd: "3122005", bonbun: "0316",
+      bubun: "0000", jibun: "316", umdCd: "10600",
+    },
     ...overrides,
   };
 }
@@ -265,34 +270,20 @@ describe("aggregate", () => {
     expect(units[0]?.changeRate12m).toBe(1);
   });
 
-  it("aggregate 산출물은 complexKey로 정렬된다", () => {
+  it("aggregate 산출물은 complexKey(aptSeq)로 정렬된다", () => {
     const units = aggregate(
       normalizeAll([
-        // 의도적으로 역순으로 입력: C, A, B
-        trade({
-          builtYear: 2000,
-          complexName: "C아파트",
-          price: 1_000_000_000,
-        }),
-        trade({
-          builtYear: 2000,
-          complexName: "A아파트",
-          price: 2_000_000_000,
-        }),
-        trade({
-          builtYear: 2000,
-          complexName: "B아파트",
-          price: 3_000_000_000,
-        }),
+        // 의도적으로 역순으로 입력. 이름이 아니라 aptSeq가 정렬 기준이다 —
+        // 일부러 이름 순서와 aptSeq 순서를 어긋나게 뒀다.
+        trade({ aptSeq: "11680-3", complexName: "A아파트", price: 1_000_000_000 }),
+        trade({ aptSeq: "11680-1", complexName: "C아파트", price: 2_000_000_000 }),
+        trade({ aptSeq: "11680-2", complexName: "B아파트", price: 3_000_000_000 }),
       ]),
       AS_OF,
       config,
     );
     expect(units).toHaveLength(3);
-    // complexKey로 정렬되었으므로 A < B < C 순서여야 함
-    expect(units[0]?.complexName).toContain("A");
-    expect(units[1]?.complexName).toContain("B");
-    expect(units[2]?.complexName).toContain("C");
+    expect(units.map((u) => u.complexKey)).toEqual(["11680-1", "11680-2", "11680-3"]);
   });
 
   it("changeRate3m: 두 창 모두 거래가 충분하면 lowConfidence 플래그가 서지 않는다", () => {
@@ -556,3 +547,140 @@ describe("층 범위", () => {
     expect(low[0]?.minFloor).toBe(1);
   });
 });
+
+describe("mergeLandLeasehold", () => {
+  it("한 건이라도 Y면 Y다 — 나머지가 전부 N이어도", () => {
+    expect(mergeLandLeasehold(["N", "N", "Y", "N"])).toBe("Y");
+  });
+
+  it("Y가 모름과 섞여도 Y다", () => {
+    expect(mergeLandLeasehold([null, "Y", null])).toBe("Y");
+  });
+
+  it("Y가 없고 모르는 값이 하나라도 있으면 모름(null)이다 — N으로 접지 않는다", () => {
+    expect(mergeLandLeasehold(["N", "N", null])).toBeNull();
+  });
+
+  it("모두 N일 때만 N이다", () => {
+    expect(mergeLandLeasehold(["N", "N", "N"])).toBe("N");
+  });
+
+  it("빈 배열은 모름이다 — 근거 없이 '아님'이라고 단정하지 않는다", () => {
+    expect(mergeLandLeasehold([])).toBeNull();
+  });
+
+  it("다수결이 아니다 — Y 한 건이 N 아흔아홉 건을 이긴다", () => {
+    const values = [...Array<"N">(99).fill("N"), "Y" as const];
+    expect(mergeLandLeasehold(values)).toBe("Y");
+  });
+});
+
+describe("aggregate — 토지임대부", () => {
+  it("그 단지 거래 중 한 건이라도 Y면 평형이 Y로 나온다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ landLeasehold: "N", contractDate: "2026-07-01" }),
+        trade({ landLeasehold: "Y", contractDate: "2026-07-02" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.landLeasehold).toBe("Y");
+  });
+
+  it("모르는 값이 섞이면 모름(null)으로 나온다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ landLeasehold: "N", contractDate: "2026-07-01" }),
+        trade({ landLeasehold: null, contractDate: "2026-07-02" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.landLeasehold).toBeNull();
+  });
+
+  it("창이 최근 6개월이 아니라 그룹 전체다 — 오래된 Y 거래도 그 단지의 사실이다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 6개월 창 밖(대표가에는 안 들어간다)
+        trade({ landLeasehold: "Y", contractDate: "2025-09-01" }),
+        // 창 안
+        trade({ landLeasehold: "N", contractDate: "2026-07-02" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.tradeCount).toBe(1);
+    expect(units[0]?.landLeasehold).toBe("Y");
+  });
+});
+
+describe("pickComplexName — 화면에 쓸 대표 이름", () => {
+  const named = (complexName: string, contractDate: string) =>
+    normalizeAll([trade({ complexName, contractDate })])[0]!;
+
+  it("가장 많이 쓰인 이름을 고른다 — 오타 한 건이 대표를 차지하지 못한다", () => {
+    expect(
+      pickComplexName([
+        named("래미안대치팰리스", "2026-07-01"),
+        named("래미안대치팰리스", "2026-07-02"),
+        named("래미안대치팰리스오타", "2026-07-03"),
+      ]),
+    ).toBe("래미안대치팰리스");
+  });
+
+  it("건수가 같으면 계약일이 더 최근인 이름을 고른다 — 개명이면 새 이름이 이긴다", () => {
+    expect(
+      pickComplexName([named("옛이름", "2026-01-01"), named("새이름", "2026-07-01")]),
+    ).toBe("새이름");
+  });
+
+  it("건수도 날짜도 같으면 사전순으로 못박는다 — 같은 입력이면 같은 결과여야 한다", () => {
+    expect(pickComplexName([named("나단지", "2026-07-01"), named("가단지", "2026-07-01")])).toBe(
+      "가단지",
+    );
+  });
+
+  it("입력 순서가 바뀌어도 같은 이름이 나온다", () => {
+    const a = named("가장많은이름", "2026-07-01");
+    const b = named("가장많은이름", "2026-07-02");
+    const c = named("드문이름", "2026-07-03");
+    expect(pickComplexName([a, b, c])).toBe(pickComplexName([c, b, a]));
+  });
+
+  it("거래가 없으면 빈 문자열이다", () => {
+    expect(pickComplexName([])).toBe("");
+  });
+});
+
+describe("aggregate — 단지 이름", () => {
+  it("같은 단지의 모든 평형이 같은 이름을 쓴다 — 한 단지가 둘로 보이면 안 된다", () => {
+    const units = aggregate(
+      normalizeAll([
+        // 같은 aptSeq, 평형만 다르고 이름 표기가 흔들린다.
+        trade({ exclusiveAreaSqm: 84.4, complexName: "은마", contractDate: "2026-07-01" }),
+        trade({ exclusiveAreaSqm: 84.4, complexName: "은마", contractDate: "2026-07-02" }),
+        trade({ exclusiveAreaSqm: 101.2, complexName: "은마아파트단지", contractDate: "2026-07-03" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units).toHaveLength(2);
+    expect(new Set(units.map((u) => u.complexName)).size).toBe(1);
+    expect(units[0]?.complexName).toBe("은마");
+  });
+
+  it("입력 순서가 바뀌어도 같은 이름이 나온다 — group[0]에 기대지 않는다", () => {
+    const trades = [
+      trade({ complexName: "많은이름", contractDate: "2026-07-01" }),
+      trade({ complexName: "많은이름", contractDate: "2026-07-02" }),
+      trade({ complexName: "드문이름", contractDate: "2026-07-03" }),
+    ];
+    const forward = aggregate(normalizeAll([...trades]), AS_OF, config);
+    const reversed = aggregate(normalizeAll([...trades].reverse()), AS_OF, config);
+    expect(forward[0]?.complexName).toBe("많은이름");
+    expect(reversed[0]?.complexName).toBe("많은이름");
+  });
+});
+

@@ -6,12 +6,18 @@ function trade(overrides: Partial<RawTrade> = {}): RawTrade {
   return {
     regionCode: "11680",
     legalDongName: "대치동",
+    aptSeq: "11680-4394",
     complexName: "래미안대치팰리스",
     builtYear: 2015,
     exclusiveAreaSqm: 84.97,
     floor: 10,
     price: 3_000_000_000,
     contractDate: "2026-06-15",
+    landLeasehold: "N",
+    address: {
+      roadNm: "삼성로", roadNmCd: "3122005", bonbun: "0316",
+      bubun: "0000", jibun: "316", umdCd: "10600",
+    },
     ...overrides,
   };
 }
@@ -43,35 +49,45 @@ describe("normalizeName", () => {
 });
 
 describe("buildComplexKey", () => {
-  it("법정동·건축년도·정규화명을 합친다", () => {
-    expect(buildComplexKey(trade())).toBe("11680|대치동|2015|래미안대치팰리스");
+  it("국토부 단지 ID(aptSeq)를 그대로 쓴다", () => {
+    expect(buildComplexKey(trade())).toBe("11680-4394");
   });
 
-  it("표기가 흔들려도 같은 키가 된다", () => {
+  it("표기가 흔들려도 같은 키다 — 이름이 키에 안 들어가니 갈릴 수가 없다", () => {
     expect(buildComplexKey(trade({ complexName: "래미안 대치팰리스" }))).toBe(
       buildComplexKey(trade({ complexName: "래미안대치팰리스" })),
     );
   });
 
-  it("건축년도가 다르면 다른 키다", () => {
-    expect(buildComplexKey(trade({ builtYear: 2015 }))).not.toBe(
+  it("이름이 아예 달라도 aptSeq가 같으면 같은 키다 — 과소병합이 구조적으로 불가능하다", () => {
+    expect(buildComplexKey(trade({ complexName: "전혀 다른 이름" }))).toBe(
+      buildComplexKey(trade()),
+    );
+  });
+
+  it("이름·법정동·준공년도가 모두 같아도 aptSeq가 다르면 다른 키다 — 과대병합도 불가능하다", () => {
+    expect(buildComplexKey(trade({ aptSeq: "11680-1" }))).not.toBe(
+      buildComplexKey(trade({ aptSeq: "11680-2" })),
+    );
+  });
+
+  it("aptSeq가 같으면 준공년도가 달라도 같은 키다 — 단지를 가르는 것은 aptSeq뿐이다", () => {
+    expect(buildComplexKey(trade({ builtYear: 2015 }))).toBe(
       buildComplexKey(trade({ builtYear: 2016 })),
     );
   });
 
-  it("법정동이 다르면 다른 키다 — 같은 이름의 단지가 여러 동에 있다", () => {
-    expect(buildComplexKey(trade({ legalDongName: "역삼동" }))).not.toBe(
-      buildComplexKey(trade({ legalDongName: "대치동" })),
-    );
+  it("지역코드를 덧붙이지 않는다 — aptSeq가 이미 시군구코드로 시작한다", () => {
+    expect(buildComplexKey(trade())).not.toContain("|");
   });
 });
 
 describe("normalizeAll", () => {
   it("모든 거래에 키를 붙인다", () => {
-    const result = normalizeAll([trade(), trade({ complexName: "은마" })]);
+    const result = normalizeAll([trade(), trade({ aptSeq: "11680-100", complexName: "은마" })]);
     expect(result).toHaveLength(2);
-    expect(result[0]?.complexKey).toBeDefined();
-    expect(result[0]?.complexKey).not.toBe(result[1]?.complexKey);
+    expect(result[0]?.complexKey).toBe("11680-4394");
+    expect(result[1]?.complexKey).toBe("11680-100");
   });
 
   it("원본 필드를 보존한다", () => {

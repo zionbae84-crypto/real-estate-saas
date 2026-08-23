@@ -13,25 +13,42 @@ import {
   loadRawTrades,
   runPipeline,
 } from "./run";
+import { CACHE_SCHEMA_VERSION } from "./fetch";
 import type { RawTrade } from "./types";
 
 function trade(overrides: Partial<RawTrade> = {}): RawTrade {
   return {
     regionCode: "11680",
     legalDongName: "대치동",
+    aptSeq: "11680-100",
     complexName: "은마",
     builtYear: 1979,
     exclusiveAreaSqm: 84.3,
     floor: 5,
     price: 2_000_000_000,
     contractDate: "2026-06-15",
+    landLeasehold: "N",
+    address: {
+      roadNm: "삼성로", roadNmCd: "3122005", bonbun: "0316",
+      bubun: "0000", jibun: "316", umdCd: "10600",
+    },
     ...overrides,
   };
 }
 
+/**
+ * 캐시 파일을 쓴다. `schemaVersion`을 명시하지 않으면 현재 버전을 붙인다 —
+ * 대부분의 테스트는 "형식은 최신인데 내용이 이러이러할 때"를 보는 것이지
+ * 버전 불일치를 보는 게 아니다. 버전 불일치는 그것만 보는 테스트에서
+ * `schemaVersion`을 직접 넘겨 확인한다.
+ */
 function writeCache(dir: string, filename: string, data: unknown): void {
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, filename), JSON.stringify(data));
+  const withVersion =
+    typeof data === "object" && data !== null && !Array.isArray(data)
+      ? { schemaVersion: CACHE_SCHEMA_VERSION, ...(data as Record<string, unknown>) }
+      : data;
+  writeFileSync(join(dir, filename), JSON.stringify(withVersion));
 }
 
 describe("loadRawTrades", () => {
@@ -208,6 +225,7 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     builtYear: 1979,
     areaBucket: 84,
     maxExclusiveAreaSqm: 84.3,
+    landLeasehold: "N",
     medianPrice: 2_000_000_000,
     tradeCount: 5,
     minPrice: 1_900_000_000,
@@ -325,3 +343,65 @@ describe("runPipeline: 빈 데이터 가드 (통합)", () => {
     expect(snapshotOutputMtimes()).toEqual(before);
   });
 });
+
+describe("loadRawTrades — 캐시 형식 버전", () => {
+  let root: string;
+  let rawDir: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "run-schema-test-"));
+    rawDir = join(root, "raw");
+    mkdirSync(rawDir, { recursive: true });
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  /** writeCache의 기본 버전 주입을 우회해 봉투를 날것으로 쓴다. */
+  function writeRaw(filename: string, data: unknown): void {
+    writeFileSync(join(rawDir, filename), JSON.stringify(data));
+  }
+
+  it("schemaVersion이 없는 옛 봉투를 만나면 조용히 넘기지 않고 던진다", () => {
+    writeRaw("11680-202607.json", { trades: [trade()], failures: 0, cancelled: 0 });
+    expect(() => loadRawTrades(rawDir, ["11680"])).toThrow(/schemaVersion/);
+  });
+
+  it("schemaVersion이 다르면 던진다", () => {
+    writeRaw("11680-202607.json", {
+      schemaVersion: CACHE_SCHEMA_VERSION + 1,
+      trades: [trade()],
+      failures: 0,
+      cancelled: 0,
+    });
+    expect(() => loadRawTrades(rawDir, ["11680"])).toThrow(/schemaVersion/);
+  });
+
+  it("옛 봉투의 거래를 하나도 돌려주지 않는다 — 부분적으로라도 흘리면 안 된다", () => {
+    writeRaw("11680-202606.json", {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      trades: [trade()],
+      failures: 0,
+      cancelled: 0,
+    });
+    writeRaw("11680-202607.json", { trades: [trade()], failures: 0, cancelled: 0 });
+    expect(() => loadRawTrades(rawDir, ["11680"])).toThrow(/schemaVersion/);
+  });
+
+  it("현재 버전 봉투는 정상적으로 읽는다", () => {
+    writeRaw("11680-202607.json", {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      trades: [trade()],
+      failures: 0,
+      cancelled: 0,
+    });
+    expect(loadRawTrades(rawDir, ["11680"])).toHaveLength(1);
+  });
+
+  it("다시 받으라고 안내한다 — 새벽 2시에 이 에러를 보는 사람이 다음 할 일을 알아야 한다", () => {
+    writeRaw("11680-202607.json", { trades: [trade()], failures: 0, cancelled: 0 });
+    expect(() => loadRawTrades(rawDir, ["11680"])).toThrow(/pipeline:fetch/);
+  });
+});
+

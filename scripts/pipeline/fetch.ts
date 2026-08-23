@@ -35,6 +35,52 @@ export interface FetchLogEntry {
    * 보이면 안 된다.
    */
   cacheCorrupted?: boolean;
+  /**
+   * 캐시 파일의 `schemaVersion`이 지금 코드가 쓰는
+   * {@link CACHE_SCHEMA_VERSION}과 달라 캐시 없음으로 취급하고 다시 받았으면
+   * true.
+   *
+   * `cacheCorrupted`와 **일부러 나눠 센다.** 사람이 해야 할 일이 다르기
+   * 때문이다 — 손상은 디스크를 의심할 일이고, 스키마 불일치는 파서가 필드를
+   * 더 남기게 바뀐 뒤의 정상적인 한 번짜리 전환이다. 둘을 뭉치면 스키마를
+   * 올릴 때마다 "캐시 손상 36건"이 뜨면서 진짜 디스크 문제를 가린다.
+   *
+   * 이 사실을 조용히 넘기지 않는 이유는 따로 있다: 옛 캐시는 `aptSeq`도
+   * `landLeasehold`도 없다. 형식만 보고 그대로 읽으면 단지 키가 `undefined`가
+   * 되고 토지임대부가 전부 "모름"으로 깔린 채 파이프라인이 "정상 종료"한다.
+   */
+  cacheSchemaMismatch?: boolean;
+}
+
+/**
+ * `data/raw/*.json` 캐시 봉투의 형식 버전.
+ *
+ * 파서가 남기는 필드가 바뀌면 반드시 올린다. 옛 캐시는 새 필드가 없는데,
+ * 버전이 없으면 그 사실을 알아챌 방법이 없어 `aptSeq`가 `undefined`인 거래가
+ * 조용히 집계로 흘러든다.
+ *
+ * - 1: `{ trades, failures, cancelled, truncated? }` (버전 필드 자체가 없음)
+ * - 2: 위에 더해 각 거래가 `aptSeq`·`landLeasehold`·`address`를 갖는다
+ *
+ * `run.ts`의 같은 이름 상수와 값이 같아야 한다 — 어긋나면 한쪽은 다시 받고
+ * 다른 쪽은 못 읽는다.
+ */
+export const CACHE_SCHEMA_VERSION = 2;
+
+/**
+ * 캐시 봉투를 읽었는데 형식 버전이 지금 코드와 다를 때 던진다.
+ *
+ * 손상(깨진 JSON 등)과 구분하려고 따로 둔다 — 호출자가 `instanceof`로 갈라
+ * 로그에 다른 필드를 남긴다({@link FetchLogEntry.cacheSchemaMismatch}).
+ */
+export class CacheSchemaMismatchError extends Error {
+  constructor(found: unknown) {
+    super(
+      `캐시 봉투의 schemaVersion이 ${JSON.stringify(found)}입니다 — ` +
+        `지금 코드는 ${CACHE_SCHEMA_VERSION}을 씁니다. 캐시 없음으로 보고 다시 받습니다.`,
+    );
+    this.name = "CacheSchemaMismatchError";
+  }
 }
 
 // 프로브(Task 1)로 확정된 엔드포인트. JSON을 지원하므로 XML 파서는 필요 없다.
@@ -286,6 +332,7 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
   for (const { regionCode, yearMonth } of targets) {
     const path = join(deps.rawDir, `${regionCode}-${yearMonth}.json`);
     let cacheCorrupted = false;
+    let cacheSchemaMismatch = false;
 
     try {
       // 캐시가 있고 닫힌 달이면 캐시를 쓴다. 단, 캐시 읽기가 깨지면(이전 실행이
@@ -310,9 +357,12 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
             ...(cached.truncated ? { truncated: true } : {}),
           });
           continue;
-        } catch {
-          cacheCorrupted = true;
-          // 아래로 이어져 캐시 없음 취급으로 다시 받는다.
+        } catch (cacheError) {
+          // 스키마 불일치와 진짜 손상을 나눠 센다 — 사람이 할 일이 다르다
+          // (FetchLogEntry.cacheSchemaMismatch 참고). 둘 다 캐시 없음
+          // 취급으로 아래에서 다시 받는 것은 같다.
+          if (cacheError instanceof CacheSchemaMismatchError) cacheSchemaMismatch = true;
+          else cacheCorrupted = true;
         }
       }
 
@@ -323,6 +373,7 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
         deps.wait,
       );
       const envelope: CacheEnvelope = {
+        schemaVersion: CACHE_SCHEMA_VERSION,
         trades,
         failures,
         cancelled,
@@ -338,6 +389,7 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
         cancelled,
         ...(truncated ? { truncated: true } : {}),
         ...(cacheCorrupted ? { cacheCorrupted: true } : {}),
+        ...(cacheSchemaMismatch ? { cacheSchemaMismatch: true } : {}),
       });
       console.log(`${regionCode} ${yearMonth}: ${trades.length}건 (파싱실패 ${failures}, 해제 ${cancelled})`);
     } catch (e) {
@@ -354,6 +406,7 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
         cancelled: 0,
         error: message,
         ...(cacheCorrupted ? { cacheCorrupted: true } : {}),
+        ...(cacheSchemaMismatch ? { cacheSchemaMismatch: true } : {}),
       });
       console.error(`${regionCode} ${yearMonth}: 실패 — ${message}`);
     }
@@ -373,6 +426,8 @@ export async function runFetch(deps: FetchDeps): Promise<FetchLogEntry[]> {
  * 영영 사라진다. 필드명은 FetchLogEntry의 대응 필드와 맞춘다.
  */
 interface CacheEnvelope {
+  /** {@link CACHE_SCHEMA_VERSION}. 이 값이 다르면 캐시 없음으로 취급해 다시 받는다 */
+  schemaVersion: number;
   trades: RawTrade[];
   failures: number;
   cancelled: number;
@@ -399,9 +454,16 @@ function readCache(path: string): CacheEnvelope {
   if (!Array.isArray(obj.trades)) {
     throw new Error("캐시 봉투의 trades 필드가 배열이 아닙니다");
   }
+  // 형식 검사(trades가 배열인가)를 통과해도 **버전이 다르면 읽지 않는다.**
+  // 옛 봉투(v1)의 거래에는 aptSeq도 landLeasehold도 없어서, 모양만 맞다고
+  // 그대로 쓰면 단지 키가 undefined가 되고 토지임대부가 전부 모름으로 깔린다.
+  if (obj.schemaVersion !== CACHE_SCHEMA_VERSION) {
+    throw new CacheSchemaMismatchError(obj.schemaVersion);
+  }
   const failures = typeof obj.failures === "number" ? obj.failures : 0;
   const cancelled = typeof obj.cancelled === "number" ? obj.cancelled : 0;
   return {
+    schemaVersion: CACHE_SCHEMA_VERSION,
     trades: obj.trades as RawTrade[],
     failures,
     cancelled,

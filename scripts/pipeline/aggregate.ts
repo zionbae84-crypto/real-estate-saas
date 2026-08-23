@@ -1,9 +1,16 @@
 import type { NormalizedTrade } from "./normalize";
-import type { ReportConfig } from "./types";
+import type { LandLeasehold, ReportConfig } from "./types";
 
 export interface ComplexUnit {
+  /** 국토부 단지 고유 ID(`aptSeq`). `normalize.ts`의 buildComplexKey 참고 */
   complexKey: string;
-  /** 원본 표기 중 대표 하나 */
+  /**
+   * 화면에 쓸 단지 이름. {@link pickComplexName}이 그 단지의 모든 거래에서 고른다.
+   *
+   * 키가 `aptSeq`로 바뀌어도 **이름은 여전히 화면에 필요하다** — 사용자는
+   * `"11680-314"`가 아니라 "까치마을"을 찾는다. 키와 이름의 역할이 갈렸다:
+   * 키는 묶는 데만 쓰고, 이름은 보여 주는 데만 쓴다.
+   */
   complexName: string;
   regionCode: string;
   legalDongName: string;
@@ -30,6 +37,20 @@ export interface ComplexUnit {
    * 알려준다면 반영해야 더 정확(하고 여전히 보수적인 방향)해진다.
    */
   maxExclusiveAreaSqm: number;
+  /**
+   * 이 단지가 **토지임대부**인가. `"Y"` / `"N"` / `null`(모름).
+   *
+   * 토지 소유권이 없는 집이라 사는 사람이 반드시 알아야 하는 "사지 말아야 할"
+   * 신호다. 그래서 판정 방향이 한쪽으로 기울어 있다 —
+   * {@link mergeLandLeasehold} 참고.
+   *
+   * 창(window)은 `recent`가 아니라 그룹 **전체**다. 토지임대부는
+   * `maxExclusiveAreaSqm`처럼 시간과 무관한 그 단지의 성질이지 "최근 6개월의
+   * 사실"이 아니다.
+   *
+   * **`!== "Y"`를 "토지임대부 아님"으로 읽지 말 것.** "아님"은 `=== "N"`뿐이다.
+   */
+  landLeasehold: LandLeasehold;
   /** 최근 6개월 거래의 중위값(원) */
   medianPrice: number;
   tradeCount: number;
@@ -144,6 +165,27 @@ export function isTrustworthyFloor(floor: number): boolean {
   return Number.isInteger(floor) && floor >= 1;
 }
 
+/**
+ * 한 단지의 거래들이 말하는 토지임대부 여부를 하나로 합친다.
+ *
+ * 우선순위가 대칭이 아니다. 이 순서가 이 함수의 전부다:
+ * 1. 한 건이라도 `"Y"`면 `"Y"`다. 나머지가 전부 `"N"`이어도 `"Y"`다.
+ * 2. `"Y"`가 없고 모르는 값(`null`)이 하나라도 있으면 `null`(모름)이다.
+ * 3. 모든 거래가 `"N"`일 때만 `"N"`(아님)이다.
+ *
+ * 다수결이나 최빈값을 쓰지 않는 이유: 토지임대부를 **놓치는 쪽이 낙관
+ * 방향**이기 때문이다. 화면이 "토지 소유권이 있는 집"이라고 잘못 말하면
+ * 사용자는 없는 근거로 안심한다. 반대로 실제로는 아닌 집을 토지임대부라고
+ * 말하면 사용자는 확인하러 간다 — 확인 비용은 들지만 잘못 사지는 않는다.
+ *
+ * 빈 배열이면 `null`이다 — 아무 근거도 없는데 "아님"이라고 단정하지 않는다.
+ */
+export function mergeLandLeasehold(values: readonly LandLeasehold[]): LandLeasehold {
+  if (values.includes("Y")) return "Y";
+  if (values.length === 0 || values.includes(null)) return null;
+  return "N";
+}
+
 /** 주어진 연/월의 마지막 날짜(일). month는 0-indexed이며 범위를 벗어나도 Date.UTC가 정규화한다. */
 function lastDayOfMonth(year: number, month: number): number {
   return new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
@@ -202,11 +244,70 @@ function changeRateWithConfidence(
   return { rate, recentCount: recent.length, priorCount: older.length, lowConfidence };
 }
 
+/**
+ * 한 단지의 거래들에서 화면에 쓸 대표 이름 하나를 고른다.
+ *
+ * 키가 `aptSeq`가 되면서 생긴 새 문제다. 예전에는 이름이 키의 일부라 한 키
+ * 안의 이름이 (정규화 후) 항상 같았지만, 이제 같은 `aptSeq`에 표기가 다른
+ * 이름이 붙어 올 수 있다. 그때 아무거나 쓰면(예전처럼 `group[0]`) 화면에
+ * 뜨는 이름이 **입력 순서에 따라 달라진다** — 파일 읽는 순서가 바뀌면 같은
+ * 데이터로 다른 산출물이 나온다.
+ *
+ * 고르는 순서:
+ * 1. **가장 많이 쓰인 이름.** 사람들이 실제로 그렇게 부르는 이름이고, 오타
+ *    한 건이 대표를 차지하지 못한다.
+ * 2. 같으면 **계약일이 더 최근인 이름.** 단지가 개명하면 새 이름이 이긴다.
+ * 3. 그래도 같으면 **사전순.** 남는 것은 결정론뿐이라 임의로라도 못박는다 —
+ *    같은 입력이면 언제 실행해도 같은 이름이 나와야 한다.
+ *
+ * 표기가 흔들리는 것인지 진짜로 다른 이름이 붙은 것인지는 이 함수가 판단하지
+ * 않는다. 그건 사람이 볼 일이라 이상 신호 리포트의 "한 단지 ID에 이름이 여러
+ * 개" 절이 드러낸다.
+ */
+export function pickComplexName(trades: readonly NormalizedTrade[]): string {
+  const stats = new Map<string, { count: number; latest: string }>();
+  for (const t of trades) {
+    const prev = stats.get(t.complexName);
+    if (prev === undefined) {
+      stats.set(t.complexName, { count: 1, latest: t.contractDate });
+    } else {
+      prev.count += 1;
+      if (t.contractDate > prev.latest) prev.latest = t.contractDate;
+    }
+  }
+
+  let best: { name: string; count: number; latest: string } | null = null;
+  for (const [name, { count, latest }] of stats) {
+    if (
+      best === null ||
+      count > best.count ||
+      (count === best.count && latest > best.latest) ||
+      (count === best.count && latest === best.latest && name < best.name)
+    ) {
+      best = { name, count, latest };
+    }
+  }
+  return best?.name ?? "";
+}
+
 export function aggregate(
   trades: NormalizedTrade[],
   asOf: Date,
   config: ReportConfig,
 ): ComplexUnit[] {
+  // 이름은 **단지 전체**에서 한 번 고른다. 평형별로 따로 고르면 같은 단지의
+  // 84㎡ 행과 101㎡ 행에 다른 이름이 떠서, 화면이 한 단지를 두 단지처럼
+  // 보여 준다.
+  const nameByComplex = new Map<string, string>();
+  {
+    const byComplex = new Map<string, NormalizedTrade[]>();
+    for (const trade of trades) {
+      const list = byComplex.get(trade.complexKey);
+      if (list) list.push(trade);
+      else byComplex.set(trade.complexKey, [trade]);
+    }
+    for (const [key, list] of byComplex) nameByComplex.set(key, pickComplexName(list));
+  }
   const sixMonthsAgo = monthsBefore(asOf, 6);
   const threeMonthsAgo = monthsBefore(asOf, 3);
   const twelveMonthsAgo = monthsBefore(asOf, 12);
@@ -252,12 +353,14 @@ export function aggregate(
 
     units.push({
       complexKey: first.complexKey,
-      complexName: first.complexName,
+      complexName: nameByComplex.get(first.complexKey) ?? first.complexName,
       regionCode: first.regionCode,
       legalDongName: first.legalDongName,
       builtYear: first.builtYear,
       areaBucket: areaBucket(first.exclusiveAreaSqm),
       maxExclusiveAreaSqm: Math.max(...group.map((t) => t.exclusiveAreaSqm)),
+      // 창은 recent가 아니라 group 전체 — 시간과 무관한 그 단지의 성질이다.
+      landLeasehold: mergeLandLeasehold(group.map((t) => t.landLeasehold)),
       medianPrice: median(recentPrices),
       tradeCount: recent.length,
       minPrice: Math.min(...recentPrices),

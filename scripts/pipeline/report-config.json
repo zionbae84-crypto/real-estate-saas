@@ -1,7 +1,6 @@
 {
-  "underMergeMaxEditDistance": 2,
-  "overMergeMinPriceRatio": 2.0,
-  "overMergeMinTradeCount": 4,
+  "widePriceRangeMinRatio": 2.0,
+  "widePriceRangeMinTradeCount": 4,
   "lowConfidenceMinTrades": 3,
   "emptyRatioWarnThreshold": 0.2
 }

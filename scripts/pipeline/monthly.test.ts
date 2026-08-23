@@ -13,12 +13,18 @@ function trade(overrides: Partial<RawTrade> = {}): RawTrade {
   return {
     regionCode: "11680",
     legalDongName: "대치동",
+    aptSeq: "11680-100",
     complexName: "은마",
     builtYear: 1979,
     exclusiveAreaSqm: 84.4,
     floor: 5,
     price: 2_000_000_000,
     contractDate: "2026-07-10",
+    landLeasehold: "N",
+    address: {
+      roadNm: "삼성로", roadNmCd: "3122005", bonbun: "0316",
+      bubun: "0000", jibun: "316", umdCd: "10600",
+    },
     ...overrides,
   };
 }
@@ -53,7 +59,7 @@ describe("buildMonthlySeries", () => {
 
   it("키 형식은 complexKey|areaBucket이다 — aggregate와 같은 조인 키", () => {
     const series = buildMonthlySeries(normalizeAll([trade({ exclusiveAreaSqm: 84.4 })]), AS_OF);
-    expect(Object.keys(series)[0]).toMatch(/^11680\|대치동\|1979\|.+\|84$/);
+    expect(Object.keys(series)[0]).toBe("11680-100|84");
   });
 
   it("각 키 안에서 월이 오름차순으로 정렬된다", () => {

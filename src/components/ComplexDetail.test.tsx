@@ -8,13 +8,14 @@ import { ComplexDetail } from "./ComplexDetail";
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
   const areaBucket = overrides.areaBucket ?? 59;
   return {
-    complexKey: "11680|대치동|2015|테스트",
+    complexKey: "11680-9001",
     complexName: "테스트아파트",
     regionCode: "11680",
     legalDongName: "대치동",
     builtYear: 2015,
     areaBucket,
     maxExclusiveAreaSqm: areaBucket,
+    landLeasehold: "N",
     tradeCount: 5,
     minPrice: 280_000_000,
     maxPrice: 320_000_000,

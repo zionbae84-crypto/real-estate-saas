@@ -3,17 +3,16 @@ import type { ComplexUnit } from "./aggregate";
 import type { FetchLogEntry } from "./fetch";
 import {
   buildReport,
-  editDistance,
-  findOverMergeSuspects,
+  findAmbiguousDisplayNames,
+  findNameConflicts,
   findSplitAreaSuspects,
-  findUnderMergeCandidates,
+  findWidePriceRangeUnits,
 } from "./report";
 import type { ReportConfig } from "./types";
 
 const config: ReportConfig = {
-  underMergeMaxEditDistance: 2,
-  overMergeMinPriceRatio: 2.0,
-  overMergeMinTradeCount: 4,
+  widePriceRangeMinRatio: 2.0,
+  widePriceRangeMinTradeCount: 4,
   lowConfidenceMinTrades: 3,
   emptyRatioWarnThreshold: 0.2,
 };
@@ -27,6 +26,7 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     builtYear: 1979,
     areaBucket: 84,
     maxExclusiveAreaSqm: 84.3,
+    landLeasehold: "N",
     medianPrice: 2_000_000_000,
     tradeCount: 5,
     minPrice: 1_900_000_000,
@@ -52,163 +52,91 @@ const baseLog: FetchLogEntry[] = [
   { regionCode: "11680", yearMonth: "202608", status: "fetched", tradeCount: 10, failures: 0, cancelled: 0 },
 ];
 
-describe("editDistance", () => {
-  it("같으면 0이다", () => {
-    expect(editDistance("우성", "우성")).toBe(0);
-  });
-
-  it("한 글자 다르면 1이다", () => {
-    expect(editDistance("우성1차", "우성2차")).toBe(1);
-  });
-
-  it("두 글자 추가면 2다", () => {
-    expect(editDistance("우성", "우성1차")).toBe(2);
-  });
-});
-
-describe("findUnderMergeCandidates", () => {
-  it("같은 동·같은 건축년도의 비슷한 이름을 짝짓는다", () => {
-    const found = findUnderMergeCandidates(
-      [
-        unit({ complexKey: "11680|대치동|1979|은마" }),
-        unit({ complexKey: "11680|대치동|1979|은마아파트" }),
-      ],
-      config,
-    );
+describe("findNameConflicts — 한 단지 ID에 이름 여러 개", () => {
+  it("같은 aptSeq에 정말 다른 이름이 붙으면 잡는다", () => {
+    const found = findNameConflicts([
+      { complexKey: "11680-314", complexName: "까치마을" },
+      { complexKey: "11680-314", complexName: "수서까치마을" },
+    ]);
     expect(found).toHaveLength(1);
+    expect(found[0]?.names).toEqual(["까치마을", "수서까치마을"]);
   });
 
-  it("건축년도가 다르면 짝짓지 않는다 — 다른 단지일 가능성이 높다", () => {
-    const found = findUnderMergeCandidates(
-      [
-        unit({ complexKey: "11680|대치동|1979|은마" }),
-        unit({ complexKey: "11680|대치동|1985|은마" }),
-      ],
-      config,
-    );
+  it("표기 흔들림(공백·괄호)은 잡지 않는다 — 사용자가 같은 단지로 알아본다", () => {
+    const found = findNameConflicts([
+      { complexKey: "11680-349", complexName: "한신(개포)" },
+      { complexKey: "11680-349", complexName: "한신 개포" },
+    ]);
     expect(found).toHaveLength(0);
   });
 
-  it("법정동이 다르면 짝짓지 않는다", () => {
-    const found = findUnderMergeCandidates(
-      [
-        unit({ complexKey: "11680|대치동|1979|은마" }),
-        unit({ complexKey: "11680|역삼동|1979|은마" }),
-      ],
-      config,
-    );
+  it("서로 다른 aptSeq에 같은 이름이 있어도 이름 충돌이 아니다", () => {
+    const found = findNameConflicts([
+      { complexKey: "11680-1", complexName: "우성" },
+      { complexKey: "11680-2", complexName: "우성" },
+    ]);
     expect(found).toHaveLength(0);
   });
 
-  it("임계값을 넘게 다르면 짝짓지 않는다", () => {
-    const found = findUnderMergeCandidates(
-      [
-        unit({ complexKey: "11680|대치동|1979|은마" }),
-        unit({ complexKey: "11680|대치동|1979|래미안대치팰리스" }),
-      ],
-      config,
-    );
+  it("이름이 하나뿐이면 잡지 않는다", () => {
+    const found = findNameConflicts([
+      { complexKey: "11680-314", complexName: "까치마을" },
+      { complexKey: "11680-314", complexName: "까치마을" },
+    ]);
     expect(found).toHaveLength(0);
   });
 });
 
-describe("findUnderMergeCandidates 경계값 — underMergeMaxEditDistance", () => {
-  // 접두어 관계가 아니면서(둘 다 길이가 같고 서로의 prefix가 아님) 딱 두 글자만
-  // 다른 이름 쌍. prefix 지름길에 걸리지 않고 순수하게 편집거리만으로 판정되게 한다.
-  it("편집거리가 정확히 상한(2)이면 후보로 잡힌다", () => {
-    const found = findUnderMergeCandidates(
-      [
-        unit({ complexKey: "11680|대치동|1979|삼성12차" }),
-        unit({ complexKey: "11680|대치동|1979|삼성34차" }),
-      ],
-      config,
-    );
+describe("findAmbiguousDisplayNames — 화면에서 구분 안 되는 동명 단지", () => {
+  it("같은 법정동·같은 이름의 다른 단지를 잡는다", () => {
+    const found = findAmbiguousDisplayNames([
+      unit({ complexKey: "11680-1", complexName: "우성", legalDongName: "대치동", builtYear: 1983 }),
+      unit({ complexKey: "11680-2", complexName: "우성", legalDongName: "대치동", builtYear: 1999 }),
+    ]);
     expect(found).toHaveLength(1);
-    expect(found[0]?.distance).toBe(config.underMergeMaxEditDistance);
+    expect(found[0]?.keys).toEqual(["11680-1", "11680-2"]);
   });
 
-  // 위와 같은 형태에서 다른 글자 하나를 늘려 편집거리를 3으로 만든다 — 상한보다 1 크다.
-  it("편집거리가 상한보다 하나 크면(3) 후보로 잡히지 않는다", () => {
-    const found = findUnderMergeCandidates(
-      [
-        unit({ complexKey: "11680|대치동|1979|삼성123차" }),
-        unit({ complexKey: "11680|대치동|1979|삼성456차" }),
-      ],
-      config,
-    );
-    expect(found).toHaveLength(0);
-  });
-});
-
-describe("findOverMergeSuspects", () => {
-  it("같은 평형에서 최고가가 최저가의 2배 이상이면 의심한다", () => {
-    const found = findOverMergeSuspects(
-      [unit({ minPrice: 1_000_000_000, maxPrice: 2_000_000_000, tradeCount: 5 })],
-      config,
-    );
-    expect(found).toHaveLength(1);
+  it("준공년도가 다르면 화면에 대책이 있다고 표시한다", () => {
+    const found = findAmbiguousDisplayNames([
+      unit({ complexKey: "11680-1", complexName: "우성", legalDongName: "대치동", builtYear: 1983 }),
+      unit({ complexKey: "11680-2", complexName: "우성", legalDongName: "대치동", builtYear: 1999 }),
+    ]);
+    expect(found[0]?.sameBuiltYear).toBe(false);
   });
 
-  it("거래 건수가 적으면 의심하지 않는다 — 우연히 벌어질 수 있다", () => {
-    const found = findOverMergeSuspects(
-      [unit({ minPrice: 1_000_000_000, maxPrice: 2_000_000_000, tradeCount: 3 })],
-      config,
-    );
+  it("준공년도까지 같으면 대책 없음으로 표시한다 — 화면이 가를 방법이 없다", () => {
+    const found = findAmbiguousDisplayNames([
+      unit({ complexKey: "11680-1", complexName: "우성", legalDongName: "대치동", builtYear: 1983 }),
+      unit({ complexKey: "11680-2", complexName: "우성", legalDongName: "대치동", builtYear: 1983 }),
+    ]);
+    expect(found[0]?.sameBuiltYear).toBe(true);
+  });
+
+  it("법정동이 다르면 잡지 않는다 — 화면이 이미 갈라 보여 준다", () => {
+    const found = findAmbiguousDisplayNames([
+      unit({ complexKey: "11680-1", complexName: "우성", legalDongName: "대치동" }),
+      unit({ complexKey: "11680-2", complexName: "우성", legalDongName: "역삼동" }),
+    ]);
     expect(found).toHaveLength(0);
   });
 
-  it("가격 차가 작으면 의심하지 않는다", () => {
-    const found = findOverMergeSuspects(
-      [unit({ minPrice: 1_900_000_000, maxPrice: 2_100_000_000, tradeCount: 10 })],
-      config,
-    );
+  it("같은 단지의 평형이 여러 개인 것은 잡지 않는다 — 키가 같으면 한 단지다", () => {
+    const found = findAmbiguousDisplayNames([
+      unit({ complexKey: "11680-1", complexName: "우성", legalDongName: "대치동", areaBucket: 84 }),
+      unit({ complexKey: "11680-1", complexName: "우성", legalDongName: "대치동", areaBucket: 101 }),
+    ]);
     expect(found).toHaveLength(0);
   });
-});
 
-describe("findOverMergeSuspects 경계값 — overMergeMinTradeCount", () => {
-  // 가격 배율은 넉넉히 2배를 넘겨 고정해 두고, 거래 건수만 하한(4) 근처에서 움직인다.
-  it("거래 건수가 정확히 하한(4)이면 신호가 난다", () => {
-    const found = findOverMergeSuspects(
-      [unit({ minPrice: 1_000_000, maxPrice: 3_000_000, tradeCount: config.overMergeMinTradeCount })],
-      config,
-    );
-    expect(found).toHaveLength(1);
-  });
-
-  it("거래 건수가 하한보다 하나 적으면(3) 신호가 나지 않는다", () => {
-    const found = findOverMergeSuspects(
-      [unit({ minPrice: 1_000_000, maxPrice: 3_000_000, tradeCount: config.overMergeMinTradeCount - 1 })],
-      config,
-    );
-    expect(found).toHaveLength(0);
-  });
-});
-
-describe("findOverMergeSuspects 경계값 — overMergeMinPriceRatio", () => {
-  // 거래 건수는 하한에 정확히 맞춰 고정해 두고, 가격 배율만 2.0 근처에서 움직인다.
-  // 부동소수점 오차를 피하려고 최저가·최고가를 원 단위 정수로 골라 배율이
-  // 정확히 config.overMergeMinPriceRatio(2.0)가 되게 한다.
-  it("최고÷최저가 정확히 하한(2.0)이면 신호가 난다", () => {
-    const found = findOverMergeSuspects(
-      [
-        unit({
-          minPrice: 1_000_000,
-          maxPrice: 1_000_000 * config.overMergeMinPriceRatio,
-          tradeCount: config.overMergeMinTradeCount,
-        }),
-      ],
-      config,
-    );
-    expect(found).toHaveLength(1);
-  });
-
-  it("최고÷최저가 하한 바로 아래(1.99)면 신호가 나지 않는다", () => {
-    const found = findOverMergeSuspects(
-      [unit({ minPrice: 100_000_000, maxPrice: 199_000_000, tradeCount: config.overMergeMinTradeCount })],
-      config,
-    );
-    expect(found).toHaveLength(0);
+  it("대책 없는 것을 목록 위로 올린다", () => {
+    const found = findAmbiguousDisplayNames([
+      unit({ complexKey: "11680-1", complexName: "가", legalDongName: "대치동", builtYear: 1983 }),
+      unit({ complexKey: "11680-2", complexName: "가", legalDongName: "대치동", builtYear: 1999 }),
+      unit({ complexKey: "11680-3", complexName: "나", legalDongName: "대치동", builtYear: 1983 }),
+      unit({ complexKey: "11680-4", complexName: "나", legalDongName: "대치동", builtYear: 1983 }),
+    ]);
+    expect(found[0]?.sameBuiltYear).toBe(true);
   });
 });
 
@@ -532,21 +460,18 @@ describe("buildReport — 마크다운 표 렌더링 (I3)", () => {
     return row.split(/(?<!\\)\|/);
   }
 
-  it("과소병합 후보 표의 각 데이터 행이 헤더와 같은 열 수를 가진다", () => {
-    const md = buildReport(
-      [
-        unit({ complexKey: "11650|반포동|2003|반포훼미리102동" }),
-        unit({ complexKey: "11650|반포동|2003|반포훼미리103동" }),
-      ],
-      baseLog,
-      config,
-    );
+  it("이름 충돌 표의 각 데이터 행이 헤더와 같은 열 수를 가진다", () => {
+    const md = buildReport([unit()], baseLog, config, [
+      // 이름에 파이프가 들어 있어도 표가 깨지면 안 된다.
+      { complexKey: "11650-1", complexName: "반포훼미리|102동" },
+      { complexKey: "11650-1", complexName: "반포훼미리103동" },
+    ]);
     const sections = md.split(/^## /m);
-    const section = sections.find((s) => s.startsWith("과소병합 후보"));
+    const section = sections.find((s) => s.startsWith("한 단지 ID에 이름 여러 개"));
     expect(section).toBeDefined();
     const lines = (section ?? "").split("\n");
-    const headerLine = lines.find((l) => l.startsWith("| 거리"));
-    const dataLine = lines.find((l) => l.includes("반포훼미리102동"));
+    const headerLine = lines.find((l) => l.startsWith("| 단지 ID"));
+    const dataLine = lines.find((l) => l.includes("반포훼미리"));
     expect(headerLine).toBeDefined();
     expect(dataLine).toBeDefined();
     expect(splitMarkdownRow(dataLine ?? "").length).toBe(splitMarkdownRow(headerLine ?? "").length);
@@ -571,14 +496,94 @@ describe("buildReport — 마크다운 표 렌더링 (I3)", () => {
     expect(splitMarkdownRow(dataLine ?? "").length).toBe(splitMarkdownRow(headerLine ?? "").length);
   });
 
-  it("과대병합 의심 표에 건축년도를 담아 이름+법정동만 같은 두 단지를 구분할 수 있게 한다", () => {
+  it("가격 범위 표에 건축년도를 담아 이름+법정동만 같은 두 단지를 구분할 수 있게 한다", () => {
     const md = buildReport(
       [unit({ minPrice: 1_000_000_000, maxPrice: 2_000_000_000, tradeCount: 5, builtYear: 1979 })],
       baseLog,
       config,
     );
     const sections = md.split(/^## /m);
-    const section = sections.find((s) => s.startsWith("과대병합 의심"));
+    const section = sections.find((s) => s.startsWith("가격 범위가 지나치게 넓은 평형"));
     expect(section).toContain("1979");
   });
 });
+
+describe("리포트가 여전히 의미 있는 것을 보고 있다", () => {
+  /**
+   * 아무것도 못 잡는 절이 리포트에 남아 있으면 그 자체가 거짓 안심이다 —
+   * 사람은 "(없음)"을 보고 문제가 없다고 읽는다. 여기서는 남은 신호 하나하나가
+   * **실제로 켜질 수 있다**는 것을 확인한다.
+   */
+  it("한 단지 ID에 이름 여러 개 — 켜질 수 있다", () => {
+    const md = buildReport([unit()], baseLog, config, [
+      { complexKey: "11680-1", complexName: "옛이름" },
+      { complexKey: "11680-1", complexName: "새이름" },
+    ]);
+    expect(section(md, "한 단지 ID에 이름 여러 개")).not.toContain("(없음)");
+  });
+
+  it("화면에서 구분 안 되는 동명 단지 — 켜질 수 있다", () => {
+    const md = buildReport(
+      [
+        unit({ complexKey: "11680-1", complexName: "우성", legalDongName: "대치동" }),
+        unit({ complexKey: "11680-2", complexName: "우성", legalDongName: "대치동" }),
+      ],
+      baseLog,
+      config,
+    );
+    expect(section(md, "화면에서 구분 안 되는 동명 단지")).not.toContain("(없음)");
+  });
+
+  it("가격 범위가 지나치게 넓은 평형 — 켜질 수 있다", () => {
+    const md = buildReport(
+      [unit({ minPrice: 1_000_000_000, maxPrice: 3_000_000_000, tradeCount: 9 })],
+      baseLog,
+      config,
+    );
+    expect(section(md, "가격 범위가 지나치게 넓은 평형")).not.toContain("(없음)");
+  });
+
+  it("평형 분할 의심 — 켜질 수 있다", () => {
+    const md = buildReport(
+      [
+        unit({ complexKey: "11680-1", areaBucket: 84, tradeCount: 1 }),
+        unit({ complexKey: "11680-1", areaBucket: 85, tradeCount: 1 }),
+      ],
+      baseLog,
+      config,
+    );
+    expect(section(md, "평형 분할 의심")).not.toContain("(없음)");
+  });
+
+  it("캐시 형식 불일치 — 켜질 수 있다", () => {
+    const md = buildReport([unit()], [{ ...baseLog[0]!, cacheSchemaMismatch: true }], config);
+    expect(section(md, "캐시 형식 불일치(재수집됨)")).not.toContain("(없음)");
+  });
+
+  /**
+   * 키가 aptSeq가 되면서 "이름이 비슷하니 같은 단지일지 모른다"는 신호는
+   * 뜻을 잃었다. 실제 데이터에서 그 절은 67쌍을 내놨는데 67쌍 전부가 국토부
+   * 기준으로 다른 단지였다 — 100% 거짓 양성만 내는 목록은 사람 눈을 마비시켜
+   * 진짜 신호까지 못 보게 만든다. 되살아나지 않도록 못박는다.
+   */
+  it("뜻을 잃은 과소·과대병합 절이 되살아나지 않는다", () => {
+    const md = buildReport([unit()], baseLog, config, []);
+    expect(md).not.toContain("## 과소병합 후보");
+    expect(md).not.toContain("## 과대병합 의심");
+  });
+
+  it("가격 범위 절이 '다른 단지가 섞였다'고 말하지 않는다 — aptSeq 키에서는 그럴 수 없다", () => {
+    const md = buildReport(
+      [unit({ minPrice: 1_000_000_000, maxPrice: 3_000_000_000, tradeCount: 9 })],
+      baseLog,
+      config,
+    );
+    expect(section(md, "가격 범위가 지나치게 넓은 평형")).not.toContain("다른 단지가 섞였을 수 있다");
+  });
+});
+
+/** 리포트에서 `## 제목` 절 하나를 떼어낸다. */
+function section(md: string, title: string): string {
+  return md.split(/^## /m).find((s) => s.startsWith(title)) ?? "";
+}
+
