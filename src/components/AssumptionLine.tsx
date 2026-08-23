@@ -28,6 +28,18 @@ interface AssumptionItem {
   field?: AssumableField;
   /** 그대로 표시되는 문장. 실제 기본값에서 만든다 — 하드코딩하지 않는다. */
   text: string;
+  /**
+   * 리뷰 수정(인쇄 결함 2): `text` 안에서 종이 위에서는 누를 수 없는
+   * 조작 지시("눌러서 알려주세요"류)를 정확히 가리키는 부분 문자열.
+   * `renderAssumptionText`가 이 문자열을 `text`에서 찾아 별도 span으로
+   * 감싸 인쇄에서만 숨긴다(hiddenInPrint.ts의 .assumption-action) —
+   * 가정 사실과 방향 경고(고치면 숫자가 어느 쪽으로 움직이는지)는 이
+   * 지시문의 앞뒤에 남아 인쇄에서도 살아남는다.
+   *
+   * `text`를 화면·인쇄용으로 두 벌 만드는 대신 하나의 문자열에서 잘라
+   * 쓰는 이유: 두 벌을 만들면 나중에 한쪽만 고쳐져 어긋날 수 있다.
+   */
+  printHiddenPhrase?: string;
 }
 
 /**
@@ -87,6 +99,7 @@ export function buildAssumptionItems(
       text:
         "기존 대출 없음으로 계산했어요. 매달 갚는 돈이 있다면 눌러서 " +
         "알려주세요 — 반영하면 살 수 있는 가격이 낮아질 수 있어요.",
+      printHiddenPhrase: "매달 갚는 돈이 있다면 눌러서 알려주세요 — ",
     });
   }
 
@@ -98,6 +111,7 @@ export function buildAssumptionItems(
           "— 한도가 늘어날 수 있어요."
         : "비규제지역으로 가정하고 계산했어요. 규제지역이면 눌러서 " +
           "바꾸세요 — 한도가 줄어들 수 있어요.",
+      printHiddenPhrase: "눌러서 바꾸세요 — ",
     });
   }
 
@@ -110,19 +124,22 @@ export function buildAssumptionItems(
     // 넘으면 농특세가 붙어 부대비용이 늘어 가격이 "낮아질" 수 있다는
     // 반대 방향이 진실이다. regulatedArea 항목과 같은 양방향 분기 방식을
     // 따른다.
+    const overThreshold = state.exclusiveAreaSqm > ruralTaxAreaThresholdSqm;
     items.push({
       field: "area",
-      text:
-        state.exclusiveAreaSqm > ruralTaxAreaThresholdSqm
-          ? `전용면적 ${state.exclusiveAreaSqm}㎡로 가정하고 계산했어요. ` +
-            "실제 면적을 눌러서 알려주세요 — " +
-            `${ruralTaxAreaThresholdSqm}㎡ 이하면 부대비용이 줄어 살 ` +
-            "수 있는 가격이 늘어날 수 있어요."
-          : `전용면적 ${state.exclusiveAreaSqm}㎡로 가정하고 계산했어요. ` +
-            "이미 농특세가 붙지 않는 면적으로 계산했어요 — 실제 면적을 " +
-            "눌러서 알려주세요, " +
-            `${ruralTaxAreaThresholdSqm}㎡를 넘으면 부대비용이 늘어 살 ` +
-            "수 있는 가격이 낮아질 수 있어요.",
+      text: overThreshold
+        ? `전용면적 ${state.exclusiveAreaSqm}㎡로 가정하고 계산했어요. ` +
+          "실제 면적을 눌러서 알려주세요 — " +
+          `${ruralTaxAreaThresholdSqm}㎡ 이하면 부대비용이 줄어 살 ` +
+          "수 있는 가격이 늘어날 수 있어요."
+        : `전용면적 ${state.exclusiveAreaSqm}㎡로 가정하고 계산했어요. ` +
+          "이미 농특세가 붙지 않는 면적으로 계산했어요 — 실제 면적을 " +
+          "눌러서 알려주세요, " +
+          `${ruralTaxAreaThresholdSqm}㎡를 넘으면 부대비용이 늘어 살 ` +
+          "수 있는 가격이 낮아질 수 있어요.",
+      printHiddenPhrase: overThreshold
+        ? "실제 면적을 눌러서 알려주세요 — "
+        : "실제 면적을 눌러서 알려주세요, ",
     });
   }
 
@@ -157,6 +174,36 @@ export function buildAssumptionItems(
   return items;
 }
 
+/**
+ * 리뷰 수정(인쇄 결함 2): `item.text` 안에서 `item.printHiddenPhrase`가
+ * 가리키는 조작 지시 부분만 별도 span(`.assumption-action`)으로 감싼다.
+ * `styles.css`의 `@media print`가 그 클래스만 숨긴다 — 화면에서는 이
+ * span도 그냥 인라인으로 이어져 렌더링 결과가 기존과 똑같다(스타일도,
+ * 텍스트도 바뀌지 않는다).
+ *
+ * `text`를 인쇄용으로 다시 쓰지 않고 부분 문자열 하나(`indexOf`)로
+ * 찾아 쓰는 이유: 문장을 두 벌 관리하면 나중에 한쪽만 고쳐져 화면과
+ * 인쇄물이 어긋난다. 못 찾으면(오타 등으로 `printHiddenPhrase`가
+ * `text`의 부분 문자열이 아니게 되면) 안전하게 원문 전체를 그대로
+ * 보여준다 — 인쇄에서 조작 지시가 남는 쪽이, 가정 사실이 통째로
+ * 사라지는 쪽보다 낫다.
+ */
+function renderAssumptionText(item: AssumptionItem) {
+  if (item.printHiddenPhrase === undefined) return item.text;
+
+  const start = item.text.indexOf(item.printHiddenPhrase);
+  if (start === -1) return item.text;
+
+  const end = start + item.printHiddenPhrase.length;
+  return (
+    <>
+      {item.text.slice(0, start)}
+      <span className="assumption-action">{item.text.slice(start, end)}</span>
+      {item.text.slice(end)}
+    </>
+  );
+}
+
 export function AssumptionLine({
   state,
   onOpen,
@@ -189,10 +236,10 @@ export function AssumptionLine({
                 data-field={field === "existingDebt" ? field : undefined}
                 onClick={() => onOpen(field)}
               >
-                {item.text}
+                {renderAssumptionText(item)}
               </button>
             ) : (
-              <p className="assumption-notice">{item.text}</p>
+              <p className="assumption-notice">{renderAssumptionText(item)}</p>
             )}
           </li>
         );

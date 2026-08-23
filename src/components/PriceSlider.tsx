@@ -54,30 +54,49 @@ export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProp
         {formatWon(price)}
       </p>
 
-      <Slider
-        label="이 가격에 산다면"
-        min={0}
-        max={max}
-        step={PRICE_STEP}
-        values={[price]}
-        getAriaLabel={() => "이 가격에 산다면"}
-        getAriaValuetext={(value) => formatWon(value)}
-        // 기본값은 원 단위 정수(예: 476100000)를 그대로 보여준다 — 드래그
-        // 중 썸 위에 뜨는 값 표시(value indicator)에도 같은 한국식 표기를
-        // 입힌다. 실제 브라우저 확인에서 이걸 빼먹으면 화면에 그 raw
-        // 숫자가 그대로 노출되는 게 실제로 보인다.
-        getValueIndicatorLabel={({ value }) => formatWon(value)}
-        markers={markers}
-        onValuesChange={(values) => {
-          const next = toPrice(values, max);
-          if (next !== undefined) onChange(next);
-        }}
-      />
+      {/*
+        인쇄 시 지우는 부분을 이 wrapper 하나로 한정한다
+        (`src/print/hiddenInPrint.ts`의 `.price-slider-control`).
+        드래그로 값을 바꾸는 장치는 종이 위에서 무의미하지만, 지금 가리키는
+        **값**(위의 `.slider-price`)과 한계 안내(아래 `.slider-warning`)는
+        바로 아래 대출 배지가 이 가격을 기준으로 계산되므로(전제) 남긴다 —
+        그래서 Slider만 별도 div로 감싼다.
+      */}
+      <div className="price-slider-control">
+        <Slider
+          label="이 가격에 산다면"
+          min={0}
+          max={max}
+          step={PRICE_STEP}
+          values={[price]}
+          getAriaLabel={() => "이 가격에 산다면"}
+          getAriaValuetext={(value) => formatWon(value)}
+          // 기본값은 원 단위 정수(예: 476100000)를 그대로 보여준다 — 드래그
+          // 중 썸 위에 뜨는 값 표시(value indicator)에도 같은 한국식 표기를
+          // 입힌다. 실제 브라우저 확인에서 이걸 빼먹으면 화면에 그 raw
+          // 숫자가 그대로 노출되는 게 실제로 보인다.
+          getValueIndicatorLabel={({ value }) => formatWon(value)}
+          markers={markers}
+          onValuesChange={(values) => {
+            const next = toPrice(values, max);
+            if (next !== undefined) onChange(next);
+          }}
+        />
+      </div>
 
       {price === max && (
         <p className="slider-warning">
-          이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요.
-          슬라이더를 내려 부담이 어떻게 달라지는지 확인해 보세요.
+          {/*
+            리뷰 수정(인쇄 결함 2): "이건 빌릴 수 있는 한계예요. 무리
+            없는 선은 따로 있어요"는 인쇄물에서 가장 중요한 문장 중
+            하나라 반드시 남긴다. 뒤의 "슬라이더를 내려 ~"만 종이 위에서
+            누를 수 없는 조작 지시라 별도 span으로 감싸 인쇄에서 지운다
+            — hiddenInPrint.ts의 .slider-action.
+          */}
+          이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요.{" "}
+          <span className="slider-action">
+            슬라이더를 내려 부담이 어떻게 달라지는지 확인해 보세요.
+          </span>
         </p>
       )}
     </section>

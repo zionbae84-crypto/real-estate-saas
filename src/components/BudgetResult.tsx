@@ -65,7 +65,17 @@ export function BudgetResult({ result, safePrice }: BudgetResultProps) {
           </div>
 
           <details className="result-step result-step--fold">
-            <summary>부대비용·정책대출·상세 설명 더 보기</summary>
+            {/*
+              리뷰 수정(인쇄 결함 2): "더 보기"는 인쇄에서 <details>가
+              강제로 펼쳐지면(styles.css의 ::details-content 규칙) 이미
+              펼쳐진 내용 바로 위에서 하라고 시키는 죽은 지시문이 된다.
+              접미사만 별도 span으로 감싸 인쇄에서 지운다 —
+              hiddenInPrint.ts의 .fold-more-hint.
+            */}
+            <summary>
+              부대비용·정책대출·상세 설명
+              <span className="fold-more-hint"> 더 보기</span>
+            </summary>
             <BindingExplainer loanLimit={result.loanLimit} showTitle={false} />
             <CostBreakdown costs={result.costs} />
             <PolicyLoanList matched={result.matchedPolicyLoans} />

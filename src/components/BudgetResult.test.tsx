@@ -85,6 +85,23 @@ describe("BudgetResult", () => {
     expect(advice.closest("details")).not.toBeNull();
   });
 
+  it("리뷰 수정(인쇄 결함 2): summary의 '더 보기'만 별도 span으로 감싼다", () => {
+    // 인쇄에서 <details>가 강제로 펼쳐지면(styles.css의 ::details-content
+    // 규칙) "더 보기"는 이미 펼쳐진 내용 바로 위에서 하라고 시키는 죽은
+    // 지시문이 된다 — .fold-more-hint만 인쇄에서 지운다. 이 details 안에
+    // BindingExplainer의 "네 가지 한도 모두 보기" summary도 중첩돼
+    // 있으므로, 바깥 details의 자식 summary로 범위를 좁혀 조회한다.
+    renderResult();
+    const summary = document.querySelector(".result-step--fold > summary");
+    expect(summary).not.toBeNull();
+
+    const hint = summary?.querySelector(".fold-more-hint");
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toBe(" 더 보기");
+    // 제목 자체(펼쳐진 내용의 헤딩 구실)는 hint 바깥에 남는다.
+    expect(summary?.textContent).toBe("부대비용·정책대출·상세 설명 더 보기");
+  });
+
   it("실구매력이 0이면 숫자 대신 안내를 보여준다", () => {
     renderResult({ result: result({ affordablePrice: 0 }) });
     expect(

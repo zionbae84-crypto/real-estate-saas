@@ -254,4 +254,72 @@ describe("App - 단지 상세(화면 4)", () => {
       );
     });
   });
+
+  describe("리뷰 수정: 인쇄(화면 5)", () => {
+    it("현금·소득을 입력하기 전에는 인쇄 버튼이 없다", () => {
+      render(<App />);
+      expect(
+        screen.queryByRole("button", { name: "인쇄하기" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("계산이 나오면 인쇄 버튼이 나타나고, 누르면 브라우저 인쇄 대화상자를 연다", async () => {
+      const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
+      render(<App />);
+      await fillProfile();
+
+      const button = screen.getByRole("button", { name: "인쇄하기" });
+      await userEvent.click(button);
+
+      expect(printSpy).toHaveBeenCalledTimes(1);
+      printSpy.mockRestore();
+    });
+
+    it("입력한 전제(현금·소득·룰셋 기준)가 인쇄 전용 요약에 나온다", async () => {
+      const { container } = render(<App />);
+      await fillProfile();
+
+      const summary = container.querySelector(".print-summary");
+      expect(summary).not.toBeNull();
+      expect(summary?.textContent).toMatch(/15억/); // 보유 현금
+      expect(summary?.textContent).toMatch(/1억 5,000만원/); // 연 소득
+      expect(summary?.textContent).toMatch(/규제 기준/); // 룰셋 기준
+      expect(summary?.textContent).toMatch(/인쇄일/);
+    });
+
+    it("리뷰 수정(인쇄 '함께 볼 것'): 부제의 개인정보 보호 문구만 별도 span으로 감싼다", () => {
+      // "입력한 재무정보는 이 브라우저를 벗어나지 않아요"는 "이
+      // 브라우저"라는 지시 대상이 종이 위에는 없어 인쇄에서 뜻이 서지
+      // 않는다 — .subtitle-privacy-note만 인쇄에서 지운다
+      // (styles.css). 룰셋 기준·수도권 범위는 종이에서도 뜻이 있어
+      // 남긴다.
+      const { container } = render(<App />);
+      const subtitle = container.querySelector(".subtitle");
+      const note = subtitle?.querySelector(".subtitle-privacy-note");
+
+      expect(note).not.toBeNull();
+      expect(note?.textContent).toBe(
+        " · 입력한 재무정보는 이 브라우저를 벗어나지 않아요",
+      );
+
+      // 화면 문구는 인쇄 결함 수정 전과 정확히 같아야 한다.
+      const expectedLabel = formatRuleVersionLabel(rules);
+      expect(subtitle?.textContent).toBe(
+        `${expectedLabel} · 수도권 · 입력한 재무정보는 이 브라우저를 벗어나지 않아요`,
+      );
+    });
+
+    it("목록 화면에서는 전용면적이 가정값이라고 밝히고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
+      const { container } = render(<App />);
+      await fillProfile();
+
+      const summaryBefore = container.querySelector(".print-summary");
+      expect(summaryBefore?.textContent).toMatch(/86㎡\s*\(가정값\)/);
+
+      await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+
+      const summaryAfter = container.querySelector(".print-summary");
+      expect(summaryAfter?.textContent).toMatch(/59㎡\s*\(선택한 매물의 실제 면적\)/);
+    });
+  });
 });

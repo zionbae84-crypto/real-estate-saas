@@ -272,4 +272,81 @@ describe("AssumptionLine", () => {
       expect(areaButton).not.toHaveAttribute("data-field");
     });
   });
+
+  describe("리뷰 수정(인쇄 결함 2): 조작 지시만 별도 span으로 감싸 인쇄에서 지운다", () => {
+    /**
+     * printHiddenPhrase는 text의 정확한 부분 문자열이어야 렌더링 시
+     * 실제로 잘려 나간다(renderAssumptionText의 indexOf 계약). 이 계약이
+     * 깨지면(오타 등으로 부분 문자열이 아니게 되면) 렌더 함수가 조용히
+     * 원문 전체를 그대로 보여줘 인쇄 결함 2가 되돌아온다 — 그래서 모든
+     * 항목에서 이 계약 자체를 잠근다.
+     */
+    it.each([
+      { state: {}, field: "existingDebt" },
+      { state: { isRegulatedArea: true }, field: "regulatedArea" },
+      { state: { isRegulatedArea: false }, field: "regulatedArea" },
+      { state: { exclusiveAreaSqm: 120 }, field: "area" }, // 임계값 초과
+      { state: { exclusiveAreaSqm: 80 }, field: "area" }, // 임계값 이하
+    ] satisfies Array<{ state: Partial<ProfileFormState>; field: AssumableField }>)(
+      "$field 항목의 printHiddenPhrase는 text의 부분 문자열이다 ($state)",
+      ({ state, field }) => {
+        const items = buildAssumptionItems(
+          { ...DEFAULT_FORM_STATE, ...state },
+          100,
+        );
+        const item = items.find((i) => i.field === field);
+        expect(item?.printHiddenPhrase).toBeDefined();
+        expect(item?.text).toContain(item?.printHiddenPhrase);
+      },
+    );
+
+    it("기존 부채 항목: 조작 지시(.assumption-action)만 별도로 감싸고, 가정 사실·방향 경고는 그 바깥에 그대로 남는다", () => {
+      const { container } = render(
+        <AssumptionLine state={DEFAULT_FORM_STATE} onOpen={vi.fn()} />,
+      );
+
+      const button = screen.getByRole("button", { name: /기존 대출/ });
+      const action = button.querySelector(".assumption-action");
+      expect(action).not.toBeNull();
+      expect(action?.textContent).toBe("매달 갚는 돈이 있다면 눌러서 알려주세요 — ");
+
+      // 화면 전체 문구는 인쇄 결함 수정 전과 정확히 같아야 한다(스크린
+      // 문구를 망가뜨리면 안 된다는 요구사항).
+      expect(button.textContent).toBe(
+        "기존 대출 없음으로 계산했어요. 매달 갚는 돈이 있다면 눌러서 " +
+          "알려주세요 — 반영하면 살 수 있는 가격이 낮아질 수 있어요.",
+      );
+
+      // action span을 뺀 나머지(=인쇄에 남는 것)에는 가정 사실과 방향
+      // 경고가 둘 다 있어야 한다 — 조작 지시만 빠지고 근거는 남는다는
+      // 요구사항을 DOM 구조로 직접 확인한다.
+      const printedText = Array.from(button.childNodes)
+        .filter((node) => node !== action)
+        .map((node) => node.textContent ?? "")
+        .join("");
+      expect(printedText).toContain("기존 대출 없음으로 계산했어요.");
+      expect(printedText).toContain("반영하면 살 수 있는 가격이 낮아질 수 있어요.");
+      expect(printedText).not.toContain("눌러서");
+      expect(container).toBeTruthy(); // container는 위 button 조회에 이미 쓰였다(전제 확인용)
+    });
+
+    it("printHiddenPhrase가 없는 항목(갈아타기 알림)은 span 없이 그대로 렌더링된다", () => {
+      const restored = loadStoredState({
+        getItem: () =>
+          JSON.stringify({
+            cash: 50_000_000,
+            annualIncome: 100_000_000,
+            status: "갈아타기",
+            existingHome: {
+              expectedSalePrice: 700_000_000,
+              remainingLoan: 300_000_000,
+              capitalGainsTax: 20_000_000,
+            },
+          }),
+      });
+      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
+      const notice = screen.getByText(/갈아타기/);
+      expect(notice.querySelector(".assumption-action")).toBeNull();
+    });
+  });
 });

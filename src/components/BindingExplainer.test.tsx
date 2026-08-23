@@ -330,6 +330,20 @@ describe("BindingExplainer", () => {
     });
   });
 
+  it("리뷰 수정(인쇄 결함 2): 네 가지 한도 summary의 '모두 보기'만 별도 span으로 감싼다", () => {
+    // 인쇄에서 <details>가 강제로 펼쳐지면(styles.css의 ::details-content
+    // 규칙) "모두 보기"는 이미 펼쳐진 표 바로 위에서 하라고 시키는 죽은
+    // 지시문이 된다 — .fold-more-hint만 인쇄에서 지운다.
+    const { container } = render(<BindingExplainer loanLimit={limit("LTV")} />);
+    const summary = container.querySelector("details > summary");
+    expect(summary).not.toBeNull();
+
+    const hint = summary?.querySelector(".fold-more-hint");
+    expect(hint).not.toBeNull();
+    expect(hint?.textContent).toBe(" 모두 보기");
+    expect(summary?.textContent).toBe("네 가지 한도 모두 보기");
+  });
+
   describe("getBindingTitle", () => {
     it("각 제약의 한 줄 제목을 컴포넌트가 그리는 것과 똑같이 돌려준다", () => {
       const bindings: BindingConstraint[] = ["LTV", "DSR", "CAP", "POLICY"];
