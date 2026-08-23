@@ -73,6 +73,14 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 참고) 종이에서 잃는 정보가 없다 — `.rights-verdict` 이하는 아래
   // MUST_SURVIVE_PRINT_CLASSES가 지킨다.
   ".rights-check-form",
+  // 문진 안내문 안의 "두 서류를 떼어 놓고 답해 주세요" 조작 지시.
+  // 바로 위 `.rights-check-form`이 인쇄에서 지워지므로 종이에는 답할
+  // 자리가 없다 — 지시 대상이 없는 말이 된다. `.fold-more-hint`·
+  // `.assumption-action`·`.slider-action`과 같은 패턴으로, 안내문 전체가
+  // 아니라 조작 지시 부분만 span으로 갈라 그 부분만 지운다. 어떤 서류를
+  // 보고 답하는 문진인지와 "다 지나가도 안전하다고 말하지 않아요"는
+  // 종이에서도 뜻이 있어 남는다.
+  ".rights-check-action",
 ];
 
 /**

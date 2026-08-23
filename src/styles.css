@@ -725,8 +725,16 @@ body {
   color: var(--seed-color-fg-neutral-muted);
 }
 
+/*
+ * `clear`는 "이 문진이 확인한 범위에서는 걸리는 게 없었어요"이지
+ * "안전해요"가 아니다. 예전에는 여기에 `--safe`를 썼는데, 그건 예산
+ * 화면의 문자 그대로 "안전" 배지가 쓰는 바로 그 토큰이다 — 글자는
+ * "'안전하다'는 뜻이 아니에요"라고 말하는데 색이 그걸 되돌려 줬다.
+ * 중립색으로 둔다. 다른 세 결론(stop·expert·incomplete)은 색이 글자를
+ * 거스르지 않으므로 그대로다.
+ */
 .rights-overall[data-verdict="clear"] {
-  color: var(--safe);
+  color: var(--seed-color-fg-neutral);
 }
 
 .rights-overall-note {
@@ -914,7 +922,8 @@ body {
   .assumption-action,
   .slider-action,
   .fold-more-hint,
-  .rights-check-form {
+  .rights-check-form,
+  .rights-check-action {
     display: none;
   }
 

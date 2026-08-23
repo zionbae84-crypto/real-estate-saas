@@ -117,6 +117,15 @@ export interface RightsEncumbranceRule {
   /** 이 비율 이상이면 "사면 안 돼요" */
   stopRatio: number;
   messages: {
+    /**
+     * 비율을 낼 수 없을 때 화면의 '몫' 자리에 대신 넣는 글자.
+     *
+     * 모르는 금액이 하나라도 있으면 `knownTotal / price`는 실제 몫이
+     * 아니라 **아래쪽 경계**일 뿐이다. 그 숫자를 그대로 띄우면(전부
+     * 모를 때는 "0.0%"가 된다) 표에 박힌 숫자가 옆의 경고문보다 먼저
+     * 읽힌다.
+     */
+    ratioUnknown: string;
     noPrice: string;
     unknown: string;
     stop: string;

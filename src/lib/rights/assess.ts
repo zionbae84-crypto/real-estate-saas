@@ -43,6 +43,15 @@ export interface RightsAssessment {
    * 컴포넌트가 스스로 지어내면 여기서만 다른 말이 나온다.
    */
   encumbranceLabel: string;
+  /**
+   * 비율을 낼 수 없을 때 화면의 '몫' 자리에 대신 넣는 글자.
+   *
+   * 모르는 금액이 하나라도 있으면 `ratio`는 실제 몫이 아니라 아래쪽
+   * 경계일 뿐이다. 전부 모를 때는 그 값이 0이라 화면에 "0.0%"가 박히는데,
+   * **표에 박힌 숫자가 옆의 경고문보다 먼저 읽힌다.** 그래서 숫자 대신
+   * 이 글자를 넣는다. 문구는 룰셋에서 온다.
+   */
+  encumbranceRatioUnknownLabel: string;
   /** 결론과 늘 함께 보여야 하는 문구 */
   disclaimer: readonly string[];
 }
@@ -98,6 +107,7 @@ export function assessRights(
     priceMissing,
     encumbrance,
     encumbranceLabel: rules.verdictLabels[encumbrance.verdict],
+    encumbranceRatioUnknownLabel: rules.encumbrance.messages.ratioUnknown,
     disclaimer: rules.disclaimer,
   };
 }

@@ -32,6 +32,7 @@ function minimalRules(): Record<string, unknown> {
       expertRatio: 0.7,
       stopRatio: 0.9,
       messages: {
+        ratioUnknown: "f",
         noPrice: "a",
         unknown: "b",
         stop: "c",

@@ -24,6 +24,7 @@ const SECTIONS: readonly RightsSection[] = [
 const AMOUNT_ROLES: readonly RightsAmountRole[] = ["zero", "input", "unknown"];
 
 const ENCUMBRANCE_MESSAGE_KEYS = [
+  "ratioUnknown",
   "noPrice",
   "unknown",
   "stop",

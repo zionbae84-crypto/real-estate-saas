@@ -30,10 +30,21 @@ export function RightsCheck() {
         <span className="fold-more-hint"> — 열어서 답하기</span>
       </summary>
 
+      {/*
+       * 이 문단은 인쇄에서 살아남는다. 그런데 "떼어 놓고 답해 주세요"는
+       * 종이 위에서 지시 대상이 없다 — 답하는 자리(`.rights-check-form`)는
+       * 인쇄에서 지워지기 때문이다. 그래서 저장소에 이미 있는 패턴
+       * (`.fold-more-hint`·`.assumption-action`·`.slider-action`)을 그대로
+       * 쓴다: 조작 지시 부분만 span으로 갈라 그 부분만 인쇄에서 감춘다.
+       * 어떤 서류를 보고 답하는 문진인지, 그리고 다 지나가도 안전하다는
+       * 뜻이 아니라는 것은 종이에서도 뜻이 있어 남긴다.
+       */}
       <p className="rights-check-intro">
-        등기사항전부증명서(집합건물)와 건축물대장을 떼어 놓고 답해 주세요.
-        이 문진은 <strong>사면 안 되는 신호</strong>를 찾는 거예요. 다
-        지나가도 안전하다고 말하지 않아요.
+        이 문진은 등기사항전부증명서(집합건물)와 건축물대장을 보고 답하는
+        거예요.
+        <span className="rights-check-action"> 두 서류를 떼어 놓고 답해 주세요.</span>{" "}
+        <strong>사면 안 되는 신호</strong>를 찾는 문진이라, 다 지나가도
+        안전하다고 말하지 않아요.
       </p>
 
       <form className="rights-check-form" onSubmit={(e) => e.preventDefault()}>

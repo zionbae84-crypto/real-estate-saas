@@ -53,6 +53,33 @@ describe("RightsCheck", () => {
     }
   });
 
+  /**
+   * 리뷰 수정(Minor 2): `.rights-check-intro`는 인쇄에서 살아남는데
+   * "떼어 놓고 답해 주세요"라고 했다. 종이에는 답할 자리가 없다
+   * (`.rights-check-form`이 인쇄에서 지워진다). 조작 지시 부분만 span으로
+   * 갈라 인쇄에서 감춘다 — `.fold-more-hint`·`.assumption-action`과 같은
+   * 패턴이다.
+   */
+  describe("안내문의 조작 지시는 인쇄에서만 사라진다", () => {
+    it("조작 지시가 별도 span으로 갈라져 있다", () => {
+      const { container } = render(<RightsCheck />);
+      const action = container.querySelector(".rights-check-action");
+      expect(action).not.toBeNull();
+      expect(action?.textContent).toContain("떼어 놓고 답해 주세요");
+    });
+
+    it("그 span을 지워도 안내문의 뜻이 남는다", () => {
+      // 인쇄에서 실제로 벌어지는 일을 흉내낸다.
+      const { container } = render(<RightsCheck />);
+      container.querySelector(".rights-check-action")?.remove();
+      const intro = container.querySelector(".rights-check-intro")?.textContent ?? "";
+      expect(intro).toContain("등기사항전부증명서");
+      expect(intro).toContain("건축물대장");
+      expect(intro).toContain("안전하다고 말하지 않아요");
+      expect(intro).not.toContain("답해 주세요");
+    });
+  });
+
   it("문서의 네 축을 모두 덮는다", () => {
     render(<RightsCheck />);
     for (const section of ["표제부", "갑구", "을구", "등기부 밖"]) {

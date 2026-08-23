@@ -137,6 +137,59 @@ describe("RightsVerdict", () => {
       expect(unknownNote).toContain("0원으로 두지 않아서");
     });
 
+    /**
+     * 리뷰 수정(Important 7): 13항목을 전부 "모르겠어요"로 답해도 확인한
+     * 합계가 0원이라 비율이 0으로 나왔고, 화면에 "0.0%"가 그대로 박혔다.
+     * 아래에 경고가 붙지만 표에 박힌 숫자가 경고문보다 먼저 읽힌다.
+     */
+    describe("모르는 금액이 있으면 비율 대신 못 낸다고 말한다", () => {
+      /** 모든 항목을 그 항목의 모름 선택지로 답한다 */
+      function allUnknown(): RightsAnswers {
+        const out: Record<string, { optionId: string; amountWon: number | null }> = {};
+        for (const item of rules.items) {
+          const option = item.options.find((o) => o.unknown === true);
+          if (option === undefined) throw new Error(`모름 선택지가 없어요: ${item.id}`);
+          out[item.id] = { optionId: option.id, amountWon: null };
+        }
+        return out;
+      }
+
+      it("전부 모르겠어요면 '0.0%'가 화면에 나오지 않는다", () => {
+        const { container } = renderVerdict(allUnknown(), 500_000_000);
+        const ratio = container.querySelector('[data-field="ratio"]');
+        expect(ratio?.textContent).not.toContain("%");
+        expect(ratio?.textContent).toBe(
+          rules.encumbrance.messages.ratioUnknown,
+        );
+      });
+
+      it("한 항목만 모름이어도 비율을 내지 않는다", () => {
+        const { container } = renderVerdict(
+          {
+            ...bestCase(),
+            mortgage: { optionId: "unknown", amountWon: null },
+          },
+          1_000_000_000,
+        );
+        expect(
+          container.querySelector('[data-field="ratio"]')?.textContent,
+        ).toBe(rules.encumbrance.messages.ratioUnknown);
+      });
+
+      it("금액을 다 알면 비율을 숫자로 낸다", () => {
+        const { container } = renderVerdict(
+          {
+            ...bestCase(),
+            mortgage: { optionId: "known", amountWon: 300_000_000 },
+          },
+          1_000_000_000,
+        );
+        expect(
+          container.querySelector('[data-field="ratio"]')?.textContent,
+        ).toBe("30.0%");
+      });
+    });
+
     it("매매 예정가를 모르면 비율을 아예 내지 않는다", () => {
       const { container } = renderVerdict(bestCase(), null);
       expect(container.querySelector('[data-field="ratio"]')).toBeNull();
