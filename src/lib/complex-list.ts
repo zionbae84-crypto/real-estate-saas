@@ -32,12 +32,17 @@ export interface ComplexListEntry {
 }
 
 export interface ComplexListResult {
-  /** 안전선 이하 */
+  /** 그 행 자신의 부담 등급이 `safe`인 행 */
   withinSafe: ComplexListEntry[];
-  /** 안전선 초과 ~ 실구매력 이하 */
+  /** 살 수는 있지만 그 행의 부담 등급이 `safe`가 아닌 행 */
   beyondSafe: ComplexListEntry[];
   affordablePrice: number;
-  /** 안전한 가격이 없으면 null */
+  /**
+   * 헤드라인용 안전선. 안전한 가격이 없으면 null.
+   *
+   * 프로필의 가정 면적으로 잰 값이라 덩어리 분기에는 쓰지 않는다
+   * (아래 `buildComplexList` 문서 참고).
+   */
   safePrice: number | null;
   /**
    * 지역 필터를 풀면 보여줄 것이 생기는가.
@@ -66,11 +71,24 @@ export interface ComplexListResult {
  * 행마다 이분 탐색을 다시 돌리지 않는다. 가용현금은 면적과 무관하므로
  * 한 번만 구해 재사용한다.
  *
- * **안전선(`safePrice`)만은 예외로 프로필 기준을 유지한다.** 화면
- * 상단의 헤드라인 값이라 목록의 분기가 상단 문구와 어긋나면 안 되기
- * 때문이다. 그래서 행 자체 면적으로는 안전해도 헤드라인 안전선을
- * 넘으면 아래 덩어리(beyondSafe)에 들어갈 수 있다 — 보수적인 방향이라
- * 허용한다.
+ * **두 덩어리로 가르는 기준도 그 행 자신의 부담 등급이다**
+ * (`entry.burden.safety.level === "safe"`). 덩어리와 행 배지가 같은
+ * `entry.burden` 하나에서 나오므로 구조적으로 어긋날 수 없다.
+ *
+ * 예전에는 헤드라인 안전선(`safePrice`, 프로필의 **가정** 면적으로 잰
+ * 값)과 행의 `maxPrice`를 비교해 갈랐다. 행의 부담은 행 자신의 실제
+ * 면적으로 재는데 분기만 가정 면적으로 재니 둘이 어긋났고, 어긋나는
+ * 방향이 하필 낙관 쪽이었다 — "무리 없이 살 수 있어요" 덩어리 안에
+ * "주의" 배지가 달린 행이 들어가, 덩어리 헤더가 그 행의 배지보다
+ * 낙관적으로 말했다. 이 제품이 가장 피해야 하는 종류의 오답이다.
+ *
+ * `safePrice`는 화면 상단 헤드라인이 쓰므로 계속 계산해 돌려주지만,
+ * **분기에는 쓰지 않는다.**
+ *
+ * **알려진 한계(파이프라인):** `unit.areaBucket`은 반올림한 값이라 실제
+ * 전용면적이 85㎡ 임계값의 반대편일 수 있다(예: 85.4㎡ → 85). 그러면
+ * 농특세·정책대출 자격 판정이 낙관 방향으로 틀린다. 파이프라인이 정확한
+ * 면적을 싣기 전까지 85 버킷에 남는 한계다.
  */
 export function buildComplexList(input: ComplexListInput): ComplexListResult {
   const { units, profile, rules, regionCodes } = input;
@@ -101,8 +119,8 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
       burden: calcBurdenAt(rowProfile(unit), rules, unit.maxPrice),
       needsBuiltYear: ambiguous.has(nameKey(unit)),
     };
-    const isSafe = safePrice !== null && unit.maxPrice <= safePrice;
-    (isSafe ? withinSafe : beyondSafe).push(entry);
+    // 덩어리와 배지가 같은 entry.burden에서 나온다 — 위 문서 참고.
+    (entry.burden.safety.level === "safe" ? withinSafe : beyondSafe).push(entry);
   }
 
   const byBurden = (a: ComplexListEntry, b: ComplexListEntry) =>
