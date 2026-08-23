@@ -239,6 +239,25 @@ function parseEncumbrance(rawEncumbrance: unknown, items: RightsItem[]): void {
     throw new Error("룰셋 필드 누락 또는 타입 오류: encumbrance.sourceItemIds");
   }
 
+  /*
+   * 역방향 검증(리뷰 수정 Minor 5): 금액을 다루는 선택지가 있는데 그
+   * 항목이 sourceItemIds에 없으면, 사용자가 적은 그 금액은 **어디에도
+   * 쓰이지 않고 조용히 사라진다.** 화면은 금액을 묻고 사용자는 답했는데
+   * 합계는 그것을 세지 않는 상태다 — 정확히 Important 2로 잡힌 결함의
+   * 모양이고, 그때 아무 테스트도 잡지 못했다.
+   *
+   * `amount`가 붙은 선택지가 하나라도 있으면(zero·input·unknown 무엇이든)
+   * 그 항목은 금액을 다루기로 한 항목이므로 합계의 출처에 있어야 한다.
+   */
+  const sourceIdSet = new Set(sourceItemIds as string[]);
+  for (const item of items) {
+    if (sourceIdSet.has(item.id)) continue;
+    const withAmount = item.options.find((option) => option.amount !== undefined);
+    if (withAmount !== undefined) {
+      throw new Error(`룰셋 값 오류: ${item.id} 항목에 금액 선택지(${withAmount.id})가 있는데 encumbrance.sourceItemIds에 없어요. 사용자가 적은 그 금액이 어디에도 쓰이지 않고 사라져요.`);
+    }
+  }
+
   for (const id of sourceItemIds as string[]) {
     const item = items.find((candidate) => candidate.id === id);
     if (item === undefined) {

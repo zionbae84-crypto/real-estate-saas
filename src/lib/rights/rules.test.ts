@@ -221,6 +221,41 @@ describe("권리분석 룰셋 파싱", () => {
       });
     });
 
+    /**
+     * 리뷰 수정(Minor 5): 검증이 한 방향뿐이었다(sourceItemIds → 금액
+     * 선택지 존재). 반대로 금액 선택지가 있는데 sourceItemIds에 없으면
+     * 사용자가 적은 그 금액이 어디에도 쓰이지 않고 조용히 사라진다 —
+     * 전세권 보증금이 정확히 그 모양으로 빠져 있었다.
+     */
+    it("금액 선택지가 있는 항목이 sourceItemIds에 없으면 거부한다", () => {
+      expectRejected((r) => {
+        const e = r.encumbrance as { sourceItemIds: string[] };
+        const items = r.items as RightsItem[];
+        // 합계에서 빼되 항목의 금액 선택지는 그대로 둔다. 다른 항목을
+        // 출처로 세워 "출처가 비었다"가 아니라 이 검사가 잡게 한다.
+        items.push({
+          ...(items[0] as RightsItem),
+          id: "another",
+          options: (items[0] as RightsItem).options.map((o) => ({ ...o })),
+        });
+        e.sourceItemIds = ["another"];
+      });
+    });
+
+    it("금액 선택지가 없는 항목은 sourceItemIds에 없어도 된다(오탐 방지)", () => {
+      // 금액과 무관한 항목(가압류·경매 등)까지 출처에 넣으라고 요구하면
+      // 안 된다. 실제 룰셋이 통과하는 것으로 확인한다.
+      const rules = parseRightsRules(rawRightsRules);
+      const sources = new Set(rules.encumbrance.sourceItemIds);
+      const withoutAmount = rules.items.filter(
+        (item) => !item.options.some((o) => o.amount !== undefined),
+      );
+      expect(withoutAmount.length).toBeGreaterThan(0);
+      for (const item of withoutAmount) {
+        expect(sources.has(item.id), item.id).toBe(false);
+      }
+    });
+
     it("금액 입력 선택지가 있는데 amountLabel이 없으면 거부한다", () => {
       expectRejected((r) => {
         const items = r.items as RightsItem[];
@@ -410,6 +445,77 @@ describe("권리분석 룰셋 파싱", () => {
     expect(stop?.note).toContain("이행강제금");
     // 위반 내용의 폭이 넓다는 사실도 함께 말한다.
     expect(stop?.note).toMatch(/폭이 넓|다양|제각/);
+  });
+
+  /**
+   * 리뷰 수정(Important 9): 룰 파일에서 `trust.withTruster`·
+   * `illegalBuilding.present`·`mainUse.nonHousing`을 stop에서 expert로
+   * 조용히 낮춰도 81개 테스트가 전부 통과했다. 잡힌 셋(`ownerMatch`·
+   * `seizure`·`auction`)도 우연이었다 — 다른 테스트가 그 선택지를
+   * 우연히 쓰고 있었을 뿐이다.
+   *
+   * 그래서 **이 룰셋이 stop으로 두어야 하는 신호의 집합**을 여기 못박는다.
+   * 어느 하나를 내리면 반드시 실패하고, 반대로 새 stop을 조용히 늘려도
+   * 실패한다 — 등급을 올리는 것도 사람이 이 목록을 함께 고치며 하는
+   * 결정이어야 한다.
+   *
+   * 이 목록을 고칠 때의 기준: **내리는 것은 낙관 방향이다.** 이 앱은
+   * 주택담보대출을 전제로 예산을 계산하므로, 그 전제를 깨거나 대금을
+   * 다 치르고도 소유권을 잃을 수 있는 신호는 stop으로 남는다.
+   */
+  describe("stop으로 두어야 하는 신호의 집합", () => {
+    /** `항목id.선택지id` 형태. 알파벳순으로 적는다 */
+    const REQUIRED_STOP_SIGNALS = [
+      // 등기부상 소유자가 아닌 사람과 계약하는 자리
+      "ownerMatch.different",
+      "trust.withTruster",
+      // 대금을 다 치르고도 소유권을 잃거나 뺏길 수 있는 자리
+      "seizure.present",
+      "auction.present",
+      // 주담대 전제가 깨지는 자리(이 앱의 예산 계산이 통째로 어긋난다)
+      "illegalBuilding.present",
+      "mainUse.nonHousing",
+    ].sort();
+
+    /** 실제 룰셋에서 stop인 선택지를 전부 모은다 */
+    function actualStopSignals(): string[] {
+      const rules = parseRightsRules(rawRightsRules);
+      return rules.items
+        .flatMap((item) =>
+          item.options
+            .filter((option) => option.verdict === "stop")
+            .map((option) => `${item.id}.${option.id}`),
+        )
+        .sort();
+    }
+
+    it("룰셋의 stop 신호가 이 목록과 정확히 일치한다", () => {
+      expect(
+        actualStopSignals(),
+        "stop 신호를 늘리거나 줄였다면 이 목록도 함께 고치세요. " +
+          "특히 **내리는 것은 낙관 방향**이라, 이 테스트를 고치는 손이 " +
+          "그 결정을 의식적으로 내리게 하는 것이 이 검사의 목적입니다.",
+      ).toEqual(REQUIRED_STOP_SIGNALS);
+    });
+
+    it("목록이 비어 있지 않다(전제)", () => {
+      // 목록이 통째로 비면 위 검사가 "stop이 하나도 없다"에도 통과한다.
+      expect(REQUIRED_STOP_SIGNALS.length).toBeGreaterThanOrEqual(6);
+    });
+
+    it("stop 신호마다 왜 멈추라는지 적혀 있다", () => {
+      const rules = parseRightsRules(rawRightsRules);
+      const silent: string[] = [];
+      for (const item of rules.items) {
+        for (const option of item.options) {
+          if (option.verdict !== "stop") continue;
+          if (option.note === undefined || option.note.trim().length < 10) {
+            silent.push(`${item.id}.${option.id}`);
+          }
+        }
+      }
+      expect(silent).toEqual([]);
+    });
   });
 
   describe("결론 문구", () => {
