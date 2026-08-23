@@ -155,6 +155,7 @@ export function AssumptionLine({ state, onOpen }: AssumptionLineProps) {
               <button
                 type="button"
                 className="assumption-item"
+                data-field={field}
                 onClick={() => onOpen(field)}
               >
                 {item.text}
