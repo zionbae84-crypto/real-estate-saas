@@ -5,14 +5,15 @@ import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/f
 import { ComplexDetail } from "./ComplexDetail";
 
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
+  const areaBucket = overrides.areaBucket ?? 59;
   return {
     complexKey: "11680|대치동|2015|테스트",
     complexName: "테스트아파트",
     regionCode: "11680",
     legalDongName: "대치동",
     builtYear: 2015,
-    areaBucket: 59,
-    medianPrice: 300_000_000,
+    areaBucket,
+    maxExclusiveAreaSqm: areaBucket,
     tradeCount: 5,
     minPrice: 280_000_000,
     maxPrice: 320_000_000,
@@ -59,20 +60,6 @@ describe("ComplexDetail", () => {
     expect(title).toMatch(/대치동/);
     expect(screen.getByText(/2억 8,000만원 ~ 3억 2,000만원/)).toBeInTheDocument();
     expect(screen.getByText(/거래 5건/)).toBeInTheDocument();
-  });
-
-  it("medianPrice를 화면에 내지 않는다", () => {
-    // 부모 스펙 §12. medianPrice(3억)는 min(2.8억)·max(3.2억) 어느
-    // 쪽과도 겹치지 않는다.
-    const { container } = render(
-      <ComplexDetail
-        unit={unit({ medianPrice: 300_000_000 })}
-        burden={burden()}
-        costs={costs()}
-        onClose={vi.fn()}
-      />,
-    );
-    expect(container.textContent).not.toMatch(/(^|[^,\d])3억원/);
   });
 
   it("변동률을 화면에 내지 않는다", () => {

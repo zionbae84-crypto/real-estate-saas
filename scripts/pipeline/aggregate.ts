@@ -8,8 +8,28 @@ export interface ComplexUnit {
   regionCode: string;
   legalDongName: string;
   builtYear: number;
-  /** 전용면적을 1㎡ 단위로 반올림한 값 */
+  /** 전용면적을 1㎡ 단위로 반올림한 값. 화면 표시용(예: "84㎡") */
   areaBucket: number;
+  /**
+   * 이 버킷(complexKey × areaBucket)에 실제로 들어간 거래들의 **최대**
+   * 전용면적(원본 실수값, 반올림하지 않음).
+   *
+   * areaBucket은 반올림값이라 실제 전용면적 85.4㎡가 85로 내려올 수 있다
+   * — 그러면 화면이 85㎡ 이하로 오판해 농특세(85㎡ 초과분)를 빼고
+   * 계산한다. 부대비용이 실제보다 작아지고 실구매력이 커지므로 이
+   * 제품이 가장 피해야 하는 낙관 방향 오류다. 85㎡ 임계값 판정에는
+   * areaBucket이 아니라 이 값을 써야 한다.
+   *
+   * 평균·중위값이 아니라 **최대값**을 쓴다 — 면적이 클수록 농특세가
+   * 붙어 비용이 커지고 실구매력이 작아지므로, 최대값 쪽으로 틀리는
+   * 것이 보수적인(안전한) 방향이다.
+   *
+   * 계산 대상은 `recent`(최근 6개월, 대표가를 낸 창)가 아니라 이
+   * 버킷에 속한 **모든** 거래(`group`)다 — areaBucket은 시간과 무관한
+   * 물리적 속성이므로, 오래된 거래라도 그 단지·평형의 실제 면적을
+   * 알려준다면 반영해야 더 정확(하고 여전히 보수적인 방향)해진다.
+   */
+  maxExclusiveAreaSqm: number;
   /** 최근 6개월 거래의 중위값(원) */
   medianPrice: number;
   tradeCount: number;
@@ -184,6 +204,7 @@ export function aggregate(
       legalDongName: first.legalDongName,
       builtYear: first.builtYear,
       areaBucket: areaBucket(first.exclusiveAreaSqm),
+      maxExclusiveAreaSqm: Math.max(...group.map((t) => t.exclusiveAreaSqm)),
       medianPrice: median(recentPrices),
       tradeCount: recent.length,
       minPrice: Math.min(...recentPrices),

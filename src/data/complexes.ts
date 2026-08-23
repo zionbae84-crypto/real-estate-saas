@@ -18,9 +18,18 @@ export interface ComplexUnit {
   regionCode: string;
   legalDongName: string;
   builtYear: number;
+  /** 전용면적을 1㎡ 단위로 반올림한 값. **표시용**(예: "84㎡") */
   areaBucket: number;
-  /** 대표가격(원). **화면에 숫자로 내지 않는다** — 부모 스펙 §12 */
-  medianPrice: number;
+  /**
+   * 이 버킷에 실제로 들어간 거래들의 **최대** 전용면적(원본 실수값).
+   *
+   * 85㎡ 임계값(농특세·정책대출 자격) 판정에는 `areaBucket`이 아니라
+   * 이 값을 써야 한다 — `areaBucket`은 반올림값이라 실제 85.4㎡가 85로
+   * 내려와 초과분을 놓칠 수 있다. 이 제품이 가장 피해야 하는 낙관 방향
+   * 오류다. 최대값을 쓰는 이유는 그것이 보수적이기 때문이다 — 면적이
+   * 클수록 농특세가 붙어 부대비용이 커지고 실구매력이 작아진다.
+   */
+  maxExclusiveAreaSqm: number;
   tradeCount: number;
   minPrice: number;
   maxPrice: number;

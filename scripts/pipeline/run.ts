@@ -6,6 +6,7 @@ import { aggregate } from "./aggregate";
 import { DATA_DIR, RAW_DIR, loadReportConfig, loadRegions } from "./config";
 import { emit } from "./emit";
 import type { FetchLogEntry } from "./fetch";
+import { buildMonthlySeries, emitMonthly } from "./monthly";
 import { normalizeAll } from "./normalize";
 import { buildReport } from "./report";
 import type { RawTrade } from "./types";
@@ -202,11 +203,16 @@ export function runPipeline(asOf: Date, rawDir: string = RAW_DIR): void {
 
   emit(units, asOf, latestContractMonth(raw), currentRulesVersion());
 
+  // complexes.json과 별도 파일로 낸다 — src/에서 아직 붙이지 않는다
+  // (scripts/pipeline/monthly.test.ts의 가드가 이 경계를 지킨다).
+  const monthly = buildMonthlySeries(normalized, asOf);
+  emitMonthly(monthly, DATA_DIR);
+
   const report = buildReport(units, loadFetchLog(), config);
   writeFileSync(join(DATA_DIR, "report.md"), report);
 
   console.log(
-    "완료. data/ 아래 complexes.json, regions.json, manifest.json, README.md, report.md",
+    "완료. data/ 아래 complexes.json, regions.json, manifest.json, monthly.json, README.md, report.md",
   );
 }
 

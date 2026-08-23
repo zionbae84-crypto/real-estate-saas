@@ -59,7 +59,7 @@ export interface ComplexListResult {
  * 모든 가격 비교와 부담 계산은 **`maxPrice`** 기준이다. 범위의 위쪽으로
  * 재면 틀리더라도 부담이 표시보다 작아지는 쪽으로 틀린다.
  *
- * **행마다 그 행의 실제 전용면적(`unit.areaBucket`)으로 계산한다.**
+ * **행마다 그 행의 실제 전용면적(`unit.maxExclusiveAreaSqm`)으로 계산한다.**
  * 프로필 하나의 `exclusiveAreaSqm`으로 모든 행을 계산하면, 실제로는
  * 농특세(85㎡ 초과)가 붙어야 할 넓은 평형이 프로필의 좁은 가정 면적을
  * 빌려 부대비용을 적게 계상받는다 — 부담은 실제보다 작게, 구매 가능
@@ -85,10 +85,11 @@ export interface ComplexListResult {
  * `safePrice`는 화면 상단 헤드라인이 쓰므로 계속 계산해 돌려주지만,
  * **분기에는 쓰지 않는다.**
  *
- * **알려진 한계(파이프라인):** `unit.areaBucket`은 반올림한 값이라 실제
- * 전용면적이 85㎡ 임계값의 반대편일 수 있다(예: 85.4㎡ → 85). 그러면
- * 농특세·정책대출 자격 판정이 낙관 방향으로 틀린다. 파이프라인이 정확한
- * 면적을 싣기 전까지 85 버킷에 남는 한계다.
+ * `unit.areaBucket`이 아니라 **`unit.maxExclusiveAreaSqm`**(그 버킷에 실제로
+ * 들어간 거래들의 최대 전용면적, 원본 실수값)으로 계산한다. `areaBucket`은
+ * 반올림한 값이라 실제 전용면적 85.4㎡가 85로 내려올 수 있는데, 그러면
+ * 85㎡ 이하로 오판해 농특세를 빼고 계산한다 — 부담은 실제보다 작게,
+ * 실구매력은 실제보다 크게 나오는 낙관 방향 오류다.
  */
 export function buildComplexList(input: ComplexListInput): ComplexListResult {
   const { units, profile, rules, regionCodes } = input;
@@ -99,7 +100,7 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
 
   const rowProfile = (u: ComplexUnit): BuyerProfile => ({
     ...profile,
-    exclusiveAreaSqm: u.areaBucket,
+    exclusiveAreaSqm: u.maxExclusiveAreaSqm,
   });
 
   const affordable = (u: ComplexUnit) =>

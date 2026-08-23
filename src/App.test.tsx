@@ -43,7 +43,7 @@ const { DETAIL_TEST_UNIT } = vi.hoisted(() => ({
     legalDongName: "테스트동",
     builtYear: 2015,
     areaBucket: 59,
-    medianPrice: 200_000_000,
+    maxExclusiveAreaSqm: 59,
     tradeCount: 3,
     minPrice: 190_000_000,
     maxPrice: 210_000_000,
