@@ -40,6 +40,12 @@ export function App() {
    * 작게, 실구매력은 실제보다 크게 보이는, 이 제품이 가장 피해야 하는
    * 방향의 오답이다. 그래서 화면이 쓰는 프로필만 상세가 열려 있는
    * 동안 이 값으로 바꿔치기하고, 닫으면 원래 프로필로 즉시 되돌아간다.
+   *
+   * 이 바꿔치기가 켜져 있는 동안에는 `ProfileForm`의 전용면적 입력란도
+   * 함께 사라진다(`areaOverridden`). 남겨 두면 사용자가 거기에 값을
+   * 넣어도 화면이 이 평형의 면적을 계속 쓰므로 **입력이 조용히
+   * 무시된다.** `AssumptionLine`이 같은 이유로 전용면적 가정 문구를
+   * 빼는 것과 같은 판단이다.
    */
   const effectiveProfile = useMemo(() => {
     if (profile === null || selectedUnit === null) return profile;
@@ -113,7 +119,12 @@ export function App() {
       </p>
 
       <ErrorBoundary onReset={reset}>
-        <ProfileForm state={state} setField={setField} openField={openField} />
+        <ProfileForm
+          state={state}
+          setField={setField}
+          openField={openField}
+          areaOverridden={selectedUnit !== null}
+        />
 
         {affordability === null ? (
           <p className="prompt">
@@ -138,7 +149,19 @@ export function App() {
                   safePrice={affordability.safePrice}
                   onChange={affordability.setPrice}
                 />
-                <SafetyBadge safety={affordability.safety} />
+                <SafetyBadge
+                  safety={affordability.safety}
+                  // 상세가 열려 있을 때만 라벨을 붙인다. 그때만 화면에
+                  // 배지가 둘(여기 + ComplexDetail 안)이고, 마크업이
+                  // 같아서 어느 쪽이 "이 집을 사면"의 답인지 알 수 없다 —
+                  // 하필 더 낙관적인 쪽이 매물 옆에 붙는다. 목록 화면에서는
+                  // 배지가 하나뿐이라 라벨이 잡음이 된다.
+                  label={
+                    selectedUnit !== null
+                      ? "위 가격에서 최대로 빌렸을 때예요"
+                      : undefined
+                  }
+                />
               </>
             )}
             {detail !== null ? (

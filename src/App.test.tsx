@@ -194,4 +194,64 @@ describe("App - 단지 상세(화면 4)", () => {
     expect(stored.touched ?? []).not.toContain("area");
     expect(stored.exclusiveAreaSqm).not.toBe(59);
   });
+
+  describe("리뷰 수정: 상세 화면의 배지 라벨·전용면적 입력·포커스", () => {
+    it("상세가 열리면 배지가 둘이 되고, 각각 무엇에 답하는지 라벨이 보인다", async () => {
+      const { container } = render(<App />);
+      await fillProfile();
+
+      // 목록 화면에서는 배지가 하나뿐이라 라벨을 붙이지 않는다.
+      expect(container.querySelectorAll(".safety-badge")).toHaveLength(1);
+      expect(container.querySelector(".safety-badge-label")).toBeNull();
+
+      await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+
+      const badges = container.querySelectorAll(".safety-badge");
+      expect(badges).toHaveLength(2);
+
+      const labels = [...container.querySelectorAll(".safety-badge-label")].map(
+        (el) => el.textContent ?? "",
+      );
+      // 둘 다 라벨이 있고, 서로 다른 질문에 답한다고 글자로 말한다.
+      expect(labels).toHaveLength(2);
+      expect(labels[0]).toMatch(/최대로 빌렸을 때/);
+      expect(labels[1]).toMatch(/이 집을 샀을 때/);
+
+      // 목록으로 돌아오면 배지가 다시 하나가 되고 라벨도 사라진다.
+      await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
+      expect(container.querySelectorAll(".safety-badge")).toHaveLength(1);
+      expect(container.querySelector(".safety-badge-label")).toBeNull();
+    });
+
+    it("상세가 열려 있는 동안에는 전용면적 입력란을 내보내지 않는다", async () => {
+      // 상세가 열려 있으면 화면 계산이 그 평형의 면적을 쓰므로,
+      // 입력란에 값을 넣어도 화면이 꿈쩍하지 않는다 — 입력이 조용히
+      // 무시되는 상태다. 무시할 거라면 물어보지 않는다.
+      render(<App />);
+      await fillProfile();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /전용면적 86㎡로 가정하고 계산했어요/ }),
+      );
+      expect(screen.getByLabelText("전용면적 (㎡)")).toBeInTheDocument();
+
+      await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+      expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
+
+      // 상세를 닫으면 다시 물어볼 수 있어야 한다.
+      await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
+      expect(screen.getByLabelText("전용면적 (㎡)")).toBeInTheDocument();
+    });
+
+    it("상세를 열면 포커스가 상세로 옮겨간다", async () => {
+      render(<App />);
+      await fillProfile();
+
+      await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+
+      expect(document.activeElement).toBe(
+        screen.getByRole("region", { name: "단지 상세" }),
+      );
+    });
+  });
 });

@@ -192,6 +192,41 @@ describe("ComplexDetail", () => {
     expect(screen.getByText(/실구매 가능 가격도 함께 바뀌었을 수 있어요/)).toBeInTheDocument();
   });
 
+  describe("리뷰 수정: 상세 화면의 배지·마크업·포커스", () => {
+    it("이 배지가 '이 집을 샀을 때'의 답이라고 글자로 말한다", () => {
+      // 상세 화면에는 헤드라인 배지(최대로 빌렸을 때)와 이 배지가 함께
+      // 뜬다. 라벨이 없으면 어느 쪽이 이 매물의 답인지 알 수 없다.
+      const { container } = render(
+        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+      );
+      expect(container.querySelector(".safety-badge-label")?.textContent).toMatch(
+        /이 집을 샀을 때/,
+      );
+    });
+
+    it("필요 대출액 문단에 죽은 data-level을 붙이지 않는다", () => {
+      // .complex-detail-loan[data-level=…]에 대응하는 CSS도 없고
+      // .complex-level 자식도 없었다 — 아무것도 하지 않는 속성이다.
+      const { container } = render(
+        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+      );
+      const loan = container.querySelector(".complex-detail-loan");
+      expect(loan).not.toBeNull();
+      expect(loan?.hasAttribute("data-level")).toBe(false);
+    });
+
+    it("열리면 포커스가 상세로 옮겨간다", () => {
+      // 목록이 사라지고 이 화면이 그 자리에 나타난다. 포커스가 사라진
+      // 버튼 자리에 남으면 스크린리더 사용자는 화면이 바뀐 것을 모른다.
+      render(
+        <ComplexDetail unit={unit()} burden={burden()} costs={costs()} onClose={vi.fn()} />,
+      );
+      expect(document.activeElement).toBe(
+        screen.getByRole("region", { name: "단지 상세" }),
+      );
+    });
+  });
+
   it("목록으로 버튼을 누르면 닫는다", () => {
     const onClose = vi.fn();
     render(

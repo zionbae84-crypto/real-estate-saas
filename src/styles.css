@@ -181,6 +181,18 @@ body {
 .safety-badge[data-level="caution"] .safety-level { color: var(--caution); }
 .safety-badge[data-level="danger"] .safety-level { color: var(--danger); }
 
+/*
+ * 배지가 둘 뜨는 화면(단지 상세)에서 각 배지가 무엇에 답하는지 말하는
+ * 줄. 등급 색과 겹치지 않게 중립색·작은 글자로 두고, 구분은 오로지
+ * 글자가 한다 — 색만으로 의미를 전달하지 않는다.
+ */
+.safety-badge-label {
+  margin: 0 0 0.15rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
 .safety-level {
   font-size: 1.5rem;
   font-weight: 700;
@@ -480,7 +492,16 @@ body {
   padding: 0.75rem 0;
 }
 
-.complex-row p {
+/*
+ * 행의 세 줄은 <span>이다 — onSelect가 있으면 이 마크업이 <button>
+ * 안으로 들어가는데 button의 콘텐츠 모델은 phrasing content라 <p>가
+ * 유효하지 않다. <p>였을 때와 같은 블록 배치·여백을 여기서 그대로
+ * 준다(마크업만 바뀌고 화면은 같아야 한다).
+ */
+.complex-row .complex-name,
+.complex-row .complex-range,
+.complex-row .complex-burden {
+  display: block;
   margin: 0.15rem 0;
 }
 
@@ -511,9 +532,14 @@ body {
 }
 
 .complex-empty,
+.complex-list-note,
 .complex-freshness {
   color: var(--seed-color-fg-neutral-muted);
   font-size: 0.9rem;
+}
+
+.complex-list-note {
+  margin: 0 0 0.5rem;
 }
 
 .complex-no-loan {

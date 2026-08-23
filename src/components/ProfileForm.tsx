@@ -78,12 +78,25 @@ export interface ProfileFormProps {
    * 다른 항목을 열면 화면에서는 그 값을 다시 보거나 고칠 방법이 없어진다.
    */
   openField?: AssumableField | null;
+  /**
+   * 지금 화면이 특정 평형의 상세를 보여주고 있어, 그 평형의 실제
+   * 전용면적으로 계산 중인가(App.tsx의 `effectiveProfile`).
+   *
+   * 참이면 전용면적 입력란을 **내보내지 않는다.** 상세가 열려 있는
+   * 동안에는 화면 계산이 그 평형의 면적을 쓰므로, 입력란에 값을 넣어도
+   * 화면이 꿈쩍하지 않는다 — 입력이 조용히 무시되는 상태다. 무시할
+   * 거라면 물어보지 않는 편이 정직하다. `AssumptionLine`이 같은
+   * 이유로 전용면적 가정 문구를 빼는 것과 짝을 이룬다. 상세를 닫으면
+   * 이 플래그가 꺼지고 입력란도 원래 조건대로 돌아온다.
+   */
+  areaOverridden?: boolean;
 }
 
 export function ProfileForm({
   state,
   setField,
   openField = null,
+  areaOverridden = false,
 }: ProfileFormProps) {
   return (
     <form className="profile-form" onSubmit={(e) => e.preventDefault()}>
@@ -144,12 +157,13 @@ export function ProfileForm({
         </div>
       )}
 
-      {(openField === "area" || state.touched.includes("area")) && (
-        <AreaInput
-          value={state.exclusiveAreaSqm}
-          onChange={(value) => setField("exclusiveAreaSqm", value)}
-        />
-      )}
+      {!areaOverridden &&
+        (openField === "area" || state.touched.includes("area")) && (
+          <AreaInput
+            value={state.exclusiveAreaSqm}
+            onChange={(value) => setField("exclusiveAreaSqm", value)}
+          />
+        )}
     </form>
   );
 }

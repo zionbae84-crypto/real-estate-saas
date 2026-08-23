@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
@@ -30,10 +31,33 @@ export interface ComplexDetailProps {
  * 되돌아간다. 그 사실을 사용자가 놀라지 않게 여기서 한 줄로 알려준다.
  */
 export function ComplexDetail({ unit, burden, costs, onClose }: ComplexDetailProps) {
-  const level = burden.safety.level;
+  /**
+   * 상세가 열리면 포커스를 이 화면으로 옮긴다.
+   *
+   * 목록이 통째로 사라지고 이 화면이 그 자리에 나타나는데, 포커스는
+   * 방금 사라진 행 버튼 자리에 남는다 — 스크린리더 사용자에게는 아무
+   * 일도 일어나지 않은 것처럼 들린다. 화면이 바뀌었다는 사실 자체가
+   * 전달되지 않으면 그 뒤의 숫자도 읽히지 않는다.
+   *
+   * 첫 요소(← 목록으로)가 아니라 섹션 자체에 포커스를 준다. 섹션의
+   * 접근 가능한 이름("단지 상세")과 그 안의 제목·본문이 순서대로
+   * 읽히므로, 사용자가 "무엇이 열렸는지"부터 듣는다.
+   *
+   * `unit`이 바뀌면 다시 옮긴다 — 다른 평형의 상세로 갈아탈 때도
+   * 같은 전환이다.
+   */
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    sectionRef.current?.focus();
+  }, [unit]);
 
   return (
-    <section className="complex-detail" aria-label="단지 상세">
+    <section
+      className="complex-detail"
+      aria-label="단지 상세"
+      ref={sectionRef}
+      tabIndex={-1}
+    >
       <button type="button" className="complex-detail-back" onClick={onClose}>
         ← 목록으로
       </button>
@@ -54,7 +78,7 @@ export function ComplexDetail({ unit, burden, costs, onClose }: ComplexDetailPro
         않아서, 목록으로 돌아가면 원래 가정한 면적 기준으로 되돌아가요.
       </p>
 
-      <p className="complex-detail-loan" data-level={level}>
+      <p className="complex-detail-loan">
         범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
         {burden.neededLoan === 0 ? (
           <span className="complex-no-loan">대출 없이 살 수 있어요</span>
@@ -65,7 +89,7 @@ export function ComplexDetail({ unit, burden, costs, onClose }: ComplexDetailPro
         )}
       </p>
 
-      <SafetyBadge safety={burden.safety} />
+      <SafetyBadge safety={burden.safety} label="이 집을 샀을 때예요" />
 
       <CostBreakdown costs={costs} />
     </section>

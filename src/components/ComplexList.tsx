@@ -86,6 +86,7 @@ export function ComplexList({
   return (
     <section className="complex-list" aria-label="살 수 있는 단지">
       <h2>살 수 있는 단지</h2>
+      <BasisNote />
 
       {safeShown.length > 0 && (
         <>
@@ -141,17 +142,21 @@ function ComplexRow({
   const { unit, burden, needsBuiltYear } = entry;
   const level = burden.safety.level;
 
+  // 각 줄은 <p>가 아니라 <span>이다. onSelect가 있으면 이 마크업이
+  // 그대로 <button> 안으로 들어가는데, button의 콘텐츠 모델은
+  // phrasing content라 <p>는 유효하지 않다. 블록 모양과 여백은
+  // styles.css가 그대로 유지한다 — 마크업만 바뀌고 화면은 같다.
   const rows = (
     <>
-      <p className="complex-name">
+      <span className="complex-name">
         <strong>{unit.complexName}</strong> {unit.areaBucket}㎡ · {unit.legalDongName}
         {needsBuiltYear && <span className="complex-built"> · {unit.builtYear}년 준공</span>}
-      </p>
-      <p className="complex-range">
+      </span>
+      <span className="complex-range">
         {formatRange(unit.minPrice, unit.maxPrice)}
         <span className="complex-trades"> · 최근 1년 거래 {unit.tradeCount}건</span>
-      </p>
-      <p className="complex-burden" data-level={level}>
+      </span>
+      <span className="complex-burden" data-level={level}>
         범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
         {burden.neededLoan === 0 ? (
           // 현금만으로 덮이는 가격이다. "월 0원 · 부담률 0%"만 보여주면
@@ -167,7 +172,7 @@ function ComplexRow({
             <span className="complex-level">{LEVEL_LABELS[level]}</span>
           </>
         )}
-      </p>
+      </span>
     </>
   );
 
@@ -237,6 +242,27 @@ function EmptyMessage({
     <p className="complex-empty">
       지금 예산으로 살 수 있는 단지가 이 데이터에는 없어요. 현금이 더
       있으면 선택지가 생겨요.
+    </p>
+  );
+}
+
+/**
+ * 이 목록의 숫자가 어느 면적 기준인지 밝힌다.
+ *
+ * 헤드라인(실구매 가능 가격·안전선)은 아직 매물을 고르기 전이라
+ * **가정한 전용면적**으로 계산되고, 목록의 각 행은 **그 평형의 실제
+ * 면적**으로 계산된다. 행 쪽이 정확하지만, 둘이 다르면 85㎡ 이하
+ * 행은 헤드라인보다 비싼 가격까지 통과한다(농특세가 붙지 않아
+ * 부대비용이 적기 때문이다). 그런 행을 보고 사용자가 화면이 서로
+ * 모순된다고 읽지 않게, 기준을 먼저 말한다. `ComplexDetail`에는 이미
+ * 같은 안내가 있지만 목록 화면에는 없었다.
+ */
+function BasisNote() {
+  return (
+    <p className="complex-list-note">
+      각 줄은 그 평형의 실제 전용면적으로 계산했어요. 위에 보이는
+      실구매 가능 가격과 안전선은 가정한 면적 기준이라, 그보다 비싼 집이
+      여기 보일 수 있어요. 이 목록 쪽이 더 정확해요.
     </p>
   );
 }
