@@ -13,6 +13,7 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     legalDongName: "대치동",
     builtYear: 1979,
     areaBucket: 84,
+    maxExclusiveAreaSqm: 84.3,
     medianPrice: 2_000_000_000,
     tradeCount: 5,
     minPrice: 1_900_000_000,
@@ -105,32 +106,49 @@ describe("buildManifest", () => {
 });
 
 describe("buildSchemaDoc (I7)", () => {
-  it("changeRate12m이 12개월 전 시점도 12개월 창도 아니라는 것을 명시한다", () => {
-    const doc = buildSchemaDoc();
-    expect(doc).toContain("changeRate12m");
-    expect(doc).toMatch(/12개월 전 시점.*아니다|아니다.*12개월/);
-  });
-
   it("실제 필드 이름들을 담는다", () => {
     const doc = buildSchemaDoc();
     for (const field of [
       "complexKey",
       "areaBucket",
-      "medianPrice",
+      "maxExclusiveAreaSqm",
       "lowConfidence",
-      "changeRate3m",
-      "changeRate3mRecentCount",
-      "changeRate3mPriorCount",
-      "changeRate3mLowConfidence",
-      "changeRate12mRecentCount",
-      "changeRate12mPriorCount",
-      "changeRate12mLowConfidence",
       "dataAsOf",
       "generatedAt",
       "regionCodes",
     ]) {
       expect(doc).toContain(field);
     }
+  });
+
+  it("medianPrice·changeRate류는 내보내지 않는다고 명시한다", () => {
+    // 이 필드들은 파이프라인 내부에서는 계산되지만(aggregate.ts) 화면
+    // 표시 금지 규칙(부모 스펙 §12: 감정평가법 저촉·수익률 예측 금지)
+    // 때문에 complexes.json에는 담기지 않는다. 필드 자체가 없다는 사실을
+    // 문서에도 명시해, 화면 개발자가 "빠뜨렸나?" 헷갈리지 않게 한다.
+    const doc = buildSchemaDoc();
+    expect(doc).toMatch(/medianPrice/);
+    expect(doc).toMatch(/changeRate/);
+    expect(doc).toMatch(/내보내지 않는다|담지 않는다|제외/);
+  });
+
+  it("maxExclusiveAreaSqm 행이 areaBucket과의 관계(반올림 vs 실제값)를 설명한다", () => {
+    const doc = buildSchemaDoc();
+    const lines = doc.split("\n");
+    const row = lines.find((l) => l.startsWith("| maxExclusiveAreaSqm "));
+    expect(row).toBeDefined();
+    expect(row).toMatch(/최대/);
+  });
+
+  it("monthly.json이 별도 파일이고 medianPrice·변동률이 없다는 것을 문서화한다", () => {
+    const doc = buildSchemaDoc();
+    expect(doc).toContain("monthly.json");
+    expect(doc).toMatch(/별도 파일/);
+    expect(doc).toMatch(/complexKey\|areaBucket/);
+    expect(doc).toContain("tradeCount");
+    // "내보내지 않는 필드" 절과 별개로 monthly.json 절도 그 규칙을 되짚는다.
+    const monthlySection = doc.slice(doc.indexOf("## monthly.json"));
+    expect(monthlySection).toMatch(/medianPrice/);
   });
 
   it("dataAsOf가 계약월 기준이며 신고 지연으로 과소 보고될 수 있음을 설명한다", () => {
@@ -141,32 +159,6 @@ describe("buildSchemaDoc (I7)", () => {
 
   it("호출할 때마다 바이트 단위로 같은 문서를 낸다 — 결정론", () => {
     expect(buildSchemaDoc()).toBe(buildSchemaDoc());
-  });
-
-  it("changeRate3m 행에 계산식(분자-분모/분모)과 분모, 부호 의미를 명시한다", () => {
-    // 한국어 "X 대비 Y"는 X가 기준(분모)이라는 뜻인데, 실제 코드
-    // (aggregate.ts의 changeRate)는 분모가 '그 이전 3개월'이다. "최근 3개월
-    // 중위값 대비 그 이전 3개월 중위값의 변동률"이라는 옛 문구는 정반대로
-    // 읽힌다. 애매한 "대비" 대신 계산식 자체와 부호 의미를 못박아야 한다.
-    const doc = buildSchemaDoc();
-    const lines = doc.split("\n");
-    const row = lines.find((l) => l.startsWith("| changeRate3m "));
-    expect(row).toBeDefined();
-    expect(row).toContain("÷");
-    expect(row).toContain("그 이전 3개월 중위값");
-    expect(row).toMatch(/양수/);
-    expect(row).toMatch(/음수/);
-  });
-
-  it("changeRate12m 행에도 같은 형식의 계산식과 부호 의미를 명시한다", () => {
-    const doc = buildSchemaDoc();
-    const lines = doc.split("\n");
-    const row = lines.find((l) => l.startsWith("| changeRate12m "));
-    expect(row).toBeDefined();
-    expect(row).toContain("÷");
-    expect(row).toContain("그 이전 6개월 중위값");
-    expect(row).toMatch(/양수/);
-    expect(row).toMatch(/음수/);
   });
 
   it("complexKey 행의 pipe가 이스케이프되어 표 헤더와 같은 열 수를 유지한다", () => {
@@ -204,7 +196,7 @@ describe("emit — 산출물과 함께 스키마 문서를 쓴다 (I7)", () => {
     const readmePath = join(root, "README.md");
     expect(existsSync(readmePath)).toBe(true);
     const content = readFileSync(readmePath, "utf8");
-    expect(content).toContain("changeRate12m");
+    expect(content).toContain("maxExclusiveAreaSqm");
     expect(content).toContain("lowConfidence");
   });
 
@@ -213,5 +205,56 @@ describe("emit — 산출물과 함께 스키마 문서를 쓴다 (I7)", () => {
     expect(existsSync(join(root, "complexes.json"))).toBe(true);
     expect(existsSync(join(root, "manifest.json"))).toBe(true);
     expect(existsSync(join(root, "regions.json"))).toBe(true);
+  });
+});
+
+describe("emit — complexes.json에는 화면에 낼 수 없는 필드를 담지 않는다", () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = mkdtempSync(join(tmpdir(), "emit-banned-fields-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  const BANNED_FIELDS = [
+    "medianPrice",
+    "changeRate3m",
+    "changeRate3mRecentCount",
+    "changeRate3mPriorCount",
+    "changeRate3mLowConfidence",
+    "changeRate12m",
+    "changeRate12mRecentCount",
+    "changeRate12mPriorCount",
+    "changeRate12mLowConfidence",
+  ];
+
+  it("complexes.json에 medianPrice·changeRate류 필드가 하나도 없다", () => {
+    emit([unit()], new Date("2026-08-22T00:00:00Z"), "2026-08", "2026-03", root);
+    const written = JSON.parse(
+      readFileSync(join(root, "complexes.json"), "utf8"),
+    ) as Record<string, unknown>[];
+    expect(written).toHaveLength(1);
+    const keys = Object.keys(written[0] ?? {});
+    for (const banned of BANNED_FIELDS) {
+      expect(keys).not.toContain(banned);
+    }
+  });
+
+  it("complexes.json에는 여전히 maxExclusiveAreaSqm과 areaBucket이 함께 담긴다", () => {
+    emit(
+      [unit({ areaBucket: 85, maxExclusiveAreaSqm: 85.4 })],
+      new Date("2026-08-22T00:00:00Z"),
+      "2026-08",
+      "2026-03",
+      root,
+    );
+    const written = JSON.parse(
+      readFileSync(join(root, "complexes.json"), "utf8"),
+    ) as Array<{ areaBucket: number; maxExclusiveAreaSqm: number }>;
+    expect(written[0]?.areaBucket).toBe(85);
+    expect(written[0]?.maxExclusiveAreaSqm).toBe(85.4);
   });
 });
