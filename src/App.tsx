@@ -183,6 +183,19 @@ export function App() {
         residentialProfile,
         rules,
       ),
+      /*
+       * 호가 위치 확인의 예산 줄이 쓸 프로필.
+       *
+       * `residentialProfile`을 그대로 넘긴다 — 실거주가 아니면 이
+       * 값이 `null`이고, 그러면 `assessPrice`가 예산 줄을 아예 만들지
+       * 않는다. 화면에서 숨기는 것이 아니라 계산 자체를 하지 않는
+       * 것이 요점이다(위 `residentialProfile` 주석과 같은 이유).
+       *
+       * 이 프로필의 전용면적은 이미 이 평형의 실제 면적으로 바꿔치기돼
+       * 있다(`effectiveProfile`) — 호가에서의 부대비용도 그 면적으로
+       * 계산돼야 85㎡ 임계값을 낙관 방향으로 넘기지 않는다.
+       */
+      priceBudget: { profile: residentialProfile, financeRules: rules },
     };
   }, [residentialProfile, selectedUnit]);
 
@@ -300,6 +313,7 @@ export function App() {
                   unit={detail.unit}
                   burden={detail.burden}
                   costs={detail.costs}
+                  priceBudget={detail.priceBudget}
                   onClose={() => setSelectedUnit(null)}
                 />
               ) : (

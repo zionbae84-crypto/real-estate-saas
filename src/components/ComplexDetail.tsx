@@ -2,8 +2,10 @@ import { useEffect, useRef } from "react";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
+import type { PriceBudgetInput } from "../lib/price";
 import { formatRange } from "./ComplexList";
 import { CostBreakdown } from "./CostBreakdown";
+import { PriceCheck } from "./PriceCheck";
 import { SafetyBadge } from "./SafetyBadge";
 
 export interface ComplexDetailProps {
@@ -12,6 +14,11 @@ export interface ComplexDetailProps {
   burden: BurdenAtPrice;
   /** `unit.maxPrice`에서의 부대비용 내역 */
   costs: CostBreakdownData;
+  /**
+   * 호가 위치 확인의 예산 줄에 쓸 실거주 프로필. 없으면 그 줄을
+   * 만들지 않는다({@link PriceCheck} 참고).
+   */
+  priceBudget: PriceBudgetInput | null;
   onClose: () => void;
 }
 
@@ -31,7 +38,13 @@ export interface ComplexDetailProps {
  * 저장하지 않는다** — 이 화면을 닫으면 원래 가정 면적으로 곧바로
  * 되돌아간다. 그 사실을 사용자가 놀라지 않게 여기서 한 줄로 알려준다.
  */
-export function ComplexDetail({ unit, burden, costs, onClose }: ComplexDetailProps) {
+export function ComplexDetail({
+  unit,
+  burden,
+  costs,
+  priceBudget,
+  onClose,
+}: ComplexDetailProps) {
   /**
    * 상세가 열리면 포커스를 이 화면으로 옮긴다.
    *
@@ -93,6 +106,25 @@ export function ComplexDetail({ unit, burden, costs, onClose }: ComplexDetailPro
       <SafetyBadge safety={burden.safety} label="이 집을 샀을 때예요" />
 
       <CostBreakdown costs={costs} />
+
+      {/*
+        호가 위치 확인은 **여기**에 붙는다. 위 계산은 전부 이 평형의
+        범위 위쪽(`unit.maxPrice`)을 전제로 한 것이고, 사용자가 실제로
+        들은 가격은 그와 다르다 — 그 가격이 이 평형의 최근 1년 실거래
+        범위 어디에 있는지는 그 평형이 정해진 이 화면에서만 물을 수
+        있는 질문이다(목록의 행 하나는 아직 어떤 매물도 아니고, 권리분석
+        문진처럼 독립된 자리에 두면 어느 평형의 범위와 견줄지가 없다).
+
+        **평형별 `key`를 준다.** 다른 평형의 상세로 갈아탈 때 이
+        컴포넌트가 다시 마운트되면서 앞 매물의 호가가 비워진다. 없으면
+        화면은 멀쩡한 판정을 내는데 그 판정이 통째로 다른 집에 대한 것이
+        된다 — 이 제품이 절대 만들면 안 되는 종류의 조용한 오답이다.
+      */}
+      <PriceCheck
+        key={`${unit.complexKey}|${unit.areaBucket}`}
+        unit={unit}
+        budget={priceBudget}
+      />
     </section>
   );
 }

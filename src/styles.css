@@ -1191,6 +1191,213 @@ body {
   color: var(--seed-color-fg-neutral-muted);
 }
 
+/* ─────────────────────── 호가 위치 확인 ─────────────────────── */
+
+.price-check {
+  margin-top: 2rem;
+  border-top: 1px solid var(--border);
+  padding-top: 1rem;
+}
+
+.price-check-title {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+/*
+ * "적절한 값이 얼마인지 매기지 않아요". 입력란 **위**에 둔다 — 값을
+ * 적고 나서야 "그건 안 알려줘요"라고 하면 이미 기대를 만든 뒤다.
+ * 인쇄에서도 남는다: 종이를 건네받은 사람이 아래 판정을 "적정가 판정"
+ * 으로 읽으면 안 된다.
+ */
+.price-no-estimate {
+  border-left: 4px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+}
+
+.price-check-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.price-verdict {
+  margin-top: 1.5rem;
+}
+
+.price-overall {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0.25rem 0;
+}
+
+.price-overall[data-verdict="stop"] {
+  color: var(--danger);
+}
+
+.price-overall[data-verdict="expert"] {
+  color: var(--caution);
+}
+
+.price-overall[data-verdict="incomplete"],
+.price-overall[data-verdict="withheld"] {
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
+ * `clear`는 "이 계산이 확인한 범위에서는 걸리는 게 없었어요"이지
+ * "잘 샀어요"도 "안전해요"도 아니다. 권리분석·구매 유형 결론과 같은
+ * 이유로 --safe를 쓰지 않는다 — 그건 예산 화면의 문자 그대로 "안전"
+ * 배지가 쓰는 토큰이라, 글자가 "'싸다'는 뜻이 아니에요"라고 말하는데
+ * 색이 그걸 되돌려 준다. scripts/price-guard.test.ts가 잠근다.
+ */
+.price-overall[data-verdict="clear"] {
+  color: var(--seed-color-fg-neutral);
+}
+
+.price-overall-note {
+  margin: 0 0 1rem;
+}
+
+.price-evidence {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0;
+}
+
+.price-evidence > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.price-evidence dt {
+  font-size: 0.9rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.price-evidence dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.price-evidence-message {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.price-findings {
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.price-finding {
+  border-left: 4px solid var(--border);
+  padding: 0.5rem 0.75rem;
+}
+
+.price-finding[data-verdict="stop"] {
+  border-left-color: var(--danger);
+  background: var(--seed-color-bg-critical-weak);
+}
+
+.price-finding[data-verdict="expert"] {
+  border-left-color: var(--caution);
+  background: var(--seed-color-bg-warning-weak);
+}
+
+.price-finding[data-verdict="checked"] {
+  border-left-color: var(--safe);
+}
+
+/*
+ * 판정을 유보한 줄. 대시 테두리는 "여기서 멈췄다"는 신호지만 그것만으로
+ * 뜻을 전하지 않는다 — 판정 자리에 룰셋의 글자가 이미 들어가 있고,
+ * 바로 아래 문구가 왜 유보했는지 말한다.
+ */
+.price-finding[data-verdict="withheld"] {
+  border-left-style: dashed;
+}
+
+.price-finding-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.price-finding-verdict {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.price-finding-name {
+  font-size: 0.8125rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.price-finding-values {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0;
+}
+
+.price-finding-values > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.price-finding-values dt {
+  font-size: 0.9rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.price-finding-values dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.price-finding-message {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+/*
+ * 예산 줄을 만들지 않았다는 사실. 빈칸으로 두면 "이 호가는 예산에
+ * 문제가 없다"로 읽히므로 자리를 비우지 않고 이유를 적는다.
+ */
+.price-budget-absent {
+  margin: 0.75rem 0 0;
+  font-size: 0.9rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
+ * 판정과 언제나 함께 나가는 고지(층·향 미반영, 신고 지연, "바가지라는
+ * 뜻이 아니다"). 면책보다 무겁게 읽혀야 하는 사실 고지라 흐리게 하지
+ * 않는다.
+ */
+.price-disclosure {
+  margin: 1rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.9rem;
+}
+
+.price-disclaimer {
+  margin: 1rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.875rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
 /*
  * 인쇄물 전용 요약(PrintSummary). 화면에서는 숨긴다 — 화면은 이미
  * ProfileForm의 되비추기·AssumptionLine으로 같은 값을 보여주고 있어
@@ -1242,7 +1449,8 @@ body {
   .rights-check-form,
   .rights-check-action,
   .purchase-type-form,
-  .purchase-form {
+  .purchase-form,
+  .price-check-form {
     display: none;
   }
 
@@ -1343,7 +1551,9 @@ body {
   .rights-finding,
   .rights-encumbrance,
   .purchase-metric,
-  .purchase-stage {
+  .purchase-stage,
+  .price-finding,
+  .price-evidence > div {
     break-inside: avoid;
     -webkit-column-break-inside: avoid;
     page-break-inside: avoid;
