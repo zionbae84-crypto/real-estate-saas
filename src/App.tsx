@@ -7,6 +7,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaSource } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
+import { PurchaseCheck } from "./components/PurchaseCheck";
+import { PurchaseTypeSelect } from "./components/PurchaseTypeSelect";
 import { RegionFilter } from "./components/RegionFilter";
 import { RightsCheck } from "./components/RightsCheck";
 import { SafetyBadge } from "./components/SafetyBadge";
@@ -14,7 +16,10 @@ import { COMPLEX_UNITS, DATA_AS_OF, REGIONS, type ComplexUnit } from "./data/com
 import { buildComplexList } from "./lib/complex-list";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { calcAcquisitionCosts, calcBurdenAt } from "./lib/finance";
+import type { PurchaseType } from "./lib/purchase";
 import { rules, useAffordability } from "./state/useAffordability";
+import { purchaseRules } from "./state/usePurchaseCheck";
+import { usePurchaseType } from "./state/usePurchaseType";
 import type { AssumableField } from "./state/useProfileForm";
 import { useProfileForm } from "./state/useProfileForm";
 
@@ -25,6 +30,14 @@ export function App() {
   // AssumptionLine의 버튼도 ProfileForm의 openField 분기도 도달할 방법이
   // 없다(둘 다 그 자체로는 완결돼 있지만 이어 주는 배선이 없었다).
   const [openField, setOpenField] = useState<AssumableField | null>(null);
+  /**
+   * 구매 유형. 지금까지 이 화면이 말없이 전제하던 값이라 실거주에서
+   * 시작하고, 한 번 고르면 기억한다(usePurchaseType 문서 참고) —
+   * 나머지 프로필이 전부 저장되는데 유형만 저장되지 않으면, 새로고침한
+   * 뒤 화면이 실거주로 되돌아가 자기 매수에 해당하지 않는 한도를 다시
+   * 보여준다.
+   */
+  const { purchaseType, setPurchaseType, restoreFailed } = usePurchaseType();
   const [regionCodes, setRegionCodes] = useState<string[]>([]);
   // ComplexList의 PAGE_SIZE와 같은 값이다 — 각 덩어리에서 이만큼씩 보여준다.
   const [visibleCount, setVisibleCount] = useState(10);
@@ -57,11 +70,27 @@ export function App() {
     return { ...profile, exclusiveAreaSqm: selectedUnit.maxExclusiveAreaSqm };
   }, [profile, selectedUnit]);
 
-  const affordability = useAffordability(effectiveProfile);
+  /**
+   * 실거주가 아닐 때는 프로필을 아예 넘기지 않는다.
+   *
+   * **이 한 줄이 "투자 목적 매수에 실거주 대출 한도를 쓰지 않는다"를
+   * 지키는 자리다.** `useAffordability`와 `buildComplexList`는 둘 다
+   * `calcMaxLoan`·`calcAffordablePrice`·`calcSafePrice`로 내려가는데,
+   * 그 함수들은 `rules/2026-08.json`의 LTV·DSR·절대상한 위에 서 있고
+   * 그 값들은 전부 **실거주 매수를 전제로** 고시된 것이다.
+   * 임대사업자대출·다주택자 LTV는 그 룰셋에 없다. 그래서 갭투자·월세
+   * 수익형에서는 화면에서 숨기는 데 그치지 않고 **계산 자체를 하지
+   * 않는다** — 숨기기만 하면 언젠가 그 값이 다른 자리로 새어 나온다.
+   * `scripts/purchase-structure.test.ts`가 이 배선을 소스 수준에서
+   * 잠근다.
+   */
+  const residentialProfile = purchaseType === "실거주" ? effectiveProfile : null;
+
+  const affordability = useAffordability(residentialProfile);
 
   const complexList = useMemo(
     () =>
-      profile === null
+      profile === null || purchaseType !== "실거주"
         ? null
         : buildComplexList({
             units: COMPLEX_UNITS,
@@ -69,7 +98,7 @@ export function App() {
             rules,
             regionCodes,
           }),
-    [profile, regionCodes],
+    [profile, purchaseType, regionCodes],
   );
 
   /**
@@ -107,6 +136,18 @@ export function App() {
   }
 
   /**
+   * 유형을 바꾸면 열려 있던 단지 상세를 닫는다.
+   *
+   * 상세는 실거주 예산 계산 위에서만 뜻이 있는 화면이다. 남겨 두면
+   * 갭투자로 갔다가 돌아왔을 때 예전 평형이 화면 전체의 전용면적을
+   * 계속 바꿔치기하고 있는 상태가 된다(effectiveProfile 참고).
+   */
+  function handlePurchaseTypeChange(next: PurchaseType) {
+    setPurchaseType(next);
+    setSelectedUnit(null);
+  }
+
+  /**
    * 인쇄물의 "전용면적" 전제가 어디서 왔는지(PrintSummary가 문구 방향을
    * 가르는 데 쓴다).
    *
@@ -133,13 +174,17 @@ export function App() {
     selectedUnit !== null ? selectedUnit.maxExclusiveAreaSqm : state.exclusiveAreaSqm;
 
   const detail = useMemo(() => {
-    if (effectiveProfile === null || selectedUnit === null) return null;
+    if (residentialProfile === null || selectedUnit === null) return null;
     return {
       unit: selectedUnit,
-      burden: calcBurdenAt(effectiveProfile, rules, selectedUnit.maxPrice),
-      costs: calcAcquisitionCosts(selectedUnit.maxPrice, effectiveProfile, rules),
+      burden: calcBurdenAt(residentialProfile, rules, selectedUnit.maxPrice),
+      costs: calcAcquisitionCosts(
+        selectedUnit.maxPrice,
+        residentialProfile,
+        rules,
+      ),
     };
-  }, [effectiveProfile, selectedUnit]);
+  }, [residentialProfile, selectedUnit]);
 
   return (
     <main className="app">
@@ -151,7 +196,17 @@ export function App() {
           — 인쇄에서만 지운다(hiddenInPrint.ts의 .subtitle-privacy-note).
           앞의 룰셋 기준·수도권 범위는 종이에서도 뜻이 있어 남긴다.
         */}
-        {formatRuleVersionLabel(rules)} · 수도권
+        {/*
+          어느 룰셋 기준인지는 유형에 따라 다르다. `rules/2026-08.json`의
+          LTV·DSR·절대상한은 실거주 매수를 전제한 값이고, 투자 경로는 바로
+          그 기준으로 한도를 계산하지 않는다고 말한다 — 그 화면 위에
+          "2026년 8월 규제 기준"이 남아 있으면 종이에서 뜻이 어긋난다.
+          투자 경로에서는 이 화면이 실제로 쓴 구매 유형 룰셋을 적는다.
+        */}
+        {purchaseType === "실거주"
+          ? formatRuleVersionLabel(rules)
+          : `구매 유형 기준 ${purchaseRules.version}`}{" "}
+        · 수도권
         <span className="subtitle-privacy-note">
           {" "}
           · 입력한 재무정보는 이 브라우저를 벗어나지 않아요
@@ -159,98 +214,139 @@ export function App() {
       </p>
 
       <ErrorBoundary onReset={reset}>
-        <ProfileForm
-          state={state}
-          setField={setField}
-          openField={openField}
-          areaOverridden={selectedUnit !== null}
+        <PurchaseTypeSelect
+          rules={purchaseRules}
+          value={purchaseType}
+          onChange={handlePurchaseTypeChange}
+          restoreFailed={restoreFailed}
         />
 
-        {affordability === null ? (
-          <p className="prompt">
-            현금과 연소득을 입력하면 살 수 있는 가격을 계산해요.
-          </p>
+        {/*
+          유형을 고르면 그 유형에 맞는 화면만 나온다.
+
+          실거주에서는 지금까지와 **똑같은** 예산 계산이 그대로 나오고,
+          갭투자·월세 수익형에서는 그 자리가 통째로 유형별 지표로 바뀐다.
+          두 화면을 나란히 두지 않는 이유는 화면 정리가 아니라 계산이다 —
+          실거주 예산 계산은 실거주 대출 한도 위에 서 있어서, 투자 목적
+          매수 옆에 두면 그 한도를 이 매수에 쓸 수 있는 것처럼 읽힌다.
+          `residentialProfile`이 그 계산 자체를 막고, 이 분기가 화면을
+          막는다.
+
+          권리분석 문진은 이 분기 **밖**에 있다. 등기부는 어떤 목적으로
+          사든 같은 서류이고, 유형과 무관하게 봐야 한다.
+        */}
+        {purchaseType === "실거주" ? (
+          <>
+          <ProfileForm
+            state={state}
+            setField={setField}
+            openField={openField}
+            areaOverridden={selectedUnit !== null}
+          />
+
+          {affordability === null ? (
+            <p className="prompt">
+              현금과 연소득을 입력하면 살 수 있는 가격을 계산해요.
+            </p>
+          ) : (
+            <>
+              {/*
+                화면에서는 숨고 인쇄에서만 나온다(styles.css의 .print-summary).
+                지금 화면 그대로 인쇄되는 이 리포트가 배우자·부모님처럼 화면을
+                보지 않은 사람에게 건네지므로, 계산의 전제(보유 현금·연
+                소득·생애최초 여부·기존 대출·규제지역 여부·전용면적)와
+                룰셋 기준·인쇄일을 종이에도 남긴다.
+              */}
+              <PrintSummary
+                state={state}
+                effectiveAreaSqm={effectiveAreaSqm}
+                areaSource={areaSource}
+                rules={rules}
+              />
+              <AssumptionLine
+                state={state}
+                onOpen={setOpenField}
+                areaOverridden={selectedUnit !== null}
+              />
+              <BudgetResult
+                result={affordability.result}
+                safePrice={affordability.safePrice}
+              />
+              {affordability.result.affordablePrice > 0 && (
+                <>
+                  <PriceSlider
+                    price={affordability.price}
+                    max={affordability.result.affordablePrice}
+                    safePrice={affordability.safePrice}
+                    onChange={affordability.setPrice}
+                  />
+                  <SafetyBadge
+                    safety={affordability.safety}
+                    // 상세가 열려 있을 때만 라벨을 붙인다. 그때만 화면에
+                    // 배지가 둘(여기 + ComplexDetail 안)이고, 마크업이
+                    // 같아서 어느 쪽이 "이 집을 사면"의 답인지 알 수 없다 —
+                    // 하필 더 낙관적인 쪽이 매물 옆에 붙는다. 목록 화면에서는
+                    // 배지가 하나뿐이라 라벨이 잡음이 된다.
+                    label={
+                      selectedUnit !== null
+                        ? "위 가격에서 최대로 빌렸을 때예요"
+                        : undefined
+                    }
+                  />
+                </>
+              )}
+              {detail !== null ? (
+                <ComplexDetail
+                  unit={detail.unit}
+                  burden={detail.burden}
+                  costs={detail.costs}
+                  onClose={() => setSelectedUnit(null)}
+                />
+              ) : (
+                <>
+                  <RegionFilter
+                    regions={REGIONS}
+                    selected={regionCodes}
+                    onChange={handleRegionChange}
+                  />
+                  {complexList !== null && (
+                    <ComplexList
+                      result={complexList}
+                      dataAsOf={DATA_AS_OF}
+                      hasRegionFilter={regionCodes.length > 0}
+                      noRepaymentCapacity={
+                        affordability.result.loanLimit.breakdown.DSR === 0
+                      }
+                      visibleCount={visibleCount}
+                      onShowMore={() => setVisibleCount((n) => n + 10)}
+                      onSelect={handleSelectUnit}
+                    />
+                  )}
+                </>
+              )}
+
+              {/*
+                지금 보고 있는 화면 상태 그대로(상세가 열려 있으면 그 매물,
+                아니면 목록) 인쇄한다 — 별도 인쇄 화면을 만들지 않는다.
+                버튼 자신은 인쇄에서 지운다(styles.css의 .print-button).
+              */}
+              <button
+                type="button"
+                className="print-button"
+                onClick={() => window.print()}
+              >
+                인쇄하기
+              </button>
+            </>
+          )}
+          </>
         ) : (
           <>
-            {/*
-              화면에서는 숨고 인쇄에서만 나온다(styles.css의 .print-summary).
-              지금 화면 그대로 인쇄되는 이 리포트가 배우자·부모님처럼 화면을
-              보지 않은 사람에게 건네지므로, 계산의 전제(보유 현금·연
-              소득·생애최초 여부·기존 대출·규제지역 여부·전용면적)와
-              룰셋 기준·인쇄일을 종이에도 남긴다.
-            */}
-            <PrintSummary
-              state={state}
-              effectiveAreaSqm={effectiveAreaSqm}
-              areaSource={areaSource}
-              rules={rules}
-            />
-            <AssumptionLine
-              state={state}
-              onOpen={setOpenField}
-              areaOverridden={selectedUnit !== null}
-            />
-            <BudgetResult
-              result={affordability.result}
-              safePrice={affordability.safePrice}
-            />
-            {affordability.result.affordablePrice > 0 && (
-              <>
-                <PriceSlider
-                  price={affordability.price}
-                  max={affordability.result.affordablePrice}
-                  safePrice={affordability.safePrice}
-                  onChange={affordability.setPrice}
-                />
-                <SafetyBadge
-                  safety={affordability.safety}
-                  // 상세가 열려 있을 때만 라벨을 붙인다. 그때만 화면에
-                  // 배지가 둘(여기 + ComplexDetail 안)이고, 마크업이
-                  // 같아서 어느 쪽이 "이 집을 사면"의 답인지 알 수 없다 —
-                  // 하필 더 낙관적인 쪽이 매물 옆에 붙는다. 목록 화면에서는
-                  // 배지가 하나뿐이라 라벨이 잡음이 된다.
-                  label={
-                    selectedUnit !== null
-                      ? "위 가격에서 최대로 빌렸을 때예요"
-                      : undefined
-                  }
-                />
-              </>
-            )}
-            {detail !== null ? (
-              <ComplexDetail
-                unit={detail.unit}
-                burden={detail.burden}
-                costs={detail.costs}
-                onClose={() => setSelectedUnit(null)}
-              />
-            ) : (
-              <>
-                <RegionFilter
-                  regions={REGIONS}
-                  selected={regionCodes}
-                  onChange={handleRegionChange}
-                />
-                {complexList !== null && (
-                  <ComplexList
-                    result={complexList}
-                    dataAsOf={DATA_AS_OF}
-                    hasRegionFilter={regionCodes.length > 0}
-                    noRepaymentCapacity={
-                      affordability.result.loanLimit.breakdown.DSR === 0
-                    }
-                    visibleCount={visibleCount}
-                    onShowMore={() => setVisibleCount((n) => n + 10)}
-                    onSelect={handleSelectUnit}
-                  />
-                )}
-              </>
-            )}
+            <PurchaseCheck type={purchaseType} />
 
             {/*
-              지금 보고 있는 화면 상태 그대로(상세가 열려 있으면 그 매물,
-              아니면 목록) 인쇄한다 — 별도 인쇄 화면을 만들지 않는다.
-              버튼 자신은 인쇄에서 지운다(styles.css의 .print-button).
+              지금 보고 있는 화면 상태 그대로 인쇄한다 — 실거주 경로와
+              같은 버튼이고, 버튼 자신은 인쇄에서 지운다.
             */}
             <button
               type="button"
@@ -283,9 +379,27 @@ export function App() {
         <RightsCheck />
       </ErrorBoundary>
 
+      {/*
+        면책 문구도 유형에 따라 갈린다.
+
+        "추정치이며 실제 대출한도는 …"은 이 화면이 대출한도 추정치를 낸다는
+        것을 전제한 문장이다. 투자 경로에서는 바로 위에서 "이 유형의 대출
+        한도는 우리가 계산하지 않아요"라고 말한 뒤라, 그 문장이 그대로
+        남으면 어딘가에 한도 추정치가 있는 것처럼 읽힌다.
+      */}
       <footer className="disclaimer">
-        추정치이며 실제 대출한도는 금융기관 심사 결과에 따릅니다.
-        시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
+        {purchaseType === "실거주" ? (
+          <>
+            추정치이며 실제 대출한도는 금융기관 심사 결과에 따릅니다.
+            시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
+          </>
+        ) : (
+          <>
+            이 화면은 대출한도를 계산하지 않아요. 여기 있는 숫자는 적어 주신
+            값으로 낸 비율이에요.
+            시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
+          </>
+        )}
       </footer>
     </main>
   );

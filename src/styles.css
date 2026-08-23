@@ -884,12 +884,329 @@ body {
 }
 
 /*
+ * 구매 유형과 유형별 재무 지표.
+ *
+ * 권리분석 문진과 같은 규칙이다 — 등급(이대로는 사면 안 돼요 / 확인이
+ * 꼭 필요해요 / 확인했어요 / 아직 낼 수 없어요)은 **언제나 글자로 먼저**
+ * 있고, 아래 색은 그 글자를 거들 뿐이다. 색이 하나도 적용되지 않아도
+ * (흑백 인쇄·색각 이상) 뜻이 그대로 남아야 한다. 새 hex를 만들지 않고
+ * 이 파일이 이미 쓰던 의미 변수(--danger·--caution·--safe)와 SEED 배경
+ * 토큰만 재사용한다.
+ */
+.purchase-type {
+  margin: 0 0 1.5rem;
+}
+
+.purchase-type-fieldset {
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem 1rem;
+  margin: 0;
+}
+
+.purchase-type-question {
+  font-weight: 700;
+  padding: 0 0.25rem;
+}
+
+/*
+ * 저장해 둔 유형을 읽지 못했다는 안내. 뜻은 전부 글자가 말하고, 색은
+ * 눈에 띄게 하는 역할만 한다(색만으로 전달하는 정보가 없다).
+ */
+.purchase-type-restore-notice {
+  border-left: 4px solid var(--caution);
+  background: var(--seed-color-bg-warning-weak);
+  padding: 0.75rem 1rem;
+  margin: 0 0 1rem;
+  font-weight: 600;
+}
+
+/*
+ * 투자 경로 인쇄물 요약(PurchasePrintSummary)의 머리줄. 화면에서는
+ * 부모가 숨겨져 보이지 않고, 종이에서 이 종이가 어떤 룰셋·언제 기준인지를
+ * 말한다.
+ */
+.purchase-print-summary-meta {
+  margin: 0 0 0.5rem;
+  font-size: 0.875rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.purchase-type-why {
+  margin: 0.35rem 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.purchase-type-options {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.purchase-type-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.purchase-type-option input {
+  margin-top: 0.35rem;
+}
+
+.purchase-type-option-body {
+  display: grid;
+  gap: 0.1rem;
+}
+
+.purchase-type-label {
+  font-weight: 600;
+}
+
+.purchase-type-summary {
+  font-size: 0.875rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
+ * 종이에만 나오는 유형 표시. 화면에는 라디오가 이미 있어 중복이고,
+ * 인쇄에서는 그 라디오가 지워진다(.purchase-type-form). PrintSummary와
+ * 같은 패턴이다.
+ */
+.purchase-type-print {
+  display: none;
+}
+
+.purchase-check {
+  margin-top: 1rem;
+}
+
+/*
+ * "이 유형의 대출 한도는 우리가 계산하지 않아요". 이 화면에서 가장
+ * 중요한 문장이라 맨 위에 두고 인쇄에서도 지우지 않는다 — 사라지면
+ * 아래 지표들만 남아 한도가 문제되지 않는 것처럼 읽힌다.
+ */
+.purchase-loan-note {
+  border-left: 4px solid var(--caution);
+  background: var(--seed-color-bg-warning-weak);
+  padding: 0.75rem 1rem;
+  margin: 0 0 1rem;
+  font-weight: 600;
+}
+
+.purchase-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.purchase-loan {
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  padding: 0.75rem 1rem 1rem;
+  margin: 0;
+}
+
+.purchase-loan-question {
+  font-weight: 600;
+  padding: 0 0.25rem;
+}
+
+.purchase-loan-options {
+  display: grid;
+  gap: 0.4rem;
+  margin: 0.5rem 0 0.75rem;
+}
+
+.purchase-loan-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  cursor: pointer;
+}
+
+.purchase-loan-option input {
+  margin-top: 0.35rem;
+}
+
+.purchase-verdict {
+  margin-top: 2rem;
+}
+
+.purchase-verdict-title {
+  font-size: 1rem;
+  margin: 0 0 0.5rem;
+}
+
+.purchase-overall {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0.25rem 0;
+}
+
+.purchase-overall[data-verdict="stop"] {
+  color: var(--danger);
+}
+
+.purchase-overall[data-verdict="expert"] {
+  color: var(--caution);
+}
+
+.purchase-overall[data-verdict="incomplete"] {
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
+ * `clear`는 "이 계산이 확인한 범위에서는 걸리는 게 없었어요"이지
+ * "안전해요"가 아니다. 권리분석 결론과 같은 이유로 --safe를 쓰지
+ * 않는다 — 그건 예산 화면의 문자 그대로 "안전" 배지가 쓰는 토큰이라,
+ * 글자가 "'안전하다'는 뜻이 아니에요"라고 말하는데 색이 그걸 되돌려
+ * 준다.
+ */
+.purchase-overall[data-verdict="clear"] {
+  color: var(--seed-color-fg-neutral);
+}
+
+.purchase-overall-note {
+  margin: 0 0 1rem;
+}
+
+.purchase-metrics {
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.purchase-metric {
+  border-left: 4px solid var(--border);
+  padding: 0.5rem 0.75rem;
+}
+
+.purchase-metric[data-verdict="stop"] {
+  border-left-color: var(--danger);
+  background: var(--seed-color-bg-critical-weak);
+}
+
+.purchase-metric[data-verdict="expert"] {
+  border-left-color: var(--caution);
+  background: var(--seed-color-bg-warning-weak);
+}
+
+.purchase-metric[data-verdict="checked"] {
+  border-left-color: var(--safe);
+}
+
+/*
+ * 아직 낼 수 없는 지표. 대시 테두리는 "여기 아직 비어 있다"는 신호지만
+ * 그것만으로 뜻을 전하지 않는다 — 판정 자리에 룰셋의 문구가 글자로
+ * 이미 들어가 있다.
+ */
+.purchase-metric[data-verdict="unknown"] {
+  border-left-style: dashed;
+}
+
+.purchase-metric-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0;
+}
+
+.purchase-metric-verdict {
+  font-weight: 700;
+  font-size: 0.9rem;
+}
+
+.purchase-metric-name {
+  font-size: 0.8125rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.purchase-metric-values {
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0;
+}
+
+.purchase-metric-values > div {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.purchase-metric-values dt {
+  font-size: 0.9rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.purchase-metric-values dd {
+  margin: 0;
+  font-weight: 600;
+}
+
+.purchase-stages {
+  list-style: none;
+  display: grid;
+  gap: 0.25rem;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.purchase-stage {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.purchase-stage-drop {
+  font-weight: 600;
+}
+
+/* 막을 수 있는지는 이미 글자로 적혀 있다. 색은 그 글자를 거들 뿐이다. */
+.purchase-stage[data-covered="no"] .purchase-stage-covered {
+  color: var(--danger);
+  font-weight: 600;
+}
+
+.purchase-metric-message,
+.purchase-metric-note {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.purchase-metric-warning {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.purchase-disclaimer {
+  margin: 1rem 0 0;
+  padding-left: 1.1rem;
+  font-size: 0.875rem;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
  * 인쇄물 전용 요약(PrintSummary). 화면에서는 숨긴다 — 화면은 이미
  * ProfileForm의 되비추기·AssumptionLine으로 같은 값을 보여주고 있어
  * 여기까지 보이면 같은 정보가 세 번 반복된다. `@media print`에서만
  * 드러낸다(아래).
  */
 .print-summary {
+  display: none;
+}
+
+/*
+ * 투자 경로(갭투자·월세 수익형)의 인쇄물 전용 요약. 위 .print-summary와
+ * 같은 이유로 화면에서는 숨긴다 — 화면에는 입력란이 그 값을 이미
+ * 되비추고 있다. 인쇄에서만 드러낸다(아래 @media print).
+ */
+.purchase-print-summary {
   display: none;
 }
 
@@ -923,8 +1240,15 @@ body {
   .slider-action,
   .fold-more-hint,
   .rights-check-form,
-  .rights-check-action {
+  .rights-check-action,
+  .purchase-type-form,
+  .purchase-form {
     display: none;
+  }
+
+  /* 라디오가 지워진 자리에 고른 유형을 평문으로 남긴다. */
+  .purchase-type-print {
+    display: block;
   }
 
   /*
@@ -940,7 +1264,8 @@ body {
   }
 
   /* 인쇄물 전용 요약을 이제 드러낸다. */
-  .print-summary {
+  .print-summary,
+  .purchase-print-summary {
     display: block;
   }
 
@@ -966,9 +1291,20 @@ body {
    * 옛 구현)으로 렌더링하는 비-Chromium 엔진에서는 이 형태가 실제로
    * 먹힐 수 있고, 남겨서 드는 비용이 없다. 실제로 펼치는 규칙은 바로
    * 아래 ::details-content 쪽이다.
+   *
+   * **선택자를 :where()로 감싸고 !important를 뺀 이유(리뷰 밖 결함 P2,
+   * 브라우저로 실측).** 예전 형태 `details:not([open]) > *:not(summary)`는
+   * 특정도가 (0,1,1)이라, 위 숨김 규칙의 `.rights-check-form`(0,1,0)을
+   * 이기고 있었다 — 게다가 !important까지 붙어 있었다. 그래서 권리분석
+   * 문진 폼은 인쇄에서 실제로는 숨겨지지 않았고, 종이에 라디오 선택지가
+   * 전부 나왔다(computed display가 block인 것을 MCP 브라우저로 확인했다).
+   * :where()는 특정도를 0으로 만들고, !important는 원래 필요가 없다 —
+   * 이 규칙이 이겨야 하는 상대는 UA 스타일시트인데 작성자 스타일은
+   * 특정도와 무관하게 UA 스타일보다 먼저다. printCss.test.ts가 이제
+   * 특정도까지 계산해 이 관계를 잠근다.
    */
-  details:not([open]) > *:not(summary) {
-    display: block !important;
+  :where(details:not([open])) > :where(:not(summary)) {
+    display: block;
   }
 
   /*
@@ -1003,8 +1339,11 @@ body {
   .assumption-notice,
   .safe-line-item,
   .print-summary dl > div,
+  .purchase-print-summary dl > div,
   .rights-finding,
-  .rights-encumbrance {
+  .rights-encumbrance,
+  .purchase-metric,
+  .purchase-stage {
     break-inside: avoid;
     -webkit-column-break-inside: avoid;
     page-break-inside: avoid;
