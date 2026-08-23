@@ -13,6 +13,7 @@ const EXPECTED_FUNCTIONS = [
   "calcAcquisitionCosts",
   "calcAffordablePrice",
   "calcAvailableCash",
+  "calcBurdenAt",
   "calcMaxLoan",
   "calcPolicyLimit",
   "calcSafePrice",

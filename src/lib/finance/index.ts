@@ -3,6 +3,8 @@ export { calcAcquisitionCosts } from "./acquisition-cost";
 export { calcAffordablePrice, PRICE_STEP } from "./affordable-price";
 export type { AffordableResult } from "./affordable-price";
 export { calcAvailableCash } from "./available-cash";
+export { calcBurdenAt } from "./burden";
+export type { BurdenAtPrice } from "./burden";
 export type { AvailableCash } from "./available-cash";
 export { calcMaxLoan, calcPolicyLimit, NO_POLICY_LIMIT } from "./loan-limit";
 export type { MatchedPolicyLoan } from "./loan-limit";
