@@ -92,7 +92,10 @@ export function assessPurchase(
  *    상쇄되지 않는다.
  * 2. 낼 수 없는 지표가 있으면 `incomplete`다. **빈칸은 통과가 아니다.**
  * 3. `expert`가 하나라도 있으면 `expert`다.
- * 4. 그 밖에만 `clear`이고, 그것조차 "걸리는 게 없었다"이지
+ * 4. **대출 원금을 실제로 뺐으면(검증할 수 없는 값으로 필요 자기자금을
+ *    줄였으면) `clear`로 내려가지 않는다.** {@link hasUnverifiedLoanPrincipal}
+ *    참고.
+ * 5. 그 밖에만 `clear`이고, 그것조차 "걸리는 게 없었다"이지
  *    "안전하다"가 아니다.
  */
 function decideOverall(metrics: PurchaseMetricResult[]): PurchaseOverall {
@@ -102,25 +105,68 @@ function decideOverall(metrics: PurchaseMetricResult[]): PurchaseOverall {
   if (has("stop")) return "stop";
   if (has("unknown")) return "incomplete";
   if (has("expert")) return "expert";
+  if (hasUnverifiedLoanPrincipal(metrics)) return "expert";
   return "clear";
 }
 
 /**
- * `incomplete`일 때 이미 확인이 필요한 지표가 있으면 그 사실을 덧붙인다.
+ * 월세 수익형 필요 자기자금에서 대출 원금을 실제로 뺐는가.
  *
- * 미입력 값 하나가 이미 걸린 지표를 회색 "아직 다 채우지 않았어요" 뒤로
- * 숨기면 실제보다 덜 위험해 보인다. 우선순위는 바꾸지 않는다 — 먼저
- * 채우라고 말하는 것이 여전히 맞는 안내다. 문구는 룰셋에서 온다.
+ * `ownFundsMetric`은 `loanPrincipal !== null && loanPrincipal > 0`일 때만
+ * `loanAssumptionNote`를 채운다({@link ownFundsMetric} 참고) — 즉 이
+ * 함수가 참이면 사용자가 적은 대출 원금이 필요 자기자금을 실제로
+ * 줄였다는 뜻이다.
+ *
+ * **이 값이 참이면 전체 결론은 `clear`가 될 수 없다.** 이 화면은
+ * 임대사업자대출·다주택자 한도를 계산하지 않는다고 스스로 선언한다
+ * (`types.ts`의 "이 모듈이 하지 않는 것" 절, `loanLimitNote`) — 그래서
+ * 사용자가 적은 대출 원금이 실제로 나오는 금액인지 이 계산은 검증할
+ * 방법이 없다. 검증하지 못하는 값을 빼서 필요 자기자금을 줄여놓고
+ * "걸리는 게 없었다"고 결론짓는 것은 이 제품이 절대 하면 안 되는
+ * 일이다. 그래서 `decideOverall`은 `stop`·`incomplete`·`expert` 중
+ * 어느 것도 아닐 때 이 조건을 마지막으로 한 번 더 확인해 `clear` 대신
+ * `expert`로 내린다.
+ *
+ * 갭투자는 대출을 묻지 않는다({@link NO_LOAN}) — `loanPrincipal`이 언제나
+ * 0이라 `loanAssumptionNote`도 언제나 `null`이고, 이 함수가 갭투자
+ * 결론에 영향을 주는 일은 없다.
+ */
+function hasUnverifiedLoanPrincipal(metrics: PurchaseMetricResult[]): boolean {
+  return metrics.some(
+    (metric) => metric.id === "ownFunds" && metric.loanAssumptionNote !== null,
+  );
+}
+
+/**
+ * `incomplete`·`expert`에 조건부 덧말을 붙인다.
+ *
+ * - `incomplete`: 이미 확인이 필요한 지표가 있으면 그 사실을 덧붙인다.
+ *   미입력 값 하나가 이미 걸린 지표를 회색 "아직 다 채우지 않았어요"
+ *   뒤로 숨기면 실제보다 덜 위험해 보인다. 우선순위는 바꾸지 않는다 —
+ *   먼저 채우라고 말하는 것이 여전히 맞는 안내다.
+ * - `expert`: 대출 원금을 실제로 뺐으면({@link hasUnverifiedLoanPrincipal})
+ *   왜 확인이 필요한지를 덧붙인다 — `decideOverall`이 이 조건 하나만으로
+ *   `clear`를 `expert`로 내렸을 수도 있는데, 개별 지표의 `expert` 문구만
+ *   봐서는 그 이유가 드러나지 않는다.
+ *
+ * 두 경우 모두 문구는 룰셋에서 온다.
  */
 function overallNoteFor(
   copy: PurchaseOverallCopy,
   overall: PurchaseOverall,
   metrics: PurchaseMetricResult[],
 ): string {
-  if (overall !== "incomplete") return copy.note;
-  if (copy.pendingExpertNote === undefined) return copy.note;
-  if (!metrics.some((metric) => metric.verdict === "expert")) return copy.note;
-  return `${copy.note} ${copy.pendingExpertNote}`;
+  if (overall === "incomplete") {
+    if (copy.pendingExpertNote === undefined) return copy.note;
+    if (!metrics.some((metric) => metric.verdict === "expert")) return copy.note;
+    return `${copy.note} ${copy.pendingExpertNote}`;
+  }
+  if (overall === "expert") {
+    if (copy.loanFloorNote === undefined) return copy.note;
+    if (!hasUnverifiedLoanPrincipal(metrics)) return copy.note;
+    return `${copy.note} ${copy.loanFloorNote}`;
+  }
+  return copy.note;
 }
 
 /* ─────────────────────────── 공통 계산 ─────────────────────────── */

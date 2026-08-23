@@ -257,6 +257,21 @@ describe("구매 유형 룰셋", () => {
     ).toThrow(/pendingExpertNote/);
   });
 
+  /**
+   * 대출 원금을 실제로 뺐으면 결론이 clear로 내려가지 않는다
+   * (assess.ts의 hasUnverifiedLoanPrincipal). 그 하한이 왜 걸렸는지
+   * 화면에 말하는 문구라 없으면 거부한다 — pendingExpertNote와 같은 자리.
+   */
+  it("대출 원금 하한의 덧말이 없으면 거부한다", () => {
+    expect(() =>
+      parsePurchaseRules(
+        poisoned((draft) => {
+          delete branch(draft, "overall", "expert").loanFloorNote;
+        }),
+      ),
+    ).toThrow(/loanFloorNote/);
+  });
+
   it("부대비용 전제 문구가 없으면 거부한다", () => {
     expect(() =>
       parsePurchaseRules(

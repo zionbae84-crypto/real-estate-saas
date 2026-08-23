@@ -151,6 +151,18 @@ export interface PurchaseOverallCopy {
   note: string;
   /** `incomplete`에서만 쓰는 조건부 덧말(권리분석 룰셋의 같은 자리와 같은 이유) */
   pendingExpertNote?: string;
+  /**
+   * `expert`에서만 쓰는 조건부 덧말.
+   *
+   * 월세 수익형에서 대출 원금을 실제로 뺐으면(`OwnFundsResult.loanAssumptionNote
+   * !== null`) 결론은 `clear`로 내려가지 않고 최소 `expert`에 머문다
+   * ({@link PurchaseOverall} 문서, `assessPurchase`의
+   * `hasUnverifiedLoanPrincipal` 참고) — 이 화면은 임대사업자대출·다주택자
+   * 한도를 계산하지 않는다고 스스로 선언해서, 사용자가 적은 대출 원금이
+   * 실제로 나오는 금액인지 검증할 방법이 없기 때문이다. 그 하한이 왜
+   * 걸렸는지를 이 문구가 말한다.
+   */
+  loanFloorNote?: string;
 }
 
 /**

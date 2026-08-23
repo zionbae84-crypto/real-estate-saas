@@ -667,6 +667,140 @@ describe("전체 결론", () => {
 });
 
 /**
+ * 대출 원금을 실제로 뺐으면(월세 수익형 필요 자기자금) 전체 결론이
+ * `clear`가 되지 않는다.
+ *
+ * **RTI는 이미 항상 `expert`이거나 `unknown`이라 실제 룰셋으로는 이
+ * 조건이 아니어도 월세 수익형이 `clear`에 닿지 않는다.** 이 하한이
+ * 실제로 무언가를 하고 있는지(꺼도 테스트가 죽는지) 확인하려면 RTI·
+ * DSCR·Cap Rate를 걷어 필요 자기자금 하나만 계산하는 룰셋이 필요하다.
+ * `withRules`로 그 세 지표를 갭투자 쪽으로 옮겨 "정의된 지표는 반드시
+ * 어느 유형엔가 쓰인다"는 파서 불변식을 지키면서(이 룰셋으로 `gap()`은
+ * 부르지 않는다) 월세수익형.metrics를 `["ownFunds"]`만 남긴다.
+ */
+describe("월세 수익형 — 대출 원금을 뺐으면 clear로 내려가지 않는다", () => {
+  const price = 5 * 억;
+  const deposit = 3000 * 만;
+
+  const ownFundsOnly = withRules((draft) => {
+    const types = draft.types as Record<string, Record<string, unknown>>;
+    (types.갭투자 as Record<string, unknown>).metrics = [
+      "jeonseRatio",
+      "ownFunds",
+      "reverseJeonse",
+      "capRate",
+      "dscr",
+      "rti",
+    ];
+    (types.월세수익형 as Record<string, unknown>).metrics = ["ownFunds"];
+  });
+
+  function rentalOnly(input: Partial<RentalInput>) {
+    return assessPurchase(ownFundsOnly, financeRules, {
+      type: "월세수익형",
+      price: null,
+      deposit: null,
+      cash: null,
+      monthlyRent: null,
+      annualOperatingCost: null,
+      loan: { kind: "unknown" },
+      ...input,
+    });
+  }
+
+  function requiredFor(loanPrincipal: number): number {
+    return Math.max(0, price - deposit - loanPrincipal) + costsAt(price);
+  }
+
+  it("이 룰셋에서는 ownFunds 하나만 낸다(전제)", () => {
+    const assessment = rentalOnly({ price, deposit, cash: 10 * 억, loan: { kind: "none" } });
+    expect(assessment.metrics.map((m) => m.id)).toEqual(["ownFunds"]);
+  });
+
+  it("대출 원금을 실제로 빼서 checked가 나와도 전체 결론은 expert로 멈춘다", () => {
+    const principal = 1 * 억;
+    const cash = requiredFor(principal);
+    const assessment = rentalOnly({
+      price,
+      deposit,
+      cash,
+      loan: { kind: "known", principal, annualDebtService: null, annualInterest: null },
+    });
+    expect(metricOf(assessment.metrics, "ownFunds").verdict).toBe("checked");
+    expect(assessment.overall).toBe("expert");
+    expect(assessment.overallNote).toContain(rules.overall.expert.loanFloorNote);
+  });
+
+  it("대출을 끼지 않는다고 확인하면(확인한 0원) 여전히 clear에 도달한다", () => {
+    const cash = requiredFor(0);
+    const assessment = rentalOnly({
+      price,
+      deposit,
+      cash,
+      loan: { kind: "none" },
+    });
+    expect(metricOf(assessment.metrics, "ownFunds").verdict).toBe("checked");
+    expect(assessment.overall).toBe("clear");
+  });
+
+  it("원금을 모르면 이미 incomplete라 이 장치가 따로 끼어들지 않는다", () => {
+    const assessment = rentalOnly({
+      price,
+      deposit,
+      cash: 10 * 억,
+      loan: { kind: "unknown" },
+    });
+    expect(metricOf(assessment.metrics, "ownFunds").verdict).toBe("unknown");
+    expect(assessment.overall).toBe("incomplete");
+  });
+
+  it("대출 원금을 넣은 여러 조합 어디에서도 clear가 되지 않는다", () => {
+    const principals = [1, 3000 * 만, 1 * 억, 3 * 억, price];
+    for (const principal of principals) {
+      const cash = requiredFor(principal);
+      const assessment = rentalOnly({
+        price,
+        deposit,
+        cash,
+        loan: { kind: "known", principal, annualDebtService: null, annualInterest: null },
+      });
+      expect(
+        assessment.overall,
+        `원금 ${String(principal)}원에서 clear가 나오면 안 된다`,
+      ).not.toBe("clear");
+    }
+  });
+
+  it("근거 문구는 코드가 아니라 룰셋에서 온다", () => {
+    const renamed = withRules((draft) => {
+      const types = draft.types as Record<string, Record<string, unknown>>;
+      (types.갭투자 as Record<string, unknown>).metrics = [
+        "jeonseRatio",
+        "ownFunds",
+        "reverseJeonse",
+        "capRate",
+        "dscr",
+        "rti",
+      ];
+      (types.월세수익형 as Record<string, unknown>).metrics = ["ownFunds"];
+      const overall = draft.overall as Record<string, Record<string, unknown>>;
+      (overall.expert as Record<string, unknown>).loanFloorNote = "이 문구는 룰셋에서 왔어요.";
+    });
+    const principal = 1 * 억;
+    const assessment = assessPurchase(renamed, financeRules, {
+      type: "월세수익형",
+      price,
+      deposit,
+      cash: requiredFor(principal),
+      monthlyRent: null,
+      annualOperatingCost: null,
+      loan: { kind: "known", principal, annualDebtService: null, annualInterest: null },
+    });
+    expect(assessment.overallNote).toContain("이 문구는 룰셋에서 왔어요.");
+  });
+});
+
+/**
  * 리뷰 수정(Critical 1): 부대비용 계산에 취득자의 주택 수가 들어 있지
  * 않다는 사실이 화면까지 실제로 나가는지 확인한다. 룰셋 파서가 문구의
  * 방향을 잠그고(rules.test.ts), 여기서는 그 문구가 지표에 실려 나가는

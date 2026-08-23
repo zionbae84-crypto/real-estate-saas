@@ -74,6 +74,13 @@ const COST_GROWS = /커질|커지|많아질|늘어날|더 나올|더 나와/;
  * 9. **필요 자기자금 문구는 유형별로 갈린다.** 월세 수익형 문구가
  *    "전세보증금"이라고 말하면 사용자가 방금 적은 값과 다른 것을
  *    가리키는 말이 된다({@link parseOwnFunds}).
+ * 10. **`overall.expert`는 반드시 `loanFloorNote`를 갖는다.** 월세
+ *     수익형에서 대출 원금을 실제로 뺐으면 결론은 `clear`로 내려가지
+ *     않고 최소 `expert`에 머문다(`assess.ts`의
+ *     `hasUnverifiedLoanPrincipal`). 이 화면은 임대사업자대출·다주택자
+ *     한도를 계산하지 않는다고 스스로 선언해서, 사용자가 적은 대출
+ *     원금이 실제로 나오는 금액인지 검증할 방법이 없기 때문이다. 이
+ *     문구가 없으면 그 하한이 왜 걸렸는지 화면이 말하지 않게 된다.
  */
 export function parsePurchaseRules(raw: unknown): PurchaseRules {
   const r = plainObject(raw, "룰셋");
@@ -98,6 +105,16 @@ export function parsePurchaseRules(raw: unknown): PurchaseRules {
     plainObject(overall.incomplete, "overall.incomplete"),
     "pendingExpertNote",
     "overall.incomplete.pendingExpertNote",
+  );
+  // 월세 수익형에서 대출 원금을 실제로 뺐으면 결론이 clear로 내려가지
+  // 않는다(assess.ts의 hasUnverifiedLoanPrincipal) — 이 화면이 임대사업자
+  // 대출·다주택자 한도를 계산하지 않는다고 스스로 선언해서, 그 원금이
+  // 실제로 나오는지 검증할 방법이 없기 때문이다. 이 문구가 왜 확인이
+  // 필요한지 화면에서 말한다.
+  requireText(
+    plainObject(overall.expert, "overall.expert"),
+    "loanFloorNote",
+    "overall.expert.loanFloorNote",
   );
 
   if (
