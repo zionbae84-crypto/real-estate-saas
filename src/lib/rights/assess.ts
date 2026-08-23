@@ -1,9 +1,14 @@
-import { calcEncumbrance, type EncumbranceResult } from "./encumbrance";
+import {
+  amountOf,
+  calcEncumbrance,
+  type EncumbranceResult,
+} from "./encumbrance";
 import type {
   RightsAnswers,
   RightsItem,
   RightsOption,
   RightsOverall,
+  RightsOverallCopy,
   RightsRules,
   RightsVerdict,
 } from "./types";
@@ -38,6 +43,15 @@ export interface RightsAssessment {
    * 컴포넌트가 스스로 지어내면 여기서만 다른 말이 나온다.
    */
   encumbranceLabel: string;
+  /**
+   * 비율을 낼 수 없을 때 화면의 '몫' 자리에 대신 넣는 글자.
+   *
+   * 모르는 금액이 하나라도 있으면 `ratio`는 실제 몫이 아니라 아래쪽
+   * 경계일 뿐이다. 전부 모를 때는 그 값이 0이라 화면에 "0.0%"가 박히는데,
+   * **표에 박힌 숫자가 옆의 경고문보다 먼저 읽힌다.** 그래서 숫자 대신
+   * 이 글자를 넣는다. 문구는 룰셋에서 온다.
+   */
+  encumbranceRatioUnknownLabel: string;
   /** 결론과 늘 함께 보여야 하는 문구 */
   disclaimer: readonly string[];
 }
@@ -87,14 +101,44 @@ export function assessRights(
   return {
     overall,
     overallLabel: copy.label,
-    overallNote: copy.note,
+    overallNote: overallNoteFor(copy, overall, findings),
     findings,
     unansweredItemIds,
     priceMissing,
     encumbrance,
     encumbranceLabel: rules.verdictLabels[encumbrance.verdict],
+    encumbranceRatioUnknownLabel: rules.encumbrance.messages.ratioUnknown,
     disclaimer: rules.disclaimer,
   };
+}
+
+/**
+ * 결론에 붙일 설명.
+ *
+ * `incomplete`일 때 **이미 전문가 확인이 필요한 항목이 있으면** 그
+ * 사실을 덧붙인다. 미답 항목 하나가 expert 항목 넷을 회색 "아직 다
+ * 답하지 않았어요" 뒤로 숨기면 실제보다 덜 위험해 보인다 — 이 제품에서
+ * 그 방향의 오차가 가장 위험하다.
+ *
+ * 우선순위는 바꾸지 않는다. 먼저 채우라고 말하는 것이 여전히 맞는
+ * 안내이고, 덧말은 그 위에 얹힐 뿐이다. 문구는 룰셋에서 온다 — 이
+ * 파일에는 사용자에게 보일 문자열이 여전히 하나도 없다.
+ *
+ * 합계 계산의 expert는 세지 않는다. 매매 예정가를 아직 안 적었다는
+ * 이유만으로도 expert가 되는데, 그건 "전문가 확인이 꼭 필요한 항목"이
+ * 아니라 그냥 빈칸이다.
+ */
+function overallNoteFor(
+  copy: RightsOverallCopy,
+  overall: RightsOverall,
+  findings: RightsFinding[],
+): string {
+  if (overall !== "incomplete") return copy.note;
+  if (copy.pendingExpertNote === undefined) return copy.note;
+  if (!findings.some((finding) => finding.verdict === "expert")) {
+    return copy.note;
+  }
+  return `${copy.note} ${copy.pendingExpertNote}`;
 }
 
 function toFinding(
@@ -103,20 +147,37 @@ function toFinding(
   answers: RightsAnswers,
 ): RightsFinding {
   const answer = answers[item.id];
-  const option =
-    answer === undefined
-      ? undefined
-      : item.options.find((candidate) => candidate.id === answer.optionId);
+  const option = answer && item.options.find((c) => c.id === answer.optionId);
 
   // 룰셋에 없는 선택지 id가 들어오면(옛 답이 남아 있거나 룰셋이 바뀐
   // 경우) 답하지 않은 것으로 본다. 모르는 값을 통과로 바꾸지 않는다.
-  if (option === undefined) {
+  if (answer === undefined || option === undefined) {
     return {
       item,
       option: null,
       verdict: null,
       label: rules.unansweredLabel,
       note: null,
+    };
+  }
+
+  /*
+   * 금액이 필요한 선택지인데 금액이 비어 있으면 이 항목은 아직 확인된
+   * 것이 아니다.
+   *
+   * 합계 계산은 이미 그 금액을 unknown으로 세고 있었지만 항목 줄만
+   * "확인했어요"로 남아 있었다 — 인쇄물에서 그 줄만 본 사람(배우자·
+   * 부모님·법무사)은 근저당을 확인한 것으로 읽는다. 판정과 문구는
+   * 룰셋의 `amountMissing`에서 온다.
+   */
+  if (option.amount === "input" && amountOf(option, answer) === null) {
+    const { verdict, note } = rules.amountMissing;
+    return {
+      item,
+      option,
+      verdict,
+      label: rules.verdictLabels[verdict],
+      note,
     };
   }
 

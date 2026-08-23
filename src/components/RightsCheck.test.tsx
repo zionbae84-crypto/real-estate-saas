@@ -1,6 +1,7 @@
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
+import { safetyClaimsIn } from "../../scripts/claims-safety";
 import rawRightsRules from "../../rules/rights-2026-08.json";
 import { parseRightsRules, type RightsItem } from "../lib/rights";
 import { RightsCheck } from "./RightsCheck";
@@ -51,6 +52,33 @@ describe("RightsCheck", () => {
       expect(text, `${item.id}.where`).toContain(item.where);
       expect(text, `${item.id}.why`).toContain(item.why);
     }
+  });
+
+  /**
+   * 리뷰 수정(Minor 2): `.rights-check-intro`는 인쇄에서 살아남는데
+   * "떼어 놓고 답해 주세요"라고 했다. 종이에는 답할 자리가 없다
+   * (`.rights-check-form`이 인쇄에서 지워진다). 조작 지시 부분만 span으로
+   * 갈라 인쇄에서 감춘다 — `.fold-more-hint`·`.assumption-action`과 같은
+   * 패턴이다.
+   */
+  describe("안내문의 조작 지시는 인쇄에서만 사라진다", () => {
+    it("조작 지시가 별도 span으로 갈라져 있다", () => {
+      const { container } = render(<RightsCheck />);
+      const action = container.querySelector(".rights-check-action");
+      expect(action).not.toBeNull();
+      expect(action?.textContent).toContain("떼어 놓고 답해 주세요");
+    });
+
+    it("그 span을 지워도 안내문의 뜻이 남는다", () => {
+      // 인쇄에서 실제로 벌어지는 일을 흉내낸다.
+      const { container } = render(<RightsCheck />);
+      container.querySelector(".rights-check-action")?.remove();
+      const intro = container.querySelector(".rights-check-intro")?.textContent ?? "";
+      expect(intro).toContain("등기사항전부증명서");
+      expect(intro).toContain("건축물대장");
+      expect(intro).toContain("안전하다고 말하지 않아요");
+      expect(intro).not.toContain("답해 주세요");
+    });
   });
 
   it("문서의 네 축을 모두 덮는다", () => {
@@ -189,13 +217,6 @@ describe("RightsCheck", () => {
 
   it("아무 조작 없이도 화면 어디에서도 '안전'하다고 말하지 않는다", () => {
     const { container } = render(<RightsCheck />);
-    const claims = (container.textContent ?? "")
-      .split(/(?<=[.!?)]|요|다)\s+/)
-      .filter(
-        (sentence) =>
-          /안전|사도 (돼|되)|괜찮|문제없/.test(sentence) &&
-          !/아니|않|없어|말아|마세|아닌/.test(sentence),
-      );
-    expect(claims).toEqual([]);
+    expect(safetyClaimsIn(container.textContent ?? "")).toEqual([]);
   });
 });

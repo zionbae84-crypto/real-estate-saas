@@ -87,6 +87,50 @@ const EXCEPTIONS: ReadonlyArray<{ text: string; why: string }> = [
   },
 ];
 
+/**
+ * 룰셋 JSON 안에서 **사용자에게 보이는 문자열**을 모두 모은다.
+ *
+ * 리뷰 수정(Important 10): 예전 검사는 `src` 아래 `.ts`/`.tsx`만 훑었다.
+ * 그런데 권리분석 문진의 사용자 문구는 **거의 전부 JSON에 있다** —
+ * 질문 13개, 어디를 보는지, 왜 위험한지, 선택지 라벨, 항목별 note,
+ * 판정 라벨, 전체 결론, 면책, 합계 메시지. 리뷰가 `overall.clear.note`를
+ * 합쇼체로 바꿔도 이 가드가 통과하는 것을 실행으로 확인했다.
+ *
+ * ## 무엇을 검사 대상에서 빼는가 — `_`로 시작하는 키만 뺀다
+ *
+ * 이 저장소의 룰셋은 **밑줄로 시작하는 키를 내부 주석 자리로** 쓴다
+ * (`_note`·`_scope`·`_verdictScope`…). 그 값은 이 저장소의 주석 문체인
+ * 한다체로 쓰이고 사용자에게 보이지 않으므로 검사하지 않는다. 밑줄
+ * 규칙은 JSON에 주석을 달 수 없어서 생긴 관행이고, 파서가 무시하는
+ * 키라는 점에서 이미 "코드가 보지 않는 자리"다.
+ *
+ * 나머지는 **전부 검사한다.** `version`·`effectiveFrom`·`id`처럼 사람이
+ * 읽지 않는 식별자도 굳이 빼지 않는다 — 그런 값에는 한국어 종결어미가
+ * 들어갈 수 없어 검사해도 무해하고, 예외를 하나 늘릴 때마다 그 자리가
+ * 새 사각지대가 되기 때문이다. **뺄 것을 적게 두는 쪽이 그물을 크게
+ * 한다.**
+ */
+function ruleStrings(value: unknown, path = ""): Array<[string, string]> {
+  if (typeof value === "string") return [[path, value]];
+  if (Array.isArray(value)) {
+    return value.flatMap((entry, i) => ruleStrings(entry, `${path}[${i}]`));
+  }
+  if (typeof value === "object" && value !== null) {
+    return Object.entries(value).flatMap(([key, entry]) =>
+      // 밑줄로 시작하는 키는 내부 주석이다. 파서도 보지 않는다.
+      key.startsWith("_") ? [] : ruleStrings(entry, path ? `${path}.${key}` : key),
+    );
+  }
+  return [];
+}
+
+/** 검사 대상 룰셋 파일: rules 아래 .json 전부 */
+function ruleFiles(dir = "rules"): string[] {
+  return readdirSync(dir)
+    .filter((entry) => entry.endsWith(".json"))
+    .map((entry) => join(dir, entry));
+}
+
 /** 검사 대상: src 아래 tsx/ts에서 테스트 파일을 뺀 것 */
 function uiSourceFiles(dir: string): string[] {
   return readdirSync(dir).flatMap((entry) => {
@@ -166,6 +210,63 @@ describe("말투 통일", () => {
       "화면 문구는 해요체로 씁니다. 합니다체를 유지해야 하는 문장이라면 " +
         "scripts/tone-guard.test.ts의 EXCEPTIONS에 이유와 함께 추가하세요.",
     ).toEqual([]);
+  });
+
+  describe("룰셋 JSON의 사용자 문구", () => {
+    it("검사할 룰셋 파일과 문구를 실제로 찾는다(전제)", () => {
+      // 파일이나 문구를 못 찾으면 아래 검사가 공허하게 통과한다.
+      const files = ruleFiles();
+      expect(files.length).toBeGreaterThan(0);
+      const strings = files.flatMap((file) =>
+        ruleStrings(JSON.parse(readFileSync(file, "utf8"))),
+      );
+      // 권리분석 룰셋만 해도 질문·안내·선택지가 수백 개다.
+      expect(strings.length).toBeGreaterThan(100);
+    });
+
+    it("합니다체가 남아 있지 않다", () => {
+      const offenders: string[] = [];
+
+      for (const file of ruleFiles()) {
+        const parsed: unknown = JSON.parse(readFileSync(file, "utf8"));
+        for (const [path, text] of ruleStrings(parsed)) {
+          if (FORMAL_ENDINGS.test(text)) offenders.push(`${file}: ${path}`);
+        }
+      }
+
+      expect(
+        offenders,
+        "룰셋의 사용자 문구도 해요체로 씁니다. 개발자용 메모라면 키 이름을 " +
+          "밑줄로 시작하세요(예: _note) — 그 자리는 검사하지 않습니다.",
+      ).toEqual([]);
+    });
+
+    it("밑줄로 시작하는 키는 검사하지 않는다(기준 고정)", () => {
+      const sample = {
+        _note: "이 값은 개발자용 메모다. 합쇼체가 섞일 수 있습니다.",
+        note: "여기는 사용자 문구예요.",
+        nested: { _scope: "내부 설명입니다.", label: "라벨이에요" },
+      };
+      const paths = ruleStrings(sample).map(([path]) => path);
+      expect(paths).toEqual(["note", "nested.label"]);
+    });
+
+    it("밑줄 아닌 키의 합쇼체는 실제로 잡는다(변이 검사)", () => {
+      // 실제 룰셋이 통과한다는 사실만으로는 그물이 살아 있는지 알 수
+      // 없다 — 리뷰가 overall.clear.note를 합쇼체로 바꿔도 옛 가드는
+      // 통과했다. 그 변이를 여기서 재현한다.
+      const mutated = {
+        overall: {
+          clear: {
+            note: "이 문진은 등기부와 건축물대장에서 흔한 위험 신호만 훑습니다. 계약 전에 확인하십시오.",
+          },
+        },
+      };
+      const caught = ruleStrings(mutated).filter(([, text]) =>
+        FORMAL_ENDINGS.test(text),
+      );
+      expect(caught.map(([path]) => path)).toEqual(["overall.clear.note"]);
+    });
   });
 
   it("예외 목록의 문구가 실제 소스에 존재한다", () => {

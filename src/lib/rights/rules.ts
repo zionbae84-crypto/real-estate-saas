@@ -24,6 +24,7 @@ const SECTIONS: readonly RightsSection[] = [
 const AMOUNT_ROLES: readonly RightsAmountRole[] = ["zero", "input", "unknown"];
 
 const ENCUMBRANCE_MESSAGE_KEYS = [
+  "ratioUnknown",
   "noPrice",
   "unknown",
   "stop",
@@ -68,6 +69,26 @@ export function parseRightsRules(raw: unknown): RightsRules {
     const copy = plainObject(overall[key], `overall.${key}`);
     requireText(copy, "label", `overall.${key}.label`);
     requireText(copy, "note", `overall.${key}.note`);
+  }
+
+  // incomplete는 덧말을 반드시 갖는다. 미답 항목이 있으면 결론이
+  // incomplete로 덮이는데, 그 문구만으로는 이미 전문가 확인이 필요한
+  // 항목이 있다는 사실이 통째로 가려진다 — 실제보다 덜 위험해 보인다.
+  requireText(
+    plainObject(overall.incomplete, "overall.incomplete"),
+    "pendingExpertNote",
+    "overall.incomplete.pendingExpertNote",
+  );
+
+  // 금액이 비었을 때 내리는 판정. `checked`면 이 규칙이 존재할 이유가
+  // 사라지므로(금액 없는 항목이 다시 "확인했어요"가 된다) 막는다.
+  const amountMissing = plainObject(r.amountMissing, "amountMissing");
+  requireText(amountMissing, "note", "amountMissing.note");
+  if (!VERDICTS.includes(amountMissing.verdict as RightsVerdict)) {
+    throw new Error(`룰셋 값 오류: amountMissing.verdict는 ${VERDICTS.join("·")} 중 하나여야 해요 (${String(amountMissing.verdict)})`);
+  }
+  if (amountMissing.verdict === "checked") {
+    throw new Error("룰셋 값 오류: amountMissing.verdict는 checked일 수 없어요. 금액이 비어 있는 항목을 '확인했어요'로 두면 인쇄물에서 그 줄만 본 사람이 확인이 끝난 것으로 읽어요.");
   }
 
   if (
@@ -216,6 +237,25 @@ function parseEncumbrance(rawEncumbrance: unknown, items: RightsItem[]): void {
     !sourceItemIds.every((id) => isText(id))
   ) {
     throw new Error("룰셋 필드 누락 또는 타입 오류: encumbrance.sourceItemIds");
+  }
+
+  /*
+   * 역방향 검증(리뷰 수정 Minor 5): 금액을 다루는 선택지가 있는데 그
+   * 항목이 sourceItemIds에 없으면, 사용자가 적은 그 금액은 **어디에도
+   * 쓰이지 않고 조용히 사라진다.** 화면은 금액을 묻고 사용자는 답했는데
+   * 합계는 그것을 세지 않는 상태다 — 정확히 Important 2로 잡힌 결함의
+   * 모양이고, 그때 아무 테스트도 잡지 못했다.
+   *
+   * `amount`가 붙은 선택지가 하나라도 있으면(zero·input·unknown 무엇이든)
+   * 그 항목은 금액을 다루기로 한 항목이므로 합계의 출처에 있어야 한다.
+   */
+  const sourceIdSet = new Set(sourceItemIds as string[]);
+  for (const item of items) {
+    if (sourceIdSet.has(item.id)) continue;
+    const withAmount = item.options.find((option) => option.amount !== undefined);
+    if (withAmount !== undefined) {
+      throw new Error(`룰셋 값 오류: ${item.id} 항목에 금액 선택지(${withAmount.id})가 있는데 encumbrance.sourceItemIds에 없어요. 사용자가 적은 그 금액이 어디에도 쓰이지 않고 사라져요.`);
+    }
   }
 
   for (const id of sourceItemIds as string[]) {

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { claimsSafety } from "../../../scripts/claims-safety";
 import rawRightsRules from "../../../rules/rights-2026-08.json";
 import { assessRights } from "./assess";
 import { parseRightsRules } from "./rules";
@@ -77,17 +78,6 @@ function forEachCombination(
 
   walk(0);
   return visited;
-}
-
-/** 결론 문구가 "안전"을 긍정으로 주장하는가 */
-function claimsSafety(phrase: string): boolean {
-  return phrase
-    .split(/(?<=[.!?)]|요|다)\s+/)
-    .some(
-      (sentence) =>
-        /안전|사도 (돼|되)|사도 좋|괜찮|문제없|이상 없/.test(sentence) &&
-        !/아니|않|없어|말아|마세|아닌/.test(sentence),
-    );
 }
 
 describe("권리분석 판정", () => {
@@ -219,6 +209,126 @@ describe("권리분석 판정", () => {
       const answers =
         stopItem && stopOption ? { [stopItem.id]: answerFor(stopOption) } : {};
       expect(assessRights(rules, answers, PRICE).overall).toBe("stop");
+    });
+  });
+
+  /**
+   * 리뷰 수정(Important 5): expert 항목이 넷이나 있는데 한 항목만 미답이면
+   * 헤드라인이 회색 "아직 다 답하지 않았어요"가 되고, note가 이미 전문가
+   * 확인이 필요한 항목이 있다는 사실을 한 글자도 말하지 않았다. 우선순위는
+   * 그대로 두고 note에 조건부로 덧붙인다.
+   */
+  describe("incomplete가 expert를 가리지 않는다", () => {
+    /** 항목 하나를 expert로 답하고, 다른 항목 하나는 비운 상태 */
+    function pendingExpertAnswers(): RightsAnswers {
+      const answers: Record<string, RightsAnswer | undefined> = {
+        ...bestCaseAnswers(),
+        trust: { optionId: "withTrustee", amountWon: null },
+      };
+      delete answers.auction;
+      return answers;
+    }
+
+    it("expert 항목이 있는 채로 미답이 남으면 note가 그 사실을 말한다", () => {
+      const result = assessRights(rules, pendingExpertAnswers(), PRICE);
+      expect(result.overall).toBe("incomplete");
+      expect(result.overallNote).toContain(rules.overall.incomplete.note);
+      expect(result.overallNote).toContain(
+        rules.overall.incomplete.pendingExpertNote,
+      );
+    });
+
+    it("expert 항목이 없으면 덧말을 붙이지 않는다", () => {
+      const answers: Record<string, RightsAnswer | undefined> = {
+        ...bestCaseAnswers(),
+      };
+      delete answers.auction;
+      const result = assessRights(rules, answers, PRICE);
+      expect(result.overall).toBe("incomplete");
+      expect(result.overallNote).toBe(rules.overall.incomplete.note);
+    });
+
+    it("덧말은 룰셋에서 온다", () => {
+      const renamed: RightsRules = {
+        ...rules,
+        overall: {
+          ...rules.overall,
+          incomplete: {
+            ...rules.overall.incomplete,
+            pendingExpertNote: "다시 지은 덧말",
+          },
+        },
+      };
+      const result = assessRights(renamed, pendingExpertAnswers(), PRICE);
+      expect(result.overallNote).toContain("다시 지은 덧말");
+    });
+  });
+
+  /**
+   * 리뷰 수정(Important 8): "있고, 합계를 확인했어요"를 고른 뒤 금액을 비워
+   * 두면 합계 계산은 올바르게 unknown으로 셌는데 항목 줄만 "확인했어요"로
+   * 남았다. 인쇄물에서 그 줄만 본 사람은 근저당을 확인한 것으로 읽는다.
+   */
+  describe("금액이 비어 있으면 그 항목은 '확인했어요'가 아니다", () => {
+    /** 금액 입력이 필요한 선택지를 가진 항목들 */
+    const amountItems = rules.items.filter((item) =>
+      item.options.some((o) => o.amount === "input"),
+    );
+
+    it("검사할 금액 항목이 실제로 있다(전제)", () => {
+      expect(amountItems.length).toBeGreaterThan(0);
+    });
+
+    it("금액을 비우면 항목 판정이 checked가 아니고 결론도 clear가 아니다", () => {
+      for (const item of amountItems) {
+        const option = item.options.find((o) => o.amount === "input");
+        if (option === undefined) continue;
+        const answers: RightsAnswers = {
+          ...bestCaseAnswers(),
+          [item.id]: { optionId: option.id, amountWon: null },
+        };
+        const result = assessRights(rules, answers, PRICE);
+        const finding = result.findings.find((f) => f.item.id === item.id);
+
+        expect(finding?.verdict, item.id).not.toBe("checked");
+        expect(finding?.verdict, item.id).toBe(rules.amountMissing.verdict);
+        expect(finding?.label, item.id).toBe(
+          rules.verdictLabels[rules.amountMissing.verdict],
+        );
+        expect(finding?.note, item.id).toBe(rules.amountMissing.note);
+        expect(result.overall, item.id).not.toBe("clear");
+      }
+    });
+
+    it("금액을 채우면 그 선택지 본래의 판정으로 돌아간다", () => {
+      for (const item of amountItems) {
+        const option = item.options.find((o) => o.amount === "input");
+        if (option === undefined) continue;
+        const answers: RightsAnswers = {
+          ...bestCaseAnswers(),
+          [item.id]: { optionId: option.id, amountWon: SMALL_AMOUNT },
+        };
+        const finding = assessRights(rules, answers, PRICE).findings.find(
+          (f) => f.item.id === item.id,
+        );
+        expect(finding?.verdict, item.id).toBe(option.verdict);
+      }
+    });
+
+    it("음수·NaN 금액도 비어 있는 것으로 본다", () => {
+      const item = amountItems[0];
+      const option = item?.options.find((o) => o.amount === "input");
+      expect(option).toBeDefined();
+      for (const bad of [-1, Number.NaN, Number.POSITIVE_INFINITY]) {
+        const answers: RightsAnswers = {
+          ...bestCaseAnswers(),
+          ...(item && option ? { [item.id]: { optionId: option.id, amountWon: bad } } : {}),
+        };
+        const finding = assessRights(rules, answers, PRICE).findings.find(
+          (f) => f.item.id === item?.id,
+        );
+        expect(finding?.verdict, String(bad)).not.toBe("checked");
+      }
     });
   });
 

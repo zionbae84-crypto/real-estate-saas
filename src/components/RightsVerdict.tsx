@@ -106,8 +106,18 @@ function Encumbrance({ assessment, priceLabel }: RightsVerdictProps) {
         {encumbrance.ratio !== null && (
           <div>
             <dt>매매 예정가에서 차지하는 몫</dt>
+            {/*
+             * 모르는 금액이 하나라도 있으면 비율은 실제 몫이 아니라
+             * 아래쪽 경계일 뿐이다. 전부 "모르겠어요"로 답하면 그 값이
+             * 0이라 "0.0%"가 표에 박히는데, 바로 아래 경고문보다 그
+             * 숫자가 먼저 읽힌다 — 아무것도 확인하지 않은 사람이 가장
+             * 낙관적인 숫자를 보게 되는 자리다. 그래서 숫자를 아예
+             * 내지 않고 룰셋의 문구로 바꾼다.
+             */}
             <dd data-field="ratio">
-              {(encumbrance.ratio * 100).toFixed(1)}%
+              {encumbrance.unknownItemIds.length > 0
+                ? assessment.encumbranceRatioUnknownLabel
+                : `${(encumbrance.ratio * 100).toFixed(1)}%`}
             </dd>
           </div>
         )}
