@@ -1,9 +1,17 @@
+import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import type { ComplexListEntry, ComplexListResult } from "../lib/complex-list";
 import type { SafetyLevel } from "../lib/finance";
 
-/** 한 번에 보여주는 최대 행 수 */
-const PAGE_SIZE = 20;
+/**
+ * 각 덩어리에서 한 번에 보여주는 최대 행 수.
+ *
+ * 두 덩어리를 합쳐 세지 않고 **각각** 자른다. 합쳐 세면 안전 덩어리가
+ * 길 때 두 번째 덩어리가 화면 밖으로 밀려나고, 그러면 "선이 어디에
+ * 있는가"라는 이 화면의 요점이 보이지 않는다 — 실제로 안전 82개·부담
+ * 7개인 프로필에서 두 번째 헤더가 아예 안 나왔다.
+ */
+const PAGE_SIZE = 10;
 
 const LEVEL_LABELS: Record<SafetyLevel, string> = {
   safe: "안전",
@@ -63,10 +71,8 @@ export function ComplexList({
     );
   }
 
-  // 두 덩어리를 합쳐 세므로 "더 보기"가 덩어리 경계에서 어색해지지 않는다.
   const safeShown = result.withinSafe.slice(0, visibleCount);
-  const beyondBudget = Math.max(0, visibleCount - result.withinSafe.length);
-  const beyondShown = result.beyondSafe.slice(0, beyondBudget);
+  const beyondShown = result.beyondSafe.slice(0, visibleCount);
   const remaining = total - safeShown.length - beyondShown.length;
 
   return (
@@ -78,7 +84,7 @@ export function ComplexList({
           <h3 className="complex-group complex-group--safe">무리 없이 살 수 있어요</h3>
           <ul className="complex-rows">
             {safeShown.map((e) => (
-              <ComplexRow key={e.unit.complexKey} entry={e} />
+              <ComplexRow key={unitKey(e.unit)} entry={e} />
             ))}
           </ul>
         </>
@@ -89,7 +95,7 @@ export function ComplexList({
           <h3 className="complex-group complex-group--beyond">살 수는 있지만 부담이 커요</h3>
           <ul className="complex-rows">
             {beyondShown.map((e) => (
-              <ComplexRow key={e.unit.complexKey} entry={e} />
+              <ComplexRow key={unitKey(e.unit)} entry={e} />
             ))}
           </ul>
         </>
@@ -106,6 +112,17 @@ export function ComplexList({
   );
 }
 
+/**
+ * 행의 React 키.
+ *
+ * `complexKey`는 **단지** 키라 평형별로 중복된다 — 한 단지에 25㎡와 28㎡가
+ * 있으면 두 행의 키가 같아지고, React가 행을 중복하거나 누락시킬 수 있다.
+ * 평형까지 넣어야 유일하다.
+ */
+function unitKey(unit: ComplexUnit): string {
+  return `${unit.complexKey}|${unit.areaBucket}`;
+}
+
 function ComplexRow({ entry }: { entry: ComplexListEntry }) {
   const { unit, burden, needsBuiltYear } = entry;
   const level = burden.safety.level;
@@ -117,17 +134,45 @@ function ComplexRow({ entry }: { entry: ComplexListEntry }) {
         {needsBuiltYear && <span className="complex-built"> · {unit.builtYear}년 준공</span>}
       </p>
       <p className="complex-range">
-        {formatWon(unit.minPrice)} ~ {formatWon(unit.maxPrice)}
+        {formatRange(unit.minPrice, unit.maxPrice)}
         <span className="complex-trades"> · 최근 1년 거래 {unit.tradeCount}건</span>
       </p>
       <p className="complex-burden" data-level={level}>
-        범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면 월{" "}
-        {formatWon(burden.safety.monthlyPayment)} · 부담률{" "}
-        {(burden.safety.burdenRatio * 100).toFixed(0)}%{" "}
-        <span className="complex-level">{LEVEL_LABELS[level]}</span>
+        범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
+        {burden.neededLoan === 0 ? (
+          // 현금만으로 덮이는 가격이다. "월 0원 · 부담률 0%"만 보여주면
+          // 계산이 안 된 것처럼 읽힌다 — 왜 0인지를 말한다.
+          <>
+            <span className="complex-no-loan">대출 없이 살 수 있어요</span>{" "}
+            <span className="complex-level">{LEVEL_LABELS[level]}</span>
+          </>
+        ) : (
+          <>
+            월 {formatWon(burden.safety.monthlyPayment)} · 부담률{" "}
+            {(burden.safety.burdenRatio * 100).toFixed(0)}%{" "}
+            <span className="complex-level">{LEVEL_LABELS[level]}</span>
+          </>
+        )}
       </p>
     </li>
   );
+}
+
+/**
+ * 가격 범위 문구.
+ *
+ * 거래가 하나뿐이거나 값이 모두 같으면 범위가 한 점으로 모인다. 같은
+ * 숫자를 두 번 읽히게 하지 않는다 — 거래 건수가 그 숫자의 근거를 이미
+ * 말한다. 전체 평형의 절반이 거래 1건이라 이 경우가 드물지 않다.
+ *
+ * 표시 문자열로 비교한다. 원 단위로 비교해도 지금 데이터에서는 결과가
+ * 같지만(`formatWon`은 반올림하지 않고 나머지를 그대로 쓴다), 사용자가
+ * 보는 것은 숫자가 아니라 문자열이므로 판단 기준을 화면에 맞춘다.
+ */
+function formatRange(minPrice: number, maxPrice: number): string {
+  const low = formatWon(minPrice);
+  const high = formatWon(maxPrice);
+  return low === high ? high : `${low} ~ ${high}`;
 }
 
 function EmptyMessage({

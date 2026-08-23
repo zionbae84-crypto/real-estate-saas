@@ -23,7 +23,8 @@ export function App() {
   // 없다(둘 다 그 자체로는 완결돼 있지만 이어 주는 배선이 없었다).
   const [openField, setOpenField] = useState<AssumableField | null>(null);
   const [regionCodes, setRegionCodes] = useState<string[]>([]);
-  const [visibleCount, setVisibleCount] = useState(20);
+  // ComplexList의 PAGE_SIZE와 같은 값이다 — 각 덩어리에서 이만큼씩 보여준다.
+  const [visibleCount, setVisibleCount] = useState(10);
 
   const complexList = useMemo(
     () =>
@@ -50,7 +51,7 @@ export function App() {
    */
   function handleRegionChange(codes: string[]) {
     setRegionCodes(codes);
-    setVisibleCount(20);
+    setVisibleCount(10);
     if (codes.length > 0) {
       setField(
         "isRegulatedArea",
@@ -106,7 +107,7 @@ export function App() {
                   affordability.result.loanLimit.breakdown.DSR === 0
                 }
                 visibleCount={visibleCount}
-                onShowMore={() => setVisibleCount((n) => n + 20)}
+                onShowMore={() => setVisibleCount((n) => n + 10)}
               />
             )}
           </>

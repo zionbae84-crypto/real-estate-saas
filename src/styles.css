@@ -515,3 +515,8 @@ body {
   color: var(--seed-color-fg-neutral-muted);
   font-size: 0.9rem;
 }
+
+.complex-no-loan {
+  color: var(--safe);
+  font-weight: 600;
+}

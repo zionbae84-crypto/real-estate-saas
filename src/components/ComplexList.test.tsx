@@ -150,12 +150,60 @@ describe("ComplexList", () => {
     expect(screen.getByText(/신고가 한 달쯤 늦어서/)).toBeInTheDocument();
   });
 
-  it("20개를 넘으면 더 보기가 나온다", () => {
-    const many = Array.from({ length: 25 }, (_, i) =>
-      entry(unit({ complexKey: `u${i}` })),
-    );
+  it("한 덩어리가 길어도 다른 덩어리가 화면에서 밀려나지 않는다", () => {
+    // 합쳐 세면 안전 덩어리가 길 때 두 번째 헤더가 아예 안 나온다 —
+    // "선이 어디에 있는가"라는 이 화면의 요점이 사라진다.
+    renderList({
+      withinSafe: Array.from({ length: 82 }, (_, i) =>
+        entry(unit({ complexKey: `s${i}` })),
+      ),
+      beyondSafe: Array.from({ length: 7 }, (_, i) =>
+        entry(unit({ complexKey: `b${i}` }), 0.33, "caution"),
+      ),
+    });
+    expect(screen.getByText("무리 없이 살 수 있어요")).toBeInTheDocument();
+    expect(screen.getByText("살 수는 있지만 부담이 커요")).toBeInTheDocument();
+  });
+
+  it("남은 개수를 더 보기에 알려준다", () => {
     const onShowMore = vi.fn();
-    renderList({ withinSafe: many }, { onShowMore });
+    renderList(
+      {
+        withinSafe: Array.from({ length: 15 }, (_, i) =>
+          entry(unit({ complexKey: `u${i}` })),
+        ),
+      },
+      { onShowMore },
+    );
     expect(screen.getByRole("button", { name: /5개 더 보기/ })).toBeInTheDocument();
+  });
+
+  it("대출이 필요 없으면 월 0원 대신 그 사실을 말한다", () => {
+    // "월 0원 · 부담률 0%"만 보여주면 계산이 안 된 것처럼 읽힌다.
+    const e = entry(unit());
+    renderList({ withinSafe: [{ ...e, burden: { ...e.burden, neededLoan: 0 } }] });
+    expect(screen.getByText(/대출 없이 살 수 있어요/)).toBeInTheDocument();
+    expect(screen.queryByText(/월 0원/)).not.toBeInTheDocument();
+  });
+
+  it("거래가 하나라 범위가 한 점이면 숫자를 한 번만 보여준다", () => {
+    // 같은 숫자를 두 번 읽히게 하지 않는다. 전체 평형의 절반이 거래 1건이다.
+    const { container } = renderList({
+      withinSafe: [
+        entry(unit({ minPrice: 135_000_000, maxPrice: 135_000_000, tradeCount: 1 })),
+      ],
+    });
+    const range = container.querySelector(".complex-range")?.textContent ?? "";
+    expect(range).toMatch(/1억 3,500만원 · 최근 1년 거래 1건/);
+    expect(range).not.toMatch(/~/);
+  });
+
+  it("값이 다르면 범위로 보여준다", () => {
+    const { container } = renderList({
+      withinSafe: [
+        entry(unit({ minPrice: 135_000_000, maxPrice: 135_004_000, tradeCount: 2 })),
+      ],
+    });
+    expect(container.querySelector(".complex-range")?.textContent).toMatch(/~/);
   });
 });
