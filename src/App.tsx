@@ -8,6 +8,7 @@ import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaSource } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
 import { RegionFilter } from "./components/RegionFilter";
+import { RightsCheck } from "./components/RightsCheck";
 import { SafetyBadge } from "./components/SafetyBadge";
 import { COMPLEX_UNITS, DATA_AS_OF, REGIONS, type ComplexUnit } from "./data/complexes";
 import { buildComplexList } from "./lib/complex-list";
@@ -252,6 +253,26 @@ export function App() {
             </button>
           </>
         )}
+
+        {/*
+          권리분석 문진은 **예산 흐름에 붙이지 않고 독립된 자리**에 둔다.
+          이유가 둘 있다.
+
+          1. 문진의 대상이 다르다. 위 목록의 "단지 × 평형"은 실거래가를
+             집계한 단위이지 특정 호실이 아니다. 등기사항전부증명서는
+             호실 하나에 대해 떼는 문서이므로, 목록의 행에서 "이 집의
+             등기부"를 물을 수 있는 자리가 없다. 단지 상세에 붙이면
+             그 행의 숫자가 특정 매물의 권리 상태인 것처럼 읽혀, 이
+             제품이 절대 만들면 안 되는 오해가 된다.
+          2. 이 문진은 예산 계산 없이도 성립한다. 계약을 앞두고
+             등기부만 들고 온 사람이 현금·소득을 먼저 입력해야만 쓸 수
+             있게 하면, 가장 급한 사람이 가장 늦게 도달한다. 그래서
+             `affordability === null` 분기 **밖**에 둔다.
+
+          접힌 채로 시작하지만 인쇄에서는 강제로 펼쳐진다(styles.css의
+          `::details-content` 규칙) — 이 앱의 다른 <details>와 같다.
+        */}
+        <RightsCheck />
       </ErrorBoundary>
 
       <footer className="disclaimer">
