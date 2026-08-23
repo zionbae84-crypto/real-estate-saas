@@ -206,4 +206,22 @@ describe("ComplexList", () => {
     });
     expect(container.querySelector(".complex-range")?.textContent).toMatch(/~/);
   });
+
+  // onSelect가 없으면(예: 위의 테스트들처럼 이 컴포넌트만 단독으로
+  // 렌더링하는 자리) 행은 버튼이 아니다 — 누를 곳이 없는데 버튼처럼
+  // 보이면 그 자체가 거짓말이다.
+  it("onSelect가 없으면 행이 버튼이 아니다", () => {
+    renderList({ withinSafe: [entry(unit())] });
+    expect(screen.queryByRole("button", { name: /테스트아파트/ })).not.toBeInTheDocument();
+  });
+
+  it("onSelect가 있으면 행을 눌러 그 평형을 알려준다", () => {
+    const onSelect = vi.fn();
+    const u = unit();
+    renderList({ withinSafe: [entry(u)] }, { onSelect });
+
+    screen.getByRole("button", { name: /테스트아파트/ }).click();
+
+    expect(onSelect).toHaveBeenCalledWith(u);
+  });
 });

@@ -1,6 +1,8 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import type { ComplexUnit } from "./data/complexes";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { rules } from "./state/useAffordability";
 import type * as UseAffordabilityModule from "./state/useAffordability";
@@ -20,6 +22,41 @@ vi.mock("./state/useAffordability", async () => {
     rules: { ...actual.rules, effectiveFrom: "2027-11-05" },
   };
 });
+
+/**
+ * 단지 상세(화면 4) 통합 테스트용 고정 단지 하나.
+ *
+ * 실제 번들 데이터(`data/complexes.json`)는 수십억 원대라 여기서 다루기
+ * 번거롭다 — 이 describe 블록 전용으로 작고 예측 가능한 값 하나만
+ * 모의한다. 위쪽 다른 테스트들은 현금·소득을 입력하지 않아 이 모의의
+ * 영향을 받지 않는다(프로필이 null이면 이 데이터를 아예 쓰지 않는다).
+ *
+ * `vi.mock`은 파일 최상단으로 호이스팅되므로, 팩토리 안에서 쓰는 값도
+ * `vi.hoisted`로 함께 끌어올려야 한다 — 그냥 top-level const로 두면
+ * "초기화 전 접근" 에러가 난다.
+ */
+const { DETAIL_TEST_UNIT } = vi.hoisted(() => ({
+  DETAIL_TEST_UNIT: {
+    complexKey: "11680|테스트동|2015|테스트단지",
+    complexName: "테스트단지",
+    regionCode: "11680",
+    legalDongName: "테스트동",
+    builtYear: 2015,
+    areaBucket: 59,
+    medianPrice: 200_000_000,
+    tradeCount: 3,
+    minPrice: 190_000_000,
+    maxPrice: 210_000_000,
+    lowConfidence: false,
+  } satisfies ComplexUnit,
+}));
+
+vi.mock("./data/complexes", () => ({
+  COMPLEX_UNITS: [DETAIL_TEST_UNIT],
+  DATA_AS_OF: "2026-08",
+  REGIONS: [{ regionCode: "11680", complexCount: 1, unitCount: 1 }],
+  REGION_NAMES: { "11680": "강남구" },
+}));
 
 describe("App", () => {
   it("서비스 제목을 표시한다", () => {
@@ -50,5 +87,82 @@ describe("App", () => {
     expect(
       screen.queryByText(/2026년 3월 규제 기준/),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("App - 단지 상세(화면 4)", () => {
+  // useProfileForm은 localStorage에 저장·복원한다. App을 실제로
+  // 렌더링하는 이 블록에서 지우지 않으면 이전 테스트가 입력한 값이
+  // 다음 테스트로 새어 들어간다(ProfileForm.test.tsx는 훅을 안 쓰고
+  // state를 직접 주입해서 이 문제가 없다).
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  async function fillProfile() {
+    // "150000"·"15000"은 단위 없이 쓴 만원 표기다(MoneyInput 기본
+    // 해석) — 각각 15억, 1억 5천만원.
+    await userEvent.type(screen.getByLabelText("보유 현금"), "150000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+  }
+
+  it("단지 목록의 행을 누르면 그 평형의 상세가 열린다", async () => {
+    render(<App />);
+    await fillProfile();
+
+    const row = screen.getByRole("button", { name: /테스트단지/ });
+    await userEvent.click(row);
+
+    expect(
+      screen.getByRole("region", { name: "단지 상세" }),
+    ).toBeInTheDocument();
+    // 목록·지역 선택은 상세가 열리면 화면에서 빠진다 — 별개 화면이다.
+    expect(
+      screen.queryByRole("region", { name: "지역 선택" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("살 수 있는 단지")).not.toBeInTheDocument();
+  });
+
+  it("목록으로 버튼을 누르면 다시 목록이 보인다", async () => {
+    render(<App />);
+    await fillProfile();
+    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+
+    await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
+
+    expect(screen.getByText("살 수 있는 단지")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "단지 상세" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("평형을 고르면 그 평형의 전용면적이 프로필에 반영돼 가정 문구에서 빠진다", async () => {
+    render(<App />);
+    await fillProfile();
+
+    // 아직 고르기 전에는 전용면적이 가정 중이라는 문구가 있다.
+    expect(screen.getByText(/전용면적 86㎡로 가정하고 계산했어요/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+
+    // 이 평형(전용 59㎡)을 반영했으므로 가정 문구 자체가 더 이상
+    // 화면에 없다 — AssumptionLine은 사용자가 값을 확정한 항목을
+    // 빼기 때문이다.
+    expect(screen.queryByText(/전용면적 86㎡로 가정하고 계산했어요/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
+  });
+
+  it("전용면적 반영으로 실구매 가능 가격도 함께 바뀐다", async () => {
+    const { container } = render(<App />);
+    await fillProfile();
+
+    const priceBefore = container.querySelector(".affordable-price")?.textContent;
+
+    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+    await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
+
+    const priceAfter = container.querySelector(".affordable-price")?.textContent;
+
+    expect(priceAfter).not.toBe(priceBefore);
   });
 });

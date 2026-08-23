@@ -30,6 +30,13 @@ export interface ComplexListProps {
   /** 더 보기로 늘린 행 수. 기본은 PAGE_SIZE */
   visibleCount?: number;
   onShowMore?: () => void;
+  /**
+   * 있으면 각 행이 눌러서 상세(상환 시뮬레이션)를 열 수 있는 버튼이
+   * 된다. 없으면(App.tsx 밖에서 이 컴포넌트만 렌더링하는 기존
+   * 테스트처럼) 행은 그냥 텍스트다 — 누를 곳이 없는데 버튼처럼
+   * 보이면 그 자체가 거짓말이다(AssumptionLine의 같은 원칙).
+   */
+  onSelect?: (unit: ComplexUnit) => void;
 }
 
 /**
@@ -54,6 +61,7 @@ export function ComplexList({
   noRepaymentCapacity,
   visibleCount = PAGE_SIZE,
   onShowMore,
+  onSelect,
 }: ComplexListProps) {
   const total = result.withinSafe.length + result.beyondSafe.length;
 
@@ -84,7 +92,7 @@ export function ComplexList({
           <h3 className="complex-group complex-group--safe">무리 없이 살 수 있어요</h3>
           <ul className="complex-rows">
             {safeShown.map((e) => (
-              <ComplexRow key={unitKey(e.unit)} entry={e} />
+              <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
             ))}
           </ul>
         </>
@@ -95,7 +103,7 @@ export function ComplexList({
           <h3 className="complex-group complex-group--beyond">살 수는 있지만 부담이 커요</h3>
           <ul className="complex-rows">
             {beyondShown.map((e) => (
-              <ComplexRow key={unitKey(e.unit)} entry={e} />
+              <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
             ))}
           </ul>
         </>
@@ -123,12 +131,18 @@ function unitKey(unit: ComplexUnit): string {
   return `${unit.complexKey}|${unit.areaBucket}`;
 }
 
-function ComplexRow({ entry }: { entry: ComplexListEntry }) {
+function ComplexRow({
+  entry,
+  onSelect,
+}: {
+  entry: ComplexListEntry;
+  onSelect?: (unit: ComplexUnit) => void;
+}) {
   const { unit, burden, needsBuiltYear } = entry;
   const level = burden.safety.level;
 
-  return (
-    <li className="complex-row">
+  const rows = (
+    <>
       <p className="complex-name">
         <strong>{unit.complexName}</strong> {unit.areaBucket}㎡ · {unit.legalDongName}
         {needsBuiltYear && <span className="complex-built"> · {unit.builtYear}년 준공</span>}
@@ -154,6 +168,22 @@ function ComplexRow({ entry }: { entry: ComplexListEntry }) {
           </>
         )}
       </p>
+    </>
+  );
+
+  if (onSelect === undefined) {
+    return <li className="complex-row">{rows}</li>;
+  }
+
+  return (
+    <li className="complex-row">
+      <button
+        type="button"
+        className="complex-row-button"
+        onClick={() => onSelect(unit)}
+      >
+        {rows}
+      </button>
     </li>
   );
 }
@@ -169,7 +199,7 @@ function ComplexRow({ entry }: { entry: ComplexListEntry }) {
  * 같지만(`formatWon`은 반올림하지 않고 나머지를 그대로 쓴다), 사용자가
  * 보는 것은 숫자가 아니라 문자열이므로 판단 기준을 화면에 맞춘다.
  */
-function formatRange(minPrice: number, maxPrice: number): string {
+export function formatRange(minPrice: number, maxPrice: number): string {
   const low = formatWon(minPrice);
   const high = formatWon(maxPrice);
   return low === high ? high : `${low} ~ ${high}`;

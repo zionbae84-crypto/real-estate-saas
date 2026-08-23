@@ -1,15 +1,17 @@
 import { useMemo, useState } from "react";
 import { AssumptionLine } from "./components/AssumptionLine";
 import { BudgetResult } from "./components/BudgetResult";
+import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { ProfileForm } from "./components/ProfileForm";
 import { RegionFilter } from "./components/RegionFilter";
 import { SafetyBadge } from "./components/SafetyBadge";
-import { COMPLEX_UNITS, DATA_AS_OF, REGIONS } from "./data/complexes";
+import { COMPLEX_UNITS, DATA_AS_OF, REGIONS, type ComplexUnit } from "./data/complexes";
 import { buildComplexList } from "./lib/complex-list";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
+import { calcAcquisitionCosts, calcBurdenAt } from "./lib/finance";
 import { rules, useAffordability } from "./state/useAffordability";
 import type { AssumableField } from "./state/useProfileForm";
 import { useProfileForm } from "./state/useProfileForm";
@@ -25,6 +27,8 @@ export function App() {
   const [regionCodes, setRegionCodes] = useState<string[]>([]);
   // ComplexList의 PAGE_SIZE와 같은 값이다 — 각 덩어리에서 이만큼씩 보여준다.
   const [visibleCount, setVisibleCount] = useState(10);
+  // 상세(상환 시뮬레이션)를 연 평형. null이면 목록 화면이다.
+  const [selectedUnit, setSelectedUnit] = useState<ComplexUnit | null>(null);
 
   const complexList = useMemo(
     () =>
@@ -60,6 +64,32 @@ export function App() {
     }
   }
 
+  /**
+   * 단지 목록의 행을 누르면 그 평형의 상세(상환 시뮬레이션)를 연다.
+   *
+   * 지역과 같은 패턴이다: 목록 전용 값을 따로 만들지 않고 **폼 상태에
+   * 직접** 반영한다. 그래야 위쪽 실구매 가능 가격과 상세 안의 계산이
+   * 같은 프로필을 보게 된다 — 따로 두면 "상세에서는 이 평형 기준인데
+   * 위쪽은 다른 면적 기준"인 화면이 나온다.
+   *
+   * `setField`가 `exclusiveAreaSqm`을 `ASSUMABLE_KEY_MAP`으로 이미
+   * "area"에 매핑해 두었으므로, 이 한 번의 호출로 `touched`에도 함께
+   * 기록돼 `AssumptionLine`에서 전용면적 가정 항목이 빠진다.
+   */
+  function handleSelectUnit(unit: ComplexUnit) {
+    setSelectedUnit(unit);
+    setField("exclusiveAreaSqm", unit.areaBucket);
+  }
+
+  const detail = useMemo(() => {
+    if (profile === null || selectedUnit === null) return null;
+    return {
+      unit: selectedUnit,
+      burden: calcBurdenAt(profile, rules, selectedUnit.maxPrice),
+      costs: calcAcquisitionCosts(selectedUnit.maxPrice, profile, rules),
+    };
+  }, [profile, selectedUnit]);
+
   return (
     <main className="app">
       <h1>내 예산으로 살 수 있는 집</h1>
@@ -93,22 +123,34 @@ export function App() {
                 <SafetyBadge safety={affordability.safety} />
               </>
             )}
-            <RegionFilter
-              regions={REGIONS}
-              selected={regionCodes}
-              onChange={handleRegionChange}
-            />
-            {complexList !== null && (
-              <ComplexList
-                result={complexList}
-                dataAsOf={DATA_AS_OF}
-                hasRegionFilter={regionCodes.length > 0}
-                noRepaymentCapacity={
-                  affordability.result.loanLimit.breakdown.DSR === 0
-                }
-                visibleCount={visibleCount}
-                onShowMore={() => setVisibleCount((n) => n + 10)}
+            {detail !== null ? (
+              <ComplexDetail
+                unit={detail.unit}
+                burden={detail.burden}
+                costs={detail.costs}
+                onClose={() => setSelectedUnit(null)}
               />
+            ) : (
+              <>
+                <RegionFilter
+                  regions={REGIONS}
+                  selected={regionCodes}
+                  onChange={handleRegionChange}
+                />
+                {complexList !== null && (
+                  <ComplexList
+                    result={complexList}
+                    dataAsOf={DATA_AS_OF}
+                    hasRegionFilter={regionCodes.length > 0}
+                    noRepaymentCapacity={
+                      affordability.result.loanLimit.breakdown.DSR === 0
+                    }
+                    visibleCount={visibleCount}
+                    onShowMore={() => setVisibleCount((n) => n + 10)}
+                    onSelect={handleSelectUnit}
+                  />
+                )}
+              </>
             )}
           </>
         )}
