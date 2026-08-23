@@ -88,14 +88,14 @@ describe("PriceSlider", () => {
   it("최대치일 때 그것이 한계임을 알린다", () => {
     renderSlider({ price: 640_000_000, max: 640_000_000 });
     expect(
-      screen.getByText(/빌릴 수 있는 한계이지 무리하지 않는 선이 아닙니다/),
+      screen.getByText(/빌릴 수 있는 한계예요\. 무리 없는 선은 따로 있어요/),
     ).toBeInTheDocument();
   });
 
   it("최대치가 아니면 한계 안내를 띄우지 않는다", () => {
     renderSlider({ price: 300_000_000, max: 640_000_000 });
     expect(
-      screen.queryByText(/빌릴 수 있는 한계이지/),
+      screen.queryByText(/빌릴 수 있는 한계예요/),
     ).not.toBeInTheDocument();
   });
 

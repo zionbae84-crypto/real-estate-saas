@@ -369,7 +369,7 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
     const result = calcAffordablePrice(profile({ cash: 1_000_000 }), rules);
     expect(result.affordablePrice).toBe(0);
     expect(result.warnings).toContain(
-      "고정 부대비용(법무비·이사비)만으로도 보유 현금을 초과합니다.",
+      "고정 부대비용(법무비·이사비)만으로도 보유 현금을 넘어요.",
     );
   });
 

@@ -30,13 +30,13 @@ export function calcAvailableCash(profile: BuyerProfile): AvailableCash {
 
   const home = profile.existingHome;
   if (!home) {
-    warnings.push("기존 주택 정보가 없어 매도 대금이 반영되지 않았습니다.");
+    warnings.push("기존 주택 정보가 없어 매도 대금이 반영되지 않았어요.");
     return { amount: Math.max(0, Math.floor(profile.cash)), warnings };
   }
 
   if (home.capitalGainsTax === undefined) {
     warnings.push(
-      "양도세가 반영되지 않았습니다. 실제 가용 자금은 이보다 적을 수 있습니다.",
+      "양도세가 반영되지 않았어요. 실제 가용 자금은 이보다 적을 수 있어요.",
     );
   }
 

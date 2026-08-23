@@ -34,7 +34,7 @@ describe("MoneyInput", () => {
     const { onChange, input } = setup();
     await userEvent.type(input, "abc");
     expect(onChange).toHaveBeenLastCalledWith(null);
-    expect(screen.getByText("숫자로 읽을 수 없습니다")).toBeInTheDocument();
+    expect(screen.getByText("숫자로 읽을 수 없어요")).toBeInTheDocument();
   });
 
   it("비우면 null을 내보내고 되비추기를 지운다", async () => {
@@ -42,7 +42,7 @@ describe("MoneyInput", () => {
     await userEvent.type(input, "1");
     await userEvent.clear(input);
     expect(onChange).toHaveBeenLastCalledWith(null);
-    expect(screen.queryByText("숫자로 읽을 수 없습니다")).not.toBeInTheDocument();
+    expect(screen.queryByText("숫자로 읽을 수 없어요")).not.toBeInTheDocument();
   });
 
   it("초기 value가 있으면 만원 단위로 채워 보여준다", () => {
@@ -107,7 +107,7 @@ describe("MoneyInput", () => {
 
     // 오류가 함께 떠 있는지부터 확인한다 — 이 케이스가 성립하지 않으면
     // 아래 힌트 검사가 의미가 없다.
-    expect(screen.getByText("숫자로 읽을 수 없습니다")).toBeInTheDocument();
+    expect(screen.getByText("숫자로 읽을 수 없어요")).toBeInTheDocument();
 
     // DOM에 존재하는지만 보면 SEED의 VisuallyHidden(clip-rect 트릭)을
     // 통과해 버린다 — jest-dom의 toBeVisible()조차 display/visibility/

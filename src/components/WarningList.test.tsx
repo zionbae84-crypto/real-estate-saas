@@ -11,11 +11,11 @@ describe("WarningList", () => {
   it("경고를 목록 항목으로 각각 보여준다", () => {
     render(
       <WarningList
-        warnings={["양도세가 반영되지 않았습니다.", "정책대출 자격을 확인하세요."]}
+        warnings={["양도세가 반영되지 않았어요.", "정책대출 자격을 확인하세요."]}
       />,
     );
     expect(
-      screen.getByText("양도세가 반영되지 않았습니다."),
+      screen.getByText("양도세가 반영되지 않았어요."),
     ).toBeInTheDocument();
     expect(
       screen.getByText("정책대출 자격을 확인하세요."),

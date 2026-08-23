@@ -168,9 +168,7 @@ export function parseRules(raw: unknown): Rules {
 function validateSemanticInvariants(rules: Rules): void {
   const t = rules.acquisitionTax;
   if (!(t.lowerBound < t.upperBound)) {
-    throw new Error(
-      `룰셋 값 오류: acquisitionTax.lowerBound는 upperBound보다 작아야 합니다 (${t.lowerBound} / ${t.upperBound})`,
-    );
+    throw new Error(`룰셋 값 오류: acquisitionTax.lowerBound는 upperBound보다 작아야 합니다 (${t.lowerBound} / ${t.upperBound})`);
   }
   assertNonNegative(t.lowRate, "acquisitionTax.lowRate");
   assertNonNegative(t.highRate, "acquisitionTax.highRate");
@@ -185,16 +183,12 @@ function validateSemanticInvariants(rules: Rules): void {
   // 부호가 먼저 걸러진 뒤에야 대소 비교가 의미를 갖는다(음수 highRate는
   // 위에서 이미 실패하므로, 이 비교는 두 값이 0 이상일 때만 도달한다).
   if (!(t.lowRate <= t.highRate)) {
-    throw new Error(
-      `룰셋 값 오류: acquisitionTax.lowRate는 highRate 이하여야 합니다 (${t.lowRate} / ${t.highRate})`,
-    );
+    throw new Error(`룰셋 값 오류: acquisitionTax.lowRate는 highRate 이하여야 합니다 (${t.lowRate} / ${t.highRate})`);
   }
 
   const s = rules.safetyThreshold;
   if (!(s.safe <= s.caution)) {
-    throw new Error(
-      `룰셋 값 오류: safetyThreshold.safe는 caution 이하여야 합니다 (${s.safe} / ${s.caution})`,
-    );
+    throw new Error(`룰셋 값 오류: safetyThreshold.safe는 caution 이하여야 합니다 (${s.safe} / ${s.caution})`);
   }
 
   assertRatio(rules.ltv.regulated.default, "ltv.regulated.default");
@@ -211,18 +205,14 @@ function validateSemanticInvariants(rules: Rules): void {
   // 오타는 규제지역 한도를 과대평가한다. 이 브랜치가 고친 결함과 정확히
   // 같은 모양이므로, 자동으로 잡히게 여기서 부등식으로 고정한다.
   if (!(rules.ltv.regulated.default <= rules.ltv.unregulated.default)) {
-    throw new Error(
-      `룰셋 값 오류: ltv.regulated.default는 ltv.unregulated.default 이하여야 합니다 (${rules.ltv.regulated.default} / ${rules.ltv.unregulated.default})`,
-    );
+    throw new Error(`룰셋 값 오류: ltv.regulated.default는 ltv.unregulated.default 이하여야 합니다 (${rules.ltv.regulated.default} / ${rules.ltv.unregulated.default})`);
   }
   if (
     !(
       rules.ltv.regulated.firstTimeBuyer <= rules.ltv.unregulated.firstTimeBuyer
     )
   ) {
-    throw new Error(
-      `룰셋 값 오류: ltv.regulated.firstTimeBuyer는 ltv.unregulated.firstTimeBuyer 이하여야 합니다 (${rules.ltv.regulated.firstTimeBuyer} / ${rules.ltv.unregulated.firstTimeBuyer})`,
-    );
+    throw new Error(`룰셋 값 오류: ltv.regulated.firstTimeBuyer는 ltv.unregulated.firstTimeBuyer 이하여야 합니다 (${rules.ltv.regulated.firstTimeBuyer} / ${rules.ltv.unregulated.firstTimeBuyer})`);
   }
 
   assertRatio(rules.dsrLimit, "dsrLimit");
@@ -282,9 +272,7 @@ function validateSemanticInvariants(rules: Rules): void {
   let previousCapAmount: number | null = null;
   rules.absoluteCap.brackets.forEach((bracket, index) => {
     if (previousCapAmount !== null && bracket.amount > previousCapAmount) {
-      throw new Error(
-        `룰셋 값 오류: absoluteCap.brackets의 amount는 가격이 올라갈수록 커지면 안 됩니다 (구간 ${index - 1}: ${previousCapAmount} → 구간 ${index}: ${bracket.amount})`,
-      );
+      throw new Error(`룰셋 값 오류: absoluteCap.brackets의 amount는 가격이 올라갈수록 커지면 안 됩니다 (구간 ${index - 1}: ${previousCapAmount} → 구간 ${index}: ${bracket.amount})`);
     }
     previousCapAmount = bracket.amount;
   });
@@ -306,9 +294,7 @@ function validateSemanticInvariants(rules: Rules): void {
     // 있으므로 가장 낮은(=가장 엄격한) 구간의 캡과 비교한다.
     const capForLoan = capAtHighestEligiblePrice(rules, loan);
     if (!(loan.maxAmount <= capForLoan)) {
-      throw new Error(
-        `룰셋 값 오류: ${path}.maxAmount는 자격 최고가에서의 absoluteCap(${capForLoan}) 이하여야 합니다 (${loan.maxAmount})`,
-      );
+      throw new Error(`룰셋 값 오류: ${path}.maxAmount는 자격 최고가에서의 absoluteCap(${capForLoan}) 이하여야 합니다 (${loan.maxAmount})`);
     }
   });
 
@@ -344,9 +330,7 @@ function assertRange(
   if (!(okMin && okMax)) {
     const minPart = minInclusive ? `${min} 이상` : `${min} 초과`;
     const maxPart = maxInclusive ? `${max} 이하` : `${max} 미만`;
-    throw new Error(
-      `룰셋 값 오류: ${path}는 ${minPart} ${maxPart}여야 합니다 (${value})`,
-    );
+    throw new Error(`룰셋 값 오류: ${path}는 ${minPart} ${maxPart}여야 합니다 (${value})`);
   }
 }
 

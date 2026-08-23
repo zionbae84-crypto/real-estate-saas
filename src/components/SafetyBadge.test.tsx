@@ -99,7 +99,7 @@ describe("SafetyBadge", () => {
       expect(screen.getByText("위험")).toBeInTheDocument();
       expect(screen.getByText(/대출 없이 전액 현금으로/)).toBeInTheDocument();
       expect(
-        screen.getByText(/소득 정보가 없다는 사실을 반영합니다/),
+        screen.getByText(/소득 정보가 없다는 사실을 반영해요/),
       ).toBeInTheDocument();
     });
 
@@ -117,7 +117,7 @@ describe("SafetyBadge", () => {
       );
       expect(screen.getByText(/대출 없이 전액 현금으로/)).toBeInTheDocument();
       expect(
-        screen.queryByText(/소득 정보가 없다는 사실을 반영합니다/),
+        screen.queryByText(/소득 정보가 없다는 사실을 반영해요/),
       ).not.toBeInTheDocument();
     });
 

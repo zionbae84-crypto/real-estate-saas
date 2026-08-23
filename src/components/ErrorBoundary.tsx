@@ -30,7 +30,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
     return (
       <div className="error-fallback" role="alert">
-        <h2>계산 중 문제가 발생했습니다</h2>
+        <h2>계산하다 문제가 생겼어요</h2>
         <p>입력값을 초기화하고 다시 시도해 주세요.</p>
         <ActionButton
           type="button"

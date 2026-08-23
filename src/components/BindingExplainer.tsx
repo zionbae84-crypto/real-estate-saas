@@ -22,24 +22,24 @@ interface Explanation {
 
 const EXPLANATIONS: Record<BindingConstraint, Explanation> = {
   LTV: {
-    title: "담보 가치(LTV)에 걸렸습니다",
+    title: "담보 가치(LTV)에 걸렸어요",
     advice:
-      "집값의 일정 비율까지만 빌려줍니다. 현금을 더 모으면 살 수 있는 가격이 올라갑니다.",
+      "집값의 일정 비율까지만 빌려줘요. 현금을 더 모으면 살 수 있는 가격이 올라가요.",
   },
   DSR: {
-    title: "상환 능력(DSR)에 걸렸습니다",
+    title: "소득이 한도를 정했어요",
     advice:
-      "소득 대비 연간 상환액 한도에 막혔습니다. 기존 부채를 갚으면 한도가 늘어납니다.",
+      "소득 대비 연간 상환액 한도에 막혔어요. 기존 부채를 갚으면 한도가 늘어나요.",
   },
   CAP: {
-    title: "수도권 대출 상한에 걸렸습니다",
+    title: "수도권 대출 상한에 걸렸어요",
     advice:
-      "수도권 주택구입 목적 주택담보대출은 금액 상한이 있습니다. 대출로는 늘릴 수 없습니다 — 현금이 더 필요합니다.",
+      "수도권 주택구입 목적 주택담보대출은 금액 상한이 있어요. 대출로는 못 늘려요. 현금이 더 있어야 해요.",
   },
   POLICY: {
-    title: "정책대출 한도가 최대치입니다",
+    title: "정책대출 한도가 최대치예요",
     advice:
-      "정책대출을 택했을 때 받을 수 있는 금액이 은행 대출보다 큽니다. 금리 조건을 함께 비교해 보세요.",
+      "정책대출을 택했을 때 받을 수 있는 금액이 은행 대출보다 커요. 금리 조건을 함께 비교해 보세요.",
   },
 };
 
@@ -132,13 +132,13 @@ export function BindingExplainer({
 
       {runnerUp && runnerUp.headroom === 0 && (
         <p className="runner-up-tied">
-          {`다음으로 가까운 한도는 ${LABELS[runnerUp.constraint]}입니다. 같은 금액에서 다시 걸리므로 한도가 늘어나지 않습니다.`}
+          {`다음으로 가까운 한도는 ${LABELS[runnerUp.constraint]}입니다. 같은 금액에서 다시 걸리므로 한도가 늘어나지 않아요.`}
         </p>
       )}
 
       {runnerUp && runnerUp.headroom > 0 && (
         <p className="runner-up">
-          {`다음으로 가까운 한도는 ${LABELS[runnerUp.constraint]}입니다. ${formatWon(runnerUp.headroom)} 여유가 있습니다.`}
+          {`다음으로 가까운 한도는 ${LABELS[runnerUp.constraint]}입니다. ${formatWon(runnerUp.headroom)} 여유가 있어요.`}
         </p>
       )}
 

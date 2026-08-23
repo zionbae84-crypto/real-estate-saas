@@ -41,7 +41,7 @@ describe("PolicyLoanList", () => {
       <PolicyLoanList matched={[{ ...디딤돌, availableAmount: 0 }]} />,
     );
     expect(
-      screen.getByText(/소득 기준으로는 받을 수 있는 금액이 없습니다/),
+      screen.getByText(/소득 기준으로는 받을 수 있는 금액이 없어요/),
     ).toBeInTheDocument();
   });
 });

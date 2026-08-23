@@ -24,7 +24,7 @@ export function App() {
       <h1>내 예산으로 살 수 있는 집</h1>
       <p className="subtitle">
         {formatRuleVersionLabel(rules)} · 수도권 · 입력한 재무정보는 이
-        브라우저를 벗어나지 않습니다
+        브라우저를 벗어나지 않아요
       </p>
 
       <ErrorBoundary onReset={reset}>
@@ -32,7 +32,7 @@ export function App() {
 
         {affordability === null ? (
           <p className="prompt">
-            현금과 연소득을 입력하면 살 수 있는 가격을 계산합니다.
+            현금과 연소득을 입력하면 살 수 있는 가격을 계산해요.
           </p>
         ) : (
           <>

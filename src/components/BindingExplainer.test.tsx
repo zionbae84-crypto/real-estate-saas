@@ -29,7 +29,7 @@ describe("BindingExplainer", () => {
 
   it("CAP이면 대출로는 못 늘린다고 못박는다", () => {
     render(<BindingExplainer loanLimit={limit("CAP")} />);
-    expect(screen.getByText(/대출로는 늘릴 수 없습니다/)).toBeInTheDocument();
+    expect(screen.getByText(/대출로는 못 늘려요/)).toBeInTheDocument();
   });
 
   it("POLICY면 정책대출을 택했을 때의 한도임을 밝힌다", () => {
@@ -154,7 +154,7 @@ describe("BindingExplainer", () => {
       // 조언을 따라도 한도가 늘지 않는다는 정보이므로 숨기면 안 된다.
       const tied = container.querySelector(".runner-up-tied");
       expect(tied).toHaveTextContent("담보 가치(LTV)");
-      expect(tied).toHaveTextContent("늘어나지 않습니다");
+      expect(tied).toHaveTextContent("늘어나지 않아요");
     });
 
     it("2순위 라인은 조사 없이 라벨 뒤에 '입니다'가 오는 문장 전체를 정확히 렌더링한다", () => {
@@ -173,7 +173,7 @@ describe("BindingExplainer", () => {
       // "담보 가치(LTV)" 뒤에 은/는/이/가 같은 조사가 붙지 않고 '입니다'가
       // 바로 이어지므로, 받침 유무와 무관하게 항상 문법적으로 안전하다.
       expect(runnerUp?.textContent).toBe(
-        "다음으로 가까운 한도는 담보 가치(LTV)입니다. 1억 7,771만원 여유가 있습니다.",
+        "다음으로 가까운 한도는 담보 가치(LTV)입니다. 1억 7,771만원 여유가 있어요.",
       );
     });
 
@@ -313,14 +313,14 @@ describe("BindingExplainer", () => {
     it("기본값은 제목을 보여준다", () => {
       render(<BindingExplainer loanLimit={limit("LTV")} />);
       expect(
-        screen.getByRole("heading", { name: "담보 가치(LTV)에 걸렸습니다" }),
+        screen.getByRole("heading", { name: "담보 가치(LTV)에 걸렸어요" }),
       ).toBeInTheDocument();
     });
 
     it("false면 제목 줄을 그리지 않는다 — BudgetResult가 같은 문구를 이미 밖에서 보여줄 때 쓴다", () => {
       render(<BindingExplainer loanLimit={limit("LTV")} showTitle={false} />);
       expect(
-        screen.queryByRole("heading", { name: "담보 가치(LTV)에 걸렸습니다" }),
+        screen.queryByRole("heading", { name: "담보 가치(LTV)에 걸렸어요" }),
       ).not.toBeInTheDocument();
       // 나머지 내용(금액·조언)은 그대로 남아 있다 — 제목만 빠진다.
       expect(screen.getByText(/현금을 더 모으면/)).toBeInTheDocument();

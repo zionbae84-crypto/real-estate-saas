@@ -29,7 +29,7 @@ export function PolicyLoanList({ matched }: PolicyLoanListProps) {
               <span className="policy-amount">{formatWon(availableAmount)}</span>
             ) : (
               <span className="policy-none">
-                자격은 되지만 소득 기준으로는 받을 수 있는 금액이 없습니다
+                자격은 되지만 소득 기준으로는 받을 수 있는 금액이 없어요
               </span>
             )}
           </li>

@@ -65,7 +65,7 @@ export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProp
 
       {price === max && (
         <p className="slider-warning">
-          이것은 빌릴 수 있는 한계이지 무리하지 않는 선이 아닙니다.
+          이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요.
           슬라이더를 내려 부담이 어떻게 달라지는지 확인해 보세요.
         </p>
       )}
