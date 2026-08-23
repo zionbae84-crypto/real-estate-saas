@@ -1,4 +1,8 @@
 import {
+  assertHouseholdCountNoteRequired,
+  assertNoOptimisticCostDirection,
+} from "../finance";
+import {
   PURCHASE_METRIC_IDS,
   type PurchaseMetricId,
   type PurchaseOverall,
@@ -19,6 +23,16 @@ const OVERALLS: readonly PurchaseOverall[] = [
   "clear",
 ];
 
+/**
+ * 부대비용 전제가 낙관 방향으로 갈리는 것을 막는 검사 자체는
+ * `src/lib/finance/rules.ts`(실거주 룰셋의 파서)와 공유한다 — 두
+ * 문구(투자 경로의 `acquisition.householdCountNote`, 실거주 경로의
+ * `acquisitionTax.householdCountNote`)는 파일도 맥락도 다르지만 같은
+ * 사실("부대비용은 무주택 기준이고, 이미 집이 있으면 더 나올 수 있다")을
+ * 말한다. 검사 정규식을 두 파일에 복붙하면 나중에 한쪽만 고쳐지고
+ * 다른 쪽은 옛 패턴에 머무는 식으로 어긋난다({@link parseAcquisition}
+ * 참고).
+ */
 const GAP_FIELD_IDS = ["price", "deposit", "cash"] as const;
 const RENTAL_FIELD_IDS = [
   "price",
@@ -30,15 +44,6 @@ const RENTAL_FIELD_IDS = [
   "annualDebtService",
   "annualInterest",
 ] as const;
-
-/**
- * 부대비용이 **작아진다**고 말하는 표현과 **커진다**고 말하는 표현.
- *
- * 부대비용 전제 문구가 한 방향으로만 단언하는 것을 막는 데 쓴다 —
- * {@link parseAcquisition} 참고.
- */
-const COST_SHRINKS = /작아질|작아져|적어질|줄어들|덜 나올|덜 나와/;
-const COST_GROWS = /커질|커지|많아질|늘어날|더 나올|더 나와/;
 
 /**
  * 구매 유형 룰셋 JSON을 검증해 {@link PurchaseRules}로 바꾼다.
@@ -160,22 +165,13 @@ function parseAcquisition(raw: unknown): void {
   requireText(a, "note", "acquisition.note");
   requireText(a, "householdCountNote", "acquisition.householdCountNote");
 
-  const household = a.householdCountNote as string;
-  if (!/주택 수/.test(household)) {
-    throw new Error("룰셋 값 오류: acquisition.householdCountNote는 주택 수를 묻지 않았다는 사실을 말해야 해요. 취득세는 주택 수에 따라 달라지는데 이 계산에는 그 분기가 없어요.");
-  }
-  if (!COST_GROWS.test(household)) {
-    throw new Error("룰셋 값 오류: acquisition.householdCountNote는 부대비용이 이보다 커질 수 있다는 방향을 말해야 해요. 이미 집이 있으면 취득세가 더 나올 수 있는데, 그 방향을 말하지 않으면 화면이 한계를 반대로 말하게 돼요.");
-  }
+  assertHouseholdCountNoteRequired(
+    a.householdCountNote as string,
+    "acquisition.householdCountNote",
+  );
 
   for (const key of ["note", "householdCountNote"] as const) {
-    const text = a[key] as string;
-    if (
-      COST_SHRINKS.test(text) &&
-      !(COST_GROWS.test(text) && /주택 수/.test(text))
-    ) {
-      throw new Error(`룰셋 값 오류: acquisition.${key}가 부대비용이 이보다 작아질 수 있다고 말해요. 취득자의 주택 수는 묻지도 계산하지도 않았고, 이미 집이 있으면 부대비용은 오히려 커질 수 있어요 — 작아지는 방향은 주택 수를 함께 이름 붙이고 커지는 방향도 함께 말할 때만 쓸 수 있어요.`);
-    }
+    assertNoOptimisticCostDirection(a[key] as string, `acquisition.${key}`);
   }
 }
 

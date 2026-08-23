@@ -254,6 +254,14 @@ export interface Rules {
     firstTimeBuyerReliefCap: number;
     /** 생애최초 감면이 적용되는 주택가격 상한(원) */
     firstTimeBuyerReliefPriceCap: number;
+    /**
+     * 이 계산이 무주택 기준이라는 사실과, 이미 집이 있으면(갈아타기·
+     * 다주택) 취득세가 더 나올 수 있어 부대비용이 이보다 커질 수 있다는
+     * 방향을 사용자에게 알리는 고지. 왜 필요한지는 `acquisition-cost.ts`의
+     * `calcAcquisitionCosts` 주석 참고. `rules.ts`의 `parseRules`가
+     * 방향(작아진다고만 말하면 안 됨)을 강제한다.
+     */
+    householdCountNote: string;
   };
   /** 중개보수 구간. upTo 오름차순으로 정렬되어 있어야 한다 */
   brokerageFee: Array<{

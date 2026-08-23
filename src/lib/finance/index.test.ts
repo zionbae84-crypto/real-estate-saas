@@ -9,6 +9,8 @@ import * as finance from "./index";
  * 여기서 깨지게 한다.
  */
 const EXPECTED_FUNCTIONS = [
+  "assertHouseholdCountNoteRequired",
+  "assertNoOptimisticCostDirection",
   "assertValidProfile",
   "calcAcquisitionCosts",
   "calcAffordablePrice",

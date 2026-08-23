@@ -14,7 +14,11 @@ export { calcMaxLoan, calcPolicyLimit, NO_POLICY_LIMIT } from "./loan-limit";
 export type { MatchedPolicyLoan } from "./loan-limit";
 export { matchPolicyLoans } from "./policy-loans";
 export { assertValidProfile } from "./profile";
-export { parseRules } from "./rules";
+export {
+  assertHouseholdCountNoteRequired,
+  assertNoOptimisticCostDirection,
+  parseRules,
+} from "./rules";
 export { calcSafePrice } from "./safe-price";
 export { calcSafetyScore } from "./safety";
 export type {

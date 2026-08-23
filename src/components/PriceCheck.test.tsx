@@ -252,6 +252,32 @@ describe("PriceCheck", () => {
       expect(screen.queryByText(priceRules.budget.absentNote)).toBeNull();
     });
 
+    /**
+     * `calcAcquisitionCosts`(acquisition-cost.ts)는 취득자의 주택 수를
+     * 읽지 않고 언제나 무주택 기준 세율로 계산한다 — 이 호가의 부대비용
+     * (`budgetCosts`)이 화면에 나오는 자리에는 그 사실과 방향(이미 집이
+     * 있으면 부대비용이 이보다 커질 수 있다는 것)을 알리는 고지가
+     * 반드시 함께 나가야 한다. 문구는 `rules/2026-08.json`의
+     * `acquisitionTax.householdCountNote`에서 그대로 온다 — 코드에
+     * 박은 문자열이 아니라는 것도 함께 확인한다.
+     */
+    it("부대비용 옆에 주택 수 고지가 룰셋 문구 그대로 나온다", async () => {
+      render(<PriceCheck unit={unit()} budget={budget} />);
+      await typeAsking("105000");
+      expect(document.querySelector('[data-field="budgetCosts"]')).not.toBeNull();
+      expect(
+        screen.getByText(financeRules.acquisitionTax.householdCountNote),
+      ).toBeInTheDocument();
+    });
+
+    it("예산이 없으면(부대비용 자체를 안 낸다) 주택 수 고지도 나오지 않는다", async () => {
+      render(<PriceCheck unit={unit()} budget={null} />);
+      await typeAsking("105000");
+      expect(
+        screen.queryByText(financeRules.acquisitionTax.householdCountNote),
+      ).toBeNull();
+    });
+
     it("대출이 0원이면 월 0원·부담률 0.0%를 표에 박지 않는다", async () => {
       // 현금만으로 덮이는 가격이다. ComplexList가 같은 경우에 숫자 대신
       // "대출 없이 살 수 있어요"라고 말하는 것과 같은 판단이다.

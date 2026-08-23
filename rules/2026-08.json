@@ -46,7 +46,8 @@
     "ruralTaxRate": 0.002,
     "ruralTaxAreaThresholdSqm": 85,
     "firstTimeBuyerReliefCap": 2000000,
-    "firstTimeBuyerReliefPriceCap": 1200000000
+    "firstTimeBuyerReliefPriceCap": 1200000000,
+    "householdCountNote": "이 계산은 무주택 기준으로 취득세를 매겼어요. 지금 집이 몇 채 있는지(주택 수)는 반영하지 않아서, 이미 집이 있으면(갈아타기 포함) 취득세가 더 나올 수 있어요 — 그러면 부대비용은 이보다 커지고, 실제로 필요한 현금도 더 많을 수 있어요."
   },
   "brokerageFee": [
     { "upTo": 50000000, "rate": 0.006, "cap": 250000 },

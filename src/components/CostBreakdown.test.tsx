@@ -92,4 +92,48 @@ describe("CostBreakdown", () => {
 
     expect(screen.getByText(`중개보수 부가세 (${vatPercent}%)`)).toBeInTheDocument();
   });
+
+  /**
+   * `calcAcquisitionCosts`(acquisition-cost.ts)는 취득자의 주택 수를
+   * 읽지 않고 언제나 무주택 기준 세율로 취득세를 계산한다 — 이 컴포넌트가
+   * 부대비용(취득세 포함)을 보여주는 자리라면 그 사실과 방향(이미 집이
+   * 있으면 부대비용이 이보다 커질 수 있다는 것)을 알리는 고지가 반드시
+   * 함께 나가야 한다. `BudgetResult`·`ComplexDetail`이 이 컴포넌트를
+   * 그대로 쓰므로, 여기서 잠그면 두 화면 모두 잠긴다.
+   */
+  describe("주택 수 고지", () => {
+    it("취득세 항목에 룰셋의 householdCountNote가 그대로 나온다", () => {
+      render(<CostBreakdown costs={costs()} />);
+      expect(
+        screen.getByText(rules.acquisitionTax.householdCountNote),
+      ).toBeInTheDocument();
+    });
+
+    it("문구가 코드가 아니라 룰셋에서 온다 — 실제 값으로 방향을 확인한다", () => {
+      render(<CostBreakdown costs={costs()} />);
+      const note = rules.acquisitionTax.householdCountNote;
+      // 코드에 박힌 문자열이 아니라 rules 싱글턴(rules/2026-08.json 파싱
+      // 결과)에서 읽었다는 것을, 화면에 실제로 나온 문구가 그 값과
+      // 정확히 같다는 사실로 확인한다.
+      expect(screen.getByText(note)).toBeInTheDocument();
+      // 방향: "주택 수"를 언급하고 "커질" 방향을 말해야 하며, "작아질"
+      // 방향은 말하면 안 된다 — parseRules의 assertHouseholdCountNoteRequired·
+      // assertNoOptimisticCostDirection이 룰셋 단계에서 이미 강제하지만,
+      // 화면에 실제로 나온 문구도 같은 방향인지 여기서 다시 확인한다.
+      expect(note).toMatch(/주택 수/);
+      expect(note).toMatch(/커질|커지|많아질|늘어날|더 나올|더 나와/);
+      expect(note).not.toMatch(/작아질|작아져|적어질|줄어들|덜 나올|덜 나와/);
+    });
+
+    it("인쇄에서 살아남는다 — cost-breakdown(보호 클래스) 안에 있다", () => {
+      const { container } = render(<CostBreakdown costs={costs()} />);
+      const details = container.querySelector(".cost-breakdown");
+      expect(details).not.toBeNull();
+      expect(
+        screen.getByText(rules.acquisitionTax.householdCountNote).closest(
+          ".cost-breakdown",
+        ),
+      ).toBe(details);
+    });
+  });
 });
