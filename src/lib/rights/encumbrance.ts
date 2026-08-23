@@ -1,4 +1,10 @@
-import type { RightsAnswers, RightsRules, RightsVerdict } from "./types";
+import type {
+  RightsAnswer,
+  RightsAnswers,
+  RightsOption,
+  RightsRules,
+  RightsVerdict,
+} from "./types";
 
 export interface EncumbranceResult {
   verdict: RightsVerdict;
@@ -105,6 +111,21 @@ function amountFor(
   );
   if (option === undefined) return null;
 
+  return amountOf(option, answer);
+}
+
+/**
+ * 고른 선택지와 답에서 합계에 넣을 금액(원)을 꺼낸다. 알 수 없으면 `null`.
+ *
+ * `assess.ts`도 이 함수를 쓴다 — 합계 계산은 빈 금액을 unknown으로 세는데
+ * 항목 판정만 "확인했어요"로 남는 어긋남이 실제로 있었기 때문에, 두 쪽이
+ * **같은 판단**을 쓰도록 여기 하나로 모았다. 각자 따로 판단하면 언젠가
+ * 다시 어긋난다.
+ */
+export function amountOf(
+  option: RightsOption,
+  answer: RightsAnswer,
+): number | null {
   if (option.amount === "zero") return 0;
   if (option.amount !== "input") return null;
 

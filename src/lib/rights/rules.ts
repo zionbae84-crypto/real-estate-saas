@@ -70,6 +70,26 @@ export function parseRightsRules(raw: unknown): RightsRules {
     requireText(copy, "note", `overall.${key}.note`);
   }
 
+  // incomplete는 덧말을 반드시 갖는다. 미답 항목이 있으면 결론이
+  // incomplete로 덮이는데, 그 문구만으로는 이미 전문가 확인이 필요한
+  // 항목이 있다는 사실이 통째로 가려진다 — 실제보다 덜 위험해 보인다.
+  requireText(
+    plainObject(overall.incomplete, "overall.incomplete"),
+    "pendingExpertNote",
+    "overall.incomplete.pendingExpertNote",
+  );
+
+  // 금액이 비었을 때 내리는 판정. `checked`면 이 규칙이 존재할 이유가
+  // 사라지므로(금액 없는 항목이 다시 "확인했어요"가 된다) 막는다.
+  const amountMissing = plainObject(r.amountMissing, "amountMissing");
+  requireText(amountMissing, "note", "amountMissing.note");
+  if (!VERDICTS.includes(amountMissing.verdict as RightsVerdict)) {
+    throw new Error(`룰셋 값 오류: amountMissing.verdict는 ${VERDICTS.join("·")} 중 하나여야 해요 (${String(amountMissing.verdict)})`);
+  }
+  if (amountMissing.verdict === "checked") {
+    throw new Error("룰셋 값 오류: amountMissing.verdict는 checked일 수 없어요. 금액이 비어 있는 항목을 '확인했어요'로 두면 인쇄물에서 그 줄만 본 사람이 확인이 끝난 것으로 읽어요.");
+  }
+
   if (
     !Array.isArray(r.disclaimer) ||
     r.disclaimer.length === 0 ||

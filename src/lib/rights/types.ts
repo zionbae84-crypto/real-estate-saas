@@ -80,6 +80,31 @@ export interface RightsItem {
 export interface RightsOverallCopy {
   label: string;
   note: string;
+  /**
+   * `incomplete`에서만 쓰는 조건부 덧말.
+   *
+   * 미답 항목이 남아 있으면 결론은 `incomplete`가 되는데, 그 문구만으로는
+   * **이미 전문가 확인이 필요한 항목이 있다는 사실이 통째로 가려진다** —
+   * 회색 "아직 다 답하지 않았어요"가 실제보다 덜 위험해 보인다. 그래서
+   * expert 항목이 하나라도 있으면 이 문장을 note 뒤에 덧붙인다.
+   *
+   * 우선순위 자체는 바꾸지 않는다. 먼저 채우라고 말하는 것이 여전히
+   * 맞는 안내이고, 어느 쪽이든 `clear`가 아니라는 결론은 같다.
+   */
+  pendingExpertNote?: string;
+}
+
+/**
+ * 금액이 필요한 선택지인데 금액이 비어 있을 때 그 **항목**에 내리는 판정.
+ *
+ * 합계 계산은 이미 그 금액을 unknown으로 세지만, 항목 줄이 "확인했어요"로
+ * 남으면 인쇄물에서 그 줄만 본 사람은 확인이 끝난 것으로 읽는다. 판정을
+ * 코드가 아니라 여기서 정하는 이유는 나머지 판정과 같다 — 등급은 전부
+ * 룰셋에서 온다. `checked`는 허용하지 않는다(룰셋 검증이 막는다).
+ */
+export interface RightsAmountMissingRule {
+  verdict: RightsVerdict;
+  note: string;
 }
 
 export interface RightsEncumbranceRule {
@@ -107,6 +132,8 @@ export interface RightsRules {
   /** 아직 답하지 않은 항목에 붙이는 말 */
   unansweredLabel: string;
   overall: Record<RightsOverall, RightsOverallCopy>;
+  /** 금액이 필요한데 비어 있는 항목에 내리는 판정 */
+  amountMissing: RightsAmountMissingRule;
   /** 결과와 늘 함께 보여야 하는 문구(법률 자문 아님·재확인) */
   disclaimer: string[];
   encumbrance: RightsEncumbranceRule;

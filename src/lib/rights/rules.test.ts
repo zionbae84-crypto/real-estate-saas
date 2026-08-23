@@ -16,10 +16,15 @@ function minimalRules(): Record<string, unknown> {
     unansweredLabel: "아직 답하지 않았어요",
     overall: {
       stop: { label: "멈춰요", note: "n" },
-      incomplete: { label: "덜 답했어요", note: "n" },
+      incomplete: {
+        label: "덜 답했어요",
+        note: "n",
+        pendingExpertNote: "전문가 확인이 필요한 항목이 이미 있어요",
+      },
       expert: { label: "전문가에게요", note: "n" },
       clear: { label: "걸리는 게 없었어요", note: "n" },
     },
+    amountMissing: { verdict: "expert", note: "금액이 비어 있어요" },
     disclaimer: ["법률 자문이 아니에요"],
     encumbrance: {
       priceLabel: "매매 예정가",
@@ -419,6 +424,63 @@ describe("권리분석 룰셋 파싱", () => {
       });
     });
 
+    /**
+     * 리뷰 수정(Important 5): expert 항목이 이미 있는데 한 항목만 미답이면
+     * 헤드라인이 회색 "아직 다 답하지 않았어요"가 되고, note가 전문가
+     * 확인이 필요한 항목이 있다는 사실을 한 글자도 말하지 않았다.
+     */
+    it("incomplete에 전문가 확인 덧말이 없으면 거부한다", () => {
+      expectRejected((r) => {
+        const overall = r.overall as Record<string, Record<string, unknown>>;
+        delete overall.incomplete?.pendingExpertNote;
+      });
+    });
+
+    it("실제 룰셋의 덧말이 전문가 확인을 말한다", () => {
+      const rules = parseRightsRules(rawRightsRules);
+      expect(rules.overall.incomplete.pendingExpertNote).toContain(
+        rules.verdictLabels.expert,
+      );
+    });
+  });
+
+  /**
+   * 리뷰 수정(Important 8): 금액이 필요한 선택지인데 금액이 비어 있으면
+   * 항목 판정도 미완으로 내린다. 그 판정은 코드가 아니라 룰셋이 정하고,
+   * `checked`는 허용하지 않는다 — 허용하면 이 규칙이 존재할 이유가 사라진다.
+   */
+  describe("금액이 비었을 때의 판정", () => {
+    it("amountMissing이 없으면 거부한다", () => {
+      expectRejected((r) => {
+        delete r.amountMissing;
+      });
+    });
+
+    it("amountMissing.note가 비면 거부한다", () => {
+      expectRejected((r) => {
+        (r.amountMissing as { note: string }).note = "  ";
+      });
+    });
+
+    it("amountMissing.verdict가 checked면 거부한다", () => {
+      expectRejected((r) => {
+        (r.amountMissing as { verdict: string }).verdict = "checked";
+      });
+    });
+
+    it("모르는 판정 값이면 거부한다", () => {
+      expectRejected((r) => {
+        (r.amountMissing as { verdict: string }).verdict = "safe";
+      });
+    });
+
+    it("실제 룰셋의 판정이 checked가 아니다", () => {
+      const rules = parseRightsRules(rawRightsRules);
+      expect(rules.amountMissing.verdict).not.toBe("checked");
+    });
+  });
+
+  describe("어떤 문구도 '안전'하다고 말하지 않는다", () => {
     /**
      * "안전"을 **긍정으로** 주장하는 문장만 골라낸다.
      *
