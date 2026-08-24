@@ -1,3 +1,4 @@
+import { useLayoutEffect } from "react";
 import { formatMeters } from "../format/meters";
 import type {
   LocationAssessment,
@@ -10,6 +11,12 @@ import { useLocationFacts } from "../state/useLocationFacts";
 export interface LocationFactsProps {
   /** 단지 고유 ID. 좌표는 평형이 아니라 단지에 붙는다 */
   complexKey: string;
+  /**
+   * 진단 종합에 이 축의 최신 상태를 알린다. `RightsCheck.onAssessment`와
+   * 같은 배선이다 — 판정이 아니라 상태(`state`)를 옮기는 축이라는 점만
+   * 다르고, 여기서도 새로 계산하지 않는다.
+   */
+  onAssessment?: (assessment: LocationAssessment) => void;
 }
 
 /**
@@ -51,8 +58,15 @@ export interface LocationFactsProps {
  * 것이 없고, 여기서 가장 무거운 말인 두 고지는 종이에서 더 중요하다 —
  * 종이를 건네받은 사람은 화면의 다른 맥락을 보지 못했다.
  */
-export function LocationFacts({ complexKey }: LocationFactsProps) {
+export function LocationFacts({ complexKey, onAssessment }: LocationFactsProps) {
   const { rules, assessment } = useLocationFacts(complexKey);
+
+  // `RightsCheck`와 같은 이유로 useLayoutEffect를 쓴다 — 페인트 전에
+  // 부모 상태를 갱신해 진단 종합이 한 프레임 늦지 않게 한다.
+  useLayoutEffect(() => {
+    onAssessment?.(assessment);
+  }, [assessment, onAssessment]);
+
   return <LocationFactsView rules={rules} assessment={assessment} />;
 }
 

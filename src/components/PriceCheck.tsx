@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo } from "react";
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
@@ -25,6 +25,11 @@ export interface PriceCheckProps {
    * (`assessPrice`가 이 값이 `null`이면 계산 자체를 하지 않는다).
    */
   budget: PriceBudgetInput | null;
+  /**
+   * 진단 종합에 이 축의 최신 판정을 알린다. `RightsCheck.onAssessment`와
+   * 같은 배선·같은 이유다 — 새로 계산하지 않고 이미 낸 값을 올릴 뿐이다.
+   */
+  onAssessment?: (assessment: PriceAssessment) => void;
 }
 
 /**
@@ -52,7 +57,7 @@ export interface PriceCheckProps {
  * 종이에서 잃는 정보가 없고, 층·향 고지와 신고 지연 고지는
  * `.price-disclosure`로 언제나 함께 남는다.
  */
-export function PriceCheck({ unit, budget }: PriceCheckProps) {
+export function PriceCheck({ unit, budget, onAssessment }: PriceCheckProps) {
   // 평형이 바뀌면 이 컴포넌트는 통째로 다시 마운트된다(호출부의 key).
   // 그래도 근거 객체는 렌더마다 새로 만들지 않는다 — 훅의 useMemo가
   // 참조로 의존성을 보기 때문이다.
@@ -73,6 +78,14 @@ export function PriceCheck({ unit, budget }: PriceCheckProps) {
     evidence,
     budget,
   );
+
+  // `RightsCheck`와 같은 이유로 useLayoutEffect를 쓴다 — 페인트 전에
+  // 부모 상태를 갱신해 진단 종합이 한 프레임 늦지 않게 한다. 평형이
+  // 바뀌어 이 컴포넌트가 다시 마운트되면(호출부의 key) 새 평형의
+  // 판정으로 곧바로 갱신된다.
+  useLayoutEffect(() => {
+    onAssessment?.(assessment);
+  }, [assessment, onAssessment]);
 
   return (
     <section className="price-check" aria-label="호가 위치 확인">

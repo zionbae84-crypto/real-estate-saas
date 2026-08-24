@@ -1,5 +1,7 @@
+import { useLayoutEffect } from "react";
 import type {
   InvestmentType,
+  PurchaseAssessment,
   RentalLoanAnswer,
   RentalTypeRule,
 } from "../lib/purchase";
@@ -18,6 +20,11 @@ const LOAN_KINDS: ReadonlyArray<RentalLoanAnswer["kind"]> = [
 
 export interface PurchaseCheckProps {
   type: InvestmentType;
+  /**
+   * 진단 종합에 이 축의 최신 판정을 알린다. `RightsCheck.onAssessment`와
+   * 같은 배선·같은 이유다 — 새로 계산하지 않고 이미 낸 값을 올릴 뿐이다.
+   */
+  onAssessment?: (assessment: PurchaseAssessment) => void;
 }
 
 /**
@@ -38,7 +45,7 @@ export interface PurchaseCheckProps {
  * 인쇄물에는 매매 예정가·보증금·월세·연간 운영비용이 한 번도 나오지
  * 않았다. 인쇄일과 어느 룰셋 기준인지도 같은 자리에서 남긴다.
  */
-export function PurchaseCheck({ type }: PurchaseCheckProps) {
+export function PurchaseCheck({ type, onAssessment }: PurchaseCheckProps) {
   const {
     rules,
     gapInput,
@@ -49,6 +56,12 @@ export function PurchaseCheck({ type }: PurchaseCheckProps) {
     setLoanAmount,
     assessment,
   } = usePurchaseCheck(type);
+
+  // `RightsCheck`와 같은 이유로 useLayoutEffect를 쓴다 — 페인트 전에
+  // 부모 상태를 갱신해 진단 종합이 한 프레임 늦지 않게 한다.
+  useLayoutEffect(() => {
+    onAssessment?.(assessment);
+  }, [assessment, onAssessment]);
 
   const typeRule = type === "갭투자" ? rules.types.갭투자 : rules.types.월세수익형;
 

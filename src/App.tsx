@@ -3,6 +3,7 @@ import { AssumptionLine } from "./components/AssumptionLine";
 import { BudgetResult } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
+import { DiagnosisSummary } from "./components/DiagnosisSummary";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaSource } from "./components/PrintSummary";
@@ -16,7 +17,10 @@ import { COMPLEX_UNITS, DATA_AS_OF, REGIONS, type ComplexUnit } from "./data/com
 import { buildComplexList } from "./lib/complex-list";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { calcAcquisitionCosts, calcBurdenAt } from "./lib/finance";
-import type { PurchaseType } from "./lib/purchase";
+import type { LocationAssessment } from "./lib/location";
+import type { PriceAssessment } from "./lib/price";
+import type { PurchaseAssessment, PurchaseType } from "./lib/purchase";
+import type { RightsAssessment } from "./lib/rights";
 import { rules, useAffordability } from "./state/useAffordability";
 import { purchaseRules } from "./state/usePurchaseCheck";
 import { usePurchaseType } from "./state/usePurchaseType";
@@ -43,6 +47,27 @@ export function App() {
   const [visibleCount, setVisibleCount] = useState(10);
   // 상세(상환 시뮬레이션)를 연 평형. null이면 목록 화면이다.
   const [selectedUnit, setSelectedUnit] = useState<ComplexUnit | null>(null);
+
+  /**
+   * 진단 종합(`DiagnosisSummary`)이 읽는 네 축의 최신 판정.
+   *
+   * **여기서 계산하지 않는다.** `RightsCheck`·`PurchaseCheck`·
+   * `PriceCheck`·`LocationFacts`가 각자 이미 계산한 값을
+   * `onAssessment` 콜백으로 올려 줄 뿐이다 — 복제해서 다시 계산하면
+   * 이 상태와 그 컴포넌트들이 언젠가 어긋난다.
+   *
+   * `null`은 "이 진단이 이 축을 아직 보지 않았다"다. 구매 유형별
+   * 금융은 `PurchaseCheck`가 투자 경로에서만 렌더되고, 호가·입지는
+   * `PriceCheck`·`LocationFacts`가 실거주에서 평형을 고른 동안에만
+   * 렌더된다 — 그 컴포넌트가 렌더되지 않는 동안에는 콜백이 불리지
+   * 않으므로, 아래 핸들러들이 그 전환 시점에 명시적으로 `null`로
+   * 되돌린다(그러지 않으면 다른 평형·다른 유형의 판정이 남아 있는
+   * 축으로 오인된다).
+   */
+  const [rightsAssessment, setRightsAssessment] = useState<RightsAssessment | null>(null);
+  const [purchaseAssessment, setPurchaseAssessment] = useState<PurchaseAssessment | null>(null);
+  const [priceAssessment, setPriceAssessment] = useState<PriceAssessment | null>(null);
+  const [locationAssessment, setLocationAssessment] = useState<LocationAssessment | null>(null);
 
   /**
    * 상세가 열려 있는 동안 화면 전체(위 실구매 가능 가격·안전선·상세의
@@ -133,6 +158,26 @@ export function App() {
    */
   function handleSelectUnit(unit: ComplexUnit) {
     setSelectedUnit(unit);
+    // 새 평형의 PriceCheck·LocationFacts가 다시 마운트되며 자기
+    // onAssessment로 새 값을 곧바로 올려 주지만(App.tsx 상단 주석), 그
+    // 전까지 앞 평형의 판정이 잠깐이라도 새 평형에 대한 것처럼 남지
+    // 않도록 먼저 비워 둔다.
+    setPriceAssessment(null);
+    setLocationAssessment(null);
+  }
+
+  /**
+   * 단지 상세를 닫는다.
+   *
+   * `PriceCheck`·`LocationFacts`가 통째로 사라지면 그 컴포넌트들의
+   * `onAssessment`는 다시 불리지 않는다 — 그래서 여기서 명시적으로
+   * 비운다. 비우지 않으면 방금 닫은 매물의 판정이 "지금 보고 있는
+   * 매물"인 것처럼 진단 종합에 남는다.
+   */
+  function handleCloseDetail() {
+    setSelectedUnit(null);
+    setPriceAssessment(null);
+    setLocationAssessment(null);
   }
 
   /**
@@ -145,6 +190,16 @@ export function App() {
   function handlePurchaseTypeChange(next: PurchaseType) {
     setPurchaseType(next);
     setSelectedUnit(null);
+    // 상세(호가·입지)는 실거주에서 평형을 고른 동안에만 존재한다 —
+    // 유형을 바꾸면 그 컴포넌트들이 사라지므로 진단 종합에 남은 값도
+    // 함께 비운다(handleCloseDetail과 같은 이유).
+    setPriceAssessment(null);
+    setLocationAssessment(null);
+    // 구매 유형별 금융(PurchaseCheck)은 투자 경로에서만 렌더된다.
+    // 실거주로 돌아가면 그 컴포넌트가 사라지므로 값도 비운다 — 다른
+    // 유형(갭투자 ↔ 월세수익형) 사이의 전환은 컴포넌트가 계속
+    // 렌더되며 onAssessment가 새 값으로 갱신하므로 그대로 둔다.
+    if (next === "실거주") setPurchaseAssessment(null);
   }
 
   /**
@@ -326,7 +381,9 @@ export function App() {
                   burden={detail.burden}
                   costs={detail.costs}
                   priceBudget={detail.priceBudget}
-                  onClose={() => setSelectedUnit(null)}
+                  onClose={handleCloseDetail}
+                  onPriceAssessment={setPriceAssessment}
+                  onLocationAssessment={setLocationAssessment}
                 />
               ) : (
                 <>
@@ -368,7 +425,7 @@ export function App() {
           </>
         ) : (
           <>
-            <PurchaseCheck type={purchaseType} />
+            <PurchaseCheck type={purchaseType} onAssessment={setPurchaseAssessment} />
 
             {/*
               지금 보고 있는 화면 상태 그대로 인쇄한다 — 실거주 경로와
@@ -402,7 +459,29 @@ export function App() {
           접힌 채로 시작하지만 인쇄에서는 강제로 펼쳐진다(styles.css의
           `::details-content` 규칙) — 이 앱의 다른 <details>와 같다.
         */}
-        <RightsCheck />
+        <RightsCheck onAssessment={setRightsAssessment} />
+
+        {/*
+          진단 종합은 권리분석 바로 다음, 화면의 맨 끝(면책 문구 바로
+          위)에 둔다 — "지금까지 본 것 전부를 한자리에 모으는 마무리"로
+          두는 이유는 `DiagnosisSummary.tsx` 문서에 적었다.
+
+          네 축이 동시에 다 채워지는 일은 없다(구매 유형별 금융은
+          투자 경로에서만, 호가·입지는 실거주에서 평형을 고른 동안만
+          존재한다) — 그래서 못 본 축은 값을 지어내지 않고 그대로
+          `null`을 넘긴다. `DiagnosisSummary`가 그 `null`을 "못 봤다"로
+          그린다.
+
+          `<details>`로 접지 않는다 — 이 화면의 존재 이유가 "못 본
+          축을 숨기지 않는 것"인데, 화면 전체를 접어 두면 클릭하지
+          않은 사람에게는 그 못 본 축조차 보이지 않는다.
+        */}
+        <DiagnosisSummary
+          rights={rightsAssessment}
+          purchase={purchaseAssessment}
+          price={priceAssessment}
+          location={locationAssessment}
+        />
       </ErrorBoundary>
 
       {/*
