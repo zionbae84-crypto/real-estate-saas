@@ -211,11 +211,21 @@ describe("좌표를 지어내는 경로가 없다", () => {
     expect(DATA.match(/\d+\.\d+/g) ?? []).toEqual([]);
   });
 
-  it("좌표 목록의 기본값이 '모른다'이지 빈 배열이 아니다", () => {
-    // `[]`로 두면 "확인해 봤는데 없더라"로 읽히기 시작한다. 지금 우리가
-    // 아는 것은 아무것도 없다는 것뿐이다.
-    expect(DATA).toMatch(/SUBWAY_STATIONS[^=]*=\s*null/);
-    expect(DATA).toMatch(/ELEMENTARY_SCHOOLS[^=]*=\s*null/);
+  it("빈 목록은 '모른다'로 접힌다 — 빈 배열이 그대로 나가지 않는다", () => {
+    // `[]`가 그대로 나가면 "확인해 봤는데 하나도 없더라"로 읽히기 시작한다.
+    // 전국 역·학교 목록이 정말로 0개일 수는 없으므로, 비어 있다는 것은 이
+    // 단지 주변에 대한 사실이 아니라 데이터가 아직 없다는 사실이다.
+    expect(DATA).toMatch(/SUBWAY_STATIONS[^=]*=\s*listOrNull\(/);
+    expect(DATA).toMatch(/ELEMENTARY_SCHOOLS[^=]*=\s*listOrNull\(/);
+    expect(DATA).toMatch(/function listOrNull[\s\S]*?length === 0 \? null :/);
+  });
+
+  it("검사기가 빈 배열을 그대로 내보내는 코드를 잡아낸다(변이 검사)", () => {
+    const poisoned = DATA.replace(
+      /SUBWAY_STATIONS([^=]*)=\s*listOrNull\(/,
+      "SUBWAY_STATIONS$1= (",
+    );
+    expect(poisoned).not.toMatch(/SUBWAY_STATIONS[^=]*=\s*listOrNull\(/);
   });
 
   it("검사기가 심어 둔 좌표를 잡아낸다(변이 검사)", () => {
