@@ -37,6 +37,7 @@
     "@karrotmarket/react-monochrome-icon": "^1.25.0",
     "@seed-design/css": "^2.5.0",
     "@seed-design/react": "^2.3.0",
+    "pdfjs-dist": "^6.2.108",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   }
