@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "pipeline:probe": "tsx --env-file-if-exists=.env scripts/pipeline/probe.ts",
     "pipeline:fetch": "tsx --env-file-if-exists=.env scripts/pipeline/fetch.ts",
-    "pipeline": "tsx scripts/pipeline/run.ts"
+    "pipeline": "tsx scripts/pipeline/run.ts",
+    "pipeline:location": "tsx scripts/pipeline/location.ts"
   },
   "keywords": [],
   "author": "",
