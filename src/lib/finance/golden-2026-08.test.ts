@@ -127,6 +127,64 @@ describe("골든 테스트 2026-08 — 현행 고시 대조", () => {
     expect(didim?.eligibility.maxAnnualIncome).toBeLessThanOrEqual(70_000_000);
   });
 
+  // 출처: 주금공 디딤돌대출 이용대상 안내 — 대출한도 "최대 2억원(생애최초
+  // 주택구입자 2.4억원, 신혼 · 2자녀 이상 가구는 3.2억원)". 스키마에 그
+  // 구분 축이 없어 **일반 기준 2억원**만 둔다. 우대 구분 사용자에게는
+  // 과소 계상이지만 안전한 방향이다.
+  it("디딤돌 대출한도가 일반 기준 2억원이다", () => {
+    const didim = rules.policyLoans.find((l) => l.id === "디딤돌");
+    expect(didim?.maxAmount).toBe(200_000_000);
+  });
+
+  // 회귀 잠금: 옛 값 2.5억은 공시의 어느 구분에도 없는 숫자였다(일반 2억 /
+  // 생애최초 2.4억 / 신혼·2자녀 3.2억). 한도를 5,000만원 부풀려 빌릴 수
+  // 있는 돈을 실제보다 크게 계산했다 — 되돌리면 이 테스트가 죽는다.
+  it("디딤돌 대출한도가 옛 값(2.5억)이 아니다", () => {
+    const didim = rules.policyLoans.find((l) => l.id === "디딤돌");
+    expect(didim?.maxAmount).not.toBe(250_000_000);
+    expect(didim?.maxAmount).toBeLessThan(250_000_000);
+  });
+
+  // 값만 잠그면 엔진이 그 값을 안 쓰게 바뀌어도 통과한다. 한도가 실제로
+  // 무는 프로필에서 실구매력이 따라 내려가는지 함께 본다 — 격자로 훑어
+  // 보면 이 조합(연소득 4천만·현금 1억·비규제·생애최초)에서 한도 5,000만원
+  // 차이가 실구매력 약 450만원 차이로 나타난다.
+  it("디딤돌 한도를 올리면 실구매력이 따라 올라간다", () => {
+    const profile: BuyerProfile = {
+      ...base,
+      annualIncome: 40_000_000,
+      cash: 100_000_000,
+      isFirstTimeBuyer: true,
+      isRegulatedArea: false,
+    };
+    const raised = structuredClone(rules);
+    const didim = raised.policyLoans.find((l) => l.id === "디딤돌");
+    if (didim === undefined) throw new Error("디딤돌이 룰셋에 없다");
+    didim.maxAmount = 250_000_000;
+
+    const now = calcAffordablePrice(profile, rules).affordablePrice;
+    const more = calcAffordablePrice(profile, raised).affordablePrice;
+    expect(more).toBeGreaterThan(now);
+  });
+
+  // 출처: 주금공 보금자리론 이용대상 안내 — 부부합산 연소득 7천만원 이하,
+  // 6억원 이하 주택, 대출한도 최대 3.6억원(다자녀·전세사기피해자 4억원,
+  // 생애최초 4.2억원). 셋 다 일반 기준이다.
+  it("보금자리론 자격이 소득 7천만·주택 6억·한도 3.6억이다", () => {
+    const bogeum = rules.policyLoans.find((l) => l.id === "보금자리론");
+    expect(bogeum?.eligibility.maxAnnualIncome).toBe(70_000_000);
+    expect(bogeum?.eligibility.maxHousePrice).toBe(600_000_000);
+    expect(bogeum?.maxAmount).toBe(360_000_000);
+  });
+
+  // 출처: 주금공 디딤돌대출 이용대상 안내 — 담보주택 평가액 5억원 이하
+  // (신혼·2자녀 이상 6억원), 주거전용면적 85㎡ 이하.
+  it("디딤돌 자격이 주택 5억·전용 85㎡다", () => {
+    const didim = rules.policyLoans.find((l) => l.id === "디딤돌");
+    expect(didim?.eligibility.maxHousePrice).toBe(500_000_000);
+    expect(didim?.eligibility.maxAreaSqm).toBe(85);
+  });
+
   // 출처: 한국은행 가중평균금리 2026-06, 예금은행 신규취급액 기준
   // 고정형 주담대 4.53%.
   it("시중금리 가정이 4.53%다", () => {
