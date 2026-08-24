@@ -1,4 +1,4 @@
-import { compact, type DeungiRow } from "./layout";
+import { compact, type DeungiRow, type DeungiRowPiece } from "./layout";
 import type {
   DeungiAddress,
   DeungiEntry,
@@ -102,10 +102,76 @@ function rankStarting(row: DeungiRow, leftEdge: number): string | null {
   return RANK_AT_START.exec(first.text)?.[1] ?? null;
 }
 
+/**
+ * 접수 칸이 시작하는 x. 등기목적 칸의 오른쪽 끝을 여기서 얻는다.
+ *
+ * 접수 칸은 늘 날짜로 시작한다(`2023년4월7일 제24119호`). 등기목적·순위번호
+ * 칸에는 그런 조각이 없으므로, 날짜로 시작하는 조각 중 가장 왼쪽이 접수
+ * 칸의 왼쪽 끝이다. 등기원인 칸도 날짜로 시작하지만 더 오른쪽에 있다.
+ */
+const RECEIPT_DATE_START = /^\d{4}\s*년\s*\d{1,2}\s*월\s*\d{1,2}\s*일/u;
+
+function receiptColumnOf(rows: readonly DeungiRow[], purposeLeft: number): number {
+  let x = Number.POSITIVE_INFINITY;
+  for (const row of rows) {
+    for (const piece of row.pieces) {
+      if (piece.x <= purposeLeft) continue;
+      if (!RECEIPT_DATE_START.test(piece.text.trim())) continue;
+      x = Math.min(x, piece.x);
+    }
+  }
+  return x;
+}
+
+/**
+ * 등기목적 칸이 다음 등기목적으로 넘어가는 세로 간격(글자 높이 대비).
+ *
+ * 한 순위번호 안에 등기목적이 둘 있는 일이 있다. 실제 샘플의 갑구 7번이
+ * 그렇다 — `소유권이전`과 `1번신탁등기말소`가 한 칸에 위아래로 놓인다.
+ * 둘을 이어 붙이면 `말소`가 딸려 와 소유권이전이 말소기록으로 읽힌다.
+ *
+ * 등기부는 그 둘 사이를 **한 줄 비워** 나눈다. 실제 샘플에서 이어지는
+ * 줄 간격은 13, 갈라지는 자리는 26이었다(글자 높이 10). 그 사이에서 2.0을
+ * 골랐다 — 1.3과 2.6 어느 쪽에도 붙지 않는다.
+ */
+const PURPOSE_BLOCK_GAP_RATIO = 2;
+
+/**
+ * 항목의 등기목적 칸.
+ *
+ * **한 줄만 보면 안 된다.** 등기목적은 칸 안에서 줄바꿈되고, 낱말 한가운데서
+ * 끊긴다. 실제 샘플의 을구 3번은 `2번근저당권설정등` / `기말소`로 갈라져
+ * 있었다. 첫 줄만 읽으면 `근저당권`으로 보여, 금액 없는 근저당이 하나 더
+ * 생기고 그 문서의 채권최고액 합계가 통째로 모름이 된다.
+ */
+function purposeCell(rows: readonly DeungiRow[], receiptX: number): DeungiRowPiece[] {
+  const first = rows[0];
+  const start = first?.pieces[1];
+  if (first === undefined || start === undefined) return [];
+  if (start.x >= receiptX) return [];
+
+  const left = start.x - 1;
+  const right = receiptX - 1;
+  const gapLimit = Math.max(start.height, 1) * PURPOSE_BLOCK_GAP_RATIO;
+
+  const cell: DeungiRowPiece[] = [];
+  let previousY = first.y;
+  for (const row of rows) {
+    if (previousY - row.y > gapLimit) break;
+    previousY = row.y;
+    for (const piece of row.pieces) {
+      if (piece.x >= left && piece.x < right) cell.push(piece);
+    }
+  }
+  return cell;
+}
+
 /** 표의 머리글·쪽 바닥글처럼 항목이 아닌 줄 */
 function isNoise(row: DeungiRow): boolean {
   const c = compact(row.text);
   if (c.length === 0) return true;
+  // 쪽마다 되풀이되는 부동산 표시 줄. 항목 사이에 끼어 본문으로 읽힌다.
+  if (PROPERTY_TAG.test(row.text.trim())) return true;
   if (c.includes("순위번호") && c.includes("등기목적")) return true;
   if (c.includes("등기명의인") && c.includes("최종지분")) return true;
   if (c.includes("주요등기사항") && c.includes("대상소유자")) return true;
@@ -284,42 +350,84 @@ function readAmount(compacted: string, kind: DeungiEntryKind): number | null {
   return null;
 }
 
-/** 한 항목이 말소로 보이는 최소 비율. 아래면 "애매함"으로 남긴다 */
-const STRUCK_MAJORITY = 0.5;
+/**
+ * 말소 판정은 **순위번호와 등기목적 칸**으로 한다.
+ *
+ * 항목 전체의 조각 수를 세면 실제 등기부에서 갈리지 않는다. 부기등기로
+ * 금액이 바뀌면 옛 금액 한 칸에만 줄이 그어지는데, 그것과 항목 전체가
+ * 말소된 것을 조각 수로는 구별할 수 없다. 실제 샘플의 을구 1번(전세권)은
+ * 22조각 중 5조각에만 줄이 있었고 항목은 살아 있었다 — 그 비율을 "애매함"
+ * 으로 읽는 바람에 문서 전체가 모름이 됐다.
+ *
+ * 등기부가 항목을 말소할 때는 **순위번호부터 끝까지** 줄을 긋는다.
+ * 그래서 순위번호·등기목적 칸이 갈림길이다.
+ */
+const KEY_STRUCK_MAJORITY = 0.5;
+
+/**
+ * 순위번호·등기목적은 멀쩡한데 나머지가 이만큼 그어져 있으면 말소로 본다.
+ *
+ * 우리가 순위번호 쪽 말소선을 놓쳤을 수 있다. 말소된 것을 살아 있다고
+ * 읽는 쪽이 더 위험하므로, 대부분이 그어져 있으면 말소로 접는다.
+ */
+const BODY_STRUCK_MAJORITY = 0.8;
+
+/** 순위번호는 멀쩡한데 절반 넘게 그어져 있으면 어느 쪽인지 우리가 모른다 */
+const BODY_STRUCK_SUSPICIOUS = 0.5;
 
 /** 갑구·을구의 항목을 읽는다 */
 export function readEntries(sectioned: readonly SectionedRow[]): DeungiEntry[] {
-  const leftEdge = {
-    갑구: leftEdgeOf(sectioned.filter((e) => e.section === "갑구").map((e) => e.row)),
-    을구: leftEdgeOf(sectioned.filter((e) => e.section === "을구").map((e) => e.row)),
+  const rowsOf = (section: "갑구" | "을구"): DeungiRow[] =>
+    sectioned.filter((entry) => entry.section === section).map((entry) => entry.row);
+  const leftEdge = { 갑구: leftEdgeOf(rowsOf("갑구")), 을구: leftEdgeOf(rowsOf("을구")) };
+  const receiptX = {
+    갑구: receiptColumnOf(rowsOf("갑구"), leftEdge.갑구 + RANK_COLUMN_WIDTH),
+    을구: receiptColumnOf(rowsOf("을구"), leftEdge.을구 + RANK_COLUMN_WIDTH),
   };
+
   const entries: DeungiEntry[] = [];
   let current: { section: "갑구" | "을구"; rank: string; rows: DeungiRow[] } | null = null;
 
   const flush = (): void => {
     if (current === null) return;
     const text = current.rows.map((row) => row.text).join("\n");
-    const compacted = compact(text);
     const firstRow = current.rows[0];
-    const purposeToken = firstRow === undefined
-      ? ""
-      : (firstRow.text.replace(RANK_AT_START, "").trim().split(/\s+/u)[0] ?? "");
-    const kind = classifyPurpose(purposeToken);
+
+    const cell = purposeCell(current.rows, receiptX[current.section]);
+    const purpose =
+      cell.length > 0
+        ? cell.map((piece) => piece.text).join(" ")
+        : (firstRow?.text.replace(RANK_AT_START, "").trim().split(/\s+/u)[0] ?? "");
+    const kind = classifyPurpose(purpose);
+
+    const rankPiece = firstRow?.pieces[0];
+    const key = rankPiece === undefined ? cell : [rankPiece, ...cell];
+    const keyRatio = key.length === 0 ? 0 : key.filter((piece) => piece.struck).length / key.length;
 
     const pieceCount = current.rows.reduce((sum, row) => sum + row.pieceCount, 0);
     const struckCount = current.rows.reduce((sum, row) => sum + row.struckCount, 0);
-    const ratio = pieceCount === 0 ? 0 : struckCount / pieceCount;
+    const bodyRatio = pieceCount === 0 ? 0 : struckCount / pieceCount;
+
+    const struck = keyRatio >= KEY_STRUCK_MAJORITY || bodyRatio >= BODY_STRUCK_MAJORITY;
+    const strikeAmbiguous =
+      (keyRatio > 0 && keyRatio < 1) || (keyRatio === 0 && bodyRatio >= BODY_STRUCK_SUSPICIOUS);
+
+    // 살아 있는 항목의 금액은 줄이 그어지지 않은 칸에서만 읽는다. 말소된
+    // 항목은 전부 그어져 있으므로 원문에서 읽어 사람에게 보여 준다.
+    const amountSource = compact(
+      struck ? text : current.rows.map((row) => row.liveText).join("\n"),
+    );
 
     entries.push({
       section: current.section,
       rank: current.rank,
       mainRank: mainRankOf(current.rank),
-      purpose: purposeToken,
+      purpose,
       kind,
-      amountWon: readAmount(compacted, kind),
-      holder: readHolder(compacted),
-      struck: ratio >= STRUCK_MAJORITY,
-      strikeAmbiguous: ratio > 0 && ratio < STRUCK_MAJORITY,
+      amountWon: readAmount(amountSource, kind),
+      holder: readHolder(compact(text)),
+      struck,
+      strikeAmbiguous,
       text,
     });
     current = null;
@@ -345,6 +453,19 @@ export function readEntries(sectioned: readonly SectionedRow[]): DeungiEntry[] {
   return entries;
 }
 
+/**
+ * 소유지분현황의 한 줄이 새 소유자로 시작하는 표시 — (주민)등록번호.
+ *
+ * 이름 칸이 좁아 **긴 이름은 다음 줄로 넘어간다.** 실제 샘플에서 법인
+ * 하나가 `주식회사우영이` / `앤시`로 갈려 있었고, 줄마다 소유자를 하나씩
+ * 세는 바람에 단독소유 법인이 공유자 두 명으로 읽혔다. 등록번호가 없는
+ * 줄은 새 소유자가 아니라 앞 이름의 뒷부분이다.
+ */
+const REGISTRATION_NUMBER = /^\d{6}-[\d*]{7}$/u;
+
+/** 이름 칸에 함께 적히는 `(소유자)`·`(공유자)` 같은 꼬리표 */
+const NAME_NOTE = /^\(.*\)$/u;
+
 /** 요약의 「1. 소유지분현황」 */
 export function readOwners(sectioned: readonly SectionedRow[]): DeungiOwner[] {
   const owners: DeungiOwner[] = [];
@@ -355,8 +476,20 @@ export function readOwners(sectioned: readonly SectionedRow[]): DeungiOwner[] {
     if (c.startsWith("1.소유지분현황")) continue;
 
     const tokens = row.text.trim().split(/\s+/u);
-    const name = tokens[0];
-    if (name === undefined || !/[가-힣A-Za-z]/u.test(name)) continue;
+    const registrationAt = tokens.findIndex((token) => REGISTRATION_NUMBER.test(compact(token)));
+
+    if (registrationAt < 0) {
+      const previous = owners.at(-1);
+      const rest = tokens.filter((token) => !NAME_NOTE.test(token)).join("");
+      if (previous !== undefined && rest.length > 0) previous.name += rest;
+      continue;
+    }
+
+    const name = tokens
+      .slice(0, registrationAt)
+      .filter((token) => !NAME_NOTE.test(token))
+      .join("");
+    if (!/[가-힣A-Za-z]/u.test(name)) continue;
 
     const share = tokens.find((token) => /^(단독소유|\d+분의\d+)$/u.test(compact(token))) ?? null;
     const last = tokens.at(-1);
@@ -367,6 +500,52 @@ export function readOwners(sectioned: readonly SectionedRow[]): DeungiOwner[] {
     });
   }
   return owners;
+}
+
+/**
+ * 순위번호 하나로 묶은 권리. 부기등기는 앞 등기를 고치는 것이지 별개의
+ * 권리가 아니다.
+ *
+ * 실제 샘플의 을구 1번은 `1`(전세권설정) · `1-2` · `1-3` · `1-4`(전세금
+ * 변경) 넷으로 적혀 있다. 이것을 넷으로 세면 금액 없는 전세권이 셋 생겨
+ * "금액을 못 읽었다"가 되고, 그 한 줄 때문에 채권최고액 합계까지 통째로
+ * 모름이 된다. 금액은 **가장 나중 것**이 살아 있는 값이다.
+ */
+export interface DeungiRight {
+  section: "갑구" | "을구";
+  mainRank: string;
+  kind: DeungiEntryKind;
+  amountWon: number | null;
+}
+
+interface RankedItem {
+  section: "갑구" | "을구";
+  mainRank: string;
+  kind: DeungiEntryKind;
+  amountWon: number | null;
+}
+
+/** 순위번호(주 번호)로 묶는다. 문서에 적힌 차례를 그대로 따른다 */
+export function groupRights(items: readonly RankedItem[]): DeungiRight[] {
+  const rights = new Map<string, DeungiRight>();
+  for (const item of items) {
+    const key = `${item.section}#${item.mainRank}`;
+    const already = rights.get(key);
+    if (already === undefined) {
+      rights.set(key, {
+        section: item.section,
+        mainRank: item.mainRank,
+        kind: item.kind,
+        amountWon: item.amountWon,
+      });
+      continue;
+    }
+    // 갈래는 먼저 이름 붙은 것을 쓴다. 부기등기의 `기타`가 앞의 근저당권을
+    // 덮어 권리가 사라지면 안 된다.
+    if (already.kind === "기타" && item.kind !== "기타") already.kind = item.kind;
+    if (item.amountWon !== null) already.amountWon = item.amountWon;
+  }
+  return [...rights.values()];
 }
 
 /** 요약의 2·3번 표 */
@@ -386,7 +565,6 @@ export function readSummaryRows(sectioned: readonly SectionedRow[]): DeungiSumma
     const rest = row.text.replace(RANK_AT_START, "").trim();
     const purposeToken = rest.split(/\s+/u)[0] ?? "";
     const kind = classifyPurpose(purposeToken);
-    const compacted = compact(row.text);
 
     rows.push({
       section: summaryPart === 2 ? "갑구" : "을구",
@@ -394,7 +572,9 @@ export function readSummaryRows(sectioned: readonly SectionedRow[]): DeungiSumma
       mainRank: mainRankOf(rank),
       purpose: purposeToken,
       kind,
-      amountWon: readAmount(compacted, kind),
+      // 요약도 바뀐 금액에는 줄을 긋는다. 실제 샘플의 요약에서 전세금
+      // 1,000만원에 줄이 있고 1-4번의 2,000만원이 살아 있었다.
+      amountWon: readAmount(compact(row.liveText), kind),
       text: row.text,
     });
   }

@@ -1,13 +1,20 @@
 import { describe, expect, it } from "vitest";
-import type { DeungiRow } from "./layout";
+import type { DeungiRow, DeungiRowPiece } from "./layout";
 import { classifyPurpose, mainRankOf, parseWon, readAddress, readHeader } from "./read";
-import type { DeungiTextPiece } from "./types";
 
 function row(text: string): DeungiRow {
-  const pieces: DeungiTextPiece[] = [
-    { text, x: 30, endX: 30 + text.length * 9, baselineY: 700, height: 9 },
+  const pieces: DeungiRowPiece[] = [
+    { text, x: 30, endX: 30 + text.length * 9, baselineY: 700, height: 9, struck: false },
   ];
-  return { pageNumber: 1, y: 700, text, struckCount: 0, pieceCount: 1, pieces };
+  return {
+    pageNumber: 1,
+    y: 700,
+    text,
+    liveText: text,
+    struckCount: 0,
+    pieceCount: 1,
+    pieces,
+  };
 }
 
 describe("금액 읽기", () => {

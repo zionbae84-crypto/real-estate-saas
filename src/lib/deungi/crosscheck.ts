@@ -1,3 +1,4 @@
+import { groupRights } from "./read";
 import type { DeungiEntry, DeungiEntryKind, DeungiSummaryRow } from "./types";
 
 /**
@@ -54,20 +55,25 @@ function keyOf(section: string, mainRank: string): string {
   return `${section}#${mainRank}`;
 }
 
-/** 순위번호별 금액. 같은 순위에 서로 다른 금액이 있으면 `null`(모름)로 접는다 */
+/**
+ * 순위번호별 금액.
+ *
+ * 부기등기(`1-4`)는 앞 등기(`1`)를 고치는 것이라 한 권리로 묶고, 금액은
+ * 가장 나중 것을 쓴다. 본문과 요약을 **같은 규칙으로** 접어야 서로 견줄 수
+ * 있다 — 요약도 본문과 똑같이 1번과 1-4번을 따로 적어 두기 때문이다.
+ */
 function amountsByRank(
-  items: readonly { section: string; mainRank: string; kind: DeungiEntryKind; amountWon: number | null }[],
+  items: readonly {
+    section: "갑구" | "을구";
+    mainRank: string;
+    kind: DeungiEntryKind;
+    amountWon: number | null;
+  }[],
 ): Map<string, number | null> {
   const found = new Map<string, number | null>();
-  for (const item of items) {
-    if (!CROSS_CHECKED_KINDS.includes(item.kind)) continue;
-    const key = keyOf(item.section, item.mainRank);
-    if (!found.has(key)) {
-      found.set(key, item.amountWon);
-      continue;
-    }
-    const already = found.get(key) ?? null;
-    if (already !== item.amountWon) found.set(key, null);
+  for (const right of groupRights(items)) {
+    if (!CROSS_CHECKED_KINDS.includes(right.kind)) continue;
+    found.set(keyOf(right.section, right.mainRank), right.amountWon);
   }
   return found;
 }

@@ -2,6 +2,7 @@ import type { RightsAnswer, RightsAnswers } from "../rights";
 import { crossCheck } from "./crosscheck";
 import { compact, toAllRows } from "./layout";
 import {
+  groupRights,
   hasSummary,
   readEntries,
   readHeader,
@@ -9,6 +10,7 @@ import {
   readSummaryRows,
   sectionRows,
   sectionText,
+  type DeungiRight,
   type SectionedRow,
 } from "./read";
 import { readPdfGeometry } from "./pdf";
@@ -87,6 +89,9 @@ const UNKNOWN_OPTION: Readonly<Record<string, string>> = {
 };
 
 export const COVERED_ITEM_IDS: readonly string[] = Object.keys(UNKNOWN_OPTION);
+
+/** 금액을 반드시 읽어 내야 하는 갈래. 못 읽으면 합계를 내지 않는다 */
+const AMOUNT_KINDS: readonly DeungiEntry["kind"][] = ["근저당권", "전세권", "임차권"];
 
 function answer(optionId: string, amountWon: number | null = null): RightsAnswer {
   return { optionId, amountWon };
@@ -174,10 +179,12 @@ export function readDeungi(
 
   if (entries.some((entry) => entry.strikeAmbiguous)) problems.push("partialStrike");
 
-  const amountMissing = liveEntries.some(
-    (entry) =>
-      (entry.kind === "근저당권" || entry.kind === "전세권" || entry.kind === "임차권") &&
-      entry.amountWon === null,
+  // 금액은 권리 단위로 본다. 부기등기 줄 하나에 금액이 없다는 것은 "못
+  // 읽었다"가 아니다 — 그 줄은 금액을 적는 줄이 아니다.
+  const liveRights = groupRights(liveEntries);
+  const summaryRights = groupRights(summaryRows);
+  const amountMissing = liveRights.some(
+    (right) => AMOUNT_KINDS.includes(right.kind) && right.amountWon === null,
   );
   if (amountMissing) problems.push("amountUnreadable");
 
@@ -186,8 +193,8 @@ export function readDeungi(
     status !== "agreed" ||
     entries.some((entry) => entry.strikeAmbiguous);
 
-  const mortgage = totalOf(liveEntries, summaryRows, ["근저당권"], blocked || amountMissing);
-  const lease = totalOf(liveEntries, summaryRows, ["전세권", "임차권"], blocked || amountMissing);
+  const mortgage = totalOf(liveRights, summaryRights, ["근저당권"], blocked || amountMissing);
+  const lease = totalOf(liveRights, summaryRights, ["전세권", "임차권"], blocked || amountMissing);
 
   const answers = decideAnswers({
     sectioned,
@@ -221,23 +228,23 @@ export function readDeungi(
  * 금액만 더해 놓고 모르는 값을 0원으로 두면 위험이 통째로 사라진다.
  */
 function totalOf(
-  liveEntries: readonly DeungiEntry[],
-  summaryRows: readonly DeungiSummaryRow[],
+  liveRights: readonly DeungiRight[],
+  summaryRights: readonly DeungiRight[],
   kinds: readonly DeungiEntry["kind"][],
   blocked: boolean,
 ): DeungiTotal {
-  const mine = liveEntries.filter((entry) => kinds.includes(entry.kind));
-  const theirs = summaryRows.filter((row) => kinds.includes(row.kind));
+  const mine = liveRights.filter((right) => kinds.includes(right.kind));
+  const theirs = summaryRights.filter((right) => kinds.includes(right.kind));
 
   if (mine.length === 0 && theirs.length === 0 && !blocked) {
     return { won: 0, count: 0 };
   }
   // 요약에는 있는데 본문에서 살아 있는 항목을 못 찾았으면 합계를 낼 수
   // 없다. 대조가 이미 걸러 내지만, 여기서도 0원으로 내려가지 않게 막는다.
-  if (blocked || mine.length === 0 || mine.some((entry) => entry.amountWon === null)) {
+  if (blocked || mine.length === 0 || mine.some((right) => right.amountWon === null)) {
     return { won: null, count: null };
   }
-  const won = mine.reduce((sum, entry) => sum + (entry.amountWon ?? 0), 0);
+  const won = mine.reduce((sum, right) => sum + (right.amountWon ?? 0), 0);
   return { won, count: mine.length };
 }
 

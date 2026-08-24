@@ -7,12 +7,13 @@
 export { crossCheck } from "./crosscheck";
 export type { CrossCheckOutcome } from "./crosscheck";
 export { compact, isStruck, strikeCandidates, toAllRows, toRows } from "./layout";
-export type { DeungiRow } from "./layout";
+export type { DeungiRow, DeungiRowPiece } from "./layout";
 export { readPdfGeometry } from "./pdf";
 export { COVERED_ITEM_IDS, LEFT_TO_USER, parseDeungiPdf, readDeungi } from "./parse";
 export type { DeungiReading } from "./parse";
 export {
   classifyPurpose,
+  groupRights,
   mainRankOf,
   parseWon,
   readAddress,
@@ -22,6 +23,7 @@ export {
   readSummaryRows,
   sectionRows,
 } from "./read";
+export type { DeungiRight } from "./read";
 export { parseDeungiRules, problemOf } from "./rules";
 export type { DeungiCopy, DeungiRules } from "./rules";
 export type {

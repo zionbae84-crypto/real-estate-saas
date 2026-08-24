@@ -86,6 +86,19 @@ export function isStruck(
   });
 }
 
+/**
+ * 줄 안의 글자 조각 하나. 말소선 판정을 조각마다 붙여 둔다.
+ *
+ * **왜 조각마다인가:** 실제 등기부에서 말소선은 항목 전체에만 그어지지
+ * 않는다. 전세금이 부기등기로 바뀌면 **옛 금액 한 칸에만** 줄이 그어지고
+ * 나머지는 그대로 살아 있다. 실제 샘플의 을구 1번이 그랬다 — 전세금
+ * 1,000만원에만 줄이 있고 항목 자체는 살아 있다. 줄 단위로 몇 개가
+ * 그어졌는지만 세면 이 둘을 가를 수 없다.
+ */
+export interface DeungiRowPiece extends DeungiTextPiece {
+  struck: boolean;
+}
+
 /** 한 줄. 글자 조각을 세로 위치로 묶고 가로 위치로 세운 결과 */
 export interface DeungiRow {
   pageNumber: number;
@@ -93,11 +106,18 @@ export interface DeungiRow {
   y: number;
   /** 칸을 빈칸으로 이어 붙인 줄 전체 */
   text: string;
+  /**
+   * 말소선이 그어지지 않은 칸만 이어 붙인 줄.
+   *
+   * 살아 있는 항목의 금액은 여기서 읽는다. 줄이 그어진 옛 금액을 읽으면
+   * 이미 바뀐 값이 합계에 들어간다.
+   */
+  liveText: string;
   /** 이 줄에서 말소선이 그어진 글자 조각 수 */
   struckCount: number;
   /** 이 줄의 글자 조각 수 */
   pieceCount: number;
-  pieces: readonly DeungiTextPiece[];
+  pieces: readonly DeungiRowPiece[];
 }
 
 /**
@@ -127,26 +147,46 @@ export function toRows(page: DeungiPageGeometry): DeungiRow[] {
   }
 
   return groups.map((group) => {
-    const sorted = group.slice().sort((a, b) => a.x - b.x);
+    const sorted: DeungiRowPiece[] = group
+      .slice()
+      .sort((a, b) => a.x - b.x)
+      .map((piece) => ({ ...piece, struck: isStruck(piece, candidates) }));
     const first = sorted[0];
     if (first === undefined) {
-      return { pageNumber: page.pageNumber, y: 0, text: "", struckCount: 0, pieceCount: 0, pieces: [] };
+      return {
+        pageNumber: page.pageNumber,
+        y: 0,
+        text: "",
+        liveText: "",
+        struckCount: 0,
+        pieceCount: 0,
+        pieces: [],
+      };
     }
 
     let text = first.text;
+    let liveText = first.struck ? "" : first.text;
     for (let i = 1; i < sorted.length; i += 1) {
       const previous = sorted[i - 1];
       const current = sorted[i];
       if (previous === undefined || current === undefined) continue;
       const gap = current.x - previous.endX;
-      text += gap > current.height * COLUMN_GAP_RATIO ? ` ${current.text}` : current.text;
+      const separated = gap > current.height * COLUMN_GAP_RATIO;
+      text += separated ? ` ${current.text}` : current.text;
+      if (current.struck) continue;
+      // 줄이 그어진 칸을 건너뛴 자리는 늘 빈칸으로 벌린다. 앞뒤 글자가
+      // 맞붙어 없던 낱말이 생기는 것을 막는다.
+      liveText += liveText.length === 0 || (!separated && !previous.struck)
+        ? current.text
+        : ` ${current.text}`;
     }
 
-    const struckCount = sorted.filter((piece) => isStruck(piece, candidates)).length;
+    const struckCount = sorted.filter((piece) => piece.struck).length;
     return {
       pageNumber: page.pageNumber,
       y: first.baselineY,
       text,
+      liveText,
       struckCount,
       pieceCount: sorted.length,
       pieces: sorted,
