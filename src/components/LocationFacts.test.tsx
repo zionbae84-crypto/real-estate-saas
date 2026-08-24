@@ -124,13 +124,22 @@ describe("LocationFacts — 지금(좌표가 없는 상태)", () => {
     expect(text).not.toContain("한 곳도 없");
   });
 
-  it("좌표를 못 구했어도 고지 넷은 그대로 나온다", () => {
+  it("좌표를 못 구했어도 고지 셋은 그대로 나온다", () => {
     render(<LocationFacts complexKey="11680-9001" />);
     const text = screenText();
-    expect(text).toContain(locationRules.disclosure.straightLineNote);
     expect(text).toContain(locationRules.disclosure.schoolZoneNote);
     expect(text).toContain(locationRules.disclosure.missingFactorsNote);
     expect(text).toContain(locationRules.disclosure.notARatingNote);
+  });
+
+  it("적힌 거리가 없으므로 직선거리 고지는 나오지 않는다", () => {
+    // 그 문장은 "여기 적힌 거리는 전부 직선거리"라고 말한다. 좌표를 모르면
+    // 적힌 거리가 하나도 없어서 문장이 가리킬 대상이 없고, 읽는 사람은 위에
+    // 거리가 있다고 믿고 찾게 된다.
+    render(<LocationFacts complexKey="11680-9001" />);
+    expect(screenText()).not.toContain(
+      locationRules.disclosure.straightLineNote,
+    );
   });
 
   it("존재하지 않는 단지 키에도 무너지지 않고 '모른다'로 간다", () => {
@@ -142,13 +151,23 @@ describe("LocationFacts — 지금(좌표가 없는 상태)", () => {
 });
 
 describe("LocationFacts — 직선거리 고지와 학구도 고지는 언제나 함께 나온다", () => {
-  it.each(EVERY_STATE)("%s — 직선거리 고지가 있다", (_label, assessment) => {
-    renderView(assessment);
-    expect(screenText()).toContain(locationRules.disclosure.straightLineNote);
-    // 문구가 실제로 그 사실을 말하는지도 함께 본다.
-    expect(locationRules.disclosure.straightLineNote).toContain("직선");
-    expect(locationRules.disclosure.straightLineNote).toContain("걸어");
-  });
+  it.each(EVERY_STATE)(
+    "%s — 거리를 그리는 상태면 직선거리 고지가 있고, 아니면 없다",
+    (_label, assessment) => {
+      renderView(assessment);
+      const text = screenText();
+      // 좌표를 아는 상태에서만 거리가 적힌다. 적힐 때는 그 단서가 반드시
+      // 붙고, 적히지 않을 때는 가리킬 대상이 없으므로 붙지 않는다.
+      if (assessment.state === "located") {
+        expect(text).toContain(locationRules.disclosure.straightLineNote);
+      } else {
+        expect(text).not.toContain(locationRules.disclosure.straightLineNote);
+      }
+      // 문구가 실제로 그 사실을 말하는지도 함께 본다.
+      expect(locationRules.disclosure.straightLineNote).toContain("직선");
+      expect(locationRules.disclosure.straightLineNote).toContain("걸어");
+    },
+  );
 
   it.each(EVERY_STATE)("%s — 학구도 고지가 있다", (_label, assessment) => {
     renderView(assessment);

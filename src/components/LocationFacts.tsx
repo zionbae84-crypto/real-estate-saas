@@ -36,12 +36,16 @@ export interface LocationFactsProps {
  * 내므로(`unlocated`에는 `subway`·`elementarySchool` 필드 자체가 없다)
  * 이 컴포넌트는 실수로도 "0곳"을 그릴 수 없다.
  *
- * ## 고지는 언제나 함께 나간다
+ * ## 고지
  *
- * 직선거리 고지와 학구도 고지는 상태와 무관하게 그려진다 — 아무것도 재지
- * 못한 지금도 마찬가지다. 좌표가 생기는 날 고지만 빠뜨리는 경로를 애초에
- * 만들지 않으려는 것이다. `LocationFacts.test.tsx`가 모든 상태에서
- * 확인한다.
+ * 학구도 고지는 **상태와 무관하게** 그려진다 — 아무것도 재지 못한 지금도
+ * 마찬가지다. 좌표가 생기는 날 고지만 빠뜨리는 경로를 애초에 만들지 않으려는
+ * 것이다.
+ *
+ * 반면 **직선거리 고지는 거리를 실제로 그리는 `located`에서만** 나간다. 그
+ * 문장은 "여기 적힌 거리는 전부 직선거리"라고 말하는데, 좌표를 모르면 적힌
+ * 거리가 하나도 없어 가리킬 대상이 없다. `LocationFacts.test.tsx`가 모든
+ * 상태에서 이 두 규칙을 함께 확인한다.
  *
  * 이 영역은 인쇄에서 **통째로 남는다.** 조작 장치가 하나도 없어 숨길
  * 것이 없고, 여기서 가장 무거운 말인 두 고지는 종이에서 더 중요하다 —
@@ -106,18 +110,26 @@ export function LocationFactsView({
 }
 
 /**
- * 사실과 **언제나 함께** 나가는 고지.
+ * 사실과 함께 나가는 고지.
  *
- * 좌표를 몰라 위에 아무것도 그리지 않은 상태에서도 그대로 나간다. 특히
- * 학구도 고지가 빠지면 우리가 틀린 확신을 준다 — 화면에 가장 가까운
- * 학교가 적혀 있는데 배정이 거리순이 아니라는 말이 없으면, 그 목록은
- * 배정 결과처럼 읽힌다.
+ * 넷 중 셋(학구도·빠진 요소·점수 안 매김)은 **좌표를 몰라 위에 아무것도
+ * 그리지 않은 상태에서도 그대로 나간다.** 특히 학구도 고지가 빠지면 우리가
+ * 틀린 확신을 준다 — 화면에 가장 가까운 학교가 적혀 있는데 배정이 거리순이
+ * 아니라는 말이 없으면, 그 목록은 배정 결과처럼 읽힌다.
+ *
+ * **직선거리 고지만 `located`에서만 나간다.** 그 문장은 "여기 적힌 거리는
+ * 전부 직선거리"라고 말하는데, 좌표를 모르는 상태에서는 적힌 거리가 하나도
+ * 없어서 문장이 가리킬 대상이 없다. 없는 것을 두고 단서를 달면 사용자는
+ * 위에 거리가 적혀 있다고 믿고 찾게 되고, 정작 읽어야 할 "재지 못했다"가
+ * 그만큼 묻힌다.
  */
 function Disclosure({ assessment }: { assessment: LocationAssessment }) {
   const d = assessment.disclosure;
   return (
     <ul className="location-disclosure">
-      <li data-field="straightLine">{d.straightLineNote}</li>
+      {assessment.state === "located" && (
+        <li data-field="straightLine">{d.straightLineNote}</li>
+      )}
       <li data-field="schoolZone">{d.schoolZoneNote}</li>
       <li data-field="missingFactors">{d.missingFactorsNote}</li>
       <li data-field="notARating">{d.notARatingNote}</li>
