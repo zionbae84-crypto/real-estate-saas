@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import rawLocationRules from "../../rules/location-2026-08.json";
+import { assessLocation, parseLocationRules } from "../lib/location";
 import {
   COMPLEX_COORDINATES,
   coordinateOf,
@@ -49,5 +51,57 @@ describe("입지 데이터 자리", () => {
       expect(Math.abs(coordinate.lat)).toBeLessThanOrEqual(90);
       expect(Math.abs(coordinate.lon)).toBeLessThanOrEqual(180);
     }
+  });
+});
+
+describe("실린 목록 — 학교·역은 값이 있고 단지 좌표는 없다", () => {
+  it("역 목록과 학교 목록이 실제로 실려 있다", () => {
+    // null이면 아래 검사들이 공허하게 통과한다.
+    expect(SUBWAY_STATIONS).not.toBeNull();
+    expect(ELEMENTARY_SCHOOLS).not.toBeNull();
+    expect(SUBWAY_STATIONS?.length ?? 0).toBeGreaterThan(0);
+    expect(ELEMENTARY_SCHOOLS?.length ?? 0).toBeGreaterThan(0);
+  });
+
+  it("모든 항목이 좌표를 갖고, 0·NaN이 없다", () => {
+    for (const place of [...(SUBWAY_STATIONS ?? []), ...(ELEMENTARY_SCHOOLS ?? [])]) {
+      expect(Number.isFinite(place.coordinate.lat)).toBe(true);
+      expect(Number.isFinite(place.coordinate.lon)).toBe(true);
+      expect(place.coordinate.lat).not.toBe(0);
+      expect(place.coordinate.lon).not.toBe(0);
+    }
+  });
+
+  it("단지 좌표는 아직 하나도 없다", () => {
+    // 지오코딩은 다음 작업이다. 근처 단지 좌표나 법정동 중심점으로 대신
+    // 채우면 화면은 재는 데 성공하고 숫자만 통째로 틀린다.
+    expect(Object.keys(COMPLEX_COORDINATES)).toEqual([]);
+  });
+
+  it("어느 단지를 물어도 판정이 '아직 위치를 몰라요'다", () => {
+    const rules = parseLocationRules(rawLocationRules);
+    for (const unit of COMPLEX_UNITS) {
+      const assessment = assessLocation(rules, {
+        coordinate: coordinateOf(unit.complexKey),
+        subwayStations: SUBWAY_STATIONS,
+        elementarySchools: ELEMENTARY_SCHOOLS,
+      });
+      // 좌표를 모르는 갈래에는 subway·elementarySchool 필드 자체가 없다 —
+      // 화면이 빈 목록을 그릴 재료를 갖지 못한다.
+      expect(assessment.state).toBe("unlocated");
+      expect(Object.hasOwn(assessment, "subway")).toBe(false);
+      expect(Object.hasOwn(assessment, "elementarySchool")).toBe(false);
+    }
+  });
+
+  it("좌표가 하나라도 있으면 그 단지는 'located'가 된다(변이 검사)", () => {
+    // 위 검사가 "무엇을 넣어도 unlocated"라서 통과하는 것이 아님을 확인한다.
+    const rules = parseLocationRules(rawLocationRules);
+    const assessment = assessLocation(rules, {
+      coordinate: { lat: 37.5, lon: 127.0 },
+      subwayStations: SUBWAY_STATIONS,
+      elementarySchools: ELEMENTARY_SCHOOLS,
+    });
+    expect(assessment.state).toBe("located");
   });
 });
