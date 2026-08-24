@@ -75,6 +75,7 @@ function renderForm(
     areaOverridden?: boolean;
     onFirstTimeBuyerChange?: (value: boolean) => void;
     onExistingDebtChange?: (value: number | null) => void;
+    onOwnedHomeCountChange?: (value: number | null) => void;
   } = {},
 ) {
   function Harness() {
@@ -93,6 +94,9 @@ function renderForm(
       }
       if (key === "existingDebtAnnualPayment") {
         overrides.onExistingDebtChange?.(value as number | null);
+      }
+      if (key === "ownedHomeCount") {
+        overrides.onOwnedHomeCountChange?.(value as number | null);
       }
     }
 
@@ -126,19 +130,22 @@ describe("ProfileForm", () => {
     expect(checkbox).toBeChecked();
   });
 
-  it("첫 화면에는 입력이 셋뿐이다", () => {
+  it("첫 화면에는 입력이 넷뿐이다 — 현금·소득·주택 수·생애최초", () => {
     // 리뷰 수정: 예전 버전은 존재한 적 없는 라벨(/기존 부채/)을 조회해
     // "없다"만 확인했다 — 실제로는 어떤 조건에서도 그 문구가 없으므로
     // 이 단언은 공허했다(항상 통과했다). 이름과 달리 개수도 세지 않았다.
-    // 지금은 실제 렌더된 입력 요소 개수(textbox 2개 + checkbox 1개 = 3개)를
-    // 직접 세고, 사라져야 하는 요소는 실제로 열었을 때 나타나는 라벨로
-    // 조회한다.
+    // 지금은 실제 렌더된 입력 요소 개수(textbox 2개 + radio 2개 +
+    // checkbox 1개)를 직접 세고, 사라져야 하는 요소는 실제로 열었을 때
+    // 나타나는 라벨로 조회한다.
     renderForm();
     expect(screen.getAllByRole("textbox")).toHaveLength(2);
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
 
     expect(screen.getByLabelText(/보유 현금/)).toBeInTheDocument();
     expect(screen.getByLabelText(/연 소득/)).toBeInTheDocument();
+    expect(screen.getByLabelText("무주택")).toBeInTheDocument();
+    expect(screen.getByLabelText("유주택")).toBeInTheDocument();
     expect(screen.getByRole("checkbox", { name: /생애최초/ })).toBeInTheDocument();
 
     // 사라져야 하는 것들 — openField로 열었을 때만 나타나는 실제 라벨로 조회한다
@@ -361,5 +368,94 @@ describe("ProfileForm", () => {
         screen.queryByRole("checkbox", { name: /규제지역/ }),
       ).not.toBeInTheDocument();
     });
+  });
+});
+
+/**
+ * 주택 수 질문.
+ *
+ * **아무것도 미리 골라 두지 않는다.** 무주택을 기본 선택으로 두면
+ * 고른 적 없는 사람이 무주택으로 계산되는데, 그건 디딤돌·보금자리론
+ * 자격을 모두 열어 한도를 키우는 낙관 방향이다. 이 폼의 다른 기본값이
+ * 전부 과대평가를 피하는 쪽으로 놓인 것과 같은 판단이고, 여기서는
+ * 그 "안전한 쪽"이 사실을 지어내는 것(당신은 집이 있다)이 되므로 아예
+ * 답을 받는다.
+ */
+describe("ProfileForm — 주택 수", () => {
+  it("아무것도 미리 골라 두지 않는다", () => {
+    renderForm();
+    expect(screen.getByLabelText("무주택")).not.toBeChecked();
+    expect(screen.getByLabelText("유주택")).not.toBeChecked();
+    // 주택 수 입력란은 유주택을 고르기 전에는 없다.
+    expect(
+      screen.queryByLabelText("갖고 있는 주택 수 (채)"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("무주택을 고르면 0채가 되고 주택 수 입력란은 나오지 않는다", async () => {
+    const seen: Array<number | null> = [];
+    renderForm({ onOwnedHomeCountChange: (v) => seen.push(v) });
+
+    await userEvent.click(screen.getByLabelText("무주택"));
+
+    expect(seen).toEqual([0]);
+    expect(screen.getByLabelText("무주택")).toBeChecked();
+    expect(
+      screen.queryByLabelText("갖고 있는 주택 수 (채)"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("유주택을 고르면 1채로 시작하고 주택 수를 적을 수 있다", async () => {
+    const seen: Array<number | null> = [];
+    renderForm({ onOwnedHomeCountChange: (v) => seen.push(v) });
+
+    await userEvent.click(screen.getByLabelText("유주택"));
+
+    // 유주택이라고 답한 사람이 가질 수 있는 가장 작은 수로 시작한다 —
+    // 여기서 늘리는 방향은 자격이 좁아지는 쪽이라 시작값이 한도를
+    // 부풀리지 않는다.
+    expect(seen).toEqual([1]);
+    const input = screen.getByLabelText("갖고 있는 주택 수 (채)");
+    expect(input).toHaveValue(1);
+
+    await userEvent.clear(input);
+    await userEvent.type(input, "3");
+    expect(seen.at(-1)).toBe(3);
+  });
+
+  it("이미 유주택이면 라디오를 다시 눌러도 적어 둔 수가 유지된다", async () => {
+    renderForm({ initial: { ownedHomeCount: 4 } });
+    expect(screen.getByLabelText("유주택")).toBeChecked();
+
+    await userEvent.click(screen.getByLabelText("유주택"));
+    expect(screen.getByLabelText("갖고 있는 주택 수 (채)")).toHaveValue(4);
+  });
+
+  it("0채 미만·소수는 상위 상태로 흘러가지 않는다", async () => {
+    const seen: Array<number | null> = [];
+    renderForm({
+      initial: { ownedHomeCount: 2 },
+      onOwnedHomeCountChange: (v) => seen.push(v),
+    });
+
+    const input = screen.getByLabelText("갖고 있는 주택 수 (채)");
+    await userEvent.clear(input);
+    await userEvent.type(input, "0");
+    expect(seen).toEqual([]);
+
+    // 포커스를 잃으면 마지막으로 유효했던 값으로 되돌아간다 — 화면과
+    // 계산값이 어긋난 채로 남지 않는다.
+    fireEvent.blur(input);
+    expect(input).toHaveValue(2);
+  });
+
+  it("무주택으로 되돌리면 주택 수 입력란이 사라진다", async () => {
+    renderForm({ initial: { ownedHomeCount: 2 } });
+    expect(screen.getByLabelText("갖고 있는 주택 수 (채)")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("무주택"));
+    expect(
+      screen.queryByLabelText("갖고 있는 주택 수 (채)"),
+    ).not.toBeInTheDocument();
   });
 });

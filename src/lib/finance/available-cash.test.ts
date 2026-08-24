@@ -5,6 +5,7 @@ import type { BuyerProfile } from "./types";
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 200_000_000,
     annualIncome: 100_000_000,
     existingDebtAnnualPayment: 0,
@@ -28,6 +29,7 @@ describe("calcAvailableCash", () => {
     const result = calcAvailableCash(
       profile({
         status: "갈아타기",
+        ownedHomeCount: 1,
         cash: 50_000_000,
         existingHome: {
           expectedSalePrice: 700_000_000,
@@ -44,6 +46,7 @@ describe("calcAvailableCash", () => {
     const result = calcAvailableCash(
       profile({
         status: "갈아타기",
+        ownedHomeCount: 1,
         cash: 50_000_000,
         existingHome: {
           expectedSalePrice: 700_000_000,
@@ -61,6 +64,7 @@ describe("calcAvailableCash", () => {
     const result = calcAvailableCash(
       profile({
         status: "갈아타기",
+        ownedHomeCount: 1,
         cash: 200_000_000,
         existingHome: {
           expectedSalePrice: 300_000_000,
@@ -77,6 +81,7 @@ describe("calcAvailableCash", () => {
     const result = calcAvailableCash(
       profile({
         status: "갈아타기",
+        ownedHomeCount: 1,
         cash: 10_000_000,
         existingHome: {
           expectedSalePrice: 300_000_000,
@@ -90,7 +95,7 @@ describe("calcAvailableCash", () => {
   });
 
   it("갈아타기인데 기존 주택 정보가 없으면 경고를 남긴다", () => {
-    const result = calcAvailableCash(profile({ status: "갈아타기" }));
+    const result = calcAvailableCash(profile({ status: "갈아타기", ownedHomeCount: 1 }));
     expect(result.amount).toBe(200_000_000);
     expect(result.warnings).toContain(
       "기존 주택 정보가 없어 매도 대금이 반영되지 않았어요.",

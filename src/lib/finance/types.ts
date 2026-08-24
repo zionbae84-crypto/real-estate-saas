@@ -1,4 +1,21 @@
-/** 주택 보유 상황 */
+/**
+ * 기존 주택을 **팔아서 그 돈을 이 매수에 보태는가**.
+ *
+ * ⚠ **주택 수 축이 아니다.** 몇 채를 갖고 있는지는
+ * {@link BuyerProfile.ownedHomeCount}가 따로 말한다. 두 질문은 서로
+ * 독립이다 — 1채를 갖고 있으면서 팔 수도 있고("갈아타기"), 팔지 않고
+ * 그대로 둔 채 한 채 더 살 수도 있다(다주택이 된다). 하나로 합치면
+ * 뒤쪽("1채 보유 + 안 팜")을 아예 표현할 수 없고, 그 표현할 수 없는
+ * 사람이 바로 정책대출 자격이 사라지는 사람이라 위험한 쪽으로 틀린다.
+ *
+ * 이 값이 실제로 하는 일은 하나뿐이다: `calcAvailableCash`가
+ * "갈아타기"일 때만 기존 주택 순자산을 가용 현금에 더한다. 대출 자격
+ * 판정은 이 값을 보지 않고 {@link BuyerProfile.ownedHomeCount}만 본다.
+ *
+ * `assertValidProfile`이 두 축의 아귀를 맞춘다 — "갈아타기"인데
+ * `ownedHomeCount`가 0이면(팔 집이 없는데 매도 대금을 더하는 상태)
+ * 계산에 들어가기 전에 끊는다.
+ */
 export type HouseholdStatus = "무주택" | "갈아타기";
 
 /** 갈아타기 시 기존 주택 정보 */
@@ -14,6 +31,24 @@ export interface ExistingHome {
 /** 구매자 재무 프로필 */
 export interface BuyerProfile {
   status: HouseholdStatus;
+  /**
+   * 지금 보유한 주택 수(채). **이번에 사려는 집은 세지 않는다.**
+   * 0이면 무주택, 1 이상이면 유주택이다. 0 이상의 정수여야 한다.
+   *
+   * **정책대출 자격을 가르는 축이다.** 디딤돌은 세대원 전원 무주택을
+   * 요구하고(0채만), 보금자리론은 본건 담보주택을 뺀 무주택 또는
+   * 1주택까지 받는다(0~1채) — 룰셋의 `eligibility.maxOwnedHomes`가
+   * 상품마다 그 상한을 말한다.
+   *
+   * ⚠ **취득세는 이 값을 읽지 않는다.** 주택 수별 중과세율을 확인하지
+   * 못해 룰셋에 넣지 않았기 때문이다(`acquisition-cost.ts`의
+   * `calcAcquisitionTax` 주석 참고). 그래서 유주택 구매자에게는
+   * 부대비용이 실제보다 작게 나오고, 화면은 그 사실을
+   * `acquisitionTax.householdCountNote`로 밝힌다 — 물어 놓고 반영하지
+   * 않았다는 사실 자체를 말하지 않으면, 사용자는 물었으니 당연히
+   * 반영됐다고 읽는다.
+   */
+  ownedHomeCount: number;
   /** 주택 구매에 투입 가능한 순수 보유 현금(원) */
   cash: number;
   /** 연 소득(원, 세전) */
@@ -129,7 +164,20 @@ export interface PolicyLoanRule {
   id: string;
   /** 조건 키-값. 엔진이 일반적으로 평가한다 */
   eligibility: {
-    requiresNoHome?: boolean;
+    /**
+     * 이 상품을 받을 수 있는 **최대 보유 주택 수**(본건 담보주택 제외).
+     * 0이면 무주택자 전용, 1이면 1주택자까지 받는다. 없으면 주택 수
+     * 제한이 없다는 뜻이다.
+     *
+     * 예전 스키마의 `requiresNoHome: true`가 이 자리로 옮겨 왔다 —
+     * 그 불리언은 "무주택이냐 아니냐" 두 칸밖에 없어서 보금자리론처럼
+     * **1주택까지 받는** 상품을 표현할 방법이 아예 없었고, 그래서
+     * 1주택자를 자격 없음으로 봤다. `requiresNoHome: true`는 정확히
+     * `maxOwnedHomes: 0`과 같으므로 옛 값은 기계적으로 옮길 수 있다.
+     * 옛 키는 파서(`rules.ts`)가 마이그레이션 안내와 함께 거부한다 —
+     * 조용히 무시되면 주택 수 제한이 통째로 사라진 상품이 된다.
+     */
+    maxOwnedHomes?: number;
     requiresFirstTimeBuyer?: boolean;
     maxAnnualIncome?: number;
     maxHousePrice?: number;
@@ -255,13 +303,27 @@ export interface Rules {
     /** 생애최초 감면이 적용되는 주택가격 상한(원) */
     firstTimeBuyerReliefPriceCap: number;
     /**
-     * 이 계산이 무주택 기준이라는 사실과, 이미 집이 있으면(갈아타기·
-     * 다주택) 취득세가 더 나올 수 있어 부대비용이 이보다 커질 수 있다는
-     * 방향을 사용자에게 알리는 고지. 왜 필요한지는 `acquisition-cost.ts`의
-     * `calcAcquisitionCosts` 주석 참고. `rules.ts`의 `parseRules`가
-     * 방향(작아진다고만 말하면 안 됨)을 강제한다.
+     * **유주택(1채 이상) 구매자에게** 내는 취득세 고지.
+     *
+     * 이제 화면은 주택 수를 **묻는다.** 그런데 취득세 계산은 그 답을
+     * 쓰지 않는다 — 주택 수별 중과세율을 확인하지 못해 룰셋에 넣지
+     * 않았기 때문이다. 묻고 나서 쓰지 않으면 사용자는 반영됐다고
+     * 믿으므로, 이 문구는 (1) 물었지만 반영하지 못했다는 사실,
+     * (2) 중과세율을 확인하지 못했다는 이유, (3) 그래서 부대비용과
+     * 필요한 현금이 실제보다 작게 나온다는 방향을 함께 말해야 한다.
+     * `rules.ts`의 `parseRules`가 (1)과 (3)을 강제한다.
      */
     householdCountNote: string;
+    /**
+     * **무주택 구매자에게** 내는 취득세 고지.
+     *
+     * 위 문구와 반드시 갈라야 한다. 무주택자에게 "취득세가 더 나올 수
+     * 있어요"라고 말하면 거짓이고, 거짓 경고는 진짜 경고까지 함께
+     * 닳게 만든다. 이 자리는 "무주택으로 답해 주셔서 이 계산이 그
+     * 기준과 맞는다"는 사실만 말한다. `rules.ts`의 `parseRules`가
+     * 이 문구에 비용이 커진다는 방향이 섞이지 못하게 막는다.
+     */
+    householdCountNoteNoHome: string;
   };
   /** 중개보수 구간. upTo 오름차순으로 정렬되어 있어야 한다 */
   brokerageFee: Array<{

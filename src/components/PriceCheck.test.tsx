@@ -21,6 +21,7 @@ const financeRules = parseRules(rawFinanceRules);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 600_000_000,
     annualIncome: 200_000_000,
     existingDebtAnnualPayment: 0,
@@ -339,16 +340,45 @@ describe("PriceCheck", () => {
      * (`budgetCosts`)이 화면에 나오는 자리에는 그 사실과 방향(이미 집이
      * 있으면 부대비용이 이보다 커질 수 있다는 것)을 알리는 고지가
      * 반드시 함께 나가야 한다. 문구는 `rules/2026-08.json`의
-     * `acquisitionTax.householdCountNote`에서 그대로 온다 — 코드에
-     * 박은 문자열이 아니라는 것도 함께 확인한다.
+     * `acquisitionTax.householdCountNote`(유주택)와
+     * `householdCountNoteNoHome`(무주택)에서 그대로 온다 — 코드에 박은
+     * 문자열이 아니라는 것도 함께 확인한다. 어느 쪽을 낼지는 프로필의
+     * 주택 수가 정한다: 무주택이라고 답한 사람에게 "취득세가 더 나올
+     * 수 있어요"는 거짓이고, 거짓 경고는 진짜 경고까지 닳게 만든다.
      */
-    it("부대비용 옆에 주택 수 고지가 룰셋 문구 그대로 나온다", async () => {
+    it("무주택 프로필이면 무주택 고지가 나온다", async () => {
       render(<PriceCheck unit={unit()} budget={budget} />);
       await typeAsking("105000");
       expect(document.querySelector('[data-field="budgetCosts"]')).not.toBeNull();
       expect(
+        screen.getByText(
+          financeRules.acquisitionTax.householdCountNoteNoHome,
+        ),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(financeRules.acquisitionTax.householdCountNote),
+      ).toBeNull();
+    });
+
+    it("유주택 프로필이면 물어봤지만 반영하지 못했다는 고지가 나온다", async () => {
+      render(
+        <PriceCheck
+          unit={unit()}
+          budget={{
+            ...budget,
+            profile: { ...budget.profile, ownedHomeCount: 1 },
+          }}
+        />,
+      );
+      await typeAsking("105000");
+      expect(
         screen.getByText(financeRules.acquisitionTax.householdCountNote),
       ).toBeInTheDocument();
+      expect(
+        screen.queryByText(
+          financeRules.acquisitionTax.householdCountNoteNoHome,
+        ),
+      ).toBeNull();
     });
 
     it("예산이 없으면(부대비용 자체를 안 낸다) 주택 수 고지도 나오지 않는다", async () => {
@@ -356,6 +386,11 @@ describe("PriceCheck", () => {
       await typeAsking("105000");
       expect(
         screen.queryByText(financeRules.acquisitionTax.householdCountNote),
+      ).toBeNull();
+      expect(
+        screen.queryByText(
+          financeRules.acquisitionTax.householdCountNoteNoHome,
+        ),
       ).toBeNull();
     });
 

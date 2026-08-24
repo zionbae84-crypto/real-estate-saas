@@ -1,5 +1,8 @@
 export { maxPrincipal, monthlyPayment } from "./amortization";
-export { calcAcquisitionCosts } from "./acquisition-cost";
+export {
+  calcAcquisitionCosts,
+  householdCountNoteFor,
+} from "./acquisition-cost";
 export {
   calcAffordablePrice,
   ownFundsRequired,
@@ -16,6 +19,7 @@ export { matchPolicyLoans } from "./policy-loans";
 export { assertValidProfile } from "./profile";
 export {
   assertHouseholdCountNoteRequired,
+  assertNoHomeNoteRequired,
   assertNoOptimisticCostDirection,
   parseRules,
 } from "./rules";

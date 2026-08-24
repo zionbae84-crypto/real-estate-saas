@@ -11,6 +11,7 @@ const rules = parseRules(rawRules);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 200_000_000,
     annualIncome: 100_000_000,
     existingDebtAnnualPayment: 0,
@@ -38,6 +39,7 @@ const buyers: Array<[string, BuyerProfile]> = [
     "갈아타기·기존주택 7억",
     profile({
       status: "갈아타기",
+      ownedHomeCount: 1,
       cash: 50_000_000,
       annualIncome: 90_000_000,
       existingHome: {
@@ -155,7 +157,7 @@ describe("통합: 룰셋 데이터 변경이 결과에 반영된다", () => {
   const 신생아특례: PolicyLoanRule = {
     id: "신생아특례(픽스처)",
     eligibility: {
-      requiresNoHome: true,
+      maxOwnedHomes: 0,
       maxAnnualIncome: 130_000_000,
       maxHousePrice: 900_000_000,
     },
@@ -193,6 +195,7 @@ describe("통합: 룰셋 데이터 변경이 결과에 반영된다", () => {
     // 조건이 조용히 무시되면 이 구매자에게도 상품이 붙어 값이 달라진다.
     const buyer = profile({
       status: "갈아타기",
+      ownedHomeCount: 1,
       cash: 300_000_000,
       annualIncome: 90_000_000,
     });

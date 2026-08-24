@@ -19,6 +19,7 @@ const BRUTE_FORCE_CEILING = 900_000_000;
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 200_000_000,
     annualIncome: 100_000_000,
     existingDebtAnnualPayment: 0,
@@ -153,7 +154,7 @@ describe("calcAffordablePrice", () => {
     // 갈아타기는 requiresNoHome을 만족하지 못해 정책대출 자격이 없다.
     // 이 경로에서는 실구매력이 0으로 무너지는 성질이 그대로 유지된다.
     const result = calcAffordablePrice(
-      profile({ status: "갈아타기", cash: 0, annualIncome: 0 }),
+      profile({ status: "갈아타기", ownedHomeCount: 1, cash: 0, annualIncome: 0 }),
       rules,
     );
     expect(result.affordablePrice).toBe(0);
@@ -163,6 +164,7 @@ describe("calcAffordablePrice", () => {
     const result = calcAffordablePrice(
       profile({
         status: "갈아타기",
+        ownedHomeCount: 1,
         cash: 50_000_000,
         existingHome: {
           expectedSalePrice: 700_000_000,
@@ -281,6 +283,7 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
         cash: 220_000_000,
         annualIncome: 70_000_000,
         status: "무주택",
+        ownedHomeCount: 0,
         isFirstTimeBuyer: false,
         existingDebtAnnualPayment: 0,
         exclusiveAreaSqm: 84,
@@ -475,16 +478,33 @@ describe("calcAffordablePrice — 정책대출 절벽 구간", () => {
 describe("calcAffordablePrice — 안전하지 않은 방향 스윕", () => {
   const incomes = [0, 10_000, 30_000_000, 50_000_000, 70_000_000, 120_000_000];
   const cashes = [0, 30_000_000, 150_000_000, 300_000_000];
-  const statuses: BuyerProfile["status"][] = ["무주택", "갈아타기"];
+  /**
+   * 주택 수(보유 채수)와 매도 여부(status)는 **서로 다른 축**이라 곱하지
+   * 않고 성립 가능한 조합만 나열한다. "갈아타기인데 0채"는 팔 집이 없는
+   * 프로필이라 `assertValidProfile`이 거부한다.
+   *
+   * 0채 · 1채 · 2채가 모두 들어가는 것이 요점이다 — 자격이 되는
+   * 정책대출이 둘(디딤돌·보금자리론) → 하나(보금자리론) → 없음으로
+   * 줄어드는 세 구간이 전부 이 스윕을 지난다.
+   */
+  const households: Array<{
+    status: BuyerProfile["status"];
+    ownedHomeCount: number;
+  }> = [
+    { status: "무주택", ownedHomeCount: 0 },
+    { status: "무주택", ownedHomeCount: 1 },
+    { status: "무주택", ownedHomeCount: 2 },
+    { status: "갈아타기", ownedHomeCount: 1 },
+  ];
 
   const grid: Array<[string, BuyerProfile]> = [];
   for (const annualIncome of incomes) {
     for (const cash of cashes) {
       for (const isFirstTimeBuyer of [false, true]) {
-        for (const status of statuses) {
+        for (const household of households) {
           grid.push([
-            `소득 ${annualIncome} · 현금 ${cash} · 생애최초 ${isFirstTimeBuyer} · ${status}`,
-            profile({ annualIncome, cash, isFirstTimeBuyer, status }),
+            `소득 ${annualIncome} · 현금 ${cash} · 생애최초 ${isFirstTimeBuyer} · ${household.status} ${household.ownedHomeCount}채`,
+            profile({ annualIncome, cash, isFirstTimeBuyer, ...household }),
           ]);
         }
       }
@@ -492,7 +512,7 @@ describe("calcAffordablePrice — 안전하지 않은 방향 스윕", () => {
   }
 
   it("격자 전체에서 자기부담금이 가용현금을 넘지 않는다", () => {
-    expect(grid.length).toBe(96);
+    expect(grid.length).toBe(192);
 
     for (const [label, p] of grid) {
       const result = calcAffordablePrice(p, rules);
@@ -608,6 +628,7 @@ describe("캡 구간 절벽을 넘나드는 탐색", () => {
   // 절벽 근처에 답이 놓이도록 현금·소득을 크게 잡는다.
   const wealthy: BuyerProfile = {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 1_100_000_000,
     annualIncome: 300_000_000,
     existingDebtAnnualPayment: 0,
@@ -696,6 +717,7 @@ describe("캡이 올라가는 구간에서 분할이 실제로 안전망 역할�
   // 분할 없는 단일 이분 탐색은 첫 덩어리(~12.66억)에 갇힌다.
   const buyer: BuyerProfile = {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 720_000_000,
     annualIncome: 150_000_000,
     existingDebtAnnualPayment: 0,

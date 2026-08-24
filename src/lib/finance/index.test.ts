@@ -10,6 +10,7 @@ import * as finance from "./index";
  */
 const EXPECTED_FUNCTIONS = [
   "assertHouseholdCountNoteRequired",
+  "assertNoHomeNoteRequired",
   "assertNoOptimisticCostDirection",
   "assertValidProfile",
   "calcAcquisitionCosts",
@@ -20,6 +21,7 @@ const EXPECTED_FUNCTIONS = [
   "calcPolicyLimit",
   "calcSafePrice",
   "calcSafetyScore",
+  "householdCountNoteFor",
   "matchPolicyLoans",
   "maxPrincipal",
   "monthlyPayment",

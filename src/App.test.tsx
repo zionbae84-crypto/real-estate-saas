@@ -111,6 +111,7 @@ describe("App - 단지 상세(화면 4)", () => {
     // 해석) — 각각 15억, 1억 5천만원.
     await userEvent.type(screen.getByLabelText("보유 현금"), "150000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
   }
 
   it("단지 목록의 행을 누르면 그 평형의 상세가 열린다", async () => {
@@ -282,7 +283,7 @@ describe("App - 단지 상세(화면 4)", () => {
       printSpy.mockRestore();
     });
 
-    it("입력한 전제(현금·소득·룰셋 기준)가 인쇄 전용 요약에 나온다", async () => {
+    it("입력한 전제(현금·소득·주택 수·룰셋 기준)가 인쇄 전용 요약에 나온다", async () => {
       const { container } = render(<App />);
       await fillProfile();
 
@@ -292,6 +293,11 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(summary?.textContent).toMatch(/1억 5,000만원/); // 연 소득
       expect(summary?.textContent).toMatch(/규제 기준/); // 룰셋 기준
       expect(summary?.textContent).toMatch(/인쇄일/);
+      // 주택 수는 계산의 전제(정책대출 자격을 가른다)라 종이에도 남아야
+      // 한다. 화면에서는 .profile-form 안에만 있고 그 폼은 인쇄에서
+      // 통째로 지워지므로, 종이를 건네받은 사람이 확인할 곳은 여기뿐이다.
+      expect(summary?.textContent).toMatch(/주택 수/);
+      expect(summary?.textContent).toMatch(/무주택/);
     });
 
     it("리뷰 수정(인쇄 '함께 볼 것'): 부제의 개인정보 보호 문구만 별도 span으로 감싼다", () => {
@@ -345,6 +351,7 @@ describe("App - 권리분석 문진", () => {
   async function fillProfile() {
     await userEvent.type(screen.getByLabelText("보유 현금"), "150000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
   }
 
   it("현금·소득을 입력하기 전에도 문진에 도달할 수 있다", () => {

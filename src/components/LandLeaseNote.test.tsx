@@ -31,6 +31,7 @@ const financeRules = parseRules(rawFinanceRules);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 600_000_000,
     annualIncome: 200_000_000,
     existingDebtAnnualPayment: 0,
@@ -42,6 +43,8 @@ function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
 }
 
 const priceBudget: PriceBudgetInput = { profile: profile(), financeRules };
+/** 취득세 줄에 붙는 주택 수 고지. 호출부가 골라 넘기는 값이다 */
+const 주택수고지 = financeRules.acquisitionTax.householdCountNoteNoHome;
 
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
   const areaBucket = overrides.areaBucket ?? 84;
@@ -133,6 +136,7 @@ function renderDetail(u: ComplexUnit) {
       unit={u}
       burden={burden()}
       costs={costs()}
+        householdCountNote={주택수고지}
       priceBudget={priceBudget}
       onClose={vi.fn()}
     />,

@@ -350,3 +350,59 @@ describe("AssumptionLine", () => {
     });
   });
 });
+
+/**
+ * **주택 수는 가정 항목이 아니다.**
+ *
+ * 답을 듣기 전에는 계산 자체를 시작하지 않으므로(`toProfile`), 이 문구가
+ * 그려지는 시점에는 사용자가 이미 답한 상태다. 가정하지 않은 것을
+ * "가정 중"이라고 말하면 그것도 거짓말이고, 고칠 버튼을 두 곳에 두면
+ * 어느 쪽이 진짜인지 흐려진다 — 주택 수는 폼에서만 고친다.
+ */
+describe("주택 수는 가정 문구에 나오지 않는다", () => {
+  for (const ownedHomeCount of [0, 1, 3]) {
+    it(`${ownedHomeCount}채여도 주택 수를 말하는 항목이 없다`, () => {
+      const items = buildAssumptionItems(
+        {
+          ...DEFAULT_FORM_STATE,
+          ownedHomeCount,
+          existingDebtAnnualPayment: 0,
+          touched: ["regulatedArea", "area"],
+        },
+        85,
+      );
+      expect(items.some((item) => /주택 수|무주택|유주택/.test(item.text))).toBe(
+        false,
+      );
+    });
+  }
+
+  /**
+   * 옛 갈아타기 정보 안내는 **주택 수를 언급하지 않는다.**
+   *
+   * 그 문구가 말하는 것은 "집이 없다"가 아니라 "기존 주택을 팔아 그
+   * 돈을 보태는 계산을 하지 않았다"이다. 주택 수를 언급하면 유주택이라고
+   * 답한 사람에게 그 답을 못 들은 것처럼 말하게 된다.
+   */
+  it("유주택이어도 옛 갈아타기 안내가 무주택 기준이라고 말하지 않는다", () => {
+    const items = buildAssumptionItems(
+      {
+        ...DEFAULT_FORM_STATE,
+        ownedHomeCount: 2,
+        touched: ["regulatedArea", "area"],
+        existingDebtAnnualPayment: 0,
+        existingHome: {
+          expectedSalePrice: 700_000_000,
+          remainingLoan: 0,
+          capitalGainsTax: null,
+        },
+      },
+      85,
+    );
+
+    const notice = items.find((item) => /갈아타기/.test(item.text));
+    expect(notice).toBeDefined();
+    expect(notice?.text).toMatch(/매도 자금은 반영되지 않았어요/);
+    expect(notice?.text).not.toMatch(/무주택/);
+  });
+});

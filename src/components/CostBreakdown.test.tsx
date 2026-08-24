@@ -4,6 +4,15 @@ import type { CostBreakdown as CostBreakdownData } from "../lib/finance";
 import { rules } from "../state/useAffordability";
 import { CostBreakdown } from "./CostBreakdown";
 
+/**
+ * 주택 수 고지는 이제 **호출부가 골라 넘긴다**(`householdCountNoteFor`).
+ * 이 컴포넌트가 확인할 것은 "받은 문구를 취득세 줄에 그대로 낸다"이므로,
+ * 실제 룰셋의 두 문구를 그대로 쓴다 — 코드에 문자열을 새로 지어내면
+ * 화면과 룰셋이 어긋나도 이 테스트가 통과한다.
+ */
+const 유주택문구 = rules.acquisitionTax.householdCountNote;
+const 무주택문구 = rules.acquisitionTax.householdCountNoteNoHome;
+
 function costs(overrides: Partial<CostBreakdownData> = {}): CostBreakdownData {
   return {
     acquisitionTax: 8_400_000,
@@ -19,12 +28,12 @@ function costs(overrides: Partial<CostBreakdownData> = {}): CostBreakdownData {
 
 describe("CostBreakdown", () => {
   it("접힌 요약에 합계를 보여준다", () => {
-    render(<CostBreakdown costs={costs()} />);
+    render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
     expect(screen.getByText("1,424만 7,840원")).toBeInTheDocument();
   });
 
   it("여섯 항목을 모두 표시한다", () => {
-    render(<CostBreakdown costs={costs()} />);
+    render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
 
     expect(
       screen.getByText("취득세 (지방교육세·농특세 포함)"),
@@ -48,7 +57,7 @@ describe("CostBreakdown", () => {
   });
 
   it("국민주택채권 항목에 추정치임을 밝힌다", () => {
-    render(<CostBreakdown costs={costs()} />);
+    render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
     // 라벨뿐 아니라 전체 추정치 취지의 문장이 나와야 한다 — 시가표준액
     // 비율과 할인율이 모두 검증되지 않은 가정치이기 때문에, 취득세처럼
     // 확정된 숫자와 같은 확신으로 보여주면 안 된다.
@@ -67,6 +76,7 @@ describe("CostBreakdown", () => {
           brokerageVat: 0,
           total: 11_431_840,
         })}
+        householdCountNote={유주택문구}
       />,
     );
     expect(screen.getByText("중개보수")).toBeInTheDocument();
@@ -79,12 +89,15 @@ describe("CostBreakdown", () => {
   it("합계는 total을 그대로 쓴다 — 항목을 다시 더하지 않는다", () => {
     // 각 항목의 실제 합과 다른 total을 일부러 넣는다. 화면에 그 다른
     // 값이 그대로 나오면 컴포넌트가 재계산하지 않는다는 뜻이다.
-    render(<CostBreakdown costs={costs({ total: 99_999_999 })} />);
+    render(<CostBreakdown
+        costs={costs({ total: 99_999_999 })}
+        householdCountNote={유주택문구}
+      />);
     expect(screen.getByText("9,999만 9,999원")).toBeInTheDocument();
   });
 
   it("중개보수 부가세 비율이 규칙셋과 일치한다", () => {
-    render(<CostBreakdown costs={costs()} />);
+    render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
 
     const vatPercent = Math.round(
       rules.brokerageVatRate * 100,
@@ -102,16 +115,22 @@ describe("CostBreakdown", () => {
    * 그대로 쓰므로, 여기서 잠그면 두 화면 모두 잠긴다.
    */
   describe("주택 수 고지", () => {
-    it("취득세 항목에 룰셋의 householdCountNote가 그대로 나온다", () => {
-      render(<CostBreakdown costs={costs()} />);
-      expect(
-        screen.getByText(rules.acquisitionTax.householdCountNote),
-      ).toBeInTheDocument();
+    it("받은 문구를 취득세 항목에 그대로 낸다", () => {
+      render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
+      expect(screen.getByText(유주택문구)).toBeInTheDocument();
+    });
+
+    it("무주택 문구를 받으면 그것을 낸다 — 유주택 경고를 섞지 않는다", () => {
+      // 무주택이라고 답한 사람에게 "취득세가 더 나올 수 있어요"는
+      // 거짓이고, 거짓 경고는 같은 자리의 진짜 경고까지 닳게 만든다.
+      render(<CostBreakdown costs={costs()} householdCountNote={무주택문구} />);
+      expect(screen.getByText(무주택문구)).toBeInTheDocument();
+      expect(screen.queryByText(유주택문구)).not.toBeInTheDocument();
     });
 
     it("문구가 코드가 아니라 룰셋에서 온다 — 실제 값으로 방향을 확인한다", () => {
-      render(<CostBreakdown costs={costs()} />);
-      const note = rules.acquisitionTax.householdCountNote;
+      render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
+      const note = 유주택문구;
       // 코드에 박힌 문자열이 아니라 rules 싱글턴(rules/2026-08.json 파싱
       // 결과)에서 읽었다는 것을, 화면에 실제로 나온 문구가 그 값과
       // 정확히 같다는 사실로 확인한다.
@@ -126,14 +145,14 @@ describe("CostBreakdown", () => {
     });
 
     it("인쇄에서 살아남는다 — cost-breakdown(보호 클래스) 안에 있다", () => {
-      const { container } = render(<CostBreakdown costs={costs()} />);
+      const { container } = render(
+        <CostBreakdown costs={costs()} householdCountNote={유주택문구} />,
+      );
       const details = container.querySelector(".cost-breakdown");
       expect(details).not.toBeNull();
-      expect(
-        screen.getByText(rules.acquisitionTax.householdCountNote).closest(
-          ".cost-breakdown",
-        ),
-      ).toBe(details);
+      expect(screen.getByText(유주택문구).closest(".cost-breakdown")).toBe(
+        details,
+      );
     });
   });
 });

@@ -10,6 +10,7 @@ import { buildComplexList, type ComplexListResult } from "./lib/complex-list";
 import {
   calcAcquisitionCosts,
   calcBurdenAt,
+  householdCountNoteFor,
   parseRules,
   type BuyerProfile,
 } from "./lib/finance";
@@ -49,6 +50,7 @@ const SYNTHETIC_UNKNOWN = REAL_LAND_LEASE.map(unknownVariant);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 600_000_000,
     annualIncome: 300_000_000,
     existingDebtAnnualPayment: 0,
@@ -354,6 +356,7 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
         unit={u}
         burden={calcBurdenAt(rowProfile, rules, u.maxPrice)}
         costs={calcAcquisitionCosts(u.maxPrice, rowProfile, rules)}
+        householdCountNote={householdCountNoteFor(rowProfile, rules)}
         priceBudget={{ profile: rowProfile, financeRules: rules }}
         onClose={() => undefined}
       />,
@@ -441,6 +444,7 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
     // 16억 현금 · 2억 소득이면 토지임대부 평형이 목록에 뜬다.
     await userEvent.type(screen.getByLabelText("보유 현금"), "160000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "20000");
+    await userEvent.click(screen.getByLabelText("무주택"));
     const row = screen
       .getAllByRole("button")
       .find((b) => /토지임대부아파트/.test(b.textContent ?? ""));

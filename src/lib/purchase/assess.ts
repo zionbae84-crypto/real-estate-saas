@@ -198,17 +198,23 @@ function positiveMoney(value: number | null): number | null {
  * 판정에도 쓰이지 않는다. 그 함수를 고치지 않고 재사용하기 위한
  * 최소한의 형태다.
  *
- * **`status`도 그 읽히지 않는 자리 중 하나다.** 여기 "무주택"이 적혀
- * 있다고 해서 무주택 취득세로 계산되는 것이 아니라, 주택 수에 따른
- * 취득세 분기가 `rules/2026-08.json`에도 `calcAcquisitionCosts`에도
- * 아예 없다(5억 기준 무주택과 갈아타기의 취득세가 같은 값으로 나온다).
- * 2026년 8월의 중과율을 확인하지 못했으므로 그 숫자를 넣지 않는다 —
- * 대신 룰셋의 `acquisition.householdCountNote`가 묻지 않았다는 사실과
- * 부대비용이 이보다 커질 수 있다는 방향을 화면에서 말한다.
+ * **`status`·`ownedHomeCount`도 그 읽히지 않는 자리다.** 여기 "무주택"
+ * 0채가 적혀 있다고 해서 무주택 취득세로 계산되는 것이 아니라, 주택
+ * 수에 따른 취득세 분기가 `rules/2026-08.json`에도
+ * `calcAcquisitionCosts`에도 아예 없다(5억 기준 0채와 2채의 취득세가
+ * 같은 값으로 나온다). 2026년 8월의 중과율을 확인하지 못했으므로 그
+ * 숫자를 넣지 않는다 — 대신 룰셋의 `acquisition.householdCountNote`가
+ * 묻지 않았다는 사실과 부대비용이 이보다 커질 수 있다는 방향을 화면에서
+ * 말한다.
+ *
+ * 투자 경로는 주택 수를 **묻지 않는다**(실거주 폼만 묻는다). 그래서
+ * 여기 0채는 "무주택이라고 답했다"가 아니라 "이 자리는 읽히지 않는다"는
+ * 뜻이고, 그 사실이 위 문구가 여전히 "묻지 않았다"로 남는 이유다.
  */
 function costProfile(rules: PurchaseRules): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 0,
     annualIncome: 0,
     existingDebtAnnualPayment: 0,

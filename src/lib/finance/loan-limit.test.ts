@@ -15,6 +15,7 @@ const rules = parseRules(rawRules);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 200_000_000,
     annualIncome: 100_000_000,
     existingDebtAnnualPayment: 0,
@@ -423,7 +424,7 @@ describe("calcPolicyLoanAvailability", () => {
   });
 
   it("자격 상품이 없으면 빈 배열을 반환한다", () => {
-    const 갈아타기 = profile({ status: "갈아타기", annualIncome: 100_000_000 });
+    const 갈아타기 = profile({ status: "갈아타기", ownedHomeCount: 1, annualIncome: 100_000_000 });
     const entries = calcPolicyLoanAvailability(갈아타기, rules, 300_000_000);
     expect(entries).toEqual([]);
   });

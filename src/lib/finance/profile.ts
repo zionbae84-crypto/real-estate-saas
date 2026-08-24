@@ -35,6 +35,22 @@ export function assertValidProfile(profile: BuyerProfile): void {
     assertBoolean(profile[field], field);
   }
 
+  // 주택 수는 "채" 단위라 정수여야 한다. 소수(1.5채)는 폼이 만들 수 없는
+  // 값이므로 들어왔다면 어딘가 파싱이 샌 것이고, 그대로 흘리면
+  // maxOwnedHomes 비교가 사람이 예상하지 못한 쪽으로 갈린다.
+  assertNonNegativeInteger(profile.ownedHomeCount, "ownedHomeCount");
+
+  // 두 축(주택 수 · 매도 여부)의 아귀를 맞춘다.
+  //
+  // "갈아타기"는 기존 주택을 팔아 그 대금을 현금에 보탠다는 뜻이다
+  // (calcAvailableCash). 그런데 보유 주택이 0채면 팔 집이 없다 — 그
+  // 조합은 매도 대금을 더하면서 동시에 무주택 정책대출 자격까지
+  // 유지하는, 정확히 이 제품이 피해야 하는 낙관 방향의 프로필이다.
+  // 경계에서 끊는다.
+  if (profile.status === "갈아타기" && profile.ownedHomeCount < 1) {
+    throw new RangeError(`갈아타기인데 보유 주택이 0채입니다: ownedHomeCount (${String(profile.ownedHomeCount)})`);
+  }
+
   const home = profile.existingHome;
   if (home === undefined) return;
 
@@ -66,6 +82,19 @@ export function assertNonNegativeFinite(value: number, path: string): void {
   }
   if (value < 0) {
     throw new RangeError(`0 이상이어야 합니다: ${path} (${String(value)})`);
+  }
+}
+
+/**
+ * 값이 유한하고 0 이상인 **정수**인지 검사하는 공용 헬퍼.
+ *
+ * {@link assertNonNegativeFinite}를 먼저 거친 뒤 정수 여부만 더 본다 —
+ * NaN·Infinity·음수의 메시지를 한 곳에 모아 두기 위해서다.
+ */
+function assertNonNegativeInteger(value: number, path: string): void {
+  assertNonNegativeFinite(value, path);
+  if (!Number.isInteger(value)) {
+    throw new RangeError(`정수여야 합니다: ${path} (${String(value)})`);
   }
 }
 
