@@ -138,6 +138,7 @@ function priceEvidence(overrides: Partial<PriceEvidence> = {}): PriceEvidence {
 function richProfile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 600_000_000,
     annualIncome: 200_000_000,
     existingDebtAnnualPayment: 0,

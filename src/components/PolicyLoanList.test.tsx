@@ -6,7 +6,7 @@ import { PolicyLoanList } from "./PolicyLoanList";
 const 디딤돌: MatchedPolicyLoan = {
   loan: {
     id: "디딤돌",
-    eligibility: { requiresNoHome: true },
+    eligibility: { maxOwnedHomes: 0 },
     maxAmount: 250_000_000,
     rate: 0.032,
   },

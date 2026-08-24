@@ -17,6 +17,7 @@ const financeRules = parseRules(rawFinanceRules);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 200_000_000,
     annualIncome: 60_000_000,
     existingDebtAnnualPayment: 0,

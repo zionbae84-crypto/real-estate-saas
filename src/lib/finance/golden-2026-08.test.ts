@@ -20,6 +20,7 @@ const rules2026_03 = parseRules(rawRules2026_03);
 describe("골든 테스트 2026-08 — 현행 고시 대조", () => {
   const base: BuyerProfile = {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 1_000_000_000,
     annualIncome: 100_000_000,
     existingDebtAnnualPayment: 0,
@@ -209,6 +210,7 @@ describe("골든 테스트 2026-08 — 현행 고시 대조", () => {
   it("기준 프로필(현금 2억·연소득 6천만·생애최초·규제지역)의 실구매력이 4억 7,700만원이고 DSR이 제약이다", () => {
     const buyer: BuyerProfile = {
       status: "무주택",
+      ownedHomeCount: 0,
       cash: 200_000_000,
       annualIncome: 60_000_000,
       existingDebtAnnualPayment: 0,
@@ -237,6 +239,7 @@ describe("골든 테스트 2026-08 — 현행 고시 대조", () => {
    */
   const 디딤돌구매자: BuyerProfile = {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 100_000_000,
     annualIncome: 30_000_000,
     existingDebtAnnualPayment: 0,

@@ -724,3 +724,137 @@ function setByPath(target: Record<string, unknown>, path: string, value: unknown
   }
   cursor[last] = value;
 }
+
+/**
+ * 주택 수 축(`maxOwnedHomes`)의 파싱 계약.
+ *
+ * 옛 스키마의 `requiresNoHome`은 불리언이라 "무주택이냐 아니냐" 두
+ * 칸밖에 없었고, 그래서 1주택까지 받는 상품(보금자리론)을 표현할 수
+ * 없었다. 조건 하나가 조용히 무시되면 "조건이 있는 척하지만 아무나
+ * 통과하는" 상품이 만들어지므로, 옛 키는 소리 내어 거부한다.
+ */
+describe("정책대출 자격의 주택 수 축", () => {
+  function withFirstLoanEligibility(eligibility: Record<string, unknown>) {
+    const [first, ...rest] = rawRules.policyLoans as Array<
+      Record<string, unknown>
+    >;
+    return {
+      ...rawRules,
+      policyLoans: [{ ...first, eligibility }, ...rest],
+    };
+  }
+
+  it("실제 룰셋의 두 상품이 서로 다른 주택 수 상한을 갖는다", () => {
+    const rules = parseRules(rawRules);
+    const ids = rules.policyLoans.map((loan) => loan.id);
+    expect(ids).toContain("디딤돌");
+    expect(ids).toContain("보금자리론");
+  });
+
+  it("옛 키(requiresNoHome)는 어디로 옮기면 되는지 알려주며 거부한다", () => {
+    expect(() =>
+      parseRules(withFirstLoanEligibility({ requiresNoHome: true })),
+    ).toThrow(/requiresNoHome/);
+    expect(() =>
+      parseRules(withFirstLoanEligibility({ requiresNoHome: true })),
+    ).toThrow(/maxOwnedHomes/);
+  });
+
+  it("maxOwnedHomes가 소수면 거부한다", () => {
+    expect(() =>
+      parseRules(withFirstLoanEligibility({ maxOwnedHomes: 0.5 })),
+    ).toThrow(/maxOwnedHomes/);
+  });
+
+  it("maxOwnedHomes가 음수면 거부한다", () => {
+    expect(() =>
+      parseRules(withFirstLoanEligibility({ maxOwnedHomes: -1 })),
+    ).toThrow(/maxOwnedHomes/);
+  });
+
+  it("maxOwnedHomes가 숫자가 아니면 거부한다", () => {
+    expect(() =>
+      parseRules(withFirstLoanEligibility({ maxOwnedHomes: "0" })),
+    ).toThrow(/maxOwnedHomes/);
+  });
+
+  it("0과 1은 그대로 통과한다", () => {
+    expect(() =>
+      parseRules(withFirstLoanEligibility({ maxOwnedHomes: 0 })),
+    ).not.toThrow();
+    expect(() =>
+      parseRules(withFirstLoanEligibility({ maxOwnedHomes: 1 })),
+    ).not.toThrow();
+  });
+});
+
+/**
+ * 취득세 고지가 무주택·유주택으로 갈린 뒤의 파싱 계약.
+ *
+ * 화면이 주택 수를 **묻게 되면서** 두 문구가 갈렸다. 유주택 문구는
+ * 물어 놓고 반영하지 못했다는 사실과 비용이 커지는 방향을 말해야 하고,
+ * 무주택 문구는 그 경고를 담으면 안 된다 — 그 사람에게는 거짓이고,
+ * 거짓 경고는 같은 자리의 진짜 경고까지 함께 닳게 만든다.
+ */
+describe("취득세 주택 수 고지 — 무주택·유주택 두 문구", () => {
+  function withAcquisitionTax(patch: Record<string, unknown>) {
+    return {
+      ...rawRules,
+      acquisitionTax: { ...rawRules.acquisitionTax, ...patch },
+    };
+  }
+
+  it("무주택 문구가 없으면 거부한다", () => {
+    expect(() =>
+      parseRules(withAcquisitionTax({ householdCountNoteNoHome: undefined })),
+    ).toThrow(/householdCountNoteNoHome/);
+  });
+
+  it("무주택 문구가 비용이 커진다고 말하면 거부한다", () => {
+    expect(() =>
+      parseRules(
+        withAcquisitionTax({
+          householdCountNoteNoHome:
+            "무주택 기준으로 계산했어요. 취득세가 더 나올 수 있어요.",
+        }),
+      ),
+    ).toThrow(/거짓/);
+  });
+
+  it("무주택 문구가 비용이 작아진다고 말해도 거부한다", () => {
+    expect(() =>
+      parseRules(
+        withAcquisitionTax({
+          householdCountNoteNoHome:
+            "무주택 기준으로 계산했어요. 부대비용은 이보다 작아질 수 있어요.",
+        }),
+      ),
+    ).toThrow(/작아질 수 있다/);
+  });
+
+  it("무주택 문구가 무주택을 이름 붙이지 않으면 거부한다", () => {
+    expect(() =>
+      parseRules(
+        withAcquisitionTax({
+          householdCountNoteNoHome: "이 계산은 기본 세율로 매겼어요.",
+        }),
+      ),
+    ).toThrow(/무주택/);
+  });
+
+  it("유주택 문구가 반영되지 않았다는 사실을 말하지 않으면 거부한다", () => {
+    expect(() =>
+      parseRules(
+        withAcquisitionTax({
+          householdCountNote:
+            "주택 수에 따라 취득세가 더 나올 수 있어서 부대비용이 커질 수 있어요.",
+        }),
+      ),
+    ).toThrow(/반영되지 않았다/);
+  });
+
+  it("실제 룰셋의 두 문구는 서로 다르다", () => {
+    const t = parseRules(rawRules).acquisitionTax;
+    expect(t.householdCountNote).not.toBe(t.householdCountNoteNoHome);
+  });
+});

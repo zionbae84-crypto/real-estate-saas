@@ -22,7 +22,20 @@ function isEligible(
 ): boolean {
   const e = loan.eligibility;
 
-  if (e.requiresNoHome === true && profile.status !== "무주택") return false;
+  // 주택 수 축. 상품마다 받아 주는 최대 보유 주택 수가 다르다 —
+  // 디딤돌은 0채(세대원 전원 무주택), 보금자리론은 본건 담보주택을 뺀
+  // 0~1채다. 예전에는 `requiresNoHome` 불리언 하나뿐이라 그 차이를
+  // 표현할 수 없었고, 1주택자를 두 상품 모두 자격 없음으로 봤다.
+  //
+  // `profile.status`(갈아타기 여부)는 여기서 보지 않는다. 파는지 마는지는
+  // 가용 현금의 문제이지 자격의 문제가 아니다 — 자격을 가르는 것은
+  // 지금 몇 채를 갖고 있는가뿐이다.
+  if (
+    e.maxOwnedHomes !== undefined &&
+    profile.ownedHomeCount > e.maxOwnedHomes
+  ) {
+    return false;
+  }
   if (e.requiresFirstTimeBuyer === true && !profile.isFirstTimeBuyer) {
     return false;
   }

@@ -49,9 +49,21 @@ const ACQUISITION_TAX_NUMBER_FIELDS = [
 const COST_SHRINKS = /작아질|작아져|적어질|줄어들|덜 나올|덜 나와/;
 const COST_GROWS = /커질|커지|많아질|늘어날|더 나올|더 나와/;
 
+/** 주택 수가 계산에 들어가지 않았다고 말하는 표현 */
+const NOT_APPLIED = /반영|들어 있지 않|들어가지 않|들어 있지 않아|계산에 없/;
+
 /**
- * 주택 수 고지 문구가 반드시 갖춰야 하는 두 가지: 주택 수를 묻지
- * 않았다는 사실과, 부대비용이 이보다 커질 수 있다는 방향.
+ * 주택 수 고지 문구가 반드시 갖춰야 하는 세 가지.
+ *
+ * 1. **주택 수**를 이름 붙여 말할 것.
+ * 2. 부대비용이 이보다 **커질 수 있다**는 방향을 말할 것.
+ * 3. 그 주택 수가 이 계산에 **반영되지 않았다**는 사실을 말할 것.
+ *
+ * 3번이 이 브랜치에서 늘었다. 실거주 화면은 이제 주택 수를 **묻는다** —
+ * 묻고 나서 쓰지 않으면 사용자는 "물어봤으니 당연히 반영됐겠지"로
+ * 읽는다. 그래서 "묻지 않았다"가 아니라 "반영하지 못했다"를 말해야
+ * 하고, 두 표현 모두 이 검사를 통과한다(투자 경로는 여전히 묻지
+ * 않으므로 그쪽 문구는 그대로 남는다).
  */
 export function assertHouseholdCountNoteRequired(
   text: string,
@@ -59,12 +71,47 @@ export function assertHouseholdCountNoteRequired(
 ): void {
   if (!/주택 수/.test(text)) {
     throw new Error(
-      `룰셋 값 오류: ${path}는 주택 수를 묻지 않았다는 사실을 말해야 해요. 취득세는 주택 수에 따라 달라지는데 이 계산에는 그 분기가 없어요.`,
+      `룰셋 값 오류: ${path}는 주택 수를 이름 붙여 말해야 해요. 취득세는 주택 수에 따라 달라지는데 이 계산에는 그 분기가 없어요.`,
     );
   }
   if (!COST_GROWS.test(text)) {
     throw new Error(
       `룰셋 값 오류: ${path}는 부대비용이 이보다 커질 수 있다는 방향을 말해야 해요. 이미 집이 있으면 취득세가 더 나올 수 있는데, 그 방향을 말하지 않으면 화면이 한계를 반대로 말하게 돼요.`,
+    );
+  }
+  if (!NOT_APPLIED.test(text)) {
+    throw new Error(
+      `룰셋 값 오류: ${path}는 주택 수가 이 계산에 반영되지 않았다는 사실을 말해야 해요. 물어 놓고 반영하지 않았다는 사실을 빼면, 사용자는 물었으니 반영됐다고 읽어요.`,
+    );
+  }
+}
+
+/**
+ * **무주택 구매자에게** 내는 취득세 고지가 지켜야 하는 것.
+ *
+ * 유주택 문구와 갈라야 하는 이유는 화면 정리가 아니라 정직함이다.
+ * 이 계산의 취득세는 무주택 기준 누진세율이므로, 무주택이라고 답한
+ * 사람에게는 그 한계가 해당되지 않는다. 그런데도 "취득세가 더 나올 수
+ * 있어요"를 그대로 내보내면 그 사람에게는 **거짓 경고**이고, 거짓
+ * 경고는 같은 자리에 붙는 진짜 경고까지 함께 닳게 만든다.
+ *
+ * 반대 방향(부대비용이 작아질 수 있다)도 막는다 — 무주택이라고 해서
+ * 이 계산보다 싸질 이유는 없다.
+ */
+export function assertNoHomeNoteRequired(text: string, path: string): void {
+  if (!/무주택/.test(text)) {
+    throw new Error(
+      `룰셋 값 오류: ${path}는 무주택 기준으로 계산했다는 사실을 말해야 해요. 이 문구가 나가는 자리는 사용자가 방금 무주택이라고 답한 자리예요.`,
+    );
+  }
+  if (COST_GROWS.test(text)) {
+    throw new Error(
+      `룰셋 값 오류: ${path}는 무주택 구매자에게 나가는 문구라 부대비용이 더 커질 수 있다고 말하면 안 돼요. 그 사람에게는 거짓이고, 거짓 경고는 진짜 경고까지 닳게 해요.`,
+    );
+  }
+  if (COST_SHRINKS.test(text)) {
+    throw new Error(
+      `룰셋 값 오류: ${path}가 부대비용이 이보다 작아질 수 있다고 말해요. 무주택이라고 해서 이 계산보다 싸질 이유는 없어요.`,
     );
   }
 }
@@ -100,11 +147,24 @@ const ELIGIBILITY_FIELD_TYPES: Record<
   keyof PolicyLoanRule["eligibility"],
   "boolean" | "number"
 > = {
-  requiresNoHome: "boolean",
+  maxOwnedHomes: "number",
   requiresFirstTimeBuyer: "boolean",
   maxAnnualIncome: "number",
   maxHousePrice: "number",
   maxAreaSqm: "number",
+};
+
+/**
+ * 이름이 바뀐 옛 조건 키 → 왜 바뀌었고 무엇으로 옮기면 되는지.
+ *
+ * 위 화이트리스트에서 지우기만 하면 옛 룰셋은 "엔진이 알지 못하는
+ * 조건입니다"라는 일반 메시지로 거부된다 — 멈추기는 하지만 어디로
+ * 옮겨야 하는지는 말해 주지 않는다. 규제 파일은 사람이 손으로 고치는
+ * 데이터이므로, 옮길 곳과 같은 뜻의 새 값까지 알려 준다.
+ */
+const RENAMED_ELIGIBILITY_FIELDS: Record<string, string> = {
+  requiresNoHome:
+    "maxOwnedHomes로 바뀌었어요. requiresNoHome: true는 maxOwnedHomes: 0과 같은 뜻이에요. 불리언으로는 1주택까지 받는 상품(보금자리론)을 표현할 수 없어서 주택 수 축으로 넓혔어요.",
 };
 
 /**
@@ -212,6 +272,16 @@ export function parseRules(raw: unknown): Rules {
   assertNoOptimisticCostDirection(
     acquisitionTax.householdCountNote,
     "acquisitionTax.householdCountNote",
+  );
+  // 무주택 구매자에게 나가는 짝 문구. 화면이 주택 수를 묻게 되면서
+  // 갈라졌다 — 무주택이라고 답한 사람에게 "취득세가 더 나올 수 있어요"는
+  // 거짓이고, 거짓 경고는 진짜 경고까지 닳게 한다.
+  if (typeof acquisitionTax.householdCountNoteNoHome !== "string") {
+    throw new Error("룰셋 필드 누락 또는 타입 오류: acquisitionTax.householdCountNoteNoHome");
+  }
+  assertNoHomeNoteRequired(
+    acquisitionTax.householdCountNoteNoHome,
+    "acquisitionTax.householdCountNoteNoHome",
   );
 
   if (!Array.isArray(r.policyLoans)) {
@@ -493,6 +563,10 @@ function validateEligibility(
   path: string,
 ): void {
   for (const key of Object.keys(eligibility)) {
+    const renamedTo = RENAMED_ELIGIBILITY_FIELDS[key];
+    if (renamedTo !== undefined) {
+      throw new Error(`더 이상 쓰지 않는 정책대출 조건입니다: ${path}.${key} — ${renamedTo}`);
+    }
     if (!Object.hasOwn(ELIGIBILITY_FIELD_TYPES, key)) {
       throw new Error(`엔진이 알지 못하는 정책대출 조건입니다(무시되면 조건 없는 상품이 됩니다): ${path}.${key}`);
     }
@@ -508,6 +582,17 @@ function validateEligibility(
     if (!ok) {
       throw new Error(`룰셋 필드 누락 또는 타입 오류: ${path}.${key}`);
     }
+  }
+
+  // 주택 수 상한은 "채" 단위라 0 이상의 정수여야 한다. 소수(0.5채)가
+  // 들어오면 사람이 예상하지 못한 자리에서 자격이 갈리고, 음수면 어떤
+  // 구매자도 통과하지 못하는 죽은 상품이 조용히 만들어진다.
+  const maxOwnedHomes = eligibility.maxOwnedHomes;
+  if (
+    maxOwnedHomes !== undefined &&
+    (!Number.isInteger(maxOwnedHomes) || (maxOwnedHomes as number) < 0)
+  ) {
+    throw new Error(`룰셋 값 오류: ${path}.maxOwnedHomes는 0 이상의 정수여야 합니다 (${String(maxOwnedHomes)})`);
   }
 }
 

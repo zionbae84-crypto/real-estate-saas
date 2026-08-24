@@ -66,6 +66,7 @@ describe("toProfile", () => {
     );
     expect(profile).toEqual({
       status: "무주택",
+      ownedHomeCount: 0,
       cash: 200_000_000,
       annualIncome: 50_000_000,
       existingDebtAnnualPayment: 0,

@@ -66,6 +66,7 @@ function costsAt(price: number): number {
     price,
     {
       status: "무주택",
+      ownedHomeCount: 0,
       cash: 0,
       annualIncome: 0,
       existingDebtAnnualPayment: 0,

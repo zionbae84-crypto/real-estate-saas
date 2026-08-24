@@ -49,6 +49,7 @@ const SYNTHETIC_UNKNOWN = REAL_LAND_LEASE.map(unknownVariant);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 600_000_000,
     annualIncome: 300_000_000,
     existingDebtAnnualPayment: 0,

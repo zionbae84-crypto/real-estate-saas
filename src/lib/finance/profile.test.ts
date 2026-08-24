@@ -11,6 +11,7 @@ const rules = parseRules(rawRules);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 200_000_000,
     annualIncome: 100_000_000,
     existingDebtAnnualPayment: 0,
@@ -80,6 +81,7 @@ describe("assertValidProfile", () => {
       assertValidProfile(
         profile({
           status: "갈아타기",
+          ownedHomeCount: 1,
           existingHome: { expectedSalePrice: NaN, remainingLoan: 0 },
         }),
       ),
@@ -89,6 +91,7 @@ describe("assertValidProfile", () => {
       assertValidProfile(
         profile({
           status: "갈아타기",
+          ownedHomeCount: 1,
           existingHome: { expectedSalePrice: 700_000_000, remainingLoan: -1 },
         }),
       ),
@@ -106,12 +109,13 @@ describe("assertValidProfile", () => {
   it("양도세는 선택 입력이지만, 입력했다면 유효해야 한다", () => {
     const home = { expectedSalePrice: 700_000_000, remainingLoan: 300_000_000 };
     expect(() =>
-      assertValidProfile(profile({ status: "갈아타기", existingHome: home })),
+      assertValidProfile(profile({ status: "갈아타기", ownedHomeCount: 1, existingHome: home })),
     ).not.toThrow();
     expect(() =>
       assertValidProfile(
         profile({
           status: "갈아타기",
+          ownedHomeCount: 1,
           existingHome: { ...home, capitalGainsTax: NaN },
         }),
       ),
@@ -149,5 +153,59 @@ describe("공개 진입점의 비유한 입력 방어", () => {
     expect(() => calcMaxLoan(profile(), brokenRules, 600_000_000)).toThrow(
       /NaN/,
     );
+  });
+});
+
+/**
+ * 주택 수는 "채" 단위의 정수이고, 매도 축(status)과 아귀가 맞아야 한다.
+ *
+ * 두 축을 나눈 대가로 "갈아타기인데 0채"라는 성립할 수 없는 조합이
+ * 표현 가능해졌다 — 팔 집이 없는데 매도 대금을 현금에 더하면서 동시에
+ * 무주택 정책대출 자격까지 유지하는, 정확히 이 제품이 피해야 하는
+ * 낙관 방향의 프로필이다. 경계에서 끊는다.
+ */
+describe("assertValidProfile — 주택 수", () => {
+  it("0채는 유효하다", () => {
+    expect(() =>
+      assertValidProfile(profile({ ownedHomeCount: 0 })),
+    ).not.toThrow();
+  });
+
+  it("음수면 어느 필드인지 알려주며 실패한다", () => {
+    expect(() => assertValidProfile(profile({ ownedHomeCount: -1 }))).toThrow(
+      /ownedHomeCount/,
+    );
+  });
+
+  it("소수면 실패한다", () => {
+    expect(() => assertValidProfile(profile({ ownedHomeCount: 1.5 }))).toThrow(
+      /ownedHomeCount/,
+    );
+  });
+
+  it("NaN이면 실패한다", () => {
+    expect(() => assertValidProfile(profile({ ownedHomeCount: NaN }))).toThrow(
+      /ownedHomeCount/,
+    );
+  });
+
+  it("갈아타기인데 0채면 실패한다", () => {
+    expect(() =>
+      assertValidProfile(profile({ status: "갈아타기", ownedHomeCount: 0 })),
+    ).toThrow(/ownedHomeCount/);
+  });
+
+  it("갈아타기이면서 1채 이상이면 통과한다", () => {
+    expect(() =>
+      assertValidProfile(profile({ status: "갈아타기", ownedHomeCount: 1 })),
+    ).not.toThrow();
+  });
+
+  it("무주택 상태(status)에서 주택 수가 1 이상인 것은 막지 않는다", () => {
+    // 두 축은 독립이다 — 1채를 갖고 있으면서 팔지 않는 사람이 정확히
+    // 이 조합이고, 그 사람이 바로 디딤돌 자격을 잃는 사람이다.
+    expect(() =>
+      assertValidProfile(profile({ status: "무주택", ownedHomeCount: 2 })),
+    ).not.toThrow();
   });
 });

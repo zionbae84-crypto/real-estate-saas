@@ -13,6 +13,7 @@ const rules = parseRules(rawRules);
 describe("골든 테스트 — 공식 수치 대조", () => {
   const highEarner: BuyerProfile = {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 1_000_000_000,
     annualIncome: 100_000_000,
     existingDebtAnnualPayment: 0,

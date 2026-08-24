@@ -41,6 +41,7 @@ async function fillProfile() {
  */
 const PROFILE: BuyerProfile = {
   status: "무주택",
+  ownedHomeCount: 0,
   cash: CASH,
   annualIncome: INCOME,
   existingDebtAnnualPayment: 0,

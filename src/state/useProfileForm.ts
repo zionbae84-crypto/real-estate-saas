@@ -89,6 +89,11 @@ export function toProfile(state: ProfileFormState): BuyerProfile | null {
 
   const profile: BuyerProfile = {
     status: state.status,
+    // 주택 수 축. 지금은 폼이 이 값을 따로 묻지 않으므로 매도 축에서
+    // 유도한다 — "갈아타기"는 팔 집이 있다는 뜻이라 최소 1채다.
+    // loadStoredState가 저장된 status를 항상 "무주택"으로 되돌리므로
+    // 실제로는 늘 0이며, 지금까지의 계산과 정확히 같다.
+    ownedHomeCount: state.status === "갈아타기" ? 1 : 0,
     cash: state.cash,
     annualIncome: state.annualIncome,
     // 엔진(BuyerProfile.existingDebtAnnualPayment)은 number 하나만 받는다.

@@ -9,6 +9,7 @@ const productionRules = parseRules(rawRules);
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
   return {
     status: "무주택",
+    ownedHomeCount: 0,
     cash: 100_000_000,
     annualIncome: 50_000_000,
     existingDebtAnnualPayment: 0,
@@ -43,7 +44,7 @@ describe("matchPolicyLoans", () => {
   it("모든 조건을 만족하면 해당 상품이 매칭된다", () => {
     const rules = withPolicyLoans([
       loan("테스트상품", {
-        requiresNoHome: true,
+        maxOwnedHomes: 0,
         maxAnnualIncome: 60_000_000,
         maxHousePrice: 500_000_000,
         maxAreaSqm: 85,
@@ -131,13 +132,13 @@ describe("matchPolicyLoans", () => {
     expect(matched.map((m) => m.id)).toContain("면적제한상품");
   });
 
-  it("무주택 요건 상품은 갈아타기 구매자를 제외한다", () => {
+  it("무주택 요건 상품(maxOwnedHomes: 0)은 1주택 구매자를 제외한다", () => {
     const rules = withPolicyLoans([
-      loan("무주택전용상품", { requiresNoHome: true }),
+      loan("무주택전용상품", { maxOwnedHomes: 0 }),
     ]);
 
     const matched = matchPolicyLoans(
-      profile({ status: "갈아타기" }),
+      profile({ ownedHomeCount: 1 }),
       rules,
       400_000_000,
     );
@@ -177,7 +178,7 @@ describe("matchPolicyLoans", () => {
     const rules = withPolicyLoans([
       loan("무제한상품", {}),
       loan("모든조건제한상품", {
-        requiresNoHome: true,
+        maxOwnedHomes: 0,
         requiresFirstTimeBuyer: true,
         maxAnnualIncome: 10_000_000,
         maxHousePrice: 100_000_000,
@@ -186,7 +187,7 @@ describe("matchPolicyLoans", () => {
     ]);
 
     const worstCaseBuyer = profile({
-      status: "갈아타기",
+      ownedHomeCount: 3,
       annualIncome: 200_000_000,
       isFirstTimeBuyer: false,
       exclusiveAreaSqm: 200,
@@ -199,8 +200,8 @@ describe("matchPolicyLoans", () => {
 
   it("조건이 겹치면 여러 상품이 함께 매칭된다", () => {
     const rules = withPolicyLoans([
-      loan("상품A", { requiresNoHome: true, maxAnnualIncome: 60_000_000 }),
-      loan("상품B", { requiresNoHome: true, maxHousePrice: 500_000_000 }),
+      loan("상품A", { maxOwnedHomes: 0, maxAnnualIncome: 60_000_000 }),
+      loan("상품B", { maxOwnedHomes: 0, maxHousePrice: 500_000_000 }),
     ]);
 
     const matched = matchPolicyLoans(profile(), rules, 400_000_000);
@@ -212,6 +213,7 @@ describe("matchPolicyLoans", () => {
     const matched = matchPolicyLoans(
       profile({
         status: "무주택",
+        ownedHomeCount: 0,
         isFirstTimeBuyer: true,
         annualIncome: 30_000_000,
         exclusiveAreaSqm: 60,

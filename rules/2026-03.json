@@ -43,7 +43,8 @@
     "ruralTaxAreaThresholdSqm": 85,
     "firstTimeBuyerReliefCap": 2000000,
     "firstTimeBuyerReliefPriceCap": 1200000000,
-    "householdCountNote": "이 계산은 무주택 기준으로 취득세를 매겼어요. 지금 집이 몇 채 있는지(주택 수)는 반영하지 않아서, 이미 집이 있으면(갈아타기 포함) 취득세가 더 나올 수 있어요 — 그러면 부대비용은 이보다 커지고, 실제로 필요한 현금도 더 많을 수 있어요."
+    "householdCountNote": "주택 수는 여쭤봤지만, 취득세에는 반영하지 못했어요 — 주택 수에 따른 중과세율을 확인하지 못했기 때문이에요. 그래서 이미 집이 있으면 취득세가 더 나올 수 있고, 부대비용은 이보다 커질 수 있어요. 실제로 필요한 현금도 이 계산보다 많을 수 있어요.",
+    "householdCountNoteNoHome": "무주택이라고 답해 주셔서, 취득세도 무주택 기준 세율로 계산했어요. 집이 몇 채 있는지에 따라 갈리는 중과세율은 이 계산에 넣지 않았는데, 무주택이면 그 분기에 해당하지 않아요."
   },
   "brokerageFee": [
     { "upTo": 50000000, "rate": 0.006, "cap": 250000 },
@@ -57,9 +58,10 @@
   "movingCost": 1500000,
   "policyLoans": [
     {
+      "_note": "주택 수 요건을 requiresNoHome: true에서 maxOwnedHomes: 0으로 **기계적으로만** 옮겼다. 두 표현은 정확히 같은 뜻이라 이 과거 룰셋이 내던 답은 한 줄도 바뀌지 않는다. 2026-08에서 보금자리론을 1주택까지 넓힌 것은 그 파일 _note가 인용한 공시 확인에 근거한 별개 결정이며, 지나간 시점의 룰셋에 소급하지 않는다.",
       "id": "디딤돌",
       "eligibility": {
-        "requiresNoHome": true,
+        "maxOwnedHomes": 0,
         "maxAnnualIncome": 60000000,
         "maxHousePrice": 500000000,
         "maxAreaSqm": 85
@@ -68,9 +70,10 @@
       "rate": 0.032
     },
     {
+      "_note": "위 디딤돌과 같은 기계적 이관이다(requiresNoHome: true → maxOwnedHomes: 0). 이 시점 룰셋의 판정은 그대로 둔다.",
       "id": "보금자리론",
       "eligibility": {
-        "requiresNoHome": true,
+        "maxOwnedHomes": 0,
         "maxAnnualIncome": 70000000,
         "maxHousePrice": 600000000
       },
