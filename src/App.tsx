@@ -16,7 +16,11 @@ import { SafetyBadge } from "./components/SafetyBadge";
 import { COMPLEX_UNITS, DATA_AS_OF, REGIONS, type ComplexUnit } from "./data/complexes";
 import { buildComplexList } from "./lib/complex-list";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
-import { calcAcquisitionCosts, calcBurdenAt } from "./lib/finance";
+import {
+  calcAcquisitionCosts,
+  calcBurdenAt,
+  householdCountNoteFor,
+} from "./lib/finance";
 import type { LocationAssessment } from "./lib/location";
 import type { PriceAssessment } from "./lib/price";
 import type { PurchaseAssessment, PurchaseType } from "./lib/purchase";
@@ -251,6 +255,12 @@ export function App() {
        * 계산돼야 85㎡ 임계값을 낙관 방향으로 넘기지 않는다.
        */
       priceBudget: { profile: residentialProfile, financeRules: rules },
+      /*
+       * 부대비용의 취득세 줄에 붙는 주택 수 고지. 위쪽
+       * `BudgetResult`와 **같은 프로필**에서 고르므로 한 화면이 두 말을
+       * 하지 않는다 — 고르는 규칙은 `householdCountNoteFor` 하나뿐이다.
+       */
+      householdCountNote: householdCountNoteFor(residentialProfile, rules),
     };
   }, [residentialProfile, selectedUnit]);
 
@@ -312,9 +322,20 @@ export function App() {
             areaOverridden={selectedUnit !== null}
           />
 
-          {affordability === null ? (
+          {/*
+            주택 수도 필수 답이 됐다 — 미입력을 무주택으로 대신 채우면
+            정책대출 자격이 넓어져 한도가 커지는데, 그건 사용자가 확인한
+            적 없는 값으로 낙관적인 답을 내는 것이다(useProfileForm.ts의
+            `ownedHomeCount` 주석 참고). 그래서 `toProfile`이 null을
+            돌려주고 이 안내가 대신 나온다.
+
+            `residentialProfile`을 함께 보는 이유는 타입 좁히기다 —
+            아래에서 이 프로필로 취득세 고지를 골라야 하는데, 두 값이
+            같은 조건에서 생기고 사라지므로 조건도 함께 둔다.
+          */}
+          {affordability === null || residentialProfile === null ? (
             <p className="prompt">
-              현금과 연소득을 입력하면 살 수 있는 가격을 계산해요.
+              현금·연소득·주택 수를 알려주면 살 수 있는 가격을 계산해요.
             </p>
           ) : (
             <>
@@ -339,6 +360,10 @@ export function App() {
               <BudgetResult
                 result={affordability.result}
                 safePrice={affordability.safePrice}
+                householdCountNote={householdCountNoteFor(
+                  residentialProfile,
+                  rules,
+                )}
               />
               {affordability.result.affordablePrice > 0 && (
                 <>
@@ -380,6 +405,7 @@ export function App() {
                   unit={detail.unit}
                   burden={detail.burden}
                   costs={detail.costs}
+                  householdCountNote={detail.householdCountNote}
                   priceBudget={detail.priceBudget}
                   onClose={handleCloseDetail}
                   onPriceAssessment={setPriceAssessment}

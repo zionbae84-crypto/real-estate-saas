@@ -20,6 +20,12 @@ export interface ComplexDetailProps {
   /** `unit.maxPrice`에서의 부대비용 내역 */
   costs: CostBreakdownData;
   /**
+   * 부대비용의 취득세 줄에 붙는 주택 수 고지. 호출부가
+   * `householdCountNoteFor`로 골라 넘긴다({@link CostBreakdown} 참고) —
+   * 위쪽 `BudgetResult`와 같은 값이라 한 화면이 두 말을 하지 않는다.
+   */
+  householdCountNote: string;
+  /**
    * 호가 위치 확인의 예산 줄에 쓸 실거주 프로필. 없으면 그 줄을
    * 만들지 않는다({@link PriceCheck} 참고).
    */
@@ -53,6 +59,7 @@ export function ComplexDetail({
   unit,
   burden,
   costs,
+  householdCountNote,
   priceBudget,
   onClose,
   onPriceAssessment,
@@ -143,7 +150,7 @@ export function ComplexDetail({
       */}
       <LandLeaseNote landLeasehold={unit.landLeasehold} />
 
-      <CostBreakdown costs={costs} />
+      <CostBreakdown costs={costs} householdCountNote={householdCountNote} />
 
       {/*
         호가 위치 확인은 **여기**에 붙는다. 위 계산은 전부 이 평형의

@@ -2,6 +2,7 @@ import { useLayoutEffect, useMemo } from "react";
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
+import { householdCountNoteFor } from "../lib/finance";
 import type {
   PriceAssessment,
   PriceBudgetInput,
@@ -295,10 +296,14 @@ function percent(value: number | null): string | null {
  * **부대비용(`budgetCosts`) 바로 아래에는 주택 수 고지가 함께 나간다.**
  * `finding.costs`는 `calcAcquisitionCosts`가 낸 값인데, 그 함수는
  * 취득자의 주택 수를 읽지 않고 언제나 무주택 기준 세율로 계산한다
- * (`acquisition-cost.ts`의 `calcAcquisitionTax` 주석 참고). 문구는
- * `budget.financeRules.acquisitionTax.householdCountNote`에서 그대로
- * 온다 — `CostBreakdown`과 같은 룰셋 필드를 같은 방식으로 읽으므로,
- * 두 화면이 서로 다른 문구를 갖게 될 위험이 없다.
+ * (`acquisition-cost.ts`의 `calcAcquisitionTax` 주석 참고).
+ *
+ * 화면이 주택 수를 **묻게 되면서** 그 고지가 둘로 갈렸다 — 무주택이라고
+ * 답한 사람에게 "취득세가 더 나올 수 있어요"는 거짓이고, 거짓 경고는
+ * 같은 자리의 진짜 경고까지 함께 닳게 만든다. 어느 쪽을 낼지는
+ * `householdCountNoteFor`가 `budget.profile`을 보고 정한다 —
+ * `CostBreakdown`이 쓰는 것과 **같은 함수**라 두 화면이 같은 사용자에게
+ * 서로 다른 말을 할 수 없다.
  */
 function FindingValues({
   finding,
@@ -326,7 +331,9 @@ function FindingValues({
   // 때만 만든다(assess.ts의 budgetFinding 호출부 참고) — 그래서 여기
   // 도달했다면 budget은 항상 존재한다.
   const householdCountNote =
-    budget?.financeRules.acquisitionTax.householdCountNote;
+    budget === null
+      ? undefined
+      : householdCountNoteFor(budget.profile, budget.financeRules);
 
   return (
     <>

@@ -31,6 +31,7 @@ const INCOME = 150_000_000;
 async function fillProfile() {
   await userEvent.type(screen.getByLabelText("보유 현금"), "150000");
   await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+  await userEvent.click(screen.getByLabelText("무주택"));
 }
 
 /**

@@ -29,6 +29,9 @@ describe("DEFAULT_FORM_STATE", () => {
     // 0을 기본값으로 두면 입력란이 "0"으로 시작해 지울 방법이 없어진다
     // (toProfile이 null을 0으로 좁혀 엔진에는 그대로 0으로 전달된다).
     expect(DEFAULT_FORM_STATE.existingDebtAnnualPayment).toBeNull();
+    // 주택 수도 필수값이다. 무주택(0)으로 미리 골라 두지 않는다 —
+    // 그건 정책대출 자격을 넓혀 한도를 키우는 낙관 방향이다.
+    expect(DEFAULT_FORM_STATE.ownedHomeCount).toBeNull();
     expect(DEFAULT_FORM_STATE.status).toBe("무주택");
   });
 
@@ -60,9 +63,9 @@ describe("toProfile", () => {
     expect(toProfile(state({ cash: 200_000_000 }))).toBeNull();
   });
 
-  it("두 필수값이 있으면 프로필을 만든다", () => {
+  it("세 필수값이 있으면 프로필을 만든다", () => {
     const profile = toProfile(
-      state({ cash: 200_000_000, annualIncome: 50_000_000 }),
+      state({ cash: 200_000_000, annualIncome: 50_000_000, ownedHomeCount: 0 }),
     );
     expect(profile).toEqual({
       status: "무주택",
@@ -80,7 +83,7 @@ describe("toProfile", () => {
 
   it("toProfile이 규제지역을 그대로 전달한다", () => {
     const profile = toProfile(
-      state({ cash: 1, annualIncome: 1, isRegulatedArea: false }),
+      state({ cash: 1, annualIncome: 1, ownedHomeCount: 0, isRegulatedArea: false }),
     );
     expect(profile?.isRegulatedArea).toBe(false);
   });
@@ -90,6 +93,7 @@ describe("toProfile", () => {
       state({
         cash: 1,
         annualIncome: 1,
+        ownedHomeCount: 0,
         existingHome: {
           expectedSalePrice: 700_000_000,
           remainingLoan: 300_000_000,
@@ -105,6 +109,7 @@ describe("toProfile", () => {
       state({
         cash: 1,
         annualIncome: 1,
+        ownedHomeCount: 1,
         status: "갈아타기",
         existingHome: {
           expectedSalePrice: 700_000_000,
@@ -125,6 +130,7 @@ describe("toProfile", () => {
       state({
         cash: 1,
         annualIncome: 1,
+        ownedHomeCount: 1,
         status: "갈아타기",
         existingHome: {
           expectedSalePrice: 700_000_000,
@@ -138,7 +144,7 @@ describe("toProfile", () => {
 
   it("갈아타기인데 기존주택 값이 없으면 existingHome 없이 만든다", () => {
     const profile = toProfile(
-      state({ cash: 1, annualIncome: 1, status: "갈아타기" }),
+      state({ cash: 1, annualIncome: 1, ownedHomeCount: 1, status: "갈아타기" }),
     );
     expect(profile).not.toBeNull();
     expect(profile?.existingHome).toBeUndefined();
@@ -439,7 +445,7 @@ describe("loadStoredState", () => {
         ),
       );
       expect(
-        toProfile({ ...zero, status: "갈아타기" })?.existingHome
+        toProfile({ ...zero, ownedHomeCount: 1, status: "갈아타기" })?.existingHome
           ?.capitalGainsTax,
       ).toBe(0);
 
@@ -457,7 +463,7 @@ describe("loadStoredState", () => {
         ),
       );
       expect(
-        toProfile({ ...missing, status: "갈아타기" })?.existingHome
+        toProfile({ ...missing, ownedHomeCount: 1, status: "갈아타기" })?.existingHome
           ?.capitalGainsTax,
       ).toBeUndefined();
     });
@@ -526,5 +532,78 @@ describe("useProfileForm — setField가 touched를 기록한다", () => {
     expect(
       result.current.state.touched.filter((f) => f === "area"),
     ).toHaveLength(1);
+  });
+});
+
+/**
+ * **주택 수가 없는 저장본을 무주택으로 가정하지 않는다.**
+ *
+ * 무주택 가정은 디딤돌·보금자리론 자격을 모두 열어 정책 한도를 키우고
+ * 실구매력을 올린다 — 사용자가 확인한 적 없는 값으로 "더 빌릴 수
+ * 있다"고 답하는 낙관 방향이고, 이 저장소가 예전에 겪은 결함(옛
+ * 저장본이 손대지 않은 전용면적으로 되살아나 실구매력을 부풀린 것)과
+ * 정확히 같은 모양이다.
+ *
+ * 반대 방향(모르면 1채로 가정)도 택하지 않았다. 사용자에 대해 사실이
+ * 아닌 것을 지어내는 쪽이고, 대부분의 사용자에게 틀린 취득세 경고를
+ * 띄워 경고를 닳게 만든다. 그래서 **다시 묻는다.**
+ */
+describe("loadStoredState — 주택 수", () => {
+  function storage(value: string | null): Pick<Storage, "getItem"> {
+    return { getItem: () => value };
+  }
+
+  it("주택 수가 없는 옛 저장본은 미입력으로 돌아온다 — 무주택으로 가정하지 않는다", () => {
+    const stored = JSON.stringify({ cash: 200_000_000, annualIncome: 50_000_000 });
+    const loaded = loadStoredState(storage(stored));
+
+    expect(loaded.cash).toBe(200_000_000);
+    expect(loaded.annualIncome).toBe(50_000_000);
+    expect(loaded.ownedHomeCount).toBeNull();
+  });
+
+  it("그래서 옛 저장본만으로는 계산이 시작되지 않는다", () => {
+    // 이 한 줄이 "낙관 쪽으로 기본값을 주지 않는다"를 실제로 지키는
+    // 자리다 — 프로필이 만들어지지 않으므로 어떤 한도도 나오지 않는다.
+    const stored = JSON.stringify({ cash: 200_000_000, annualIncome: 50_000_000 });
+    expect(toProfile(loadStoredState(storage(stored)))).toBeNull();
+  });
+
+  it("저장된 주택 수가 있으면 그대로 복원한다", () => {
+    for (const ownedHomeCount of [0, 1, 4]) {
+      const stored = JSON.stringify({
+        cash: 1,
+        annualIncome: 1,
+        ownedHomeCount,
+      });
+      expect(loadStoredState(storage(stored)).ownedHomeCount).toBe(
+        ownedHomeCount,
+      );
+    }
+  });
+
+  it("0채 저장본은 계산을 시작한다 — 미입력과 구분된다", () => {
+    const stored = JSON.stringify({
+      cash: 200_000_000,
+      annualIncome: 50_000_000,
+      ownedHomeCount: 0,
+    });
+    expect(toProfile(loadStoredState(storage(stored)))?.ownedHomeCount).toBe(0);
+  });
+
+  it("채 단위가 아닌 값(소수·음수·문자열)은 미입력으로 되돌린다", () => {
+    // localStorage는 사용자가 직접 고칠 수 있는 자리다. 폼이 만들 수
+    // 없는 값이 들어오면 다시 묻는 쪽이 안전한 방향이다.
+    for (const bad of [1.5, -1, "1", null, NaN]) {
+      const stored = JSON.stringify({
+        cash: 1,
+        annualIncome: 1,
+        ownedHomeCount: bad,
+      });
+      expect(
+        loadStoredState(storage(stored)).ownedHomeCount,
+        `ownedHomeCount: ${String(bad)}`,
+      ).toBeNull();
+    }
   });
 });

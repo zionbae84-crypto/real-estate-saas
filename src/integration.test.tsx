@@ -2,6 +2,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { App } from "./App";
+import { rules as financeRules } from "./state/useAffordability";
 
 /** 화면에 그려진 부담률(%)을 숫자로 읽는다. */
 function readRatio(): number {
@@ -65,7 +66,81 @@ describe("예산 계산기 통합", () => {
   it("필수값을 채우기 전에는 결과를 그리지 않는다", () => {
     render(<App />);
     expect(screen.queryByText("실구매 가능 가격")).not.toBeInTheDocument();
-    expect(screen.getByText(/현금과 연소득을 입력하면/)).toBeInTheDocument();
+    expect(screen.getByText(/현금·연소득·주택 수를 알려주면/)).toBeInTheDocument();
+  });
+
+  /**
+   * 주택 수는 현금·소득과 같은 층위의 **필수 답**이다.
+   *
+   * 미입력을 무주택으로 대신 채우면 디딤돌·보금자리론 자격이 모두 열려
+   * 정책 한도가 커지고 실구매력이 올라간다 — 사용자가 확인한 적 없는
+   * 값으로 "더 빌릴 수 있다"고 답하는, 이 제품이 가장 피해야 하는
+   * 방향이다. 그래서 답을 듣기 전에는 아무 숫자도 내지 않는다.
+   */
+  it("현금·소득만 넣고 주택 수를 답하지 않으면 결과가 나오지 않는다", async () => {
+    render(<App />);
+
+    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
+
+    expect(screen.queryByText("실구매 가능 가격")).not.toBeInTheDocument();
+    expect(screen.getByText(/현금·연소득·주택 수를 알려주면/)).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("무주택"));
+    expect(screen.getByText("실구매 가능 가격")).toBeInTheDocument();
+  });
+
+  /**
+   * 유주택을 고르면 몇 채인지 적을 수 있고, 그 답이 실제 계산을 좁힌다 —
+   * 물어만 보고 쓰지 않으면 사용자는 반영됐다고 믿는다.
+   */
+  it("유주택을 고르면 주택 수를 적을 수 있고, 그 답이 정책대출 자격을 좁힌다", async () => {
+    render(<App />);
+
+    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "5000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+
+    // 무주택이면 보금자리론 자격이 있다.
+    expect(screen.getByText("보금자리론")).toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("유주택"));
+    const countInput = screen.getByLabelText("갖고 있는 주택 수 (채)");
+    expect(countInput).toHaveValue(1);
+    // 1주택도 보금자리론까지는 받을 수 있다(공시: 본건 담보주택 제외
+    // 무주택 또는 1주택).
+    expect(screen.getByText("보금자리론")).toBeInTheDocument();
+
+    // 2주택이 되면 받을 수 있는 정책대출이 사라진다.
+    await userEvent.clear(countInput);
+    await userEvent.type(countInput, "2");
+    expect(screen.queryByText("보금자리론")).not.toBeInTheDocument();
+  });
+
+  /**
+   * **묻고 나서 쓰지 않으면 사용자는 반영됐다고 믿는다.**
+   *
+   * 취득세는 주택 수를 반영하지 못한다(중과세율을 확인하지 못했다).
+   * 그래서 유주택이라고 답한 사람에게는 그 사실이 화면에 있어야 하고,
+   * 무주택이라고 답한 사람에게는 그 경고가 나가면 안 된다 — 그 사람에게는
+   * 거짓이고, 거짓 경고는 진짜 경고까지 함께 닳게 만든다.
+   */
+  it("취득세 고지가 주택 수 답에 따라 갈린다", async () => {
+    const 유주택문구 = financeRules.acquisitionTax.householdCountNote;
+    const 무주택문구 = financeRules.acquisitionTax.householdCountNoteNoHome;
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "5000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+
+    expect(screen.getByText(무주택문구)).toBeInTheDocument();
+    expect(screen.queryByText(유주택문구)).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByLabelText("유주택"));
+
+    expect(screen.getByText(유주택문구)).toBeInTheDocument();
+    expect(screen.queryByText(무주택문구)).not.toBeInTheDocument();
   });
 
   it("현금과 소득을 넣으면 결과와 슬라이더가 나타난다", async () => {
@@ -73,6 +148,7 @@ describe("예산 계산기 통합", () => {
 
     await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
+    await userEvent.click(screen.getByLabelText("무주택"));
 
     expect(screen.getByText("실구매 가능 가격")).toBeInTheDocument();
     expect(screen.getByRole("slider")).toBeInTheDocument();
@@ -91,6 +167,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
+    await userEvent.click(screen.getByLabelText("무주택"));
 
     const slider = screen.getByRole("slider");
     // SEED 썸은 <div role="slider">라 네이티브 max 속성이 없다 —
@@ -114,6 +191,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
+    await userEvent.click(screen.getByLabelText("무주택"));
 
     expect(
       screen.getByText(/빌릴 수 있는 한계예요\. 무리 없는 선은 따로 있어요/),
@@ -143,6 +221,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
+    await userEvent.click(screen.getByLabelText("무주택"));
 
     const priceBefore = readAffordablePrice();
     expect(priceBefore).toBeGreaterThan(0);
@@ -165,6 +244,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
+    await userEvent.click(screen.getByLabelText("무주택"));
 
     expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
 
@@ -177,6 +257,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
+    await userEvent.click(screen.getByLabelText("무주택"));
 
     const before = screen.queryAllByRole("listitem").length;
     await userEvent.click(screen.getByRole("checkbox", { name: /강남구/ }));

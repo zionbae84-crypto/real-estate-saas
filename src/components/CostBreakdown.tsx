@@ -1,9 +1,19 @@
 import { formatWon } from "../format/won";
 import type { CostBreakdown as CostBreakdownData } from "../lib/finance";
-import { rules } from "../state/useAffordability";
 
 export interface CostBreakdownProps {
   costs: CostBreakdownData;
+  /**
+   * 취득세 줄에 붙는 주택 수 고지. **호출부가 `householdCountNoteFor`로
+   * 골라 넘긴다.**
+   *
+   * 예전에는 이 컴포넌트가 룰셋에서 문구 하나를 직접 읽었다. 화면이
+   * 주택 수를 묻게 되면서 문구가 무주택·유주택 둘로 갈렸고, 어느 쪽을
+   * 낼지는 프로필을 봐야 정해진다 — 이 컴포넌트는 프로필을 받지 않으므로
+   * 고른 결과만 받는다. 고르는 규칙은 `householdCountNoteFor`(finance)
+   * 하나뿐이라 이 화면과 `PriceCheck`가 서로 다른 말을 할 수 없다.
+   */
+  householdCountNote: string;
 }
 
 type CostKey = keyof Omit<CostBreakdownData, "total">;
@@ -22,15 +32,9 @@ interface RowMeta {
  * 두 번 다 그 실수를 할 뻔했다.
  */
 const ROW_META: Record<CostKey, RowMeta> = {
-  acquisitionTax: {
-    label: "취득세 (지방교육세·농특세 포함)",
-    // 이 계산은 무주택 기준이다 — `calcAcquisitionCosts`(acquisition-cost.ts)는
-    // 취득자의 주택 수를 읽지 않는다. 문구는 `rules/2026-08.json`의
-    // `acquisitionTax.householdCountNote`에서 그대로 온다(코드에 박지
-    // 않는다) — `rules.ts`의 `parseRules`가 이 문구의 방향(부대비용이
-    // 이보다 커질 수 있다는 방향이어야 함)을 강제한다.
-    note: rules.acquisitionTax.householdCountNote,
-  },
+  // 취득세 줄의 note는 프로필(주택 수)에 따라 갈리므로 여기서 고정하지
+  // 않고 렌더링 시점에 prop으로 덮어쓴다. 아래 ROW_NOTE_OVERRIDE 참고.
+  acquisitionTax: { label: "취득세 (지방교육세·농특세 포함)" },
   brokerageFee: { label: "중개보수" },
   brokerageVat: { label: "중개보수 부가세 (10%)" },
   legalFee: { label: "법무사 비용" },
@@ -58,7 +62,10 @@ const ROW_ORDER: readonly CostKey[] = [
   "housingBondCost",
 ];
 
-export function CostBreakdown({ costs }: CostBreakdownProps) {
+export function CostBreakdown({
+  costs,
+  householdCountNote,
+}: CostBreakdownProps) {
   return (
     <details className="cost-breakdown">
       <summary>
@@ -66,7 +73,10 @@ export function CostBreakdown({ costs }: CostBreakdownProps) {
       </summary>
       <dl>
         {ROW_ORDER.map((key) => {
-          const { label, note } = ROW_META[key];
+          const { label } = ROW_META[key];
+          // 취득세만 프로필에 따라 문구가 갈린다. 나머지는 고정 문구다.
+          const note =
+            key === "acquisitionTax" ? householdCountNote : ROW_META[key].note;
           return (
             <div key={key}>
               <dt>

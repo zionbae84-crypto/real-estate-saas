@@ -30,17 +30,55 @@ describe("formatPrintDate", () => {
 });
 
 describe("buildPrintSummaryItems", () => {
-  it("여섯 전제(현금·소득·생애최초·기존대출·규제지역·전용면적)를 모두 낸다", () => {
+  it("일곱 전제(현금·소득·주택 수·생애최초·기존대출·규제지역·전용면적)를 모두 낸다", () => {
     const items = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
     const labels = items.map((i) => i.label);
     expect(labels).toEqual([
       "보유 현금",
       "연 소득(세전)",
+      "주택 수",
       "생애최초 주택 구입",
       "기존 대출(연간 상환액)",
       "규제지역 여부",
       "전용면적",
     ]);
+  });
+
+  /**
+   * 주택 수는 정책대출 자격을 가르는 전제다. 화면에서는 그 답이
+   * `.profile-form` 안에만 있고 그 폼은 인쇄에서 통째로 지워지므로,
+   * 종이를 건네받은 사람이 전제를 확인할 곳은 여기뿐이다.
+   */
+  describe("주택 수", () => {
+    function ownedHomeValue(state: typeof FIXED_STATE): string | undefined {
+      return buildPrintSummaryItems(state, 59, "touched").find(
+        (i) => i.label === "주택 수",
+      )?.value;
+    }
+
+    it("0채는 '무주택'이라고 적는다 — 숫자가 아니라 뜻으로 적는다", () => {
+      expect(ownedHomeValue({ ...FIXED_STATE, ownedHomeCount: 0 })).toBe(
+        "무주택",
+      );
+    });
+
+    it("1채 이상은 몇 채인지 함께 적는다", () => {
+      expect(ownedHomeValue({ ...FIXED_STATE, ownedHomeCount: 1 })).toBe(
+        "유주택 1채",
+      );
+      expect(ownedHomeValue({ ...FIXED_STATE, ownedHomeCount: 3 })).toBe(
+        "유주택 3채",
+      );
+    });
+
+    it("답하지 않았으면 값을 지어내지 않는다", () => {
+      // 실제로는 이 상태에서 계산이 시작되지 않아 인쇄물이 나올 수 없다.
+      // 그래도 무주택으로 대신 채우지 않는다 — 종이에 적힌 전제가
+      // 사용자가 답한 적 없는 값이면 그 종이 전체가 거짓말이 된다.
+      expect(ownedHomeValue({ ...FIXED_STATE, ownedHomeCount: null })).toBe(
+        "입력 안 함",
+      );
+    });
   });
 
   it("금액은 formatWon과 같은 표기로 나온다", () => {

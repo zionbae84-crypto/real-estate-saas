@@ -14,6 +14,11 @@ export interface BudgetResultProps {
    * 없으면 `null`. `useAffordability`의 `safePrice`를 그대로 받는다.
    */
   safePrice: number | null;
+  /**
+   * 부대비용의 취득세 줄에 붙는 주택 수 고지. 호출부가
+   * `householdCountNoteFor`로 골라 넘긴다({@link CostBreakdown} 참고).
+   */
+  householdCountNote: string;
 }
 
 /**
@@ -27,7 +32,11 @@ export interface BudgetResultProps {
  * 경고(`WarningList`)는 이 계단 바깥, 맨 위에 두고 접지 않는다 — 접으면
  * 안 되는 종류의 정보다.
  */
-export function BudgetResult({ result, safePrice }: BudgetResultProps) {
+export function BudgetResult({
+  result,
+  safePrice,
+  householdCountNote,
+}: BudgetResultProps) {
   return (
     <section className="budget-result">
       <WarningList warnings={result.warnings} />
@@ -77,7 +86,10 @@ export function BudgetResult({ result, safePrice }: BudgetResultProps) {
               <span className="fold-more-hint"> 더 보기</span>
             </summary>
             <BindingExplainer loanLimit={result.loanLimit} showTitle={false} />
-            <CostBreakdown costs={result.costs} />
+            <CostBreakdown
+              costs={result.costs}
+              householdCountNote={householdCountNote}
+            />
             <PolicyLoanList matched={result.matchedPolicyLoans} />
           </details>
         </>

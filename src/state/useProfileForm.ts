@@ -31,6 +31,22 @@ export interface ProfileFormState {
   cash: number | null;
   annualIncome: number | null;
   existingDebtAnnualPayment: number | null;
+  /**
+   * 지금 보유한 주택 수(채). **이번에 사려는 집은 세지 않는다.**
+   * `0`은 무주택, `1` 이상은 유주택, `null`은 **아직 답하지 않았다**는
+   * 뜻이다.
+   *
+   * **`null`을 0으로 대신 채우지 않는다.** 무주택으로 가정하면 디딤돌·
+   * 보금자리론 자격이 모두 열려 정책 한도가 커지고, 그만큼 실구매력이
+   * 올라간다 — 사용자가 확인한 적 없는 값으로 "더 빌릴 수 있다"고
+   * 답하는 낙관 방향이다. 이 제품이 가장 피해야 하는 오답이라, 답을
+   * 듣기 전에는 계산을 시작하지 않는다({@link toProfile}).
+   *
+   * 반대 방향(모르면 1채로 가정)도 택하지 않았다. 그건 사용자에 대해
+   * 사실이 아닌 것을 지어내는 쪽이고, 대부분의 사용자에게 틀린 취득세
+   * 경고를 띄워 경고를 닳게 만든다.
+   */
+  ownedHomeCount: number | null;
   status: HouseholdStatus;
   isFirstTimeBuyer: boolean;
   isRegulatedArea: boolean;
@@ -66,6 +82,9 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
   // 스냅백해 필드를 비울 방법이 없어진다. 실제 엔진 계산 시에는
   // toProfile이 null을 0으로 바꾼다.
   existingDebtAnnualPayment: null,
+  // 미입력이다. 무주택(0)으로 시작하지 않는 이유는 위 필드 주석 참고 —
+  // 낙관 방향의 기본값이라 답을 듣기 전에는 계산하지 않는다.
+  ownedHomeCount: null,
   status: "무주택",
   // 켜두면 LTV·정책대출 자격을 과대평가하는 방향이므로 꺼진 쪽이 안전하다.
   isFirstTimeBuyer: false,
@@ -83,17 +102,26 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
   touched: [],
 };
 
-/** 필수값(현금·소득)이 채워졌을 때만 BuyerProfile을 만든다. */
+/**
+ * 필수값(현금·소득·주택 수)이 모두 채워졌을 때만 BuyerProfile을 만든다.
+ *
+ * **주택 수가 세 번째 필수값이 됐다.** 현금·소득처럼 값이 없으면 계산
+ * 자체를 시작하지 않는다. 미입력을 무주택으로 대신 채우면 정책대출
+ * 자격이 넓어져 한도가 커지는데, 그건 사용자가 확인한 적 없는 값으로
+ * 낙관적인 답을 내는 것이다({@link ProfileFormState.ownedHomeCount}).
+ */
 export function toProfile(state: ProfileFormState): BuyerProfile | null {
-  if (state.cash === null || state.annualIncome === null) return null;
+  if (
+    state.cash === null ||
+    state.annualIncome === null ||
+    state.ownedHomeCount === null
+  ) {
+    return null;
+  }
 
   const profile: BuyerProfile = {
     status: state.status,
-    // 주택 수 축. 지금은 폼이 이 값을 따로 묻지 않으므로 매도 축에서
-    // 유도한다 — "갈아타기"는 팔 집이 있다는 뜻이라 최소 1채다.
-    // loadStoredState가 저장된 status를 항상 "무주택"으로 되돌리므로
-    // 실제로는 늘 0이며, 지금까지의 계산과 정확히 같다.
-    ownedHomeCount: state.status === "갈아타기" ? 1 : 0,
+    ownedHomeCount: state.ownedHomeCount,
     cash: state.cash,
     annualIncome: state.annualIncome,
     // 엔진(BuyerProfile.existingDebtAnnualPayment)은 number 하나만 받는다.
@@ -156,6 +184,19 @@ export function loadStoredState(
     cash: amount(o.cash),
     annualIncome: amount(o.annualIncome),
     existingDebtAnnualPayment: amount(o.existingDebtAnnualPayment),
+    // 주택 수가 없는 저장본(이 필드가 생기기 전의 저장본)은 null로
+    // 둔다 — **무주택으로 가정하지 않는다.** 무주택 가정은 디딤돌·
+    // 보금자리론 자격을 모두 열어 정책 한도를 키우고 실구매력을
+    // 올린다. 사용자가 확인한 적 없는 값으로 "더 빌릴 수 있다"고
+    // 답하는 방향이라, 이 저장소가 예전에 겪은 결함(옛 저장본이 손대지
+    // 않은 전용면적으로 되살아나 실구매력을 부풀린 것)과 정확히 같은
+    // 모양이다. 그래서 다시 묻는다 — 한 번 더 묻는 쪽이 조용히
+    // 낙관하는 쪽보다 낫다.
+    //
+    // touched로 판단하지 않는 이유: 주택 수는 가정할 수 있는 항목이
+    // 아니라 필수 답이라 AssumableField가 아니다. 값이 있으면 사용자가
+    // 직접 고른 것이고, 없으면 답한 적이 없다.
+    ownedHomeCount: wholeCount(o.ownedHomeCount),
     // "갈아타기" 상태는 저장본에 남아 있어도 항상 "무주택"으로 되돌린다.
     // ProfileForm은 status/기존 주택(existingHome) 편집 UI를 전혀
     // 렌더링하지 않는다 — 사용자가 이 값을 보거나 고칠 방법이 없다.
@@ -224,6 +265,16 @@ function amount(value: unknown): number | null {
     value <= Number.MAX_SAFE_INTEGER
     ? value
     : null;
+}
+
+/**
+ * 주택 수는 "채" 단위라 0 이상의 정수여야 한다. 소수·음수·문자열은
+ * 폼이 만들 수 없는 값이므로 조작된 저장본으로 보고 미입력으로
+ * 되돌린다 — 미입력은 다시 묻는 쪽이라 안전한 방향이다.
+ */
+function wholeCount(value: unknown): number | null {
+  const n = amount(value);
+  return n !== null && Number.isInteger(n) ? n : null;
 }
 
 function positive(value: unknown): number | null {

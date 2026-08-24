@@ -54,7 +54,13 @@ function renderResult(overrides: RenderResultOverrides = {}) {
   // null은 유효한 실제 값이다). "제공 안 됨"만 undefined로 구분한다.
   const safePrice =
     overrides.safePrice === undefined ? r.affordablePrice : overrides.safePrice;
-  render(<BudgetResult result={r} safePrice={safePrice} />);
+  render(
+    <BudgetResult
+      result={r}
+      safePrice={safePrice}
+      householdCountNote={rules.acquisitionTax.householdCountNote}
+    />,
+  );
 }
 
 describe("BudgetResult", () => {

@@ -12,9 +12,9 @@ import type { ProfileFormState } from "../state/useProfileForm";
  * 지우려면 벤더 컴포넌트의 내부 DOM 구조에 기대야 하는데, 그 구조는
  * 우리가 보장할 수 있는 계약이 아니다.
  *
- * 그래서 이 컴포넌트가 여섯 전제(보유 현금·연 소득·생애최초 여부·기존
- * 대출·규제지역 여부·전용면적)를 화면 상태와 무관하게 항상 같은
- * 자리에서 평문으로 낸다. 부모 스펙 2번 항목("전제가 숫자와 함께
+ * 그래서 이 컴포넌트가 일곱 전제(보유 현금·연 소득·주택 수·생애최초
+ * 여부·기존 대출·규제지역 여부·전용면적)를 화면 상태와 무관하게 항상
+ * 같은 자리에서 평문으로 낸다. 부모 스펙 2번 항목("전제가 숫자와 함께
  * 인쇄돼야 한다")과 4번 항목("언제 기준인지 남아야 한다")을 함께 만족한다.
  */
 
@@ -35,7 +35,7 @@ export function formatPrintDate(date: Date): string {
 }
 
 /**
- * 여섯 전제를 라벨·값 쌍으로 만든다. 순수 함수라 `PrintSummary`(JSX)와
+ * 일곱 전제를 라벨·값 쌍으로 만든다. 순수 함수라 `PrintSummary`(JSX)와
  * 별도로 검증할 수 있다.
  *
  * `effectiveAreaSqm`·`areaSource`를 `state.exclusiveAreaSqm`에서
@@ -60,6 +60,13 @@ export function buildPrintSummaryItems(
         state.annualIncome === null ? "입력 안 함" : formatWon(state.annualIncome),
     },
     {
+      // 주택 수는 정책대출 자격을 가르는 전제라 종이에도 남아야 한다 —
+      // 이 종이를 건네받은 사람은 폼을 볼 수 없고, 화면에서는 그 답이
+      // .profile-form 안에만 있어서 인쇄에서 통째로 지워진다.
+      label: "주택 수",
+      value: describeOwnedHomeCount(state.ownedHomeCount),
+    },
+    {
       label: "생애최초 주택 구입",
       value: state.isFirstTimeBuyer ? "예" : "아니오",
     },
@@ -81,6 +88,20 @@ export function buildPrintSummaryItems(
       value: `${effectiveAreaSqm}㎡${areaNoteFor(areaSource)}`,
     },
   ];
+}
+
+/**
+ * 주택 수를 종이에 적을 문장으로 바꾼다.
+ *
+ * `0`을 그냥 "0채"로 적지 않는다 — 이 답이 뜻하는 것은 숫자가 아니라
+ * 자격이고, 읽는 사람에게 "무주택"이 곧바로 뜻이 서는 말이다.
+ * `null`(아직 답하지 않음)은 실제로는 계산이 시작되지 않아 이 종이가
+ * 나올 수 없지만, 이 함수는 폼 상태만 보고 만들어지므로 그 경우에도
+ * 값을 지어내지 않는다.
+ */
+function describeOwnedHomeCount(count: number | null): string {
+  if (count === null) return "입력 안 함";
+  return count === 0 ? "무주택" : `유주택 ${count}채`;
 }
 
 function areaNoteFor(source: AreaSource): string {

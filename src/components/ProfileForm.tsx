@@ -115,6 +115,11 @@ export function ProfileForm({
         onChange={(won) => setField("annualIncome", won)}
       />
 
+      <OwnedHomeField
+        value={state.ownedHomeCount}
+        onChange={(count) => setField("ownedHomeCount", count)}
+      />
+
       <div className="field">
         <Checkbox
           inputProps={{ id: "first-time" }}
@@ -218,6 +223,130 @@ function AreaInput({ value, onChange }: AreaInputProps) {
         value={text}
         onChange={(e) => handleChange(e.target.value)}
         onBlur={handleBlur}
+      />
+    </div>
+  );
+}
+
+interface OwnedHomeFieldProps {
+  /** 보유 주택 수(채). `null`이면 아직 답하지 않았다 */
+  value: number | null;
+  onChange: (count: number | null) => void;
+}
+
+/**
+ * 주택 수를 묻는다 — 먼저 무주택/유주택을 고르고, 유주택이면 몇 채인지
+ * 적는다.
+ *
+ * **미리 골라 두지 않는다.** 무주택을 기본 선택으로 두면 아무것도
+ * 고르지 않은 사람이 무주택으로 계산되는데, 그건 디딤돌·보금자리론
+ * 자격을 모두 열어 한도를 키우는 낙관 방향이다. 이 폼의 다른 기본값
+ * (규제지역 켬 · 농특세가 붙는 면적)이 전부 과대평가를 피하는 쪽으로
+ * 놓인 것과 같은 판단이고, 주택 수는 그 "안전한 쪽"이 사실을 지어내는
+ * 것이 되므로(당신은 집이 있다) 아예 답을 받는다.
+ *
+ * 유주택을 고르면 1채로 시작한다. 유주택이라고 답한 사람이 가질 수
+ * 있는 가장 작은 수이고, 여기서 늘리는 방향은 자격이 좁아지는 쪽이라
+ * 시작값이 한도를 부풀리지 않는다.
+ *
+ * **라디오 두 개 + 숫자 하나**로 나눈 이유: "0채"를 숫자 입력으로만
+ * 받으면 빈 칸과 0채가 화면에서 구분되지 않는다. 무주택은 이 계산에서
+ * 자격이 가장 넓어지는 답이라, 고른 적 없는 사람이 그 답을 얻는 경로를
+ * 만들면 안 된다.
+ *
+ * 색으로 뜻을 전달하지 않는다 — 어느 쪽을 골랐는지는 라디오와 글자가
+ * 말하고, 아래 힌트가 무엇이 달라지는지 문장으로 적는다.
+ */
+function OwnedHomeField({ value, onChange }: OwnedHomeFieldProps) {
+  const hasHome = value !== null && value > 0;
+
+  return (
+    <fieldset className="field owned-home-field">
+      <legend>지금 집이 몇 채 있나요?</legend>
+      <p className="hint">
+        이번에 사려는 집은 빼고 세어 주세요. 주택 수에 따라 받을 수 있는
+        정책대출이 달라져요 — 디딤돌은 무주택만, 보금자리론은 1주택까지
+        받을 수 있어요.
+      </p>
+      <div className="owned-home-options">
+        <label className="owned-home-option">
+          <input
+            type="radio"
+            name="owned-home"
+            value="none"
+            checked={value === 0}
+            onChange={() => onChange(0)}
+          />
+          <span>무주택</span>
+        </label>
+        <label className="owned-home-option">
+          <input
+            type="radio"
+            name="owned-home"
+            value="some"
+            checked={hasHome}
+            // 유주택으로 넘어올 때는 1채로 시작한다. 이미 유주택이면
+            // 사용자가 적어 둔 수를 그대로 둔다.
+            onChange={() => onChange(hasHome ? value : 1)}
+          />
+          <span>유주택</span>
+        </label>
+      </div>
+
+      {hasHome && (
+        <HomeCountInput value={value} onChange={(next) => onChange(next)} />
+      )}
+    </fieldset>
+  );
+}
+
+interface HomeCountInputProps {
+  value: number;
+  onChange: (value: number) => void;
+}
+
+/**
+ * 보유 주택 수 입력란. `AreaInput`과 같은 방식이다 — 원본 텍스트를
+ * 로컬 상태로 들고, 읽을 수 있는 값일 때만 상위 상태를 갱신하며,
+ * 포커스를 잃는 순간 여전히 읽을 수 없으면 마지막으로 유효했던 값으로
+ * 되돌린다. 입력 중에는 지웠다 다시 쓸 수 있으면서, 입력을 마쳤을 때는
+ * 화면과 계산값이 항상 일치한다.
+ *
+ * 1채 미만·소수는 받지 않는다 — 여기까지 온 사용자는 이미 유주택을
+ * 골랐고, 0채는 위 라디오가 담당한다.
+ */
+function HomeCountInput({ value, onChange }: HomeCountInputProps) {
+  const [text, setText] = useState(() => String(value));
+
+  useEffect(() => {
+    setText((current) => (Number(current) === value ? current : String(value)));
+  }, [value]);
+
+  function parse(raw: string): number | null {
+    const parsed = Number(raw);
+    if (raw.trim() === "" || !Number.isInteger(parsed) || parsed < 1) {
+      return null;
+    }
+    return parsed;
+  }
+
+  return (
+    <div className="field owned-home-count">
+      <label htmlFor="owned-home-count">갖고 있는 주택 수 (채)</label>
+      <input
+        id="owned-home-count"
+        type="number"
+        min={1}
+        step={1}
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          const parsed = parse(e.target.value);
+          if (parsed !== null) onChange(parsed);
+        }}
+        onBlur={() => {
+          if (parse(text) === null) setText(String(value));
+        }}
       />
     </div>
   );
