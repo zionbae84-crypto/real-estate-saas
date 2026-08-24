@@ -1,9 +1,23 @@
-import type { RightsAnswers, RightsItem, RightsSection } from "../lib/rights";
+import { useLayoutEffect } from "react";
+import type { RightsAnswers, RightsAssessment, RightsItem, RightsSection } from "../lib/rights";
 import { useRightsCheck } from "../state/useRightsCheck";
 import { MoneyInput } from "./MoneyInput";
 import { RightsVerdict } from "./RightsVerdict";
 
 const MONEY_HINT = "단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요.";
+
+export interface RightsCheckProps {
+  /**
+   * 진단 종합(`DiagnosisSummary`)에 이 축의 최신 판정을 알린다.
+   *
+   * 이 문진은 자기 상태(답·매매가)를 스스로 들고 있으므로, 종합이 같은
+   * 값을 다시 계산하지 않고 그대로 읽으려면 어디선가 이 값을 위로
+   * 올려 줘야 한다 — `PurchaseCheck`·`PriceCheck`·`LocationFacts`와
+   * 같은 배선이다(각 컴포넌트 문서 참고). 새 판정 로직을 만들지
+   * 않는다 — 이미 계산된 `assessment`를 그대로 전달할 뿐이다.
+   */
+  onAssessment?: (assessment: RightsAssessment) => void;
+}
 
 /**
  * 권리분석 문진.
@@ -19,9 +33,20 @@ const MONEY_HINT = "단위를 안 쓰면 만원으로 읽어요. '3억5000'처�
  * 예산 계산과 이어 붙이지 않고 **독립된 자리**에 둔다. 이유는
  * `App.tsx`의 호출부 주석에 적었다.
  */
-export function RightsCheck() {
+export function RightsCheck({ onAssessment }: RightsCheckProps = {}) {
   const { rules, answers, price, setPrice, selectOption, setAmount, assessment } =
     useRightsCheck();
+
+  /*
+   * `useLayoutEffect`를 쓴다(`useEffect`가 아니라) — 커밋 직후·페인트
+   * 직전에 부모(App.tsx)의 상태를 갱신해야 진단 종합이 한 프레임
+   * 늦게 그려지는 깜빡임 없이 최신 판정을 보여준다. 판정 자체는 여기서
+   * 다시 계산하지 않는다 — `useRightsCheck`가 이미 낸 값을 그대로
+   * 전달만 한다.
+   */
+  useLayoutEffect(() => {
+    onAssessment?.(assessment);
+  }, [assessment, onAssessment]);
 
   return (
     <details className="rights-check">
