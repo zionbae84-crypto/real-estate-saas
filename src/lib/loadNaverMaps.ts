@@ -42,3 +42,13 @@ export function loadNaverMaps(clientId: string): Promise<typeof naver> {
 
   return loadingPromise;
 }
+
+/**
+ * 테스트 전용 — 모듈 수준 로딩 캐시를 비운다.
+ *
+ * `vi.resetModules()`는 이미 static import된 참조를 다시 묶어주지 않아
+ * 이 캐시를 비우지 못한다. 테스트 간 격리는 이 함수로만 보장된다.
+ */
+export function resetNaverMapsLoaderForTest(): void {
+  loadingPromise = null;
+}

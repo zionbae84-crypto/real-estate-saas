@@ -242,8 +242,38 @@ describe("regionQuery 예외", () => {
   });
 });
 
+/**
+ * 파일 내용에서 절대 URL(`https://host/...`)과 프로토콜 상대 URL(`//host/...`)
+ * 리터럴을 모두 뽑아 각각의 origin으로 환산한다.
+ *
+ * 접두어 제거(`content.replaceAll("https://oapi.map.naver.com", "")`) 방식은
+ * origin 검증이 아니라 문자열 자르기였고, 리뷰어가 실제로 두 가지 우회를
+ * 통과시켰다:
+ *
+ *   1. `"//evil.example.com/x.js"` — 지울 `https://` 접두어가 애초에 없어
+ *      아무것도 지워지지 않고, 남은 문자열에도 `https?://`가 없어 통과했다.
+ *      브라우저는 `//host/path`를 `https://host/path`와 똑같이 불러온다.
+ *   2. `"https://oapi.map.naver.com.evil.io/steal.js"` — 정당한 URL이 이
+ *      문자열의 **접두어**라서 지우고 나면 `.evil.io/steal.js`만 남고,
+ *      거기엔 `https?://`가 없어 통과했다. 실제 호스트는 `evil.io`다.
+ *
+ * 그래서 문자열을 자르지 않고 `new URL()`로 origin을 뽑아 정확히 비교한다.
+ * `//`로 시작하는 리터럴은 `https:`를 붙여 같은 규칙으로 환산한다 —
+ * 브라우저 동작과 일치시키기 위해서다.
+ */
+function urlOriginsIn(content: string): { raw: string; origin: string }[] {
+  // `[A-Za-z]{2,}` TLD를 요구해 `/// <reference ... />` 같은 주석은 걸리지 않고,
+  // `[^\s"'`]*`가 따옴표·백틱에서 멈춰 템플릿 리터럴 경계를 넘지 않는다.
+  const literals = content.match(/(?:https?:)?\/\/[A-Za-z0-9.-]+\.[A-Za-z]{2,}[^\s"'`]*/g) ?? [];
+  return literals.map((raw) => ({
+    raw,
+    origin: new URL(raw.startsWith("//") ? `https:${raw}` : raw).origin,
+  }));
+}
+
 describe("loadNaverMaps 예외", () => {
   const LOAD_NAVER_MAPS_PATH = "src/lib/loadNaverMaps.ts";
+  const NAVER_MAPS_ORIGIN = "https://oapi.map.naver.com";
 
   it("loadNaverMaps.ts는 정확히 하나만 존재하고, 그 안에 재무 필드 이름이 없다", () => {
     const content = readFileSync(LOAD_NAVER_MAPS_PATH, "utf8");
@@ -256,16 +286,40 @@ describe("loadNaverMaps 예외", () => {
     }
   });
 
-  it("loadNaverMaps.ts는 네이버지도 스크립트 호스트 외 다른 곳으로 나가지 않는다", () => {
+  it("loadNaverMaps.ts는 네이버지도 호스트 외 다른 곳으로 나가지 않는다", () => {
     const content = readFileSync(LOAD_NAVER_MAPS_PATH, "utf8");
-    expect(content).toContain("oapi.map.naver.com");
-    // 이 유일한 정당한 절대 URL(스킴+호스트)을 지우면 남는 https?://
-    // 리터럴이 없어야 한다 — 다른 외부 호스트로 나가는 코드가 몰래
-    // 섞이지 않았는지 확인한다. 호스트 이름만 지우면 그 앞의 "https://"
-    // 스킴 자체가 남아 이 정당한 URL 하나만으로도 오검출되므로, 스킴을
-    // 포함한 전체 접두사를 지운다.
-    const withoutNaverUrl = content.replaceAll("https://oapi.map.naver.com", "");
-    expect(withoutNaverUrl).not.toMatch(/https?:\/\//);
+    const urls = urlOriginsIn(content);
+    // 그물이 비어 있지 않은지 핀 고정 — 파일이 바뀌어 URL 리터럴 자체가
+    // 사라지면 아래 루프가 통째로 공허하게 통과한다.
+    expect(urls.length).toBeGreaterThan(0);
+    for (const { raw, origin } of urls) {
+      expect(origin, `${raw}는 네이버지도 호스트가 아니다`).toBe(NAVER_MAPS_ORIGIN);
+    }
+  });
+
+  describe("호스트 가드 핀 고정 — 접두어 제거 방식이 놓쳤던 우회 재현", () => {
+    // 고치기 전 가드(`replaceAll("https://oapi.map.naver.com", "")` 후
+    // `https?://` 검사)는 아래 두 스니펫을 전부 통과시켰다.
+    const HOST_GUARD_BYPASSES = [
+      '"//evil.example.com/x.js"',
+      '"https://oapi.map.naver.com.evil.io/steal.js"',
+    ];
+
+    it.each(HOST_GUARD_BYPASSES)(
+      "이제는 네이버지도 호스트가 아니라고 잡아낸다: %s",
+      (snippet) => {
+        const origins = urlOriginsIn(snippet);
+        expect(origins.length).toBeGreaterThan(0);
+        expect(origins.every(({ origin }) => origin === NAVER_MAPS_ORIGIN)).toBe(false);
+      },
+    );
+
+    it("정당한 네이버지도 스크립트 URL은 통과시킨다", () => {
+      const origins = urlOriginsIn(
+        "script.src = `https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=${x}`;",
+      );
+      expect(origins.map(({ origin }) => origin)).toEqual([NAVER_MAPS_ORIGIN]);
+    });
   });
 
   it("loadNaverMaps.ts만 스크립트 삽입 예외이고, 정확히 하나만 존재한다", () => {
