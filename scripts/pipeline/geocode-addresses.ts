@@ -1,5 +1,5 @@
 // scripts/pipeline/geocode-addresses.ts
-import { buildTargets, defaultWait, fetchAllPages, type Waiter } from "./fetch";
+import { buildTargets, defaultWait, fetchAllPages, MONTHS_BACK, type Waiter } from "./fetch";
 import { normalizeAll } from "./normalize";
 import { regionNameByCode } from "../../src/data/regions";
 import type { RawTrade } from "./types";
@@ -42,10 +42,17 @@ export function buildAddressString(trade: RawTrade): string | null {
 /**
  * 지역(그리고 선택적으로 법정동)의 단지별 대표 주소를 라이브로 구한다.
  *
- * 최근 **1개월**치만 본다 — `fetchLiveComplexes`(scripts/pipeline/live.ts)의
- * 12개월과 다르다. 건물 주소는 어느 달 거래든 같으므로, 가장 가벼운
- * 조회로 충분하다. 같은 단지의 여러 거래 중 첫 번째 것의 주소만 남긴다
- * (건물 하나의 주소는 어느 거래를 봐도 같다).
+ * 조회 창은 `fetchLiveComplexes`(scripts/pipeline/live.ts)와 **똑같이**
+ * `MONTHS_BACK`(12개월)이다. 반드시 같아야 한다 — 목록에 뜨는 단지는
+ * 12개월 창에서 나오는데 주소를 1개월 창에서만 찾으면, 이번 달에 거래가
+ * 없었던 단지는 주소를 얻을 방법이 아예 없어 지도에서 조용히 사라진다.
+ * "건물 주소는 어느 달 거래든 같다"는 말은 **한 건물 안에서만** 참이고,
+ * 어느 단지가 창 안에 들어오는가(=커버리지)는 창 길이가 정한다. 특히
+ * 매달 첫 주에는 국토부 신고 지연 때문에 이번 달 거래가 거의 없어,
+ * 1개월 창이면 대부분의 지역에서 마커가 하나도 안 뜬다.
+ *
+ * 같은 단지의 여러 거래 중 첫 번째 것의 주소만 남긴다(건물 하나의 주소는
+ * 어느 거래를 봐도 같다 — 이 말이 참인 자리는 여기다).
  */
 export async function fetchComplexAddresses(
   regionCode: string,
@@ -54,7 +61,7 @@ export async function fetchComplexAddresses(
   key: string,
   wait: Waiter = defaultWait,
 ): Promise<Map<string, string>> {
-  const targets = buildTargets(now, 1, [regionCode]);
+  const targets = buildTargets(now, MONTHS_BACK, [regionCode]);
   const pages = await Promise.all(
     targets.map((t) => fetchAllPages(t.regionCode, t.yearMonth, key, wait)),
   );

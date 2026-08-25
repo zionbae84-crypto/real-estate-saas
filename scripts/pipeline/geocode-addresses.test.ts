@@ -1,6 +1,7 @@
 // scripts/pipeline/geocode-addresses.test.ts
 import { describe, expect, it } from "vitest";
 import { buildAddressString, fetchComplexAddresses } from "./geocode-addresses";
+import { MONTHS_BACK } from "./fetch";
 import type { RawTrade } from "./types";
 
 function trade(over: Partial<RawTrade> = {}): RawTrade {
@@ -115,14 +116,23 @@ describe("fetchComplexAddresses", () => {
     expect(result.has("11680-2")).toBe(true);
   });
 
-  it("한 달만 조회한다 — 12개월치를 부르지 않는다", async () => {
-    let calls = 0;
-    globalThis.fetch = (async () => {
-      calls += 1;
+  it("전체 기간을 조회한다 — 지역 목록과 같은 창(MONTHS_BACK)을 쓴다", async () => {
+    // 창이 목록(fetchLiveComplexes)보다 짧으면, 그 짧은 창에 거래가 없던
+    // 단지는 주소를 얻을 길이 없어 지도에서 조용히 사라진다. 그래서 창
+    // 길이를 `MONTHS_BACK`에 직접 묶어 두고, 여기서도 그 상수로 검증한다
+    // (숫자를 박아 두면 상수가 바뀔 때 이 테스트가 거짓으로 안심시킨다).
+    const monthsRequested: string[] = [];
+    globalThis.fetch = (async (url: URL) => {
+      monthsRequested.push(new URL(String(url)).searchParams.get("DEAL_YMD") ?? "");
       return new Response(responseBody([]), { status: 200 });
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await fetchComplexAddresses("11680", null, new Date("2026-01-15"), "dummy-key", async () => {});
-    expect(calls).toBe(1);
+
+    // 한 달에 한 번씩, 서로 다른 12개월(거래가 0건이라 페이지 추가 요청은 없다).
+    expect(monthsRequested).toHaveLength(MONTHS_BACK);
+    expect(new Set(monthsRequested).size).toBe(MONTHS_BACK);
+    expect(monthsRequested).toContain("202601"); // 이번 달
+    expect(monthsRequested).toContain("202502"); // 11개월 전(창의 가장 오래된 달)
   });
 });
