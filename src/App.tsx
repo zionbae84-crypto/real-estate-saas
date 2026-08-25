@@ -640,165 +640,168 @@ export function App() {
 
                   {regionComplexes.status === "success" &&
                     regionComplexes.units.length > 0 && (
-                      <>
-                        {/*
-                          `.dong-narrow`는 인쇄에서 지우는 선택자다
-                          (`src/print/hiddenInPrint.ts`) — 종이 위에서는
-                          고를 수 없는 장치다. 클래스가 없으면 그 규칙이
-                          이 select에 닿지 못한다.
-                        */}
-                        {dongOptions.length > 1 && (
-                          <div className="field dong-narrow">
-                            <label htmlFor="dong-narrow">행정동으로 좁히기</label>
-                            <select
-                              id="dong-narrow"
-                              value={selectedDong ?? ""}
-                              onChange={(e) => {
-                                setSelectedDong(
-                                  e.target.value === "" ? null : e.target.value,
-                                );
-                                // 앞서 걸러지지 않은 목록에서 "더 보기"로
-                                // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
-                                // 좁힌 새 목록이 이전 목록의 스크롤
-                                // 깊이를 그대로 물려받는다
-                                // (handleRegionSelect와 같은 이유).
-                                setVisibleCount(10);
-                              }}
-                            >
-                              <option value="">전체</option>
-                              {dongOptions.map((d) => (
-                                <option key={d} value={d}>
-                                  {d}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                        )}
-                        {dongFilteredEmpty ? (
-                          <p className="dong-empty">
-                            이 동엔 조건에 맞는 단지가 없어요. 다른 동을
-                            선택하거나 전체로 넓혀 보세요.
-                          </p>
-                        ) : (
-                          complexList !== null && (
-                            <ComplexList
-                              result={complexList}
-                              /*
-                                이 조회가 실제로 반영한 계약월이다.
-                                번들의 `DATA_AS_OF`(옛 배치 파이프라인이
-                                3개 구를 돌린 시점)를 쓰면, 전국 아무
-                                지역이나 그때그때 조회하는 지금 화면에서는
-                                확인한 적 없는 신선도를 사실처럼 말하게
-                                된다. 모르면(null) ComplexList가 그 줄을
-                                아예 그리지 않는다.
-                              */
-                              dataAsOf={regionComplexes.dataAsOf}
-                              hasRegionFilter={false}
-                              noRepaymentCapacity={
-                                affordability.result.loanLimit.breakdown.DSR === 0
-                              }
-                              visibleCount={visibleCount}
-                              onShowMore={() => setVisibleCount((n) => n + 10)}
-                              onSelect={handleSelectUnit}
-                            />
-                          )
-                        )}
-                      </>
-                    )}
-
-                  {regionComplexes.status === "success" &&
-                    hasRegionUnits &&
-                    !dongFilteredEmpty &&
-                    complexList !== null && (
-                      <>
-                        {/*
-                          좌표 조회(complexCoordinates)는 목록 조회와 별개로
-                          도는 상태 기계다 — idle/loading/error/success를
-                          그대로 구분해 보여준다. "조회 실패"와 "조회했더니
-                          단지가 하나도 없더라"를 같은 빈 지도로 보여주면,
-                          이 앱이 가장 경계하는 오류(모르는 것과 확인한
-                          것을 같은 문구로 보여주는 것)를 지도에서도
-                          반복하게 된다.
-
-                          idle은 이 렌더 경로에선 사실상 스치는 순간뿐이다
-                          — 위 useEffect가 regionComplexes.status가
-                          "success"로 바뀌자마자(바로 이 조건 블록이
-                          그려지는 시점과 같은 렌더) query()를 호출해
-                          "loading"으로 넘어간다. 그래도 그 찰나에 아무것도
-                          안 그리면 화면이 깜빡이므로 로딩과 같은 문구를
-                          보여준다.
-                        */}
-                        {/*
-                          로딩·실패 문구를 `.complex-map-status`로 함께
-                          감싼다 — 인쇄에서는 아래 지도 자신
-                          (`.complex-map`)이 지워지므로, 이 문구들을 종이에
-                          남기면 근거를 잃은 "불러오고 있어요…"나 눌러도
-                          반응 없는 "다시 시도" 버튼만 남는 고아 문구가
-                          된다(src/print/hiddenInPrint.ts 참고).
-                        */}
-                        {(complexCoordinates.status === "idle" ||
-                          complexCoordinates.status === "loading" ||
-                          complexCoordinates.status === "error") && (
-                          <div className="complex-map-status">
-                            {(complexCoordinates.status === "idle" ||
-                              complexCoordinates.status === "loading") && (
-                              <p>지도를 불러오고 있어요…</p>
-                            )}
-
-                            {complexCoordinates.status === "error" && (
-                              <div className="region-query-error">
+                      <div className="region-results-grid">
+                        <div className="region-results-sidebar">
+                          {/*
+                            `.dong-narrow`는 인쇄에서 지우는 선택자다
+                            (`src/print/hiddenInPrint.ts`) — 종이 위에서는
+                            고를 수 없는 장치다. 클래스가 없으면 그 규칙이
+                            이 select에 닿지 못한다.
+                          */}
+                          {dongOptions.length > 1 && (
+                            <div className="field dong-narrow">
+                              <label htmlFor="dong-narrow">행정동으로 좁히기</label>
+                              <select
+                                id="dong-narrow"
+                                value={selectedDong ?? ""}
+                                onChange={(e) => {
+                                  setSelectedDong(
+                                    e.target.value === "" ? null : e.target.value,
+                                  );
+                                  // 앞서 걸러지지 않은 목록에서 "더 보기"로
+                                  // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
+                                  // 좁힌 새 목록이 이전 목록의 스크롤
+                                  // 깊이를 그대로 물려받는다
+                                  // (handleRegionSelect와 같은 이유).
+                                  setVisibleCount(10);
+                                }}
+                              >
+                                <option value="">전체</option>
+                                {dongOptions.map((d) => (
+                                  <option key={d} value={d}>
+                                    {d}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          {dongFilteredEmpty ? (
+                            <p className="dong-empty">
+                              이 동엔 조건에 맞는 단지가 없어요. 다른 동을
+                              선택하거나 전체로 넓혀 보세요.
+                            </p>
+                          ) : (
+                            complexList !== null && (
+                              <ComplexList
+                                result={complexList}
+                                /*
+                                  이 조회가 실제로 반영한 계약월이다.
+                                  번들의 `DATA_AS_OF`(옛 배치 파이프라인이
+                                  3개 구를 돌린 시점)를 쓰면, 전국 아무
+                                  지역이나 그때그때 조회하는 지금 화면에서는
+                                  확인한 적 없는 신선도를 사실처럼 말하게
+                                  된다. 모르면(null) ComplexList가 그 줄을
+                                  아예 그리지 않는다.
+                                */
+                                dataAsOf={regionComplexes.dataAsOf}
+                                hasRegionFilter={false}
+                                noRepaymentCapacity={
+                                  affordability.result.loanLimit.breakdown.DSR === 0
+                                }
+                                visibleCount={visibleCount}
+                                onShowMore={() => setVisibleCount((n) => n + 10)}
+                                onSelect={handleSelectUnit}
+                              />
+                            )
+                          )}
+                        </div>
+                        <div className="region-results-map">
+                          {regionComplexes.status === "success" &&
+                            hasRegionUnits &&
+                            !dongFilteredEmpty &&
+                            complexList !== null && (
+                              <>
                                 {/*
-                                  세 실패 문구는 원인이 다르므로 서로 다르게
-                                  말한다: 목록 조회 실패("지금 실거래가를…"),
-                                  좌표 조회 실패(여기), 네이버지도 SDK 로드
-                                  실패("지도를 표시하지 못했어요" —
-                                  ComplexMap.tsx). 같은 문구로 뭉치면 사용자도
-                                  테스트도 무엇이 실패했는지 구분하지 못한다.
-                                */}
-                                <p>단지 위치를 불러오지 못했어요.</p>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (currentRegionCode !== null) {
-                                      complexCoordinates.query(currentRegionCode, null);
-                                    }
-                                  }}
-                                >
-                                  다시 시도
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                                  좌표 조회(complexCoordinates)는 목록 조회와 별개로
+                                  도는 상태 기계다 — idle/loading/error/success를
+                                  그대로 구분해 보여준다. "조회 실패"와 "조회했더니
+                                  단지가 하나도 없더라"를 같은 빈 지도로 보여주면,
+                                  이 앱이 가장 경계하는 오류(모르는 것과 확인한
+                                  것을 같은 문구로 보여주는 것)를 지도에서도
+                                  반복하게 된다.
 
-                        {complexCoordinates.status === "success" && (
-                          <>
-                            <ComplexMap
-                              units={dongFilteredUnits}
-                              coordinates={complexCoordinates.coordinates}
-                              naverMapClientId={
-                                import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
-                              }
-                            />
-                            {/*
-                              지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
-                              오류) — 주소가 진짜로 없어서가 아니다
-                              (api/_lib/handleGeocode.ts의 partialFailureCount
-                              참고). 새 로딩/에러/성공 3분기를 또 만들지
-                              않고, 이미 뜬 지도 옆에 한 줄만 덧붙인다 —
-                              성공적으로 찾은 단지는 그대로 지도에 남아
-                              있으니 "지도가 비어 있다"와 다르게 말해야
-                              한다.
-                            */}
-                            {complexCoordinates.hasPartialFailures && (
-                              <p className="complex-map-caveat">
-                                일부 단지의 위치를 확인하지 못했어요. 지도에
-                                안 보이는 단지가 있을 수 있어요.
-                              </p>
+                                  idle은 이 렌더 경로에선 사실상 스치는 순간뿐이다
+                                  — 위 useEffect가 regionComplexes.status가
+                                  "success"로 바뀌자마자(바로 이 조건 블록이
+                                  그려지는 시점과 같은 렌더) query()를 호출해
+                                  "loading"으로 넘어간다. 그래도 그 찰나에 아무것도
+                                  안 그리면 화면이 깜빡이므로 로딩과 같은 문구를
+                                  보여준다.
+                                */}
+                                {/*
+                                  로딩·실패 문구를 `.complex-map-status`로 함께
+                                  감싼다 — 인쇄에서는 아래 지도 자신
+                                  (`.complex-map`)이 지워지므로, 이 문구들을 종이에
+                                  남기면 근거를 잃은 "불러오고 있어요…"나 눌러도
+                                  반응 없는 "다시 시도" 버튼만 남는 고아 문구가
+                                  된다(src/print/hiddenInPrint.ts 참고).
+                                */}
+                                {(complexCoordinates.status === "idle" ||
+                                  complexCoordinates.status === "loading" ||
+                                  complexCoordinates.status === "error") && (
+                                  <div className="complex-map-status">
+                                    {(complexCoordinates.status === "idle" ||
+                                      complexCoordinates.status === "loading") && (
+                                      <p>지도를 불러오고 있어요…</p>
+                                    )}
+
+                                    {complexCoordinates.status === "error" && (
+                                      <div className="region-query-error">
+                                        {/*
+                                          세 실패 문구는 원인이 다르므로 서로 다르게
+                                          말한다: 목록 조회 실패("지금 실거래가를…"),
+                                          좌표 조회 실패(여기), 네이버지도 SDK 로드
+                                          실패("지도를 표시하지 못했어요" —
+                                          ComplexMap.tsx). 같은 문구로 뭉치면 사용자도
+                                          테스트도 무엇이 실패했는지 구분하지 못한다.
+                                        */}
+                                        <p>단지 위치를 불러오지 못했어요.</p>
+                                        <button
+                                          type="button"
+                                          onClick={() => {
+                                            if (currentRegionCode !== null) {
+                                              complexCoordinates.query(currentRegionCode, null);
+                                            }
+                                          }}
+                                        >
+                                          다시 시도
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {complexCoordinates.status === "success" && (
+                                  <>
+                                    <ComplexMap
+                                      units={dongFilteredUnits}
+                                      coordinates={complexCoordinates.coordinates}
+                                      naverMapClientId={
+                                        import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
+                                      }
+                                    />
+                                    {/*
+                                      지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
+                                      오류) — 주소가 진짜로 없어서가 아니다
+                                      (api/_lib/handleGeocode.ts의 partialFailureCount
+                                      참고). 새 로딩/에러/성공 3분기를 또 만들지
+                                      않고, 이미 뜬 지도 옆에 한 줄만 덧붙인다 —
+                                      성공적으로 찾은 단지는 그대로 지도에 남아
+                                      있으니 "지도가 비어 있다"와 다르게 말해야
+                                      한다.
+                                    */}
+                                    {complexCoordinates.hasPartialFailures && (
+                                      <p className="complex-map-caveat">
+                                        일부 단지의 위치를 확인하지 못했어요. 지도에
+                                        안 보이는 단지가 있을 수 있어요.
+                                      </p>
+                                    )}
+                                  </>
+                                )}
+                              </>
                             )}
-                          </>
-                        )}
-                      </>
+                        </div>
+                      </div>
                     )}
                 </>
               )}
