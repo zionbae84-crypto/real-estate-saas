@@ -75,10 +75,17 @@ function judgeableOveralls(
  * 판정 가능한 축이 하나도 없으면 `unresolved`로 방어적으로 내린다.
  * 권리분석이 이 앱에서 제거돼 항상 `null`인 지금은 이 경우가 이론상
  * 드문 일이 아니다 — 예를 들어 실거주 매수인데 아직 목록에서 평형을
- * 고르지 않은 방문자는 세 축(권리·구매·호가) 모두 판정 없이 이
- * 화면을 본다. 확인한 것이 하나도 없는 상태를 `clear`로 부르는 것이
- * 이 함수가 낼 수 있는 가장 위험한 오답이기 때문에, 그런 상태에서도
- * `unresolved`로 안전하게 내린다.
+ * 고르지 않은 방문자는 네 축(권리·구매·호가·입지) 모두 값 없이 이
+ * 화면을 본다: 권리는 항상 `null`이고, 구매 유형별 금융은 실거주라
+ * 계산되지 않고(투자 경로에서만 `PurchaseCheck`가 렌더된다), 호가·
+ * 입지는 평형을 고르기 전이라 계산되지 않는다(`App.tsx`의
+ * `selectedUnit`/`detail` 게이팅 참고). 이 함수가 실제로 보는 것은
+ * 그중 헤드라인 판정에 참여하는 권리·구매·호가 세 축뿐이지만(입지는
+ * `overall`이 없어 애초에 {@link judgeableOveralls}에 들어가지
+ * 않는다), 이 시나리오에서는 그 세 축도 전부 `null`이라
+ * `overalls.length === 0`이 된다. 확인한 것이 하나도 없는 상태를
+ * `clear`로 부르는 것이 이 함수가 낼 수 있는 가장 위험한 오답이기
+ * 때문에, 그런 상태에서도 `unresolved`로 안전하게 내린다.
  */
 function decideHeadline(input: DiagnosisSummaryInput): SummaryHeadline {
   const overalls = judgeableOveralls(input);

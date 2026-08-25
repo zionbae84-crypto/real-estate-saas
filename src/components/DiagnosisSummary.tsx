@@ -54,10 +54,12 @@ export interface DiagnosisSummaryProps {
  *
  * ## 대상이 다를 수 있다
  *
- * 권리분석은 사용자가 답한 등기부에 대한 것이고, 호가·입지는 목록에서
- * 고른 평형에 대한 것이다 — 같은 집이라는 보장이 없다. 이 화면은 그
- * 둘을 하나로 엮어 말하지 않는다({@link SummaryRules.targetMismatchNote}가
- * 그 사실을 언제나 고지한다) — **결합하지 않는 것도 이 화면의 답이다.**
+ * 권리분석은 이 진단이 다루지 않는 축이다(등기부 분석은 별도 도구로
+ * 준비 중이라 이 앱 어디에서도 사용자가 등기부를 조회하거나 답하는
+ * 절차가 없다). 호가·입지는 목록에서 고른 평형에 대한 것이다. 이
+ * 화면은 다루지 않는 축을 다루는 것처럼 엮어 말하지 않는다
+ * ({@link SummaryRules.targetMismatchNote}가 그 사실을 언제나
+ * 고지한다) — **결합하지 않는 것도 이 화면의 답이다.**
  */
 export function DiagnosisSummary({
   rights,
