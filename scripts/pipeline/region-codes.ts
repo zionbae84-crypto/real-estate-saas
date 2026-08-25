@@ -1,9 +1,8 @@
 import { readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 import { DATA_DIR } from "./config";
 
-const HERE = dirname(fileURLToPath(import.meta.url));
 export const REGION_CODES_SOURCE_PATH = join(DATA_DIR, "sources", "legal-dong-codes.csv");
 export const REGION_CODES_OUTPUT_PATH = join(DATA_DIR, "legal-dong-codes.json");
 
