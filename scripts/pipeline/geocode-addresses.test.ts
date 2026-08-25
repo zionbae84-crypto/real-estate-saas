@@ -53,6 +53,20 @@ describe("buildAddressString", () => {
     expect(buildAddressString(t)).toBe("서울특별시 강남구 역삼동 719-3");
   });
 
+  it("지번이 없고 부번이 0 패딩된 '0000'이면 본번만으로 만든다", () => {
+    const t = trade({
+      address: { ...trade().address, jibun: null, bubun: "0000" },
+    });
+    expect(buildAddressString(t)).toBe("서울특별시 강남구 역삼동 719");
+  });
+
+  it("지번이 없고 부번이 0 패딩된 '0003'이면 선행 0을 뗀 -3으로 만든다", () => {
+    const t = trade({
+      address: { ...trade().address, jibun: null, bubun: "0003" },
+    });
+    expect(buildAddressString(t)).toBe("서울특별시 강남구 역삼동 719-3");
+  });
+
   it("지번도 본번도 없으면 null이다 — 지어내지 않는다", () => {
     const t = trade({
       address: { roadNm: null, roadNmCd: null, bonbun: null, bubun: null, jibun: null, umdCd: null },

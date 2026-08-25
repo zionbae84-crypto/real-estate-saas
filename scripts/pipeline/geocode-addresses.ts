@@ -5,6 +5,18 @@ import { regionNameByCode } from "../../src/data/regions";
 import type { RawTrade } from "./types";
 
 /**
+ * "0"·"00"·"0000" 등 0 패딩 형태와 무관하게 부번이 실제로 없는지(=0인지)
+ * 판단한다. 부번을 숫자로 바꾸지 않는다 — bonbun/bubun은 이 코드베이스에서
+ * 정보 손실을 피하려고 의도적으로 불투명한 문자열로 다룬다
+ * (scripts/pipeline/parse-response.ts 247줄 근처 주석 참고).
+ */
+function normalizedBubun(bubun: string | null): string | null {
+  if (bubun === null) return null;
+  const stripped = bubun.replace(/^0+/, "");
+  return stripped === "" ? null : stripped;
+}
+
+/**
  * 거래 하나의 주소를 지오코딩 가능한 문자열 하나로 합친다.
  *
  * "시도 시군구 법정동 지번" 형태다. 지번이 없으면 본번-부번으로 대신
@@ -20,7 +32,8 @@ export function buildAddressString(trade: RawTrade): string | null {
   if (regionName === null) return null;
 
   const { jibun, bonbun, bubun } = trade.address;
-  const lot = jibun ?? (bonbun !== null ? `${bonbun}${bubun !== null && bubun !== "0" && bubun !== "" ? `-${bubun}` : ""}` : null);
+  const bubunSuffix = normalizedBubun(bubun);
+  const lot = jibun ?? (bonbun !== null ? `${bonbun}${bubunSuffix !== null ? `-${bubunSuffix}` : ""}` : null);
   if (lot === null) return null;
 
   return `${regionName} ${trade.legalDongName} ${lot}`;
