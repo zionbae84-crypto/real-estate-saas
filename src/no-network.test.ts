@@ -297,6 +297,26 @@ describe("loadNaverMaps 예외", () => {
     }
   });
 
+  it("정규식이 놓친 스킴 리터럴도 남아있으면 안 된다", () => {
+    // urlOriginsIn의 정규식은 `https://` 뒤에 유효한 호스트+TLD가 한
+    // 덩어리로 소스에 그대로 붙어 있어야 매치한다. 문자열 접합
+    // (`"https://" + host + "/x.js"`), 템플릿 보간
+    // (`` `https://${h}.evil.io/x.js` ``), percent-encoding
+    // (`"https://evil%2Eio/x.js"`)처럼 리터럴이 쪼개지거나 인코딩되면
+    // 정규식이 아예 매치하지 않아 origin 검증 자체가 실행되지 않는다 —
+    // 위 테스트는 그런 리터럴을 통째로 못 본다.
+    //
+    // 그래서 정규식이 실제로 매치·검증한 리터럴만 파일 내용에서 지운
+    // 나머지에 대해, 정규식 도입 전에 쓰던 뭉뚝한 "https?:// 가 남아있으면
+    // 안 된다" 검사를 다시 건다. 정규식이 잡아낸 유일한 정당한 URL은
+    // 이 시점에 이미 지워졌으므로 오탐은 없고, 정규식이 놓친 스킴
+    // 리터럴은 여기서 잡힌다.
+    const content = readFileSync(LOAD_NAVER_MAPS_PATH, "utf8");
+    const urls = urlOriginsIn(content);
+    const residual = urls.reduce((acc, { raw }) => acc.replaceAll(raw, ""), content);
+    expect(residual, "정규식 그물을 빠져나간 스킴 리터럴이 남아 있다").not.toMatch(/https?:\/\//);
+  });
+
   describe("호스트 가드 핀 고정 — 접두어 제거 방식이 놓쳤던 우회 재현", () => {
     // 고치기 전 가드(`replaceAll("https://oapi.map.naver.com", "")` 후
     // `https?://` 검사)는 아래 두 스니펫을 전부 통과시켰다.
