@@ -130,6 +130,8 @@ function sourceFiles(dir: string): string[] {
     // 문자열을 담는다 — 실제 네트워크 호출이 아니라 그 유일한 예외를
     // 검증하는 테스트 코드다.
     if (entry === "regionQuery.test.ts") return [];
+    if (entry === "loadNaverMaps.ts") return []; // 네이버지도 스크립트 삽입 — 이 태스크의 새 예외
+    if (entry === "loadNaverMaps.test.ts") return [];
     return [path];
   });
 }
@@ -237,5 +239,42 @@ describe("regionQuery 예외", () => {
     const content = readFileSync(REGION_QUERY_PATH, "utf8");
     expect(content).toContain('"/api/complexes');
     expect(content).not.toMatch(/https?:\/\//);
+  });
+});
+
+describe("loadNaverMaps 예외", () => {
+  const LOAD_NAVER_MAPS_PATH = "src/lib/loadNaverMaps.ts";
+
+  it("loadNaverMaps.ts는 정확히 하나만 존재하고, 그 안에 재무 필드 이름이 없다", () => {
+    const content = readFileSync(LOAD_NAVER_MAPS_PATH, "utf8");
+    const FORBIDDEN_FIELD_NAMES = [
+      "cash", "annualIncome", "existingDebtAnnualPayment",
+      "ownedHomeCount", "isFirstTimeBuyer", "isRegulatedArea",
+    ];
+    for (const field of FORBIDDEN_FIELD_NAMES) {
+      expect(content, `${field}가 loadNaverMaps.ts에 등장하면 안 된다`).not.toContain(field);
+    }
+  });
+
+  it("loadNaverMaps.ts는 네이버지도 스크립트 호스트 외 다른 곳으로 나가지 않는다", () => {
+    const content = readFileSync(LOAD_NAVER_MAPS_PATH, "utf8");
+    expect(content).toContain("oapi.map.naver.com");
+    // 이 유일한 정당한 절대 URL(스킴+호스트)을 지우면 남는 https?://
+    // 리터럴이 없어야 한다 — 다른 외부 호스트로 나가는 코드가 몰래
+    // 섞이지 않았는지 확인한다. 호스트 이름만 지우면 그 앞의 "https://"
+    // 스킴 자체가 남아 이 정당한 URL 하나만으로도 오검출되므로, 스킴을
+    // 포함한 전체 접두사를 지운다.
+    const withoutNaverUrl = content.replaceAll("https://oapi.map.naver.com", "");
+    expect(withoutNaverUrl).not.toMatch(/https?:\/\//);
+  });
+
+  it("loadNaverMaps.ts만 스크립트 삽입 예외이고, 정확히 하나만 존재한다", () => {
+    const matches = findByNameSuffix("src", "loadNaverMaps.ts");
+    expect(matches).toEqual(["src/lib/loadNaverMaps.ts"]);
+  });
+
+  it("loadNaverMaps.test.ts만 그 테스트 예외이고, 정확히 하나만 존재한다", () => {
+    const matches = findByNameSuffix("src", "loadNaverMaps.test.ts");
+    expect(matches).toEqual(["src/lib/loadNaverMaps.test.ts"]);
   });
 });
