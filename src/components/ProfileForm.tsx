@@ -59,7 +59,7 @@ export interface ProfileFormProps {
   ) => void;
   /**
    * 지금 펼쳐서 편집 중인 가정 항목. 미지정이거나 null이고, 아직 아무
-   * 것도 확정하지 않은 사용자라면 첫 화면의 세 항목(보유 현금 · 연 소득 ·
+   * 것도 확정하지 않은 사용자라면 첫 화면의 세 항목(사용가능 현금 예산 · 연 소득 ·
    * 생애최초 여부)만 보인다.
    *
    * 나머지 가정(기존 부채 · 규제지역 · 전용면적)을 눌러서 고치는 흐름은
@@ -102,10 +102,12 @@ export function ProfileForm({
     <form className="profile-form" onSubmit={(e) => e.preventDefault()}>
       <MoneyInput
         id="cash"
-        label="보유 현금"
+        label="사용가능 현금 예산"
         value={state.cash}
         onChange={(won) => setField("cash", won)}
-        hint="단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요."
+        hint="대출을 빼고 지금 바로 쓸 수 있는 현금이에요. 대출 원리금(한도·월
+          상환액)을 계산하는 데 써요. 단위를 안 쓰면 만원으로 읽어요.
+          '3억5000'처럼 써도 돼요."
       />
 
       <MoneyInput
@@ -113,6 +115,8 @@ export function ProfileForm({
         label="연 소득 (세전)"
         value={state.annualIncome}
         onChange={(won) => setField("annualIncome", won)}
+        hint="DSR(총부채원리금상환비율)로 대출 한도를 정하는 데 써요 — 소득이
+          낮으면 현금이 있어도 원리금을 감당할 수 있는 만큼만 빌릴 수 있어요."
       />
 
       <OwnedHomeField

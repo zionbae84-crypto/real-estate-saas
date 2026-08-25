@@ -146,7 +146,7 @@ describe("BudgetResult", () => {
             binding: "LTV",
             breakdown: { LTV: 0, DSR: 373_305_491, CAP: 600_000_000, POLICY: 0 },
           },
-          warnings: ["고정 부대비용(법무비·이사비)만으로도 보유 현금을 넘어요."],
+          warnings: ["고정 부대비용(법무비·이사비)만으로도 사용가능 현금 예산을 넘어요."],
         }),
       });
       expect(screen.getByText(/현금을 더 모으면/)).toBeInTheDocument();

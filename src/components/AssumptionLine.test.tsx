@@ -109,8 +109,10 @@ describe("AssumptionLine", () => {
     it("실제 컴포넌트는 룰셋의 ruralTaxAreaThresholdSqm 값을 문구에 반영한다", () => {
       renderLine();
       const threshold = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
+      // 기본값이 임계값과 같아(초과가 아니어서) "넘으면" 방향 문구가
+      // 나온다 — 위 "면적 문구가 방향을 분기한다" 블록과 같은 이유다.
       expect(
-        screen.getByText(new RegExp(`${threshold}㎡ 이하면`)),
+        screen.getByText(new RegExp(`${threshold}㎡를 넘으면`)),
       ).toBeInTheDocument();
     });
   });
@@ -143,10 +145,10 @@ describe("AssumptionLine", () => {
       expect(areaItem?.text).not.toMatch(/늘어날 수 있어요/);
     });
 
-    it("실제 기본값(임계값+1)은 초과 방향이므로 늘어날 수 있다고 말한다", () => {
+    it("실제 기본값(임계값과 같음)은 초과가 아니므로 낮아질 수 있다고 반대로 말한다", () => {
       renderLine();
       expect(
-        screen.getByText(/부대비용이 줄어 살 수 있는 가격이 늘어날 수 있어요/),
+        screen.getByText(/부대비용이 늘어 살 수 있는 가격이 낮아질 수 있어요/),
       ).toBeInTheDocument();
     });
   });

@@ -49,7 +49,7 @@ export interface BuyerProfile {
    * 반영됐다고 읽는다.
    */
   ownedHomeCount: number;
-  /** 주택 구매에 투입 가능한 순수 보유 현금(원) */
+  /** 주택 구매에 투입 가능한 순수 사용가능 현금 예산(원) */
   cash: number;
   /** 연 소득(원, 세전) */
   annualIncome: number;

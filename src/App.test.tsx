@@ -43,8 +43,13 @@ const { DETAIL_TEST_UNIT } = vi.hoisted(() => ({
     regionCode: "11680",
     legalDongName: "테스트동",
     builtYear: 2015,
-    areaBucket: 59,
-    maxExclusiveAreaSqm: 59,
+    // 85㎡ 초과로 둔다 — 가정 전용면적 기본값(85㎡, 농특세 미부과)과
+    // 다른 세율 구간이어야 상세를 열었을 때 실구매 가능 가격이 실제로
+    // 달라진다(아래 "상세가 열린 동안에는..." 테스트 참고). 85㎡
+    // 이하였다면 둘 다 농특세 미부과 구간이라 같은 값이 나와 그 테스트가
+    // 아무것도 증명하지 못한다.
+    areaBucket: 90,
+    maxExclusiveAreaSqm: 90,
     landLeasehold: "N",
     tradeCount: 3,
     minPrice: 190_000_000,
@@ -109,7 +114,7 @@ describe("App - 단지 상세(화면 4)", () => {
   async function fillProfile() {
     // "150000"·"15000"은 단위 없이 쓴 만원 표기다(MoneyInput 기본
     // 해석) — 각각 15억, 1억 5천만원.
-    await userEvent.type(screen.getByLabelText("보유 현금"), "150000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
     await userEvent.click(screen.getByLabelText("무주택"));
   }
@@ -149,14 +154,14 @@ describe("App - 단지 상세(화면 4)", () => {
     await fillProfile();
 
     // 아직 고르기 전에는 전용면적이 가정 중이라는 문구가 있다.
-    expect(screen.getByText(/전용면적 86㎡로 가정하고 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/전용면적 85㎡로 가정하고 계산했어요/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
-    // 이 평형(전용 59㎡)을 반영했으므로 가정 문구 자체가 더 이상
+    // 이 평형(전용 90㎡)을 반영했으므로 가정 문구 자체가 더 이상
     // 화면에 없다 — 상세가 열려 있는 동안 areaOverridden이 참이 되어
     // AssumptionLine이 전용면적 항목을 빼기 때문이다.
-    expect(screen.queryByText(/전용면적 86㎡로 가정하고 계산했어요/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/전용면적 85㎡로 가정하고 계산했어요/)).not.toBeInTheDocument();
     expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
   });
 
@@ -168,8 +173,8 @@ describe("App - 단지 상세(화면 4)", () => {
 
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
     const priceWhileOpen = container.querySelector(".affordable-price")?.textContent;
-    // 상세가 열려 있는 동안에는 이 평형(전용 59㎡)의 실제 면적 기준으로
-    // 다시 계산되므로 원래 가정(86㎡) 기준 가격과 달라야 한다.
+    // 상세가 열려 있는 동안에는 이 평형(전용 90㎡)의 실제 면적 기준으로
+    // 다시 계산되므로 원래 가정(85㎡) 기준 가격과 달라야 한다.
     expect(priceWhileOpen).not.toBe(priceBefore);
 
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
@@ -192,15 +197,15 @@ describe("App - 단지 상세(화면 4)", () => {
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
 
     // 목록으로 돌아오면 다시 가정이므로 문구도 다시 나타나야 한다 —
-    // 원래 가정 면적(86㎡) 그대로다.
-    expect(screen.getByText(/전용면적 86㎡로 가정하고 계산했어요/)).toBeInTheDocument();
+    // 원래 가정 면적(85㎡) 그대로다.
+    expect(screen.getByText(/전용면적 85㎡로 가정하고 계산했어요/)).toBeInTheDocument();
 
-    // 프로필(및 localStorage)에는 상세에서 본 59㎡가 전혀 쓰이지
+    // 프로필(및 localStorage)에는 상세에서 본 90㎡가 전혀 쓰이지
     // 않았어야 한다 — touched에도 "area"가 없고, 저장된 exclusiveAreaSqm도
-    // 원래 가정값(86)이다.
+    // 원래 가정값(85)이다.
     const stored = JSON.parse(window.localStorage.getItem("budget-profile-v1") ?? "{}");
     expect(stored.touched ?? []).not.toContain("area");
-    expect(stored.exclusiveAreaSqm).not.toBe(59);
+    expect(stored.exclusiveAreaSqm).not.toBe(90);
   });
 
   describe("리뷰 수정: 상세 화면의 배지 라벨·전용면적 입력·포커스", () => {
@@ -239,7 +244,7 @@ describe("App - 단지 상세(화면 4)", () => {
       await fillProfile();
 
       await userEvent.click(
-        screen.getByRole("button", { name: /전용면적 86㎡로 가정하고 계산했어요/ }),
+        screen.getByRole("button", { name: /전용면적 85㎡로 가정하고 계산했어요/ }),
       );
       expect(screen.getByLabelText("전용면적 (㎡)")).toBeInTheDocument();
 
@@ -289,7 +294,7 @@ describe("App - 단지 상세(화면 4)", () => {
 
       const summary = container.querySelector(".print-summary");
       expect(summary).not.toBeNull();
-      expect(summary?.textContent).toMatch(/15억/); // 보유 현금
+      expect(summary?.textContent).toMatch(/15억/); // 사용가능 현금 예산
       expect(summary?.textContent).toMatch(/1억 5,000만원/); // 연 소득
       expect(summary?.textContent).toMatch(/규제 기준/); // 룰셋 기준
       expect(summary?.textContent).toMatch(/인쇄일/);
@@ -327,12 +332,12 @@ describe("App - 단지 상세(화면 4)", () => {
       await fillProfile();
 
       const summaryBefore = container.querySelector(".print-summary");
-      expect(summaryBefore?.textContent).toMatch(/86㎡\s*\(가정값\)/);
+      expect(summaryBefore?.textContent).toMatch(/85㎡\s*\(가정값\)/);
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
       const summaryAfter = container.querySelector(".print-summary");
-      expect(summaryAfter?.textContent).toMatch(/59㎡\s*\(선택한 매물의 실제 면적\)/);
+      expect(summaryAfter?.textContent).toMatch(/90㎡\s*\(선택한 매물의 실제 면적\)/);
     });
   });
 });
@@ -349,7 +354,7 @@ describe("App - 권리분석 문진", () => {
   });
 
   async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("보유 현금"), "150000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
     await userEvent.click(screen.getByLabelText("무주택"));
   }

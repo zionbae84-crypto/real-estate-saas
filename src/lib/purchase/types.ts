@@ -42,6 +42,20 @@ export const PURCHASE_TYPES: readonly PurchaseType[] = [
   "월세수익형",
 ];
 
+/**
+ * 지금 화면에서 고를 수 있는 구매 유형.
+ *
+ * 갭투자를 뺐다 — 전세자금대출 규제로 지금은 갭투자로 살 수 있는
+ * 환경이 아니다. **엔진은 그대로 둔다**: `assessPurchase`·룰셋 검증은
+ * 여전히 갭투자를 다룬다(위 `PURCHASE_TYPES`도 안 줄인다) — 규제가
+ * 풀리면 이 목록에만 다시 넣으면 되고, 지표 로직을 다시 만들 필요가
+ * 없다. `PurchaseTypeSelect`(선택 화면)와 `usePurchaseType`(저장된 값
+ * 복원)이 이 목록을 함께 쓴다 — 하나만 고치면 예전에 갭투자를 저장해
+ * 둔 사용자가 고를 수 없는 유형이 선택된 채로 화면에 남는다.
+ */
+export const SELECTABLE_PURCHASE_TYPES: readonly PurchaseType[] =
+  PURCHASE_TYPES.filter((type) => type !== "갭투자");
+
 export const INVESTMENT_TYPES: readonly InvestmentType[] = [
   "갭투자",
   "월세수익형",

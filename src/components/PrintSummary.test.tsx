@@ -34,7 +34,7 @@ describe("buildPrintSummaryItems", () => {
     const items = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
     const labels = items.map((i) => i.label);
     expect(labels).toEqual([
-      "보유 현금",
+      "사용가능 현금 예산",
       "연 소득(세전)",
       "주택 수",
       "생애최초 주택 구입",
@@ -83,7 +83,7 @@ describe("buildPrintSummaryItems", () => {
 
   it("금액은 formatWon과 같은 표기로 나온다", () => {
     const items = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
-    const cash = items.find((i) => i.label === "보유 현금");
+    const cash = items.find((i) => i.label === "사용가능 현금 예산");
     expect(cash?.value).toContain("3억");
   });
 
@@ -189,7 +189,7 @@ describe("PrintSummary", () => {
         now={() => new Date(2026, 7, 23)}
       />,
     );
-    expect(screen.getByText("보유 현금")).toBeInTheDocument();
+    expect(screen.getByText("사용가능 현금 예산")).toBeInTheDocument();
     expect(screen.getByText("연 소득(세전)")).toBeInTheDocument();
     expect(screen.getByText("생애최초 주택 구입")).toBeInTheDocument();
     expect(screen.getByText("기존 대출(연간 상환액)")).toBeInTheDocument();

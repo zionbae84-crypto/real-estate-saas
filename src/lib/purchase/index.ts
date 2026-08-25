@@ -13,6 +13,7 @@ export {
   INVESTMENT_TYPES,
   PURCHASE_METRIC_IDS,
   PURCHASE_TYPES,
+  SELECTABLE_PURCHASE_TYPES,
 } from "./types";
 export type {
   CapRateResult,

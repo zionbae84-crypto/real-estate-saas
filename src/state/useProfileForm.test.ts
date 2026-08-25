@@ -35,17 +35,13 @@ describe("DEFAULT_FORM_STATE", () => {
     expect(DEFAULT_FORM_STATE.status).toBe("무주택");
   });
 
-  it("전용면적 기본값은 농특세 임계값을 넘는 쪽이다 — 숫자를 박지 않고 룰셋에서 유도한다", () => {
-    // 예전에는 84로 박혀 있었는데, 농특세 임계값(85㎡ 초과)보다 낮아
-    // 부대비용을 과소 계상하고 살 수 있는 가격을 과대 계상했다 — 이
-    // 제품이 절대 하면 안 되는 방향의 결함이었다. 여기서 숫자(86)를
-    // 다시 박으면 같은 실수를 테스트에서 반복하는 셈이라, 룰셋 임계값
-    // 기준으로 "그 값을 넘는지"를 확인한다.
-    expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBeGreaterThan(
-      rules.acquisitionTax.ruralTaxAreaThresholdSqm,
-    );
+  it("전용면적 기본값은 농특세 임계값과 같다(85㎡ 이하 기준) — 숫자를 박지 않고 룰셋에서 유도한다", () => {
+    // 국민주택규모(85㎡ 이하) 기준으로 가정해 달라는 제품 결정이다.
+    // 임계값을 넘는 값을 박으면 85㎡를 넘는 평형을 실제로 고른 사용자에게
+    // 부대비용이 과소 계상된 헤드라인을 보여주게 되므로, 룰셋 임계값
+    // 기준으로 "그 값과 같은지"를 확인한다(useProfileForm.ts 참고).
     expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBe(
-      rules.acquisitionTax.ruralTaxAreaThresholdSqm + 1,
+      rules.acquisitionTax.ruralTaxAreaThresholdSqm,
     );
   });
 

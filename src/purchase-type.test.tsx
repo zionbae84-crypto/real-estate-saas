@@ -29,7 +29,7 @@ const CASH = 1_500_000_000;
 const INCOME = 150_000_000;
 
 async function fillProfile() {
-  await userEvent.type(screen.getByLabelText("보유 현금"), "150000");
+  await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
   await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
   await userEvent.click(screen.getByLabelText("무주택"));
 }
@@ -48,7 +48,7 @@ const PROFILE: BuyerProfile = {
   existingDebtAnnualPayment: 0,
   isFirstTimeBuyer: false,
   isRegulatedArea: true,
-  exclusiveAreaSqm: rules.acquisitionTax.ruralTaxAreaThresholdSqm + 1,
+  exclusiveAreaSqm: rules.acquisitionTax.ruralTaxAreaThresholdSqm,
 };
 
 async function choose(type: "실거주" | "갭투자" | "월세수익형") {
@@ -65,13 +65,18 @@ describe("구매 유형 선택", () => {
     ).toBeChecked();
   });
 
-  it("세 유형을 모두 고를 수 있다", () => {
+  it("고를 수 있는 유형은 실거주·월세수익형뿐이다 — 갭투자는 전세자금대출 규제로 뺐다", () => {
     render(<App />);
-    for (const type of ["실거주", "갭투자", "월세수익형"] as const) {
+    for (const type of ["실거주", "월세수익형"] as const) {
       expect(
         screen.getByLabelText(new RegExp(purchaseRules.types[type].label)),
       ).toBeInTheDocument();
     }
+    // 엔진(PurchaseCheck)은 갭투자를 여전히 계산할 수 있다 — 여기서
+    // 확인하는 것은 이 라디오 목록에서만 뺐다는 사실이다.
+    expect(
+      screen.queryByLabelText(new RegExp(purchaseRules.types.갭투자.label)),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -82,35 +87,56 @@ describe("구매 유형 선택", () => {
 describe("구매 유형을 기억한다", () => {
   it("고른 유형이 저장된다", async () => {
     render(<App />);
-    await choose("갭투자");
-    expect(window.localStorage.getItem(PURCHASE_TYPE_STORAGE_KEY)).toBe("갭투자");
+    await choose("월세수익형");
+    expect(window.localStorage.getItem(PURCHASE_TYPE_STORAGE_KEY)).toBe(
+      "월세수익형",
+    );
   });
 
   it("새로 그려도 고른 유형이 남는다 — 실거주 예산 화면이 되돌아오지 않는다", async () => {
     render(<App />);
     await fillProfile();
-    await choose("갭투자");
+    await choose("월세수익형");
     // unmount만으로는 컨테이너가 body에 남아 다음 render와 겹친다.
     cleanup();
 
     // 새로고침과 같은 상태: 저장된 프로필과 저장된 유형만 남아 있다.
     render(<App />);
-    // 라디오로 좁힌다 — 갭투자 화면이 떠 있으면 그 섹션의 aria-label
-    // ("갭투자 재무 지표")도 같은 글자를 갖는다.
+    // 라디오로 좁힌다 — 월세수익형 화면이 떠 있으면 그 섹션의 aria-label
+    // ("월세수익형 재무 지표")도 같은 글자를 갖는다.
     expect(
       screen.getByRole("radio", {
-        name: new RegExp(purchaseRules.types.갭투자.label),
+        name: new RegExp(purchaseRules.types.월세수익형.label),
       }),
     ).toBeChecked();
     // 저장된 현금·소득으로 계산한 실거주 한도가 다시 뜨지 않는다.
     expect(document.querySelector(".affordable-price")).toBeNull();
     expect(
-      screen.getByText(purchaseRules.types.갭투자.loanLimitNote),
+      screen.getByText(purchaseRules.types.월세수익형.loanLimitNote),
     ).toBeInTheDocument();
   });
 
   it("저장된 값이 모르는 값이면 실거주로 떨어지고 그 사실을 말한다", () => {
     window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "전세");
+    render(<App />);
+    expect(
+      screen.getByLabelText(new RegExp(purchaseRules.types.실거주.label)),
+    ).toBeChecked();
+    expect(
+      document.querySelector(".purchase-type-restore-notice")?.textContent,
+    ).toMatch(/읽지 못해서 실거주로 시작했어요/);
+  });
+
+  /**
+   * 갭투자는 라디오에서 뺐지만 `PurchaseType` 유니온에는 여전히 있어서
+   * `loadStoredPurchaseType`이 "형식은 맞는 값"으로 착각할 수 있다.
+   * 저장해 둔 사람이 새로고침했을 때 고를 수 없는 화면이 조용히
+   * 되살아나면 안 되므로, "모르는 값"과 같은 경로(실거주 폴백 + 안내)를
+   * 타야 한다. `usePurchaseType.test.ts`가 단위 수준에서 이미 잠갔고,
+   * 여기서는 App 전체가 그 안내를 실제로 보여주는지 확인한다.
+   */
+  it("저장된 값이 (지금은 못 고르는) 갭투자면 실거주로 떨어지고 그 사실을 말한다", () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "갭투자");
     render(<App />);
     expect(
       screen.getByLabelText(new RegExp(purchaseRules.types.실거주.label)),
@@ -128,7 +154,7 @@ describe("구매 유형을 기억한다", () => {
   });
 
   it("정상적으로 복원됐을 때는 안내가 뜨지 않는다(오탐 방지 확인)", () => {
-    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "갭투자");
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "월세수익형");
     render(<App />);
     expect(document.querySelector(".purchase-type-restore-notice")).toBeNull();
   });
@@ -151,7 +177,7 @@ describe("실거주 경로는 그대로다", () => {
     await fillProfile();
     const before = document.querySelector(".affordable-price")?.textContent;
 
-    await choose("갭투자");
+    await choose("월세수익형");
     expect(document.querySelector(".affordable-price")).toBeNull();
 
     await choose("실거주");
@@ -171,9 +197,14 @@ describe("실거주 경로는 그대로다", () => {
 });
 
 describe("투자 목적 유형", () => {
-  it("갭투자를 고르면 실거주 예산 화면이 통째로 사라진다", async () => {
+  // 갭투자는 지금 라디오에서 뺐다(위 "구매 유형 선택" 참고) — 아래는
+  // 지금 UI로 고를 수 있는 유일한 투자 유형인 월세수익형으로 확인한다.
+  // 갭투자를 골랐을 때도 같은 동작이 나오는지는 PurchaseCheck.test.tsx가
+  // `<PurchaseCheck type="갭투자" />`를 직접 렌더링해 컴포넌트 수준에서
+  // 계속 잠근다 — 라디오가 사라져도 엔진·화면 로직 자체는 그대로다.
+  it("월세수익형을 고르면 실거주 예산 화면이 통째로 사라진다", async () => {
     render(<App />);
-    await choose("갭투자");
+    await choose("월세수익형");
 
     // 프로필 입력(현금·소득)도, 예산 결과도, 단지 목록도 없다.
     expect(screen.queryByLabelText("연 소득 (세전)")).not.toBeInTheDocument();
@@ -186,26 +217,22 @@ describe("투자 목적 유형", () => {
 
   it("대신 한도를 계산하지 않는다고 말한다", async () => {
     render(<App />);
-    await choose("갭투자");
+    await choose("월세수익형");
     expect(
-      screen.getByText(purchaseRules.types.갭투자.loanLimitNote),
+      screen.getByText(purchaseRules.types.월세수익형.loanLimitNote),
     ).toBeInTheDocument();
   });
 
-  it("월세 수익형은 월세 지표를, 갭투자는 전세 지표를 낸다", async () => {
+  it("월세 수익형은 월세 지표를 낸다(전세 지표는 나오지 않는다)", async () => {
     render(<App />);
     await choose("월세수익형");
     expect(screen.getByLabelText("월세")).toBeInTheDocument();
     expect(screen.queryByLabelText("전세보증금")).not.toBeInTheDocument();
-
-    await choose("갭투자");
-    expect(screen.getByLabelText("전세보증금")).toBeInTheDocument();
-    expect(screen.queryByLabelText("월세")).not.toBeInTheDocument();
   });
 
   it("인쇄 버튼은 유형과 무관하게 있다", async () => {
     render(<App />);
-    await choose("갭투자");
+    await choose("월세수익형");
     expect(screen.getByRole("button", { name: "인쇄하기" })).toBeInTheDocument();
   });
 });
@@ -223,7 +250,9 @@ describe("어느 기준인지·무엇을 계산하지 않는지가 유형에 따
     );
   });
 
-  it.each(["갭투자", "월세수익형"] as const)(
+  // 갭투자는 라디오에서 뺐다 — 지금 UI로 고를 수 있는 투자 유형은
+  // 월세수익형뿐이라 each 목록도 그것 하나로 좁힌다.
+  it.each(["월세수익형"] as const)(
     "%s에서는 실거주 룰셋 기준 대신 구매 유형 룰셋을 적는다",
     async (type) => {
       render(<App />);
@@ -241,7 +270,7 @@ describe("어느 기준인지·무엇을 계산하지 않는지가 유형에 따
     );
   });
 
-  it.each(["갭투자", "월세수익형"] as const)(
+  it.each(["월세수익형"] as const)(
     "%s 푸터는 대출한도 추정치가 있는 것처럼 말하지 않는다",
     async (type) => {
       render(<App />);
@@ -259,37 +288,21 @@ describe("어느 기준인지·무엇을 계산하지 않는지가 유형에 따
  * 자리인데 이를 잠그는 테스트가 없었다.
  */
 describe("유형을 오갈 때의 입력 보존", () => {
-  it("갭투자 → 월세로 가면 전세보증금이 월세 보증금으로 되살아나지 않는다", async () => {
+  // 갭투자는 라디오에서 뺐다. 갭투자↔월세수익형처럼 **서로 다른 두
+  // 투자 유형**을 오가는 값 격리(리뷰 수정 Minor 6이 고친 바로 그 결함)는
+  // 지금 이 화면에서 재현할 방법이 없다 — 이 App에서 UI로 도달 가능한
+  // 투자 유형이 월세수익형 하나뿐이기 때문이다. 그 회귀는
+  // `usePurchaseCheck.test.ts`가 훅을 직접 렌더링해 UI 도달 가능 여부와
+  // 무관하게 계속 잠근다. 아래는 이 화면에서 여전히 확인할 수 있는
+  // 것(투자 유형 하나를 오갈 때 실거주를 거치면 비워지는지)만 남긴다.
+  it("실거주를 거치면 투자 입력은 비워진다 — 되살아나는 것보다 안전하다", async () => {
     render(<App />);
-    await choose("갭투자");
-    await userEvent.type(screen.getByLabelText("전세보증금"), "40000");
-
-    await choose("월세수익형");
-    expect(screen.getByLabelText("보증금")).toHaveValue("");
-  });
-
-  it("갭↔월세를 오가도 각 유형의 값은 자기 자리에 남는다", async () => {
-    render(<App />);
-    await choose("갭투자");
-    await userEvent.type(screen.getByLabelText("전세보증금"), "40000");
     await choose("월세수익형");
     await userEvent.type(screen.getByLabelText("월세"), "200");
 
-    await choose("갭투자");
-    // MoneyInput은 포커스를 잃기 전까지 입력 원문을 그대로 들고 있다.
-    expect(screen.getByLabelText("전세보증금")).toHaveValue("40000");
-    await choose("월세수익형");
-    expect(screen.getByLabelText("월세")).toHaveValue("200");
-  });
-
-  it("실거주를 거치면 투자 입력은 비워진다 — 되살아나는 것보다 안전하다", async () => {
-    render(<App />);
-    await choose("갭투자");
-    await userEvent.type(screen.getByLabelText("전세보증금"), "40000");
-
     await choose("실거주");
-    await choose("갭투자");
-    expect(screen.getByLabelText("전세보증금")).toHaveValue("");
+    await choose("월세수익형");
+    expect(screen.getByLabelText("월세")).toHaveValue("");
   });
 
   it("실거주 프로필은 투자 유형을 거쳐도 그대로다(대조군)", async () => {
@@ -304,8 +317,9 @@ describe("유형을 오갈 때의 입력 보존", () => {
 });
 
 describe("권리분석 문진은 유형과 무관하다", () => {
-  // 등기부는 어떤 목적으로 사든 같은 서류다.
-  it.each(["실거주", "갭투자", "월세수익형"] as const)(
+  // 등기부는 어떤 목적으로 사든 같은 서류다. 갭투자는 라디오에서 뺐으므로
+  // 이 화면에서 고를 수 있는 유형(실거주·월세수익형)만 확인한다.
+  it.each(["실거주", "월세수익형"] as const)(
     "%s에서도 문진이 남아 있다",
     async (type) => {
       render(<App />);

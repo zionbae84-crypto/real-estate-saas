@@ -348,7 +348,7 @@ function FindingValues({
           label="그중 부대비용"
           value={won(finding.costs.total)}
         />
-        <Row field="availableCash" label="보유 현금" value={won(finding.availableCash)} />
+        <Row field="availableCash" label="사용가능 현금 예산" value={won(finding.availableCash)} />
         <Row
           field="shortfall"
           label="모자란 금액"

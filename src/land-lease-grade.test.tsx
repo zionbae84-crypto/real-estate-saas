@@ -442,7 +442,7 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
   async function openLandLeaseDetail() {
     render(<App />);
     // 16억 현금 · 2억 소득이면 토지임대부 평형이 목록에 뜬다.
-    await userEvent.type(screen.getByLabelText("보유 현금"), "160000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "160000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "20000");
     await userEvent.click(screen.getByLabelText("무주택"));
     const row = screen

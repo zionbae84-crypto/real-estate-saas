@@ -398,7 +398,7 @@ describe("PriceCheck", () => {
       // 현금만으로 덮이는 가격이다. ComplexList가 같은 경우에 숫자 대신
       // "대출 없이 살 수 있어요"라고 말하는 것과 같은 판단이다.
       render(<PriceCheck unit={unit()} budget={budget} />);
-      await typeAsking("30000"); // 3억 — 보유 현금 6억으로 덮인다
+      await typeAsking("30000"); // 3억 — 사용가능 현금 예산 6억으로 덮인다
       expect(document.querySelector('[data-field="neededLoan"]')?.textContent).toBe(
         "0원",
       );

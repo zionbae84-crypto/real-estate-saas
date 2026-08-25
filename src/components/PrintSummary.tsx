@@ -12,7 +12,7 @@ import type { ProfileFormState } from "../state/useProfileForm";
  * 지우려면 벤더 컴포넌트의 내부 DOM 구조에 기대야 하는데, 그 구조는
  * 우리가 보장할 수 있는 계약이 아니다.
  *
- * 그래서 이 컴포넌트가 일곱 전제(보유 현금·연 소득·주택 수·생애최초
+ * 그래서 이 컴포넌트가 일곱 전제(사용가능 현금 예산·연 소득·주택 수·생애최초
  * 여부·기존 대출·규제지역 여부·전용면적)를 화면 상태와 무관하게 항상
  * 같은 자리에서 평문으로 낸다. 부모 스펙 2번 항목("전제가 숫자와 함께
  * 인쇄돼야 한다")과 4번 항목("언제 기준인지 남아야 한다")을 함께 만족한다.
@@ -51,7 +51,7 @@ export function buildPrintSummaryItems(
 ): PrintSummaryItem[] {
   return [
     {
-      label: "보유 현금",
+      label: "사용가능 현금 예산",
       value: state.cash === null ? "입력 안 함" : formatWon(state.cash),
     },
     {

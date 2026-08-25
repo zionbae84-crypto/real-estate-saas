@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { PURCHASE_TYPES, type PurchaseType } from "../lib/purchase";
+import { SELECTABLE_PURCHASE_TYPES, type PurchaseType } from "../lib/purchase";
 
 export const PURCHASE_TYPE_STORAGE_KEY = "purchase-type-v1";
 
@@ -27,8 +27,16 @@ export interface StoredPurchaseType {
 
 const SAFE_DEFAULT: PurchaseType = "실거주";
 
+/**
+ * `SELECTABLE_PURCHASE_TYPES` 기준으로 판단한다 — 갭투자를 뺀 목록이다.
+ * 예전에 갭투자를 저장해 둔 사용자가 있으면(지금은 규제로 고를 수
+ * 없는 유형이다) "모르는 값"과 같은 경로로 실거주 폴백을 태우고 그
+ * 사실을 화면에 남긴다. `PURCHASE_TYPES`로 넓혀 체크하면 화면에는 없는
+ * 라디오가 골라진 채로 값만 복원돼, 사용자가 자기 선택을 다시 확인할
+ * 방법이 없어진다.
+ */
 function isPurchaseType(value: string): value is PurchaseType {
-  return (PURCHASE_TYPES as readonly string[]).includes(value);
+  return (SELECTABLE_PURCHASE_TYPES as readonly string[]).includes(value);
 }
 
 /**

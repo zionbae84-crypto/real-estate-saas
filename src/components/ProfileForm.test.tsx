@@ -114,11 +114,11 @@ function renderForm(
 }
 
 describe("ProfileForm", () => {
-  it("보유 현금과 연 소득을 입력할 수 있다", async () => {
+  it("사용가능 현금 예산과 연 소득을 입력할 수 있다", async () => {
     renderForm();
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "7000");
-    expect(screen.getByLabelText("보유 현금")).toHaveValue("20000");
+    expect(screen.getByLabelText("사용가능 현금 예산")).toHaveValue("20000");
     expect(screen.getByLabelText("연 소득 (세전)")).toHaveValue("7000");
   });
 
@@ -142,7 +142,7 @@ describe("ProfileForm", () => {
     expect(screen.getAllByRole("radio")).toHaveLength(2);
     expect(screen.getAllByRole("checkbox")).toHaveLength(1);
 
-    expect(screen.getByLabelText(/보유 현금/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/사용가능 현금 예산/)).toBeInTheDocument();
     expect(screen.getByLabelText(/연 소득/)).toBeInTheDocument();
     expect(screen.getByLabelText("무주택")).toBeInTheDocument();
     expect(screen.getByLabelText("유주택")).toBeInTheDocument();

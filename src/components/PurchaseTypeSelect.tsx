@@ -1,4 +1,8 @@
-import { PURCHASE_TYPES, type PurchaseRules, type PurchaseType } from "../lib/purchase";
+import {
+  SELECTABLE_PURCHASE_TYPES,
+  type PurchaseRules,
+  type PurchaseType,
+} from "../lib/purchase";
 
 export interface PurchaseTypeSelectProps {
   rules: PurchaseRules;
@@ -73,7 +77,7 @@ export function PurchaseTypeSelect({
             적용하지 않으려고 먼저 물어요.
           </p>
           <div className="purchase-type-options">
-            {PURCHASE_TYPES.map((type) => (
+            {SELECTABLE_PURCHASE_TYPES.map((type) => (
               <label className="purchase-type-option" key={type}>
                 <input
                   type="radio"

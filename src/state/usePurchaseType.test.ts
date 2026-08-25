@@ -26,7 +26,7 @@ describe("loadStoredPurchaseType", () => {
     });
   });
 
-  it.each(["실거주", "갭투자", "월세수익형"] as const)(
+  it.each(["실거주", "월세수익형"] as const)(
     "%s를 저장했으면 그대로 되살린다",
     (type) => {
       expect(loadStoredPurchaseType(storage(type))).toEqual({
@@ -35,6 +35,22 @@ describe("loadStoredPurchaseType", () => {
       });
     },
   );
+
+  /**
+   * 갭투자는 `PurchaseType` 유니온에는 여전히 있지만(엔진은 그대로
+   * 다룬다) `SELECTABLE_PURCHASE_TYPES`에서는 뺐다 — 전세자금대출
+   * 규제로 지금은 고를 수 없는 유형이다. 저장된 "갭투자"를 "형식은
+   * 맞는 값"으로 착각해 그대로 되살리면, 예전에 갭투자를 골라 둔
+   * 사용자가 새로고침했을 때 지금은 화면에서 고를 방법이 없는 유형이
+   * 조용히 다시 뜬다 — 그래서 "모르는 값"과 같은 경로(실거주 폴백 +
+   * 안내)를 태운다.
+   */
+  it("갭투자를 저장했으면 (지금은 고를 수 없는 유형이라) 실거주로 떨어지고 그 사실을 말한다", () => {
+    expect(loadStoredPurchaseType(storage("갭투자"))).toEqual({
+      type: "실거주",
+      restoreFailed: true,
+    });
+  });
 
   it("모르는 값이면 실거주로 떨어지되 조용히 떨어지지 않는다", () => {
     for (const broken of ["", "  ", "전세", "실거주 ", '"갭투자"', "{}", "null"]) {

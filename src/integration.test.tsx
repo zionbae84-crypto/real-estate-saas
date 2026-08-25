@@ -80,7 +80,7 @@ describe("예산 계산기 통합", () => {
   it("현금·소득만 넣고 주택 수를 답하지 않으면 결과가 나오지 않는다", async () => {
     render(<App />);
 
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
 
     expect(screen.queryByText("실구매 가능 가격")).not.toBeInTheDocument();
@@ -97,7 +97,7 @@ describe("예산 계산기 통합", () => {
   it("유주택을 고르면 주택 수를 적을 수 있고, 그 답이 정책대출 자격을 좁힌다", async () => {
     render(<App />);
 
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "5000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
@@ -130,7 +130,7 @@ describe("예산 계산기 통합", () => {
     const 무주택문구 = financeRules.acquisitionTax.householdCountNoteNoHome;
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "5000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
@@ -146,7 +146,7 @@ describe("예산 계산기 통합", () => {
   it("현금과 소득을 넣으면 결과와 슬라이더가 나타난다", async () => {
     render(<App />);
 
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
@@ -165,7 +165,7 @@ describe("예산 계산기 통합", () => {
 
   it("슬라이더를 내리면 월 상환액과 부담률이 줄어든다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
@@ -189,7 +189,7 @@ describe("예산 계산기 통합", () => {
 
   it("최대치에서는 그것이 한계라는 경고가 뜬다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
@@ -200,11 +200,11 @@ describe("예산 계산기 통합", () => {
 
   it("입력이 localStorage에 남아 새로고침 후 복원된다", async () => {
     const { unmount } = render(<App />);
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     unmount();
 
     render(<App />);
-    expect(screen.getByLabelText("보유 현금")).toHaveValue("20000");
+    expect(screen.getByLabelText("사용가능 현금 예산")).toHaveValue("20000");
   });
 
   /**
@@ -219,7 +219,7 @@ describe("예산 계산기 통합", () => {
    */
   it("규제지역 체크를 끄면 실구매력이 올라간다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
@@ -242,7 +242,7 @@ describe("예산 계산기 통합", () => {
     // 근거가 "모르니까 안전하게 규제지역"에서 "당신이 고른 지역이라서
     // 규제지역"으로 바뀐다 — 그 순간 그것은 더 이상 가정이 아니다.
     render(<App />);
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
@@ -255,7 +255,7 @@ describe("예산 계산기 통합", () => {
 
   it("지역을 고르면 목록이 그 지역만 남는다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("보유 현금"), "20000");
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
