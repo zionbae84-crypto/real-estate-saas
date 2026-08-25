@@ -200,10 +200,25 @@ export function App() {
    */
   const complexCoordinates = useComplexCoordinates();
 
+  /**
+   * 이 지역 조회에 단지가 하나라도 있었는가.
+   *
+   * 좌표 조회를 걸지, 지도 자리를 그릴지를 이 값 하나로 정한다 — 두
+   * 자리에서 각각 `units.length`를 세면 한쪽만 고쳐져 어긋난다. 단지가
+   * 0건인 지역에서 좌표를 묻는 것은 **그릴 것이 없다는 걸 이미 아는
+   * 채로** 국토부·네이버 API 호출량을 쓰는 일이고, 화면에는 "이 지역엔
+   * 데이터가 없어요" 옆에 지도 로딩/실패 안내가 나란히 뜬다.
+   */
+  const hasRegionUnits = regionComplexes.units.length > 0;
+
   useEffect(() => {
     if (regionComplexes.status !== "success" || currentRegionCode === null) return;
+    if (!hasRegionUnits) return;
     complexCoordinates.query(currentRegionCode, null);
-  }, [regionComplexes.status, currentRegionCode]);
+    // `complexCoordinates.query`는 useCallback([], ...)이라 참조가 안
+    // 고정돼 있다 — 그래도 의존성에 적어 둔다. 이 effect가 그 사실에
+    // 조용히 기대고 있으면, 훅 쪽이 바뀌는 날 여기서 무한 루프가 난다.
+  }, [regionComplexes.status, currentRegionCode, hasRegionUnits, complexCoordinates.query]);
 
   /** 조회 결과에 실제로 있는 행정동만. 없는 동은 고를 수 있으면 안 된다 */
   const dongOptions = useMemo(
@@ -698,6 +713,7 @@ export function App() {
                     )}
 
                   {regionComplexes.status === "success" &&
+                    hasRegionUnits &&
                     !dongFilteredEmpty &&
                     complexList !== null && (
                       <>

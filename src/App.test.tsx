@@ -1050,4 +1050,30 @@ describe("App - 지도", () => {
 
     await screen.findByRole("region", { name: "단지 지도" });
   });
+
+  it("단지가 0건인 지역에서는 좌표를 묻지도, 지도 자리를 그리지도 않는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+    const fetchCoords = vi
+      .spyOn(regionQuery, "fetchComplexCoordinates")
+      .mockResolvedValue([]);
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    // 지역 조회는 끝났다(0건이라는 사실을 화면이 이미 말한다).
+    await screen.findByText(/실거래가 자체가/);
+
+    // 그릴 것이 없다는 걸 이미 아는데 국토부·네이버 호출량을 쓰면 안 된다.
+    expect(fetchCoords).not.toHaveBeenCalled();
+    // "데이터가 없어요" 옆에 지도 로딩/실패 안내가 나란히 뜨면 안 된다.
+    expect(screen.queryByText("지도를 불러오고 있어요…")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "단지 지도" }),
+    ).not.toBeInTheDocument();
+  });
 });
