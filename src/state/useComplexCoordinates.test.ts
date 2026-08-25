@@ -15,9 +15,10 @@ describe("useComplexCoordinates", () => {
   });
 
   it("query를 부르면 loading을 거쳐 success가 되고, complexKey로 좌표를 찾을 수 있다", async () => {
-    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue([
-      { complexKey: "11680-1", lat: 37.1, lon: 127.1 },
-    ]);
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }],
+      partialFailureCount: 0,
+    });
     const { result } = renderHook(() => useComplexCoordinates());
 
     act(() => result.current.query("11680", null));
@@ -25,6 +26,23 @@ describe("useComplexCoordinates", () => {
 
     await waitFor(() => expect(result.current.status).toBe("success"));
     expect(result.current.coordinates.get("11680-1")).toEqual({ lat: 37.1, lon: 127.1 });
+    expect(result.current.hasPartialFailures).toBe(false);
+  });
+
+  it("partialFailureCount가 0보다 크면 hasPartialFailures가 true가 된다", async () => {
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }],
+      partialFailureCount: 2,
+    });
+    const { result } = renderHook(() => useComplexCoordinates());
+
+    act(() => result.current.query("11680", null));
+    await waitFor(() => expect(result.current.status).toBe("success"));
+
+    // 확인에 성공한 단지는 그대로 남아 있다 — 실패 신호가 성공한 좌표를
+    // 지우지 않는다.
+    expect(result.current.coordinates.get("11680-1")).toEqual({ lat: 37.1, lon: 127.1 });
+    expect(result.current.hasPartialFailures).toBe(true);
   });
 
   it("실패하면 error 상태가 되고, coordinates는 비어 있다", async () => {
@@ -62,13 +80,13 @@ describe("useComplexCoordinates", () => {
 
     // B가 먼저 도착한다.
     await act(async () => {
-      resolveB([{ complexKey: "11110-1", lat: 37.5, lon: 127.5 }]);
+      resolveB({ units: [{ complexKey: "11110-1", lat: 37.5, lon: 127.5 }], partialFailureCount: 0 });
     });
     await waitFor(() => expect(result.current.status).toBe("success"));
 
     // A가 뒤늦게 도착한다 — 이미 지나간 조회다.
     await act(async () => {
-      resolveA([{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }]);
+      resolveA({ units: [{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }], partialFailureCount: 0 });
     });
 
     expect(result.current.status).toBe("success");
@@ -93,7 +111,7 @@ describe("useComplexCoordinates", () => {
     act(() => result.current.query("11110", null));
 
     await act(async () => {
-      resolveB([{ complexKey: "11110-1", lat: 37.5, lon: 127.5 }]);
+      resolveB({ units: [{ complexKey: "11110-1", lat: 37.5, lon: 127.5 }], partialFailureCount: 0 });
     });
     await waitFor(() => expect(result.current.status).toBe("success"));
 

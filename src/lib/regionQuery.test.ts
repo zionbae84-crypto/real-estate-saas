@@ -124,7 +124,40 @@ describe("fetchRegionComplexes", () => {
 });
 
 describe("fetchComplexCoordinates", () => {
-  it("성공하면 좌표 목록을 반환한다", async () => {
+  it("성공하면 좌표 목록과 partialFailureCount를 반환한다", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          units: [{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }],
+          partialFailureCount: 0,
+        }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+
+    const result = await fetchComplexCoordinates("11680", null);
+    expect(result).toEqual({
+      units: [{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }],
+      partialFailureCount: 0,
+    });
+  });
+
+  it("일부 지오코딩이 실패했으면 partialFailureCount에 그 수를 담아 반환한다", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          units: [{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }],
+          partialFailureCount: 3,
+        }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+
+    const result = await fetchComplexCoordinates("11680", null);
+    expect(result.partialFailureCount).toBe(3);
+  });
+
+  it("옛 배포판처럼 partialFailureCount 필드가 없으면 0으로 본다", async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(
         JSON.stringify({ units: [{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }] }),
@@ -133,7 +166,7 @@ describe("fetchComplexCoordinates", () => {
     ) as typeof fetch;
 
     const result = await fetchComplexCoordinates("11680", null);
-    expect(result).toEqual([{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }]);
+    expect(result.partialFailureCount).toBe(0);
   });
 
   it("HTTP 실패면 던진다", async () => {
@@ -148,7 +181,7 @@ describe("fetchComplexCoordinates", () => {
     let requestedUrl = "";
     globalThis.fetch = vi.fn(async (url: string | URL) => {
       requestedUrl = url.toString();
-      return new Response(JSON.stringify({ units: [] }), { status: 200 });
+      return new Response(JSON.stringify({ units: [], partialFailureCount: 0 }), { status: 200 });
     }) as typeof fetch;
 
     await fetchComplexCoordinates("11680", null);

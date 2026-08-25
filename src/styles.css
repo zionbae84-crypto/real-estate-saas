@@ -631,9 +631,14 @@ body {
 
 .complex-empty,
 .complex-list-note,
-.complex-freshness {
+.complex-freshness,
+.complex-map-caveat {
   color: var(--seed-color-fg-neutral-muted);
   font-size: 0.9rem;
+}
+
+.complex-map-caveat {
+  margin-top: 0.5rem;
 }
 
 .complex-list-note {

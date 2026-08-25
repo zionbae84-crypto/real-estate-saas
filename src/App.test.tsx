@@ -225,7 +225,10 @@ describe("App - 지역 조회의 네 상태", () => {
     // 테스트가 실 네트워크로 나가지 않게 고정한다. 아래 단언은 목록
     // 조회 실패 문구를 **그대로** 찾으므로, 좌표 조회가 어떻게 끝나든
     // 문구가 겹치지는 않는다(셋 다 원인별로 다른 문구다).
-    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue([]);
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [],
+      partialFailureCount: 0,
+    });
 
     render(<App />);
     await fillProfile();
@@ -968,9 +971,10 @@ describe("App - 지도", () => {
       isRegulatedArea: null,
       dataAsOf: "2026-01",
     });
-    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue([
-      { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
-    ]);
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [{ complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 }],
+      partialFailureCount: 0,
+    });
 
     render(<App />);
     await fillProfile();
@@ -1009,9 +1013,10 @@ describe("App - 지도", () => {
       screen.queryByRole("region", { name: "단지 지도" }),
     ).not.toBeInTheDocument();
 
-    resolveCoords([
-      { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
-    ]);
+    resolveCoords({
+      units: [{ complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 }],
+      partialFailureCount: 0,
+    });
 
     await screen.findByRole("region", { name: "단지 지도" });
     expect(screen.queryByText("지도를 불러오고 있어요…")).not.toBeInTheDocument();
@@ -1046,9 +1051,10 @@ describe("App - 지도", () => {
 
     // 재시도 버튼이 있고, 다시 좌표 조회를 부른다.
     const retryButton = screen.getByRole("button", { name: "다시 시도" });
-    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue([
-      { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
-    ]);
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [{ complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 }],
+      partialFailureCount: 0,
+    });
     await userEvent.click(retryButton);
 
     await screen.findByRole("region", { name: "단지 지도" });
@@ -1062,7 +1068,7 @@ describe("App - 지도", () => {
     });
     const fetchCoords = vi
       .spyOn(regionQuery, "fetchComplexCoordinates")
-      .mockResolvedValue([]);
+      .mockResolvedValue({ units: [], partialFailureCount: 0 });
 
     render(<App />);
     await fillProfile();
@@ -1077,6 +1083,50 @@ describe("App - 지도", () => {
     expect(screen.queryByText("지도를 불러오고 있어요…")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("region", { name: "단지 지도" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("일부 단지의 좌표를 확인하지 못했으면 지도 옆에 안내 문구를 보여준다", async () => {
+    // partialFailureCount > 0 — 지오코딩이 일부 주소에서 던졌다는 신호다.
+    // 새 로딩/에러/성공 3분기를 또 만들지 않고, 이미 뜬 지도 옆에 한
+    // 줄만 덧붙여야 한다(찾은 단지는 그대로 지도에 남아 있다).
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DETAIL_TEST_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [{ complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 }],
+      partialFailureCount: 2,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    // 지도는 여전히 뜬다 — 확인에 성공한 단지는 그대로 보여준다.
+    await screen.findByRole("region", { name: "단지 지도" });
+    await screen.findByText("일부 단지의 위치를 확인하지 못했어요. 지도에 안 보이는 단지가 있을 수 있어요.");
+  });
+
+  it("좌표 조회가 깨끗하게 성공하면 부분 실패 안내 문구가 뜨지 않는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DETAIL_TEST_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [{ complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 }],
+      partialFailureCount: 0,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    await screen.findByRole("region", { name: "단지 지도" });
+    expect(
+      screen.queryByText("일부 단지의 위치를 확인하지 못했어요. 지도에 안 보이는 단지가 있을 수 있어요."),
     ).not.toBeInTheDocument();
   });
 });

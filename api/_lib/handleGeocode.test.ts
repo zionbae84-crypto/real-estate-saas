@@ -39,6 +39,9 @@ describe("handleGeocodeRequest", () => {
         { complexKey: "11680-1", lat: 1, lon: 1 },
         { complexKey: "11680-2", lat: 2, lon: 2 },
       ],
+      // 세 번째 주소는 지오코딩이 null을 돌려줬을 뿐 던지지 않았다 —
+      // "확인했더니 없다"이지 "확인 못 했다"가 아니므로 실패로 세지 않는다.
+      partialFailureCount: 0,
     });
     // 캐시 히트였던 첫 단지는 지오코딩을 부르지 않았다.
     expect(geocode).toHaveBeenCalledTimes(2);
@@ -181,8 +184,54 @@ describe("handleGeocodeRequest", () => {
     );
 
     expect(result.status).toBe(200);
-    const keys = (result.body as { units: { complexKey: string }[] }).units.map((u) => u.complexKey);
+    const body = result.body as { units: { complexKey: string }[]; partialFailureCount: number };
+    const keys = body.units.map((u) => u.complexKey);
     expect(keys).toEqual(["11680-0", "11680-1", "11680-3", "11680-4", "11680-5"]);
+    // 던져서 뺀 한 건이 partialFailureCount에 잡힌다.
+    expect(body.partialFailureCount).toBe(1);
+  });
+
+  it("일부는 던지고 일부는 정말 못 찾은 경우, units엔 성공만 남고 partialFailureCount엔 던진 것만 센다", async () => {
+    // N=6개 주소: 3개는 정상 지오코딩, 2개는 geocode가 던짐(429/네트워크
+    // 오류 등을 흉내), 1개는 geocode가 null을 정상적으로 돌려줌(주소가
+    // 진짜로 없음). units엔 성공한 3개만 남아야 하고, partialFailureCount는
+    // 던진 2개만 세야 한다 — null을 돌려준 1개는 세면 안 된다(그건
+    // "확인했더니 없다"이지 "확인 못 했다"가 아니다).
+    const addresses = new Map(
+      Array.from({ length: 6 }, (_, i) => [`11680-${i}`, `주소 ${i}`] as const),
+    );
+    const fetchAddresses = vi.fn().mockResolvedValue(addresses);
+    const geocode = vi.fn(async (address: string) => {
+      if (address === "주소 1" || address === "주소 4") {
+        throw new Error("429 Too Many Requests");
+      }
+      if (address === "주소 5") return null; // 진짜로 못 찾음
+      return { lat: 1, lon: 1 };
+    });
+
+    const result = await handleGeocodeRequest(
+      { regionCode: "11680", dong: null },
+      {
+        fetchAddresses,
+        cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn(async () => {}) },
+        geocode,
+        dataKey: "molit-key",
+        key: "id",
+        secret: "s",
+      },
+    );
+
+    expect(result.status).toBe(200);
+    const body = result.body as {
+      units: { complexKey: string }[];
+      partialFailureCount: number;
+    };
+    expect(body.units.map((u) => u.complexKey)).toEqual([
+      "11680-0",
+      "11680-2",
+      "11680-3",
+    ]);
+    expect(body.partialFailureCount).toBe(2);
   });
 
   it("캐시 조회가 실패해도 캐시 미스처럼 지오코딩으로 넘어가 결과를 담는다", async () => {
@@ -199,7 +248,7 @@ describe("handleGeocodeRequest", () => {
     );
 
     expect(result.status).toBe(200);
-    expect(result.body).toEqual({ units: [{ complexKey: "11680-1", lat: 1, lon: 1 }] });
+    expect(result.body).toEqual({ units: [{ complexKey: "11680-1", lat: 1, lon: 1 }], partialFailureCount: 0 });
     expect(geocode).toHaveBeenCalledWith("서울특별시 강남구 역삼동 719-3");
   });
 
@@ -217,6 +266,6 @@ describe("handleGeocodeRequest", () => {
     );
 
     expect(result.status).toBe(200);
-    expect(result.body).toEqual({ units: [{ complexKey: "11680-1", lat: 1, lon: 1 }] });
+    expect(result.body).toEqual({ units: [{ complexKey: "11680-1", lat: 1, lon: 1 }], partialFailureCount: 0 });
   });
 });

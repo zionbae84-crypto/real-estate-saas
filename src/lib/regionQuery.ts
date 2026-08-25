@@ -79,8 +79,27 @@ export interface ComplexCoordinate {
   lon: number;
 }
 
+export interface ComplexCoordinatesResult {
+  units: ComplexCoordinate[];
+  /**
+   * 지오코딩이 **던져서**(429/5xx/인증 실패/네트워크 오류) 확인하지 못한
+   * 주소 수 — `api/_lib/handleGeocode.ts`의 같은 이름 필드를 그대로
+   * 옮긴다. 주소가 진짜로 없어서 좌표가 안 나온 단지는 여기 세지 않는다.
+   * 0보다 크면 `units`가 비어 있거나 적어도 그게 "이 지역엔 지도에 찍을
+   * 게 없다"가 아니라 "일부를 확인하지 못했다"일 수 있다는 뜻이다.
+   */
+  partialFailureCount: number;
+}
+
 interface GeocodeApiResponse {
   units: ComplexCoordinate[];
+  partialFailureCount?: unknown;
+}
+
+/** 옛 배포판(필드가 아예 없음)이나 형식이 아닌 값은 0으로 좁힌다 — "일부
+ * 실패가 있었다"를 확인 없이 주장하지 않는다. */
+function narrowPartialFailureCount(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? value : 0;
 }
 
 /**
@@ -91,7 +110,7 @@ interface GeocodeApiResponse {
 export async function fetchComplexCoordinates(
   regionCode: string,
   dong: string | null,
-): Promise<ComplexCoordinate[]> {
+): Promise<ComplexCoordinatesResult> {
   const params = new URLSearchParams({ regionCode });
   if (dong !== null) params.set("dong", dong);
 
@@ -103,5 +122,8 @@ export async function fetchComplexCoordinates(
   }
 
   const body = (await res.json()) as GeocodeApiResponse;
-  return body.units;
+  return {
+    units: body.units,
+    partialFailureCount: narrowPartialFailureCount(body.partialFailureCount),
+  };
 }

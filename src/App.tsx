@@ -778,13 +778,31 @@ export function App() {
                         )}
 
                         {complexCoordinates.status === "success" && (
-                          <ComplexMap
-                            units={dongFilteredUnits}
-                            coordinates={complexCoordinates.coordinates}
-                            naverMapClientId={
-                              import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
-                            }
-                          />
+                          <>
+                            <ComplexMap
+                              units={dongFilteredUnits}
+                              coordinates={complexCoordinates.coordinates}
+                              naverMapClientId={
+                                import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
+                              }
+                            />
+                            {/*
+                              지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
+                              오류) — 주소가 진짜로 없어서가 아니다
+                              (api/_lib/handleGeocode.ts의 partialFailureCount
+                              참고). 새 로딩/에러/성공 3분기를 또 만들지
+                              않고, 이미 뜬 지도 옆에 한 줄만 덧붙인다 —
+                              성공적으로 찾은 단지는 그대로 지도에 남아
+                              있으니 "지도가 비어 있다"와 다르게 말해야
+                              한다.
+                            */}
+                            {complexCoordinates.hasPartialFailures && (
+                              <p className="complex-map-caveat">
+                                일부 단지의 위치를 확인하지 못했어요. 지도에
+                                안 보이는 단지가 있을 수 있어요.
+                              </p>
+                            )}
+                          </>
                         )}
                       </>
                     )}

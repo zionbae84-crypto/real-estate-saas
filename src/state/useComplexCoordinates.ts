@@ -8,6 +8,15 @@ export interface ComplexCoordinatesState {
   status: ComplexCoordinatesStatus;
   /** complexKey → 좌표. 실패·로딩 중에는 비어 있다 — 가짜 좌표를 만들지 않는다. */
   coordinates: Map<string, { lat: number; lon: number }>;
+  /**
+   * 마지막 성공한 조회에서, 지오코딩이 일부 주소를 확인하지 못했는가
+   * (`api/_lib/handleGeocode.ts`의 `partialFailureCount > 0`). `status`가
+   * "success"인데 이 값이 true면 `coordinates`에는 확인에 성공한 단지만
+   * 담겨 있고, 지도에 안 찍힌 단지 중 일부는 "거기 없다"가 아니라
+   * "확인하지 못했다"일 수 있다는 뜻이다 — 새 상태 카테고리를 만들지
+   * 않고 success 상태에 붙는 부가 신호로만 둔다.
+   */
+  hasPartialFailures: boolean;
   query: (regionCode: string, dong: string | null) => void;
 }
 
@@ -34,6 +43,7 @@ function requestKey(regionCode: string, dong: string | null): string {
 export function useComplexCoordinates(): ComplexCoordinatesState {
   const [status, setStatus] = useState<ComplexCoordinatesStatus>("idle");
   const [coordinates, setCoordinates] = useState<Map<string, { lat: number; lon: number }>>(new Map());
+  const [hasPartialFailures, setHasPartialFailures] = useState(false);
   const lastRequestKey = useRef<string | null>(null);
 
   const query = useCallback((regionCode: string, dong: string | null) => {
@@ -41,18 +51,20 @@ export function useComplexCoordinates(): ComplexCoordinatesState {
     lastRequestKey.current = key;
     setStatus("loading");
     fetchComplexCoordinates(regionCode, dong)
-      .then((units) => {
+      .then(({ units, partialFailureCount }) => {
         // 지나간 조회의 응답이면 아무것도 하지 않는다 — 위 주석 참고.
         if (lastRequestKey.current !== key) return;
         setCoordinates(new Map(units.map((u) => [u.complexKey, { lat: u.lat, lon: u.lon }])));
+        setHasPartialFailures(partialFailureCount > 0);
         setStatus("success");
       })
       .catch(() => {
         if (lastRequestKey.current !== key) return;
         setCoordinates(new Map());
+        setHasPartialFailures(false);
         setStatus("error");
       });
   }, []);
 
-  return { status, coordinates, query };
+  return { status, coordinates, hasPartialFailures, query };
 }

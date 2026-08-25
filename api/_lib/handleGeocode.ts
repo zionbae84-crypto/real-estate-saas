@@ -61,17 +61,33 @@ function redactAllKeys(e: unknown, deps: HandleGeocodeDeps): string {
 }
 
 /**
+ * 주소 하나의 좌표 조회 결과. "좌표를 구했다"/"조용히 뺀다"의 두 갈래가
+ * 아니라 세 갈래다 — `deps.geocode`가 **던졌다**(429/5xx/인증 실패/네트워크
+ * 오류처럼 "확인하지 못했다")와 **`null`을 돌려줬다**(주소를 진짜로 못
+ * 찾았다, "확인했더니 없다")를 구분해야 한다. 두 갈래를 합치면 클라이언트는
+ * "이 지역엔 지도에 찍을 게 없다"와 "우리가 확인을 못 했다"를 구분하지
+ * 못한다 — 이 앱이 다른 곳에서 여러 번 고친 바로 그 오류 패턴이다(지역
+ * 0건/예산 부족, 동 0건/지역 0건, 규제지역 모름/확정 아님, 그리고 이
+ * 브랜치의 SDK 로드·좌표 조회 3분기).
+ */
+type ResolveCoordinateResult =
+  | { kind: "resolved"; complexKey: string; lat: number; lon: number }
+  | { kind: "notFound" }
+  | { kind: "failed" };
+
+/**
  * 주소 하나를 좌표로 옮긴다. 캐시를 먼저 보고, 없을 때만 지오코딩한다.
  *
- * 실패는 전부 이 단지 하나를 빼는 것으로 끝난다 — 절대 던지지 않는다.
- * 병렬로 도는 자리라 여기서 던지면 같은 묶음의 멀쩡한 주소들까지 함께
- * 무너진다(순차 루프의 `continue`가 하던 일을 그대로 유지한다).
+ * 절대 던지지 않는다 — 병렬로 도는 자리라 여기서 던지면 같은 묶음의
+ * 멀쩡한 주소들까지 함께 무너진다(순차 루프의 `continue`가 하던 일을 그대로
+ * 유지한다). 대신 실패("failed")와 정말 없음("notFound")을 결과값으로
+ * 구분해 돌려준다 — 위 {@link ResolveCoordinateResult} 참고.
  */
 async function resolveCoordinate(
   complexKey: string,
   address: string,
   deps: HandleGeocodeDeps,
-): Promise<{ complexKey: string; lat: number; lon: number } | null> {
+): Promise<ResolveCoordinateResult> {
   let coordinate: Coordinate | null;
   try {
     coordinate = await deps.cache.get(address);
@@ -86,10 +102,13 @@ async function resolveCoordinate(
     try {
       coordinate = await deps.geocode(address);
     } catch {
-      // 이 단지 하나의 지오코딩 실패는 조용히 건너뛴다 — §7의 "좌표
-      // 없는 단지는 빠진다"는 원칙과 같다. 전체 요청을 실패로 만들지
-      // 않는다(주소 조회 자체의 실패와는 다르다 — 그쪽은 502다).
-      return null;
+      // 이 단지 하나의 지오코딩 자체가 실패했다 — 주소가 없다는 뜻이
+      // 아니라 "확인하지 못했다"는 뜻이다(429/5xx/인증 실패/네트워크
+      // 오류). §7의 "좌표 없는 단지는 빠진다"는 원칙대로 이 단지는 여전히
+      // `units`에서 빠지지만, 전체 요청을 502로 실패시키지도 않는다 —
+      // 대신 이 사실을 `partialFailureCount`로 응답에 남긴다(아래
+      // `handleGeocodeRequest` 참고).
+      return { kind: "failed" };
     }
     if (coordinate !== null) {
       try {
@@ -102,7 +121,8 @@ async function resolveCoordinate(
     }
   }
 
-  return coordinate === null ? null : { complexKey, lat: coordinate.lat, lon: coordinate.lon };
+  if (coordinate === null) return { kind: "notFound" };
+  return { kind: "resolved", complexKey, lat: coordinate.lat, lon: coordinate.lon };
 }
 
 /**
@@ -128,6 +148,11 @@ export async function handleGeocodeRequest(
   }
 
   const units: Array<{ complexKey: string; lat: number; lon: number }> = [];
+  // 지오코딩이 **던져서** 확인하지 못한 주소 수 — 진짜로 좌표가 없는
+  // 주소("notFound")는 여기 세지 않는다. 이 값이 0보다 크면 클라이언트는
+  // "이 지역엔 지도에 찍을 게 없다"와 "우리가 일부를 확인하지 못했다"를
+  // 구분할 수 있다.
+  let partialFailureCount = 0;
 
   // `GEOCODE_CONCURRENCY`개씩 끊어 병렬로 돈다. 묶음 안의 순서는
   // `Promise.all`이, 묶음 사이의 순서는 이 루프가 지키므로 결과 순서는
@@ -138,10 +163,14 @@ export async function handleGeocodeRequest(
     const resolved = await Promise.all(
       batch.map(([complexKey, address]) => resolveCoordinate(complexKey, address, deps)),
     );
-    for (const unit of resolved) {
-      if (unit !== null) units.push(unit);
+    for (const result of resolved) {
+      if (result.kind === "resolved") {
+        units.push({ complexKey: result.complexKey, lat: result.lat, lon: result.lon });
+      } else if (result.kind === "failed") {
+        partialFailureCount++;
+      }
     }
   }
 
-  return { status: 200, body: { units } };
+  return { status: 200, body: { units, partialFailureCount } };
 }
