@@ -4,9 +4,9 @@ import { describe, expect, it } from "vitest";
 /**
  * 입지 화면의 **구조적** 약속을 소스·CSS에서 직접 확인한다.
  *
- * `scripts/price-guard.test.ts`·`scripts/rights-color.test.ts`·
- * `scripts/purchase-structure.test.ts`와 같은 태도다 — 값 하나가 맞는지가
- * 아니라 "그 결론에 닿는 경로가 존재하지 않는지"를 잠근다.
+ * `scripts/price-guard.test.ts`·`scripts/purchase-structure.test.ts`와
+ * 같은 태도다 — 값 하나가 맞는지가 아니라 "그 결론에 닿는 경로가
+ * 존재하지 않는지"를 잠근다.
  *
  * **이 파일이 `src/`가 아니라 `scripts/`에 있는 이유:** 파일을 직접 읽는
  * 빌드 타임 검사이기 때문이다. `src/no-network.test.ts`가 `src/` 안에서

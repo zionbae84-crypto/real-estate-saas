@@ -24,8 +24,8 @@ import { describe, expect, it } from "vitest";
  * 자체가 일어나지 않는지를 둘 다 확인한다.
  *
  * **이 파일이 `src/`가 아니라 `scripts/`에 있는 이유:** `node:fs`로
- * 소스를 직접 읽는 빌드 타임 검사이기 때문이다(`printCss.test.ts`·
- * `rights-color.test.ts`와 같은 이유).
+ * 소스를 직접 읽는 빌드 타임 검사이기 때문이다(`printCss.test.ts`와
+ * 같은 이유).
  */
 
 /** 실거주 대출 한도로 내려가는 진입점들 */

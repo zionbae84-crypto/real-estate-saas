@@ -15,7 +15,7 @@ import rawLandLeaseRules from "../rules/land-lease-2026-08.json";
  *
  * **이 파일이 `src/`가 아니라 `scripts/`에 있는 이유:** `node:fs`로
  * 소스를 직접 읽는 빌드 타임 검사이기 때문이다(`window-label`·
- * `rights-color`·`printCss`와 같은 자리). `src/no-network.test.ts`가
+ * `printCss`와 같은 자리). `src/no-network.test.ts`가
  * `src/` 안에서 Node 내장 모듈 임포트를 금지한다.
  */
 
@@ -56,7 +56,7 @@ function ruleStrings(value: unknown): string[] {
   return [];
 }
 
-/** 한 선택자에 걸린 규칙의 선언부를 모은다(rights-color.test.ts와 같은 파서) */
+/** 한 선택자에 걸린 규칙의 선언부를 모은다 */
 function declarationsFor(css: string, selector: string): string[] {
   const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   const re = new RegExp(`(^|[,}])\\s*${escaped}\\s*\\{([^{}]*)\\}`, "g");
@@ -174,7 +174,7 @@ describe("토지임대부 표시의 색", () => {
    * 어느 상태에서도 이 표시는 "괜찮다"는 말이 아니다 — 하나는 매달
    * 나가는 돈이 우리 계산 밖에 더 있다는 뜻이고, 다른 하나는 그것조차
    * 모른다는 뜻이다. 예산 배지의 "안전" 색을 빌려 오면 화면에서 먼저
-   * 읽히는 색이 문장을 되돌려 준다(`rights-color.test.ts`와 같은 규칙).
+   * 읽히는 색이 문장을 되돌려 준다.
    */
   it.each(SELECTORS)("%s가 '안전' 색을 쓰지 않는다", (selector) => {
     for (const body of declarationsFor(DECLARATIONS, selector)) {

@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 /**
  * 호가 위치 화면의 **구조적** 약속을 소스·CSS에서 직접 확인한다.
  *
- * `scripts/rights-color.test.ts`·`scripts/purchase-structure.test.ts`와
+ * `scripts/purchase-structure.test.ts`와
  * 같은 태도다 — 값 하나가 맞는지가 아니라 "그 결론에 닿는 경로가
  * 존재하지 않는지"를 잠근다.
  *

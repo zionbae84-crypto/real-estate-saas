@@ -72,10 +72,13 @@ function judgeableOveralls(
  * 모른다"가 "괜찮다"로 접히고, (3) 우리가 판단 못 하는 신호(`expert`)가
  * 남아 있으면 "걸리는 게 없었다"(`clear`)고 부를 수 없다.
  *
- * 판정 가능한 축이 하나도 없으면(이론상으로만 — 권리분석 문진은 항상
- * 렌더되므로 실제로는 일어나지 않는다) `unresolved`로 방어적으로
- * 내린다. 확인한 것이 하나도 없는 상태를 `clear`로 부르는 것이 이
- * 함수가 낼 수 있는 가장 위험한 오답이기 때문이다.
+ * 판정 가능한 축이 하나도 없으면 `unresolved`로 방어적으로 내린다.
+ * 권리분석이 이 앱에서 제거돼 항상 `null`인 지금은 이 경우가 이론상
+ * 드문 일이 아니다 — 예를 들어 실거주 매수인데 아직 목록에서 평형을
+ * 고르지 않은 방문자는 세 축(권리·구매·호가) 모두 판정 없이 이
+ * 화면을 본다. 확인한 것이 하나도 없는 상태를 `clear`로 부르는 것이
+ * 이 함수가 낼 수 있는 가장 위험한 오답이기 때문에, 그런 상태에서도
+ * `unresolved`로 안전하게 내린다.
  */
 function decideHeadline(input: DiagnosisSummaryInput): SummaryHeadline {
   const overalls = judgeableOveralls(input);
