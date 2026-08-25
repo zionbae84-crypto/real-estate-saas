@@ -568,8 +568,8 @@ body {
  * 자체가 "무리 없이" / "부담이 커요"를 이미 말하고, 색은 그것을 반복한다.
  */
 .complex-group {
-  margin: 1.5rem 0 0.5rem;
-  font-size: 1rem;
+  margin: 1rem 0 0.5rem;
+  font-size: 0.9375rem;
 }
 
 .complex-group--safe {
@@ -595,9 +595,20 @@ body {
   padding: 0;
 }
 
+/*
+ * 320px 사이드바 폭에서 각 행에 카드 표면을 준다(Seline 톤) — 예전
+ * `border-top` 구분선 대신 카드 하나하나가 자기 테두리를 가진다.
+ */
 .complex-row {
-  border-top: 1px solid var(--border);
-  padding: 0.75rem 0;
+  background: var(--seed-color-bg-layer-floating);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.complex-rows > .complex-row:last-child {
+  margin-bottom: 0;
 }
 
 /*
@@ -613,7 +624,18 @@ body {
   margin: 0.15rem 0;
 }
 
+/*
+ * 320px 사이드바 폭에서 기본 본문 크기(1rem)는 두 줄에 걸치기
+ * 쉽다 — 이름·가격 줄을 한 단계 줄인다. 부가 정보(준공년·거래건수)는
+ * `white-space`를 따로 건드리지 않는다 — span은 원래 `white-space:
+ * normal`이라 좁은 폭에서 이미 자연스럽게 줄바꿈된다.
+ */
+.complex-name {
+  font-size: 0.9375rem;
+}
+
 .complex-range {
+  font-size: 0.9375rem;
   font-weight: 600;
 }
 
@@ -624,7 +646,7 @@ body {
 }
 
 .complex-burden {
-  font-size: 0.9rem;
+  font-size: 0.85rem;
 }
 
 .complex-burden[data-level="safe"] .complex-level { color: var(--safe); }
