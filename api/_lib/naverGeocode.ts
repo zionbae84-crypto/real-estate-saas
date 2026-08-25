@@ -1,6 +1,10 @@
 import { redactKey } from "../../scripts/pipeline/fetch";
 
-const ENDPOINT = "https://naveropenapi.apigw.ntruss.com/map-geocode/v2/geocode";
+// naveropenapi.apigw.ntruss.com은 예전 "AI NAVER API" 시절 도메인이다.
+// 신규 발급된 Maps Application(콘솔의 Application > Geocoding)은 이
+// 도메인으로 호출하면 실제 구독 여부와 무관하게 210/구독 필요 에러를
+// 낸다 — 반드시 이 새 도메인을 써야 한다.
+const ENDPOINT = "https://maps.apigw.ntruss.com/map-geocode/v2/geocode";
 
 interface GeocodeResponseBody {
   status?: string;
