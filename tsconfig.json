@@ -14,5 +14,5 @@
     "types": ["node", "vite/client"],
     "paths": { "seed-design/*": ["./seed-design/*"] }
   },
-  "include": ["src", "scripts", "seed-design"]
+  "include": ["src", "scripts", "seed-design", "api"]
 }
