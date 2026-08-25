@@ -362,6 +362,40 @@ describe("예산 계산기 통합", () => {
   });
 
   /**
+   * 위 두 테스트의 또 다른 변주 — 이번엔 뒤 지역이 "모르는 지역(null)"이
+   * 아니라 **조회 자체가 실패**(status: "error")하는 경우다.
+   *
+   * 아는 지역을 먼저 조회하면 규제지역 값이 확정되어 가정 문구에서
+   * 빠진다. 그 다음 지역 조회가 실패하면, 이번 조회는 이 지역에 대해
+   * 아무것도 확인해 주지 못했다 — 그런데도 앞 지역의 확정값이 화면에
+   * 남으면 "새 지역도 규제지역"이라는 확정 사실을 실제로는 아무도
+   * 검증하지 않은 채 말하는 셈이 된다. `nonRegulated` 목록이 채워지는
+   * 순간 이 경로로도 한도 과대평가가 새어 나간다.
+   */
+  it("아는 지역 다음에 조회가 실패하면 규제지역이 다시 가정으로 돌아간다", async () => {
+    const spy = mockRegionQuery(cheapestIn("11680", 3), true);
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+
+    // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
+    await selectRegion("서울특별시", "강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+
+    // 다음 지역 조회는 실패한다 — 이 지역에 대해 아무것도 알아내지 못했다.
+    spy.mockRejectedValueOnce(new Error("네트워크 오류"));
+    await selectRegion("서울특별시", "서초구");
+    await screen.findByText(/불러오지 못했어요/);
+
+    // 가정 고지가 되살아나야 한다 — 앞 지역의 확정이 실패한 조회까지
+    // 그대로 따라오면 안 된다.
+    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+  });
+
+  /**
    * 예전에는 번들에 실린 전체 목록을 클라이언트에서 걸러 "그 지역만"
    * 남겼다. 지금은 목록 자체가 그 지역을 조회한 결과다 — 그래서 검사도
    * "줄었는가"(옛 필터의 부수효과)가 아니라 **"고른 지역의 결과만

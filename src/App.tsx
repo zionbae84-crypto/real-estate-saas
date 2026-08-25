@@ -149,8 +149,19 @@ export function App() {
    * **폼 상태에 직접 반영한다.** 목록 전용 프로필을 따로 만들면 위의 최대
    * 가격과 아래 목록이 서로 다른 프로필로 계산돼, 화면이 두 개의 다른
    * 예산을 동시에 말하게 된다(옛 `handleRegionChange`와 같은 이유).
+   *
+   * **조회 실패(`status === "error"`)일 때도 가정 상태로 되돌린다.** 실패한
+   * 조회는 이번 지역에 대해 아무것도 확인해 주지 못했다 — 그런데도 status만
+   * 보고 멈추면 직전에 성공했던 다른 지역의 `isRegulatedArea`가 "확정
+   * 사실"인 채로 화면에 남는다. 지금은 `nonRegulated` 목록이 비어 있어
+   * 새어 나갈 수 있는 값이 보수적인 `true`뿐이지만, 목록이 채워지면 위
+   * `null` 케이스와 같은 방식으로 한도를 과대평가한다.
    */
   useEffect(() => {
+    if (regionComplexes.status === "error") {
+      resetField("regulatedArea");
+      return;
+    }
     if (regionComplexes.status !== "success") return;
     if (regionComplexes.isRegulatedArea !== null) {
       setField("isRegulatedArea", regionComplexes.isRegulatedArea);
