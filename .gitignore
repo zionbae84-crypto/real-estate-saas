@@ -11,3 +11,4 @@ dist/
 
 # 셸 오타 등으로 생기는 곁가지 env 파일까지 막는다 (.envecho 같은 것)
 .env*
+.vercel
