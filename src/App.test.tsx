@@ -221,6 +221,12 @@ describe("App - 지역 조회의 네 상태", () => {
       .spyOn(regionQuery, "fetchRegionComplexes")
       .mockRejectedValueOnce(new Error("네트워크 오류"))
       .mockResolvedValueOnce({ units: [DETAIL_TEST_UNIT], isRegulatedArea: null, dataAsOf: null });
+    // 이 테스트는 지역 조회(목록) 재시도만 본다 — 지도용 좌표 조회가
+    // 실 네트워크로 나가 실패하면 그 실패 문구("지도 정보를 불러오지
+    // 못했어요")도 같은 "불러오지 못했어요" 부분 문자열을 담고 있어
+    // 아래 단언과 우연히 겹친다. 좌표 조회는 성공으로 고정해 이 테스트의
+    // 관심사(목록 조회 실패·재시도)와 분리한다.
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue([]);
 
     render(<App />);
     await fillProfile();
@@ -970,6 +976,78 @@ describe("App - 지도", () => {
     await chooseRegion();
 
     await screen.findByRole("region", { name: "살 수 있는 단지" });
+    await screen.findByRole("region", { name: "단지 지도" });
+  });
+
+  it("좌표 조회가 끝나기 전엔 로딩 문구를 보여주고, 끝나면 지도로 바뀐다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DETAIL_TEST_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+
+    let resolveCoords: (
+      v: Awaited<ReturnType<typeof regionQuery.fetchComplexCoordinates>>,
+    ) => void = () => {};
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveCoords = resolve;
+        }),
+    );
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    // 목록은 이미 떠 있어야 한다 — 지도용 좌표 조회는 별도로, 더 늦게
+    // 끝난다(부모 스펙 §3). 좌표 응답이 오기 전엔 지도 대신 로딩 문구다.
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    await screen.findByText("지도를 불러오고 있어요…");
+    expect(
+      screen.queryByRole("region", { name: "단지 지도" }),
+    ).not.toBeInTheDocument();
+
+    resolveCoords([
+      { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
+    ]);
+
+    await screen.findByRole("region", { name: "단지 지도" });
+    expect(screen.queryByText("지도를 불러오고 있어요…")).not.toBeInTheDocument();
+  });
+
+  it("좌표 조회가 실패하면 '단지 없음'과 구분되는 실패 문구를 보여주고 지도를 그리지 않는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DETAIL_TEST_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockRejectedValue(
+      new Error("네트워크 오류"),
+    );
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    // "지도 정보를 불러오지 못했어요"는 "좌표를 찾았는데 0건이었다"와는
+    // 다른 문구여야 한다 — 실패("모른다")를 빈 성공("확인했더니 없다")과
+    // 같은 화면으로 보여주면 안 된다는 것이 이 앱의 원칙이다.
+    await screen.findByText("지도 정보를 불러오지 못했어요.");
+    expect(
+      screen.queryByRole("region", { name: "단지 지도" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText("지도를 불러오고 있어요…")).not.toBeInTheDocument();
+
+    // 재시도 버튼이 있고, 다시 좌표 조회를 부른다.
+    const retryButton = screen.getByRole("button", { name: "다시 시도" });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue([
+      { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
+    ]);
+    await userEvent.click(retryButton);
+
     await screen.findByRole("region", { name: "단지 지도" });
   });
 });

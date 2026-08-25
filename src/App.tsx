@@ -700,13 +700,55 @@ export function App() {
                   {regionComplexes.status === "success" &&
                     !dongFilteredEmpty &&
                     complexList !== null && (
-                      <ComplexMap
-                        units={dongFilteredUnits}
-                        coordinates={complexCoordinates.coordinates}
-                        naverMapClientId={
-                          import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
-                        }
-                      />
+                      <>
+                        {/*
+                          좌표 조회(complexCoordinates)는 목록 조회와 별개로
+                          도는 상태 기계다 — idle/loading/error/success를
+                          그대로 구분해 보여준다. "조회 실패"와 "조회했더니
+                          단지가 하나도 없더라"를 같은 빈 지도로 보여주면,
+                          이 앱이 가장 경계하는 오류(모르는 것과 확인한
+                          것을 같은 문구로 보여주는 것)를 지도에서도
+                          반복하게 된다.
+
+                          idle은 이 렌더 경로에선 사실상 스치는 순간뿐이다
+                          — 위 useEffect가 regionComplexes.status가
+                          "success"로 바뀌자마자(바로 이 조건 블록이
+                          그려지는 시점과 같은 렌더) query()를 호출해
+                          "loading"으로 넘어간다. 그래도 그 찰나에 아무것도
+                          안 그리면 화면이 깜빡이므로 로딩과 같은 문구를
+                          보여준다.
+                        */}
+                        {(complexCoordinates.status === "idle" ||
+                          complexCoordinates.status === "loading") && (
+                          <p>지도를 불러오고 있어요…</p>
+                        )}
+
+                        {complexCoordinates.status === "error" && (
+                          <div className="region-query-error">
+                            <p>지도 정보를 불러오지 못했어요.</p>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                if (currentRegionCode !== null) {
+                                  complexCoordinates.query(currentRegionCode, null);
+                                }
+                              }}
+                            >
+                              다시 시도
+                            </button>
+                          </div>
+                        )}
+
+                        {complexCoordinates.status === "success" && (
+                          <ComplexMap
+                            units={dongFilteredUnits}
+                            coordinates={complexCoordinates.coordinates}
+                            naverMapClientId={
+                              import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
+                            }
+                          />
+                        )}
+                      </>
                     )}
                 </>
               )}
