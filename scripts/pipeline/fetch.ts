@@ -92,7 +92,7 @@ const BASE_BACKOFF_MS = 500;
 const THROTTLE_MS = 200;
 const NUM_OF_ROWS = "1000";
 const NUM_OF_ROWS_NUM = Number(NUM_OF_ROWS);
-const MONTHS_BACK = 12;
+export const MONTHS_BACK = 12;
 /**
  * 시군구·월 "하나"에 대해 받을 최대 페이지 수(66개 시군구 전체에 곱하는 값이
  * 아니다 — 이 상한은 대상 하나하나에 독립적으로 적용된다). totalCount를 계속
@@ -140,8 +140,8 @@ export function redactKey(message: string, key: string): string {
   return out;
 }
 
-type Waiter = (ms: number) => Promise<void>;
-const defaultWait: Waiter = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+export type Waiter = (ms: number) => Promise<void>;
+export const defaultWait: Waiter = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 function buildUrl(regionCode: string, yearMonth: string, key: string, pageNo: number): URL {
   const url = new URL(ENDPOINT);
@@ -218,7 +218,7 @@ function parseTotalCount(body: string): number | null {
   return null;
 }
 
-interface PageAccumulator {
+export interface PageAccumulator {
   trades: RawTrade[];
   failures: number;
   cancelled: number;
@@ -239,7 +239,7 @@ interface PageAccumulator {
  * 절반만 모은 데이터를 성공으로 둔갑시키지 않기 위해서다. 호출자가 그 시군구·
  * 월 전체를 실패로 기록해야 한다.
  */
-async function fetchAllPages(
+export async function fetchAllPages(
   regionCode: string,
   yearMonth: string,
   key: string,

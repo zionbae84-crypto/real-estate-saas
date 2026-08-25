@@ -901,6 +901,37 @@ function mkdtempCache(rawDir: string, filename: string, data: unknown): void {
   writeFileSync(join(rawDir, filename), JSON.stringify(withVersion));
 }
 
+describe("fetchAllPages (export 확인)", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("모듈 바깥에서 호출할 수 있다", async () => {
+    const { fetchAllPages } = await import("./fetch");
+    const fake = async () => JSON.stringify({
+      response: {
+        header: { resultCode: "000" },
+        body: { totalCount: 0, items: "" },
+      },
+    });
+    // fetchOne이 내부에서 fetch를 쓰므로 globalThis.fetch를 모의한다.
+    const original = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(await fake(), { status: 200 })) as typeof fetch;
+    try {
+      const result = await fetchAllPages("11680", "202601", "dummy-key", async () => {});
+      expect(result.trades).toEqual([]);
+    } finally {
+      globalThis.fetch = original;
+    }
+  });
+
+  it("MONTHS_BACK은 12다", async () => {
+    const { MONTHS_BACK } = await import("./fetch");
+    expect(MONTHS_BACK).toBe(12);
+  });
+});
+
 describe("캐시 형식 버전 — 옛 캐시를 조용히 읽지 않는다", () => {
   let root: string;
   let rawDir: string;
