@@ -495,11 +495,6 @@
     "sigunguName": "세종시"
   },
   {
-    "regionCode": "41110",
-    "sidoName": "경기도",
-    "sigunguName": "수원시"
-  },
-  {
     "regionCode": "41111",
     "sidoName": "경기도",
     "sigunguName": "수원시장안구"
@@ -518,11 +513,6 @@
     "regionCode": "41117",
     "sidoName": "경기도",
     "sigunguName": "수원시영통구"
-  },
-  {
-    "regionCode": "41130",
-    "sidoName": "경기도",
-    "sigunguName": "성남시"
   },
   {
     "regionCode": "41131",
@@ -545,11 +535,6 @@
     "sigunguName": "의정부시"
   },
   {
-    "regionCode": "41170",
-    "sidoName": "경기도",
-    "sigunguName": "안양시"
-  },
-  {
     "regionCode": "41171",
     "sidoName": "경기도",
     "sigunguName": "안양시만안구"
@@ -558,11 +543,6 @@
     "regionCode": "41173",
     "sidoName": "경기도",
     "sigunguName": "안양시동안구"
-  },
-  {
-    "regionCode": "41190",
-    "sidoName": "경기도",
-    "sigunguName": "부천시"
   },
   {
     "regionCode": "41192",
@@ -595,11 +575,6 @@
     "sigunguName": "동두천시"
   },
   {
-    "regionCode": "41270",
-    "sidoName": "경기도",
-    "sigunguName": "안산시"
-  },
-  {
     "regionCode": "41271",
     "sidoName": "경기도",
     "sigunguName": "안산시상록구"
@@ -608,11 +583,6 @@
     "regionCode": "41273",
     "sidoName": "경기도",
     "sigunguName": "안산시단원구"
-  },
-  {
-    "regionCode": "41280",
-    "sidoName": "경기도",
-    "sigunguName": "고양시"
   },
   {
     "regionCode": "41281",
@@ -670,11 +640,6 @@
     "sigunguName": "하남시"
   },
   {
-    "regionCode": "41460",
-    "sidoName": "경기도",
-    "sigunguName": "용인시"
-  },
-  {
     "regionCode": "41461",
     "sidoName": "경기도",
     "sigunguName": "용인시처인구"
@@ -708,11 +673,6 @@
     "regionCode": "41570",
     "sidoName": "경기도",
     "sigunguName": "김포시"
-  },
-  {
-    "regionCode": "41590",
-    "sidoName": "경기도",
-    "sigunguName": "화성시"
   },
   {
     "regionCode": "41591",
@@ -768,11 +728,6 @@
     "regionCode": "41830",
     "sidoName": "경기도",
     "sigunguName": "양평군"
-  },
-  {
-    "regionCode": "43110",
-    "sidoName": "충청북도",
-    "sigunguName": "청주시"
   },
   {
     "regionCode": "43111",
@@ -843,11 +798,6 @@
     "regionCode": "43800",
     "sidoName": "충청북도",
     "sigunguName": "단양군"
-  },
-  {
-    "regionCode": "44130",
-    "sidoName": "충청남도",
-    "sigunguName": "천안시"
   },
   {
     "regionCode": "44131",
@@ -928,11 +878,6 @@
     "regionCode": "44825",
     "sidoName": "충청남도",
     "sigunguName": "태안군"
-  },
-  {
-    "regionCode": "47110",
-    "sidoName": "경상북도",
-    "sigunguName": "포항시"
   },
   {
     "regionCode": "47111",
@@ -1048,11 +993,6 @@
     "regionCode": "47940",
     "sidoName": "경상북도",
     "sigunguName": "울릉군"
-  },
-  {
-    "regionCode": "48120",
-    "sidoName": "경상남도",
-    "sigunguName": "창원시"
   },
   {
     "regionCode": "48121",
@@ -1263,11 +1203,6 @@
     "regionCode": "51830",
     "sidoName": "강원특별자치도",
     "sigunguName": "양양군"
-  },
-  {
-    "regionCode": "52110",
-    "sidoName": "전북특별자치도",
-    "sigunguName": "전주시"
   },
   {
     "regionCode": "52111",
