@@ -72,6 +72,48 @@ function popupContent(units: readonly ComplexUnit[]): string {
 }
 
 /**
+ * 단지 그룹(같은 complexKey) 안에서 마커에 표시할 대표 평형을 고른다.
+ * 거래건수가 가장 많은 평형 — 동률이면 배열의 첫 번째(그룹핑 순서 그대로).
+ */
+function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
+  return units.reduce((best, u) => (u.tradeCount > best.tradeCount ? u : best), units[0]!);
+}
+
+/**
+ * 마커 위에 항상 보이는 라벨. "면적+가격범위"만 담는다 — 단지 이름은
+ * 여기 넣지 않는다(클릭 팝업에만) — 라벨이 길어지면 지도가 어지러워진다.
+ * 단일 "적정가" 숫자를 내지 않는다는 원칙은 여기서도 그대로다 — 항상
+ * `formatRange`(범위) 결과만 쓴다.
+ */
+function markerLabel(representative: ComplexUnit): string {
+  const area = escapeHtml(String(representative.areaBucket));
+  const range = escapeHtml(formatRange(representative.minPrice, representative.maxPrice));
+  return `<div class="complex-map-marker">${area}㎡ ${range}</div>`;
+}
+
+/**
+ * 지금 지도에 그려지는 단지들(대표 평형 minPrice 기준) 중 가격 3분위
+ * 구간을 매긴다. 단지가 3개 미만이면 전부 중간 톤 하나로 통일한다.
+ * 절대 가격대를 하드코딩하지 않는다 — 지역마다 시세가 달라 상대적인
+ * 기준이어야 의미가 있다(부모 스펙 §1.4).
+ */
+type PriceTier = "low" | "mid" | "high";
+
+function priceTiers(groups: Array<{ complexKey: string; representative: ComplexUnit }>): Map<string, PriceTier> {
+  if (groups.length < 3) {
+    return new Map(groups.map((g) => [g.complexKey, "mid"]));
+  }
+  const sorted = [...groups].sort((a, b) => a.representative.minPrice - b.representative.minPrice);
+  const third = Math.ceil(sorted.length / 3);
+  const tiers = new Map<string, PriceTier>();
+  sorted.forEach((g, i) => {
+    const tier: PriceTier = i < third ? "low" : i < third * 2 ? "mid" : "high";
+    tiers.set(g.complexKey, tier);
+  });
+  return tiers;
+}
+
+/**
  * 좌표를 아는 단지만 지도에 아이콘으로 그린다. 클릭하면 이름·가격
  * 범위·거래 건수 팝업이 뜬다 — 목록 행과 같은 정보이고, 단일 "적정가"
  * 숫자는 여기서도 내지 않는다(부모 스펙 §6).
@@ -101,11 +143,26 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
         // DOM 컨테이너에 새 Map을 또 만들기 전에, 이전 Map을 확실히 치운다.
         cleanupFns.push(() => map.destroy());
 
-        for (const group of withCoords) {
+        const groupsWithRepresentative = withCoords.map((g) => ({
+          ...g,
+          representative: representativeUnit(g.units),
+        }));
+        const tiers = priceTiers(groupsWithRepresentative);
+
+        for (const group of groupsWithRepresentative) {
           const coord = coordinates.get(group.complexKey)!;
+          const tier = tiers.get(group.complexKey) ?? "mid";
+          const labelHtml = markerLabel(group.representative).replace(
+            'class="complex-map-marker"',
+            `class="complex-map-marker complex-map-marker--${tier}"`,
+          );
           const marker = new naverGlobal.maps.Marker({
             position: new naverGlobal.maps.LatLng(coord.lat, coord.lon),
             map,
+            icon: {
+              content: labelHtml,
+              anchor: new naverGlobal.maps.Point(0, 0),
+            },
           });
           const infoWindow = new naverGlobal.maps.InfoWindow({
             content: popupContent(group.units),

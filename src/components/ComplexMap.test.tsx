@@ -29,12 +29,18 @@ function fakeNaverMaps() {
   const markers: Array<{ position: unknown; listeners: Record<string, () => void>; removed: boolean }> = [];
   const infoWindows: Array<{ content: string; opened: boolean; removed: boolean }> = [];
   const destroyedMaps: unknown[] = [];
+  // Map 생성자가 받는 실제 컨테이너 엘리먼트를 기억해 둔다 — Marker가
+  // icon.content HTML을 여기 심어야 screen.getByText로 검증할 수 있다
+  // (실제 네이버지도 SDK도 HtmlIcon을 지도 컨테이너 안 DOM에 렌더링한다).
+  let mapContainerEl: HTMLElement | null = null;
 
   const naverGlobal = {
     maps: {
       Map: class {
         destroyed = false;
-        constructor(_el: unknown, _opts: unknown) {}
+        constructor(el: HTMLElement, _opts: unknown) {
+          mapContainerEl = el;
+        }
         destroy() {
           this.destroyed = true;
           destroyedMaps.push(this);
@@ -46,17 +52,34 @@ function fakeNaverMaps() {
           public lng: number,
         ) {}
       },
+      Point: class {
+        constructor(
+          public x: number,
+          public y: number,
+        ) {}
+      },
       Marker: class {
         listeners: Record<string, () => void> = {};
         position: unknown;
         removed = false;
-        constructor(opts: { position: unknown }) {
+        el: HTMLElement | null = null;
+        constructor(opts: { position: unknown; icon?: { content?: string | HTMLElement } }) {
           this.position = opts.position;
           markers.push(this);
+          if (opts.icon?.content !== undefined && mapContainerEl !== null) {
+            const el = document.createElement("div");
+            if (typeof opts.icon.content === "string") el.innerHTML = opts.icon.content;
+            else el.appendChild(opts.icon.content);
+            mapContainerEl.appendChild(el);
+            this.el = el;
+          }
         }
         // 실제 SDK의 Marker는 OverlayView를 상속해 setMap(null)로 지도에서 뗀다.
         setMap(map: unknown) {
-          if (map === null) this.removed = true;
+          if (map === null) {
+            this.removed = true;
+            this.el?.remove();
+          }
         }
       },
       InfoWindow: class {
@@ -238,5 +261,34 @@ describe("ComplexMap", () => {
     expect(firstMarker.removed).toBe(true);
     expect(markers[1]!.removed).toBe(false);
     expect(destroyedMaps).toHaveLength(1);
+  });
+
+  it("마커에 거래건수가 가장 많은 평형의 면적+가격범위가 항상 보인다(클릭 전에도)", async () => {
+    const units = [
+      unit({ complexKey: "1", areaBucket: 59, tradeCount: 2, minPrice: 500_000_000, maxPrice: 550_000_000 }),
+      unit({ complexKey: "1", areaBucket: 84, tradeCount: 5, minPrice: 700_000_000, maxPrice: 750_000_000 }),
+    ];
+    const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
+
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+
+    // 대표 평형은 거래건수 최다인 84㎡ — 마커 라벨에 그 평형의 가격범위가 보여야 한다.
+    expect(await screen.findByText(/84㎡/)).toBeInTheDocument();
+    expect(screen.getByText(/7억/)).toBeInTheDocument(); // formatRange(700_000_000, 750_000_000)
+  });
+
+  it("마커 라벨의 단지 유래 텍스트도 escapeHtml을 거친다", async () => {
+    const units = [
+      unit({ complexKey: "1", complexName: "<img src=x onerror=alert(1)>", areaBucket: 59, tradeCount: 1 }),
+    ];
+    const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
+
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+
+    // 마커 라벨 자체는 이름을 넣지 않지만(면적+가격만), 혹시 넣게 되면
+    // 이스케이프가 적용되는지 이 테스트가 회귀를 잡는다.
+    await screen.findByText(/59㎡/);
+    const markerHtml = document.querySelector(".complex-map-marker")?.innerHTML ?? "";
+    expect(markerHtml).not.toContain("<img");
   });
 });

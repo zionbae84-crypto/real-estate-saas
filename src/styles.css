@@ -880,6 +880,34 @@ body {
 }
 
 /*
+ * 마커 위에 항상 보이는 라벨(면적+가격범위). 클릭 전에도 보여야 해서
+ * InfoWindow와 달리 지도에 바로 얹힌다 — 가격 3분위 구간별로 배경색만
+ * 다르게 준다(청록 신호색 계열 안에서 명도만 다르게, Task 4에서 확정한
+ * cyan-signal/cyan-edge와 그 사이 중간 톤).
+ */
+.complex-map-marker {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  color: #ffffff;
+  white-space: nowrap;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.complex-map-marker--low {
+  background: #7cc4f5; /* cyan-signal보다 옅은 톤 */
+}
+
+.complex-map-marker--mid {
+  background: var(--seed-color-bg-brand-solid); /* cyan-signal */
+}
+
+.complex-map-marker--high {
+  background: var(--seed-color-bg-brand-solid-pressed); /* cyan-edge, 가장 진한 톤 */
+}
+
+/*
  * 인쇄 버튼. 화면 어조("해요체")를 그대로 쓴다 — 버튼 문구는 짧은 동사형
  * 명사구("인쇄하기")라 tone-guard의 대상(문장 종결)이 아니다.
  */
