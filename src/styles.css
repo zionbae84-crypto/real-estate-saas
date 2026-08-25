@@ -882,29 +882,43 @@ body {
 /*
  * 마커 위에 항상 보이는 라벨(면적+가격범위). 클릭 전에도 보여야 해서
  * InfoWindow와 달리 지도에 바로 얹힌다 — 가격 3분위 구간별로 배경색만
- * 다르게 준다(청록 신호색 계열 안에서 명도만 다르게, Task 4에서 확정한
- * cyan-signal/cyan-edge와 그 사이 중간 톤).
+ * 다르게 준다.
+ *
+ * 예전엔 mid(bg-brand-solid, #3ba6f1)와 high(bg-brand-solid-pressed,
+ * #3398e1)가 명도 차 ~5%뿐이라 육안으로 거의 구분이 안 됐고(review 발견),
+ * 셋 다 흰 텍스트 대비가 4.5:1(WCAG AA 본문 크기)에 못 미쳤다(low
+ * ~1.9:1, mid ~2.7:1, high ~3.1:1) — 0.75rem/600 굵기는 large-text
+ * 기준(3:1)이 아니라 본문 기준이 적용된다.
+ *
+ * 지금은 옅은 배경+어두운 글자(low, mid)에서 진한 배경+흰 글자(high)로
+ * 명도를 크게 벌려 세 단계가 한눈에 갈린다. 세 색 다 계산된 대비율이
+ * 4.5:1을 넘는다(scripts/seed-semantic-tokens.test.ts가 검증):
+ *   low  bg #c1e1f7 / text #0c0a09 → 14.47:1
+ *   mid  bg #3ba6f1 / text #0c0a09 →  7.44:1
+ *   high bg #0f5f96 / text #ffffff →  6.78:1
  */
 .complex-map-marker {
   font-size: 0.75rem;
   font-weight: 600;
   padding: 0.25rem 0.5rem;
   border-radius: 0.375rem;
-  color: #ffffff;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
 .complex-map-marker--low {
-  background: #7cc4f5; /* cyan-signal보다 옅은 톤 */
+  background: var(--seed-color-bg-brand-weak); /* cyan-signal의 옅은 톤 */
+  color: var(--seed-color-fg-neutral); /* ink-black */
 }
 
 .complex-map-marker--mid {
   background: var(--seed-color-bg-brand-solid); /* cyan-signal */
+  color: var(--seed-color-fg-neutral); /* ink-black */
 }
 
 .complex-map-marker--high {
-  background: var(--seed-color-bg-brand-solid-pressed); /* cyan-edge, 가장 진한 톤 */
+  background: var(--seed-color-bg-tier-high); /* cyan-signal보다 훨씬 진한 톤 */
+  color: var(--seed-color-palette-static-white);
 }
 
 /*

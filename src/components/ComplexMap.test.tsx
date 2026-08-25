@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as loadNaverMapsModule from "../lib/loadNaverMaps";
-import { ComplexMap } from "./ComplexMap";
+import { ComplexMap, priceTiers } from "./ComplexMap";
 import type { ComplexUnit } from "../data/complexes";
 
 function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
@@ -24,6 +24,54 @@ function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
     ...over,
   };
 }
+
+/** priceTiers 테스트용 최소 그룹 — complexKey와 minPrice만 채운다. */
+function tierGroup(complexKey: string, minPrice: number) {
+  return { complexKey, representative: unit({ complexKey, minPrice }) };
+}
+
+describe("priceTiers", () => {
+  // 실제 알고리즘: Math.ceil(n/3)을 third로 두고 정렬된 순서에서
+  // 앞 third개는 low, 다음 third개는 mid, 나머지는 high. n<3이면 이
+  // 분위 계산 자체를 건너뛰고 전부 mid로 통일한다(부모 스펙 §1.4 —
+  // 3개 미만은 "낮다/높다"를 가를 만한 표본이 아니라는 뜻).
+  it("단지가 0개면 빈 맵을 돌려준다", () => {
+    expect(priceTiers([]).size).toBe(0);
+  });
+
+  it("단지가 1개면 3개 미만 폴백으로 mid 하나가 된다", () => {
+    const tiers = priceTiers([tierGroup("a", 1_000)]);
+    expect(tiers.get("a")).toBe("mid");
+  });
+
+  it("단지가 2개면 3개 미만 폴백으로 둘 다 mid가 된다", () => {
+    const tiers = priceTiers([tierGroup("a", 1_000), tierGroup("b", 2_000)]);
+    expect(tiers.get("a")).toBe("mid");
+    expect(tiers.get("b")).toBe("mid");
+  });
+
+  it("단지가 3개면 가격 오름차순으로 low·mid·high가 정확히 하나씩 나뉜다", () => {
+    // 입력 순서를 일부러 섞어서 정렬이 minPrice 기준으로 실제 일어나는지도 함께 확인한다.
+    const tiers = priceTiers([tierGroup("c", 3_000), tierGroup("a", 1_000), tierGroup("b", 2_000)]);
+    expect(tiers.get("a")).toBe("low");
+    expect(tiers.get("b")).toBe("mid");
+    expect(tiers.get("c")).toBe("high");
+  });
+
+  it("단지가 4개면 Math.ceil(4/3)=2개씩 low·mid로 채워지고 high는 비어버린다 — 이 알고리즘의 실제 동작이며 의도적으로 고치지 않는다", () => {
+    const tiers = priceTiers([
+      tierGroup("a", 1_000),
+      tierGroup("b", 2_000),
+      tierGroup("c", 3_000),
+      tierGroup("d", 4_000),
+    ]);
+    expect(tiers.get("a")).toBe("low");
+    expect(tiers.get("b")).toBe("low");
+    expect(tiers.get("c")).toBe("mid");
+    expect(tiers.get("d")).toBe("mid");
+    expect([...tiers.values()].filter((t) => t === "high")).toHaveLength(0);
+  });
+});
 
 function fakeNaverMaps() {
   const markers: Array<{ position: unknown; listeners: Record<string, () => void>; removed: boolean }> = [];
@@ -290,5 +338,37 @@ describe("ComplexMap", () => {
     await screen.findByText(/59㎡/);
     const markerHtml = document.querySelector(".complex-map-marker")?.innerHTML ?? "";
     expect(markerHtml).not.toContain("<img");
+  });
+
+  it("단지가 3개 이상이면 가격 3분위 티어 클래스가 실제 마커 DOM에 반영된다", async () => {
+    // markerLabel(representative, tier)가 클래스 목록을 직접 조립하므로(더 이상
+    // 호출부의 .replace() 문자열 치환에 의존하지 않는다), 이 테스트는 그 배선이
+    // 렌더링 결과까지 실제로 이어지는지 DOM에서 확인한다.
+    const units = [
+      unit({ complexKey: "low-key", complexName: "저가단지", areaBucket: 59, minPrice: 300_000_000, maxPrice: 320_000_000, tradeCount: 1 }),
+      unit({ complexKey: "mid-key", complexName: "중가단지", areaBucket: 59, minPrice: 600_000_000, maxPrice: 620_000_000, tradeCount: 1 }),
+      unit({ complexKey: "high-key", complexName: "고가단지", areaBucket: 59, minPrice: 900_000_000, maxPrice: 920_000_000, tradeCount: 1 }),
+    ];
+    const coordinates = new Map([
+      ["low-key", { lat: 37.1, lon: 127.1 }],
+      ["mid-key", { lat: 37.2, lon: 127.2 }],
+      ["high-key", { lat: 37.3, lon: 127.3 }],
+    ]);
+
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+
+    await screen.findByRole("region", { name: "단지 지도" });
+    await vi.waitFor(() => {
+      expect(document.querySelectorAll(".complex-map-marker--low")).toHaveLength(1);
+      expect(document.querySelectorAll(".complex-map-marker--mid")).toHaveLength(1);
+      expect(document.querySelectorAll(".complex-map-marker--high")).toHaveLength(1);
+    });
+
+    // 가장 저렴한 단지가 low, 가장 비싼 단지가 high 클래스를 받아야 한다.
+    expect(document.querySelector(".complex-map-marker--low")?.textContent).toContain("59㎡");
+    expect(document.querySelector(".complex-map-marker--high")?.textContent).toContain("59㎡");
+    // 클래스가 하나가 아니라 여러 개(base + tier) 동시에 붙어 있는지도 확인한다.
+    const highEl = document.querySelector(".complex-map-marker--high");
+    expect(highEl?.classList.contains("complex-map-marker")).toBe(true);
   });
 });

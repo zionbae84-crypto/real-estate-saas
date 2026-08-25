@@ -29,6 +29,7 @@ const EXTENDED_TOKENS = [
   "--seed-color-bg-warning-weak",
   "--seed-color-fg-critical-contrast",
   "--seed-color-bg-critical-weak",
+  "--seed-color-bg-tier-high",
 ];
 
 describe("SEED 의미 계층 토큰 확장", () => {
@@ -67,5 +68,26 @@ describe("등급색 대비율 — 흰 배경(#ffffff), 본문 크기 기준 4.5:
   });
   it("danger(#b91c1c)", () => {
     expect(contrastRatio("#b91c1c", "#ffffff")).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+/**
+ * 지도 마커 가격 3분위(low/mid/high) 배경-텍스트 대비율.
+ * src/styles.css .complex-map-marker--{low,mid,high}와 src/seed-brand.css의
+ * 실제 값을 그대로 옮겨 계산한다. 예전 값(low #7cc4f5 + 흰 텍스트 ~1.9:1,
+ * mid bg-brand-solid #3ba6f1 + 흰 텍스트 ~2.7:1, high
+ * bg-brand-solid-pressed #3398e1 + 흰 텍스트 ~3.1:1)은 셋 다 이 기준을
+ * 못 넘었다(review 발견) — 지금은 low/mid를 옅은 배경+어두운 글자로,
+ * high를 진한 배경+흰 글자로 바꿔 셋 다 넘긴다.
+ */
+describe("지도 마커 티어 대비율 — 배경 대비 텍스트, 본문 크기 기준 4.5:1", () => {
+  it("low: bg #c1e1f7(bg-brand-weak) / text #0c0a09(fg-neutral)", () => {
+    expect(contrastRatio("#c1e1f7", "#0c0a09")).toBeGreaterThanOrEqual(4.5);
+  });
+  it("mid: bg #3ba6f1(bg-brand-solid) / text #0c0a09(fg-neutral)", () => {
+    expect(contrastRatio("#3ba6f1", "#0c0a09")).toBeGreaterThanOrEqual(4.5);
+  });
+  it("high: bg #0f5f96(bg-tier-high, 신규) / text #ffffff(palette-static-white)", () => {
+    expect(contrastRatio("#0f5f96", "#ffffff")).toBeGreaterThanOrEqual(4.5);
   });
 });

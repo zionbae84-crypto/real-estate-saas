@@ -84,11 +84,19 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * 여기 넣지 않는다(클릭 팝업에만) — 라벨이 길어지면 지도가 어지러워진다.
  * 단일 "적정가" 숫자를 내지 않는다는 원칙은 여기서도 그대로다 — 항상
  * `formatRange`(범위) 결과만 쓴다.
+ *
+ * 티어 클래스(`complex-map-marker--${tier}`)를 여기서 직접 클래스 목록에
+ * 넣는다 — 예전엔 이 함수가 `class="complex-map-marker"`만 돌려주고
+ * 호출부가 문자열 `.replace()`로 티어 클래스를 끼워 넣었는데, 그러면
+ * 여기 클래스 이름이 바뀌는 순간 그 `.replace()`가 조용히 no-op이 돼
+ * 모든 마커가 티어 색을 잃어도 타입체커도 테스트도 못 잡는다. `tier`를
+ * 파라미터로 받아 템플릿 리터럴 안에서 완성된 클래스 문자열을 만들면
+ * 그 실패 경로 자체가 없어진다.
  */
-function markerLabel(representative: ComplexUnit): string {
+function markerLabel(representative: ComplexUnit, tier: PriceTier): string {
   const area = escapeHtml(String(representative.areaBucket));
   const range = escapeHtml(formatRange(representative.minPrice, representative.maxPrice));
-  return `<div class="complex-map-marker">${area}㎡ ${range}</div>`;
+  return `<div class="complex-map-marker complex-map-marker--${tier}">${area}㎡ ${range}</div>`;
 }
 
 /**
@@ -96,10 +104,16 @@ function markerLabel(representative: ComplexUnit): string {
  * 구간을 매긴다. 단지가 3개 미만이면 전부 중간 톤 하나로 통일한다.
  * 절대 가격대를 하드코딩하지 않는다 — 지역마다 시세가 달라 상대적인
  * 기준이어야 의미가 있다(부모 스펙 §1.4).
+ *
+ * `Math.ceil(n/3)`으로 3등분하기 때문에 n=4처럼 3으로 안 나뉘는 개수에서는
+ * 구간이 고르지 않다 — n=4는 low 2개·mid 2개·high 0개가 된다(low/mid가
+ * `third`씩, high는 나머지). 의도된 알고리즘의 실제 동작이라 여기서
+ * "고치지" 않는다 — `priceTiers.test.ts`류 경계 테스트가 이 동작을
+ * 그대로 문서화한다.
  */
-type PriceTier = "low" | "mid" | "high";
+export type PriceTier = "low" | "mid" | "high";
 
-function priceTiers(groups: Array<{ complexKey: string; representative: ComplexUnit }>): Map<string, PriceTier> {
+export function priceTiers(groups: Array<{ complexKey: string; representative: ComplexUnit }>): Map<string, PriceTier> {
   if (groups.length < 3) {
     return new Map(groups.map((g) => [g.complexKey, "mid"]));
   }
@@ -152,10 +166,7 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
         for (const group of groupsWithRepresentative) {
           const coord = coordinates.get(group.complexKey)!;
           const tier = tiers.get(group.complexKey) ?? "mid";
-          const labelHtml = markerLabel(group.representative).replace(
-            'class="complex-map-marker"',
-            `class="complex-map-marker complex-map-marker--${tier}"`,
-          );
+          const labelHtml = markerLabel(group.representative, tier);
           const marker = new naverGlobal.maps.Marker({
             position: new naverGlobal.maps.LatLng(coord.lat, coord.lon),
             map,
