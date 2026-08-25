@@ -643,6 +643,22 @@ export function App() {
                       <div className="region-results-grid">
                         <div className="region-results-sidebar">
                           {/*
+                            매물 유형(아파트/오피스텔) 필터 자리 — 지금은
+                            비활성 placeholder다. 오피스텔 실거래가 데이터는
+                            아직 연동하지 않았다(국토부 아파트매매 실거래가
+                            API만 쓴다 — 별도 스펙에서 오피스텔 매매 실거래가
+                            API를 새로 연동할 때 이 select를 활성화한다).
+                            `dongOptions`(동 좁히기)와 달리 데이터 유무에
+                            좌우되지 않는 정적 요소라 그 조건 밖, 사이드바
+                            상단에 항상 그린다.
+                          */}
+                          <div className="field housing-type-select">
+                            <label htmlFor="housing-type">매물 유형</label>
+                            <select id="housing-type" value="apartment" disabled>
+                              <option value="apartment">아파트</option>
+                            </select>
+                          </div>
+                          {/*
                             `.dong-narrow`는 인쇄에서 지우는 선택자다
                             (`src/print/hiddenInPrint.ts`) — 종이 위에서는
                             고를 수 없는 장치다. 클래스가 없으면 그 규칙이

@@ -548,6 +548,27 @@ body {
   margin: 0 0 0.25rem;
 }
 
+.housing-type-select {
+  margin-bottom: 0.75rem;
+}
+
+.housing-type-select label {
+  display: block;
+  font-weight: 600;
+  margin: 0 0 0.25rem;
+}
+
+/*
+ * 오피스텔 실거래가 데이터를 아직 연동하지 않아 늘 "아파트"로 고정된
+ * placeholder select다(App.tsx 참고) — 비활성 상태임이 겉모양으로도
+ * 분명해야 사용자가 고장 난 컨트롤로 오인하지 않는다.
+ */
+.housing-type-select select:disabled {
+  color: var(--seed-color-fg-neutral-subtle);
+  cursor: not-allowed;
+  background: var(--seed-color-bg-neutral-weak);
+}
+
 /*
  * 조회 실패·결과 0건 안내. 셋 다 목록 자리를 대신 채우는 문구다.
  * `.dong-empty`는 지역 전체가 아니라 좁힌 행정동 하나에 결과가
@@ -1625,7 +1646,8 @@ body {
   .purchase-form,
   .price-check-form,
   .complex-map,
-  .complex-map-status {
+  .complex-map-status,
+  .housing-type-select {
     display: none;
   }
 

@@ -106,6 +106,10 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 선택자로 지운다 — 성공 상태의 지도 자체는 위 `.complex-map`이 따로
   // 지운다.
   ".complex-map-status",
+  // 매물 유형(아파트/오피스텔) 필터 자리 — 지금은 늘 "아파트"로 고정된
+  // 비활성 select다(App.tsx 참고). 종이 위에서는 조작할 수 없는 장치이고,
+  // 값 자체도 "아파트"뿐이라 지워도 잃는 정보가 없다.
+  ".housing-type-select",
 ];
 
 /**
