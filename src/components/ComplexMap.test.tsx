@@ -146,6 +146,58 @@ describe("ComplexMap", () => {
     expect(infoWindows[0]!.content).not.toMatch(/적정가/);
   });
 
+  it("한 단지에 평형이 여럿이어도 마커는 하나이고, 팝업에 평형이 모두 담긴다", async () => {
+    const { naverGlobal, markers, infoWindows } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(naverGlobal as unknown as typeof naver);
+
+    // 같은 단지(complexKey 동일)의 두 평형. 좌표는 단지 단위라 하나뿐이므로,
+    // 평형마다 마커를 만들면 정확히 같은 자리에 겹쳐 쌓이고 맨 위 하나만
+    // 눌린다 — 나머지 평형은 지도에 있는데 열어볼 수 없다.
+    const units = [
+      unit({ areaBucket: 84, minPrice: 900_000_000, maxPrice: 1_000_000_000, tradeCount: 3 }),
+      unit({ areaBucket: 59, minPrice: 700_000_000, maxPrice: 750_000_000, tradeCount: 2 }),
+    ];
+    const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+
+    await screen.findByRole("region", { name: "단지 지도" });
+    await vi.waitFor(() => expect(infoWindows).toHaveLength(1));
+    expect(markers).toHaveLength(1);
+
+    const content = infoWindows[0]!.content;
+    expect(content).toContain("84㎡");
+    expect(content).toContain("59㎡");
+    expect(content).toContain("거래 3건");
+    expect(content).toContain("거래 2건");
+    // 단지 이름은 맨 위에 한 번만 — 평형마다 반복하지 않는다.
+    expect(content.match(/테스트아파트/g)).toHaveLength(1);
+    // 평형이 여러 줄이 돼도 단일 "적정가" 숫자로 접히지 않는다(부모 스펙 §6).
+    expect(content).not.toMatch(/적정가/);
+  });
+
+  it("단지 이름에 마크업이 섞여 있어도 글자로 보여준다 — HTML로 실행되지 않는다", async () => {
+    const { naverGlobal, infoWindows } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(naverGlobal as unknown as typeof naver);
+
+    // complexName은 국토부 API의 aptNm에서 그대로 온다. 이 팝업은 이 앱에서
+    // 유일하게 React를 거치지 않는 HTML 문자열이라, 여기서 이스케이프하지
+    // 않으면 이 앱의 유일한 스크립트 주입 지점이 된다.
+    const units = [unit({ complexName: '<img src=x onerror=alert(1)>' })];
+    const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+
+    await screen.findByRole("region", { name: "단지 지도" });
+    await vi.waitFor(() => expect(infoWindows).toHaveLength(1));
+
+    const content = infoWindows[0]!.content;
+    expect(content).not.toContain("<img");
+    expect(content).toContain("&lt;img src=x onerror=alert(1)&gt;");
+    // 이스케이프된 문자열을 실제로 파싱해 봐도 요소가 하나도 생기지 않아야 한다.
+    const probe = document.createElement("div");
+    probe.innerHTML = content;
+    expect(probe.querySelector("img")).toBeNull();
+  });
+
   it("지도 로드가 실패해도 예외 없이 렌더링되고, 실패를 눈에 보이게 알린다", async () => {
     vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockRejectedValue(
       new Error("네이버지도 스크립트를 불러오지 못했어요"),
