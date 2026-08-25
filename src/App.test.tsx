@@ -1,9 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { ComplexUnit } from "./data/complexes";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
+import * as regionQuery from "./lib/regionQuery";
 import { rules } from "./state/useAffordability";
 import { rightsRules } from "./state/useRightsCheck";
 import type * as UseAffordabilityModule from "./state/useAffordability";
@@ -28,47 +29,58 @@ vi.mock("./state/useAffordability", async () => {
  * 단지 상세(화면 4) 통합 테스트용 고정 단지 하나.
  *
  * 실제 번들 데이터(`data/complexes.json`)는 수십억 원대라 여기서 다루기
- * 번거롭다 — 이 describe 블록 전용으로 작고 예측 가능한 값 하나만
- * 모의한다. 위쪽 다른 테스트들은 현금·소득을 입력하지 않아 이 모의의
- * 영향을 받지 않는다(프로필이 null이면 이 데이터를 아예 쓰지 않는다).
+ * 번거롭다 — 작고 예측 가능한 값 하나만 조회 결과로 돌려준다.
  *
- * `vi.mock`은 파일 최상단으로 호이스팅되므로, 팩토리 안에서 쓰는 값도
- * `vi.hoisted`로 함께 끌어올려야 한다 — 그냥 top-level const로 두면
- * "초기화 전 접근" 에러가 난다.
+ * **예전에는 `vi.mock("./data/complexes")`로 번들 데이터 자체를 갈아
+ * 끼웠다.** 지금은 화면이 그 번들에서 목록을 만들지 않는다 — 사용자가
+ * 고른 지역을 그때 조회한 결과로 만든다(App.tsx의 지역 선택 위자드).
+ * 그래서 갈아 끼울 자리도 모듈이 아니라 그 조회 경계
+ * (`lib/regionQuery`의 `fetchRegionComplexes`) 하나다.
  */
-const { DETAIL_TEST_UNIT } = vi.hoisted(() => ({
-  DETAIL_TEST_UNIT: {
-    complexKey: "11680|테스트동|2015|테스트단지",
-    complexName: "테스트단지",
-    regionCode: "11680",
-    legalDongName: "테스트동",
-    builtYear: 2015,
-    // 85㎡ 초과로 둔다 — 가정 전용면적 기본값(85㎡, 농특세 미부과)과
-    // 다른 세율 구간이어야 상세를 열었을 때 실구매 가능 가격이 실제로
-    // 달라진다(아래 "상세가 열린 동안에는..." 테스트 참고). 85㎡
-    // 이하였다면 둘 다 농특세 미부과 구간이라 같은 값이 나와 그 테스트가
-    // 아무것도 증명하지 못한다.
-    areaBucket: 90,
-    maxExclusiveAreaSqm: 90,
-    landLeasehold: "N",
-    tradeCount: 3,
-    minPrice: 190_000_000,
-    maxPrice: 210_000_000,
-    minFloor: 3,
-    maxFloor: 18,
-    unknownFloorCount: 0,
-    lowConfidence: false,
-  } satisfies ComplexUnit,
-}));
+const DETAIL_TEST_UNIT: ComplexUnit = {
+  complexKey: "11680|테스트동|2015|테스트단지",
+  complexName: "테스트단지",
+  regionCode: "11680",
+  legalDongName: "테스트동",
+  builtYear: 2015,
+  // 85㎡ 초과로 둔다 — 가정 전용면적 기본값(85㎡, 농특세 미부과)과
+  // 다른 세율 구간이어야 상세를 열었을 때 실구매 가능 가격이 실제로
+  // 달라진다(아래 "상세가 열린 동안에는..." 테스트 참고). 85㎡
+  // 이하였다면 둘 다 농특세 미부과 구간이라 같은 값이 나와 그 테스트가
+  // 아무것도 증명하지 못한다.
+  areaBucket: 90,
+  maxExclusiveAreaSqm: 90,
+  landLeasehold: "N",
+  tradeCount: 3,
+  minPrice: 190_000_000,
+  maxPrice: 210_000_000,
+  minFloor: 3,
+  maxFloor: 18,
+  unknownFloorCount: 0,
+  lowConfidence: false,
+};
 
-vi.mock("./data/complexes", () => ({
-  COMPLEX_UNITS: [DETAIL_TEST_UNIT],
-  DATA_AS_OF: "2026-08",
-  REGIONS: [{ regionCode: "11680", complexCount: 1, unitCount: 1 }],
-  REGION_NAMES: { "11680": "강남구" },
-  AGGREGATION_WINDOW_MONTHS: 6,
-  AGGREGATION_WINDOW_LABEL: "최근 6개월",
-}));
+/**
+ * 지역을 고르고 그 결과로 {@link DETAIL_TEST_UNIT} 하나를 받는다.
+ *
+ * `isRegulatedArea`는 `null`("모르는 지역")로 둔다. 불리언을 주면 App이
+ * 그 값을 폼에 반영하면서 규제지역이 **가정에서 확정으로** 바뀌는데,
+ * 아래 테스트들은 전용면적 가정·상세 화면·인쇄 요약을 보는 것이라 그
+ * 축과 무관하다 — 예전 흐름에서도 규제지역은 가정인 채였다.
+ */
+async function selectTestRegion() {
+  vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+    units: [DETAIL_TEST_UNIT],
+    isRegulatedArea: null,
+  });
+
+  await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+  await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+  await userEvent.click(
+    screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+  );
+  await screen.findByRole("region", { name: "살 수 있는 단지" });
+}
 
 describe("App", () => {
   it("서비스 제목을 표시한다", () => {
@@ -102,6 +114,184 @@ describe("App", () => {
   });
 });
 
+describe("App - 지역 선택 위자드", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  it("예산을 확정하기 전에는 지역 선택 단계가 보이지 않는다", () => {
+    render(<App />);
+    expect(screen.queryByRole("region", { name: "지역 선택" })).not.toBeInTheDocument();
+  });
+
+  it("현금·소득을 입력하면 지역 선택 단계가 나타난다", async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+    expect(screen.getByRole("region", { name: "지역 선택" })).toBeInTheDocument();
+  });
+
+  /*
+   * 브리프의 위 두 테스트만으로는 RED가 서지 않는다 — 옛 `RegionFilter`도
+   * 같은 예산 게이트 **안**에 있었고 `aria-label`도 "지역 선택"으로 같았다.
+   * 위자드가 실제로 바뀐 지점은 두 가지다: (1) 지역을 3개 고정 체크박스가
+   * 아니라 전국 2단 선택으로 고른다, (2) 지역을 확정해 **조회하기 전에는
+   * 단지 목록이 아예 없다**. 옛 흐름은 예산만 확정되면 번들에 실린 전체
+   * 목록을 곧바로 보여줬다 — 사용자가 지역을 고르지 않았는데도.
+   */
+  it("지역 선택 단계는 전국 2단 선택이고, 조회 전에는 단지 목록이 없다", async () => {
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+
+    expect(screen.getByLabelText("광역단체")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "살 수 있는 단지" }),
+    ).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 조회의 네 상태(idle·loading·error·success)가 화면에서 **서로 다른
+ * 말**을 하는지 잠근다.
+ *
+ * 이 블록에서 가장 중요한 것은 마지막 두 테스트다. "이 지역엔 실거래가
+ * 자체가 없다"와 "이 예산으로 살 수 있는 단지가 없다"는 원인이 다르고
+ * 사용자가 할 일도 다르다(지역을 바꾼다 / 예산을 바꾼다). 이 둘을 같은
+ * 문구로 보여주면 우리가 모르는 것(그 지역 데이터)을 확인한 것(예산
+ * 부족)처럼 말하게 된다 — 이 앱이 가장 경계하는 오류다.
+ *
+ * 실제로 이 계획의 초안이 그 결함을 품고 있었다. `ComplexList`의
+ * `emptyBecauseOfFilter`에 이 구분을 맡기려 했는데, 그 값은
+ * `shown.length === 0 && units.some(affordable)`이라 `regionCodes: []`를
+ * 넘기는 순간 **구조적으로 항상 false**가 된다(`shown`이 곧
+ * `units.filter(affordable)`이 되어 두 조건이 동시에 참일 수 없다).
+ * 그래서 App이 `units.length === 0`을 `buildComplexList`에 넘기기
+ * **전에** 직접 가른다. 아래 두 테스트가 그 배선을 화면 문구로 못박는다.
+ */
+describe("App - 지역 조회의 네 상태", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function fillProfile() {
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+  }
+
+  async function chooseRegion() {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  it("조회하는 동안에는 조회 중이라고 말한다", async () => {
+    // 끝나지 않는 약속 — loading 상태에 머문다.
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockReturnValue(
+      new Promise(() => {}),
+    );
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    expect(screen.getByText(/조회하고 있어요/)).toBeInTheDocument();
+    // 아직 아무 답도 하지 않았으므로 목록도, 0건 안내도 없다.
+    expect(
+      screen.queryByRole("region", { name: "살 수 있는 단지" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/실거래가 자체가 없어요/)).not.toBeInTheDocument();
+  });
+
+  it("조회에 실패하면 실패했다고 말하고, 다시 시도할 수 있다", async () => {
+    const spy = vi
+      .spyOn(regionQuery, "fetchRegionComplexes")
+      .mockRejectedValueOnce(new Error("네트워크 오류"))
+      .mockResolvedValueOnce({ units: [DETAIL_TEST_UNIT], isRegulatedArea: null });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    await screen.findByText(/불러오지 못했어요/);
+    // **실패를 "결과 0건"으로 보여주지 않는다.** 둘을 뭉치면 데이터가
+    // 없는 지역이라고 잘못 말하게 된다.
+    expect(screen.queryByText(/실거래가 자체가 없어요/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "살 수 있는 단지" }),
+    ).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: "다시 시도" }));
+
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    expect(screen.queryByText(/불러오지 못했어요/)).not.toBeInTheDocument();
+    // 재시도는 같은 지역 코드로 다시 묻는다.
+    expect(spy).toHaveBeenCalledTimes(2);
+    expect(spy).toHaveBeenNthCalledWith(2, "11680", null);
+  });
+
+  it("그 지역에 실거래가가 0건이면 지역을 바꾸라고 말한다(예산 탓으로 돌리지 않는다)", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [],
+      isRegulatedArea: null,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    await screen.findByText(/실거래가 자체가 없어요/);
+    expect(screen.getByText(/다른 지역을 선택해 보세요/)).toBeInTheDocument();
+
+    // 예산을 원인으로 지목하는 문구는 나오면 안 된다 — 우리는 이 지역의
+    // 예산 적합성을 판단한 적이 없다.
+    expect(
+      screen.queryByText(/살 수 있는 단지가 이 데이터에는 없어요/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/지역을 넓혀 보세요/)).not.toBeInTheDocument();
+  });
+
+  it("거래는 있는데 예산이 안 맞으면 예산이 원인이라고 말한다(대조군)", async () => {
+    // 500억짜리 평형 하나 — 15억 현금으로는 살 수 없다.
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [
+        {
+          ...DETAIL_TEST_UNIT,
+          minPrice: 50_000_000_000,
+          maxPrice: 50_000_000_000,
+        },
+      ],
+      isRegulatedArea: null,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    expect(
+      screen.getByText(/살 수 있는 단지가 이 데이터에는 없어요/),
+    ).toBeInTheDocument();
+    // 데이터가 없다고 말하지 않는다 — 거래는 있었고, 예산이 안 맞았다.
+    expect(screen.queryByText(/실거래가 자체가 없어요/)).not.toBeInTheDocument();
+    // 지역을 이미 하나로 확정한 뒤라 "넓혀 보라"는 조언은 성립하지 않는다.
+    expect(screen.queryByText(/지역을 넓혀 보세요/)).not.toBeInTheDocument();
+  });
+});
+
 describe("App - 단지 상세(화면 4)", () => {
   // useProfileForm은 localStorage에 저장·복원한다. App을 실제로
   // 렌더링하는 이 블록에서 지우지 않으면 이전 테스트가 입력한 값이
@@ -111,12 +301,25 @@ describe("App - 단지 상세(화면 4)", () => {
     window.localStorage.clear();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * 예산을 확정하고 **지역까지 골라** 목록에 도달한다.
+   *
+   * 지역 선택은 이번에 새로 낀 단계다. 예전에는 현금·소득·주택 수만
+   * 채우면 번들에 실린 목록이 곧바로 떴다 — 아래 테스트들이 보는 것(상세
+   * 화면·전용면적 가정·인쇄 요약)은 그대로이고, 거기 도달하는 경로에
+   * 한 단계가 늘었을 뿐이다.
+   */
   async function fillProfile() {
     // "150000"·"15000"은 단위 없이 쓴 만원 표기다(MoneyInput 기본
     // 해석) — 각각 15억, 1억 5천만원.
     await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
     await userEvent.click(screen.getByLabelText("무주택"));
+    await selectTestRegion();
   }
 
   it("단지 목록의 행을 누르면 그 평형의 상세가 열린다", async () => {
@@ -309,22 +512,29 @@ describe("App - 단지 상세(화면 4)", () => {
       // "입력한 재무정보는 이 브라우저를 벗어나지 않아요"는 "이
       // 브라우저"라는 지시 대상이 종이 위에는 없어 인쇄에서 뜻이 서지
       // 않는다 — .subtitle-privacy-note만 인쇄에서 지운다
-      // (styles.css). 룰셋 기준·수도권 범위는 종이에서도 뜻이 있어
-      // 남긴다.
+      // (styles.css). 룰셋 기준은 종이에서도 뜻이 있어 남긴다.
+      //
+      // 지역 조회가 붙으면서 이 span에 한 문장이 늘었다. "고른 지역
+      // 코드만 서버로 전송돼요"는 같은 약속(무엇이 이 브라우저를
+      // 벗어나는가)의 단서라 같은 자리에 있어야 하고, "이 브라우저"와
+      // 마찬가지로 종이 위에서는 뜻이 서지 않아 함께 지워져야 한다.
+      //
+      // "· 수도권"은 지웠다 — 지역이 전국으로 넓어져 더 이상 사실이
+      // 아니다.
       const { container } = render(<App />);
       const subtitle = container.querySelector(".subtitle");
       const note = subtitle?.querySelector(".subtitle-privacy-note");
 
       expect(note).not.toBeNull();
       expect(note?.textContent).toBe(
-        " · 입력한 재무정보는 이 브라우저를 벗어나지 않아요",
+        " · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는 고른 지역 코드만 서버로 전송돼요.",
       );
 
-      // 화면 문구는 인쇄 결함 수정 전과 정확히 같아야 한다.
       const expectedLabel = formatRuleVersionLabel(rules);
       expect(subtitle?.textContent).toBe(
-        `${expectedLabel} · 수도권 · 입력한 재무정보는 이 브라우저를 벗어나지 않아요`,
+        `${expectedLabel} · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는 고른 지역 코드만 서버로 전송돼요.`,
       );
+      expect(subtitle?.textContent).not.toContain("수도권");
     });
 
     it("목록 화면에서는 전용면적이 가정값이라고 밝히고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
@@ -353,6 +563,10 @@ describe("App - 권리분석 문진", () => {
     window.localStorage.clear();
   });
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   async function fillProfile() {
     await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
@@ -367,9 +581,13 @@ describe("App - 권리분석 문진", () => {
     ).toBeInTheDocument();
   });
 
-  it("예산 계산이 나온 뒤에도, 단지 상세를 연 뒤에도 그대로 남는다", async () => {
+  it("예산 계산이 나온 뒤에도, 지역을 고른 뒤에도, 단지 상세를 연 뒤에도 그대로 남는다", async () => {
     const { container } = render(<App />);
     await fillProfile();
+    expect(container.querySelector(".rights-check")).not.toBeNull();
+
+    // 지역 선택 단계가 새로 끼었다 — 문진은 이 단계와도 무관해야 한다.
+    await selectTestRegion();
     expect(container.querySelector(".rights-check")).not.toBeNull();
 
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AssumptionLine } from "./components/AssumptionLine";
 import { BudgetResult } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
@@ -10,10 +10,14 @@ import { PrintSummary, type AreaSource } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
 import { PurchaseCheck } from "./components/PurchaseCheck";
 import { PurchaseTypeSelect } from "./components/PurchaseTypeSelect";
-import { RegionFilter } from "./components/RegionFilter";
+import { RegionSelect } from "./components/RegionSelect";
 import { RightsCheck } from "./components/RightsCheck";
 import { SafetyBadge } from "./components/SafetyBadge";
-import { COMPLEX_UNITS, DATA_AS_OF, REGIONS, type ComplexUnit } from "./data/complexes";
+import {
+  AGGREGATION_WINDOW_LABEL,
+  DATA_AS_OF,
+  type ComplexUnit,
+} from "./data/complexes";
 import { buildComplexList } from "./lib/complex-list";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import {
@@ -26,6 +30,7 @@ import type { PriceAssessment } from "./lib/price";
 import type { PurchaseAssessment, PurchaseType } from "./lib/purchase";
 import type { RightsAssessment } from "./lib/rights";
 import { rules, useAffordability } from "./state/useAffordability";
+import { useRegionComplexes } from "./state/useRegionComplexes";
 import { purchaseRules } from "./state/usePurchaseCheck";
 import { usePurchaseType } from "./state/usePurchaseType";
 import type { AssumableField } from "./state/useProfileForm";
@@ -46,7 +51,15 @@ export function App() {
    * 보여준다.
    */
   const { purchaseType, setPurchaseType, restoreFailed } = usePurchaseType();
-  const [regionCodes, setRegionCodes] = useState<string[]>([]);
+  /**
+   * 고른 지역의 실거래가 조회 상태. 번들에 실린 3개 구 정적 데이터
+   * (`COMPLEX_UNITS`)를 대신한다 — 이 앱이 전국으로 넓어지면서 목록의
+   * 출처가 "빌드 시점에 박아 둔 파일"에서 "고른 지역을 그때 조회한
+   * 결과"로 바뀌었다.
+   */
+  const regionComplexes = useRegionComplexes();
+  /** 조회 결과 안에서 행정동으로 더 좁힌 값. null이면 그 지역 전체다 */
+  const [selectedDong, setSelectedDong] = useState<string | null>(null);
   // ComplexList의 PAGE_SIZE와 같은 값이다 — 각 덩어리에서 이만큼씩 보여준다.
   const [visibleCount, setVisibleCount] = useState(10);
   // 상세(상환 시뮬레이션)를 연 평형. null이면 목록 화면이다.
@@ -117,39 +130,78 @@ export function App() {
 
   const affordability = useAffordability(residentialProfile);
 
-  const complexList = useMemo(
-    () =>
-      profile === null || purchaseType !== "실거주"
-        ? null
-        : buildComplexList({
-            units: COMPLEX_UNITS,
-            profile,
-            rules,
-            regionCodes,
-          }),
-    [profile, purchaseType, regionCodes],
-  );
-
   /**
-   * 지역을 고르면 규제지역 여부가 그 지역에서 정해진다.
+   * 지역을 고르면 규제지역 여부를 API 응답으로 정한다. `null`(모르는
+   * 지역)이면 손대지 않는다 — 기존 가정(기본값: 규제지역)이 그대로 남는다.
+   * 목록에 있는 지역이면(true/false) 폼 상태에 반영해 위쪽 실구매 가능
+   * 가격도 같은 전제로 계산되게 한다.
    *
    * **폼 상태에 직접 반영한다.** 목록 전용 프로필을 따로 만들면 위의 최대
    * 가격과 아래 목록이 서로 다른 프로필로 계산돼, 화면이 두 개의 다른
-   * 예산을 동시에 말하게 된다.
-   *
-   * 하나라도 규제지역이면 규제지역으로 본다 — 여러 구를 골랐을 때 한쪽만
-   * 비규제라고 한도를 높게 잡으면 그 구의 단지에 대해 과대 계상이 된다.
+   * 예산을 동시에 말하게 된다(옛 `handleRegionChange`와 같은 이유).
    */
-  function handleRegionChange(codes: string[]) {
-    setRegionCodes(codes);
-    setVisibleCount(10);
-    if (codes.length > 0) {
-      setField(
-        "isRegulatedArea",
-        codes.some((c) => rules.regulatedRegionCodes.includes(c)),
-      );
+  useEffect(() => {
+    if (regionComplexes.status !== "success") return;
+    if (regionComplexes.isRegulatedArea !== null) {
+      setField("isRegulatedArea", regionComplexes.isRegulatedArea);
     }
+  }, [regionComplexes.status, regionComplexes.isRegulatedArea]);
+
+  /**
+   * 지역을 확정하면 그 지역의 실거래가를 조회한다.
+   *
+   * 앞 지역에서 고른 행정동과 "더 보기"로 늘려 둔 행 수를 함께 되돌린다 —
+   * 남겨 두면 새 지역에는 없는 동으로 걸러 빈 목록이 되거나, 새 지역의
+   * 첫 화면이 앞 지역의 스크롤 깊이를 물려받는다.
+   */
+  function handleRegionSelect(regionCode: string) {
+    setSelectedDong(null);
+    setVisibleCount(10);
+    regionComplexes.query(regionCode);
   }
+
+  /** 조회 결과에 실제로 있는 행정동만. 없는 동은 고를 수 있으면 안 된다 */
+  const dongOptions = useMemo(
+    () => [...new Set(regionComplexes.units.map((u) => u.legalDongName))].sort(),
+    [regionComplexes.units],
+  );
+
+  const dongFilteredUnits = useMemo(
+    () =>
+      selectedDong === null
+        ? regionComplexes.units
+        : regionComplexes.units.filter((u) => u.legalDongName === selectedDong),
+    [regionComplexes.units, selectedDong],
+  );
+
+  /**
+   * `regionCodes`에 빈 배열을 넘긴다 — 지역 필터를 여기서 걸지 않는다.
+   *
+   * 이 목록의 원천(`dongFilteredUnits`)은 이미 사용자가 확정한 지역
+   * 하나를 조회한 결과이고, 행정동 좁히기까지 끝난 뒤다. 같은 일을
+   * `buildComplexList`에서 한 번 더 할 이유가 없다.
+   *
+   * `regionComplexes.status`를 함께 보는 이유는, 조회하기 전(idle)이나
+   * 실패했을 때도 `units`가 빈 배열이라 그 사실만으로는 "이 지역에
+   * 없다"와 "아직 묻지 않았다"가 구분되지 않기 때문이다 — 성공했을
+   * 때만 목록을 만든다.
+   */
+  const complexList = useMemo(
+    () =>
+      // `|| purchaseType !== "실거주"`를 이 줄에 붙여 둔다 —
+      // `scripts/purchase-structure.test.ts`의 변이 검사가 이 문자열을
+      // 소스에서 그대로 찾아 "유형 조건을 지우면 잡아내는지"를 확인한다.
+      profile === null || purchaseType !== "실거주" ||
+      regionComplexes.status !== "success"
+        ? null
+        : buildComplexList({
+            units: dongFilteredUnits,
+            profile,
+            rules,
+            regionCodes: [],
+          }),
+    [profile, purchaseType, regionComplexes.status, dongFilteredUnits],
+  );
 
   /**
    * 단지 목록의 행을 누르면 그 평형의 상세(상환 시뮬레이션)를 연다.
@@ -272,7 +324,13 @@ export function App() {
           리뷰 수정(인쇄 함께 볼 것): "이 브라우저를 벗어나지 않아요"는
           "이 브라우저"라는 지시 대상이 종이 위에는 없어 뜻이 서지 않는다
           — 인쇄에서만 지운다(hiddenInPrint.ts의 .subtitle-privacy-note).
-          앞의 룰셋 기준·수도권 범위는 종이에서도 뜻이 있어 남긴다.
+          뒤에 붙는 "고른 지역 코드만 서버로 전송돼요"도 같은 약속의
+          단서라 같은 span 안에 둔다. 앞의 룰셋 기준은 종이에서도 뜻이
+          있어 남긴다.
+
+          "· 수도권"은 지웠다. 지역이 전국으로 넓어져 더 이상 사실이
+          아니다 — 범위를 실제보다 좁게 말하는 쪽이라도, 화면이 확인한
+          적 없는 것을 말하는 것은 마찬가지다.
         */}
         {/*
           어느 룰셋 기준인지는 유형에 따라 다르다. `rules/2026-08.json`의
@@ -283,11 +341,11 @@ export function App() {
         */}
         {purchaseType === "실거주"
           ? formatRuleVersionLabel(rules)
-          : `구매 유형 기준 ${purchaseRules.version}`}{" "}
-        · 수도권
+          : `구매 유형 기준 ${purchaseRules.version}`}
         <span className="subtitle-privacy-note">
           {" "}
-          · 입력한 재무정보는 이 브라우저를 벗어나지 않아요
+          · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는
+          고른 지역 코드만 서버로 전송돼요.
         </span>
       </p>
 
@@ -413,24 +471,100 @@ export function App() {
                 />
               ) : (
                 <>
-                  <RegionFilter
-                    regions={REGIONS}
-                    selected={regionCodes}
-                    onChange={handleRegionChange}
-                  />
-                  {complexList !== null && (
-                    <ComplexList
-                      result={complexList}
-                      dataAsOf={DATA_AS_OF}
-                      hasRegionFilter={regionCodes.length > 0}
-                      noRepaymentCapacity={
-                        affordability.result.loanLimit.breakdown.DSR === 0
-                      }
-                      visibleCount={visibleCount}
-                      onShowMore={() => setVisibleCount((n) => n + 10)}
-                      onSelect={handleSelectUnit}
-                    />
+                  <RegionSelect onSelect={handleRegionSelect} />
+
+                  {regionComplexes.status === "loading" && (
+                    <p>지역 실거래가를 조회하고 있어요…</p>
                   )}
+
+                  {regionComplexes.status === "error" && (
+                    <div className="region-query-error">
+                      <p>지금 실거래가를 불러오지 못했어요.</p>
+                      <button type="button" onClick={regionComplexes.retry}>
+                        다시 시도
+                      </button>
+                    </div>
+                  )}
+
+                  {/*
+                    **"이 지역엔 실거래가가 0건"은 여기서 직접 가른다** —
+                    `ComplexList`의 `emptyBecauseOfFilter`에 맡기지 않는다.
+
+                    `buildComplexList`의 그 값은 `shown.length === 0 &&
+                    units.some(affordable)`인데, 위에서 `regionCodes: []`
+                    (필터 없음)를 넘기므로 `shown`이 곧 `units.filter(affordable)`
+                    이 된다 — 그러면 두 조건이 동시에 참일 수 없어
+                    `emptyBecauseOfFilter`가 **구조적으로 항상 false**다.
+                    `hasRegionFilter`를 참으로 고정해도 "지역을 넓혀
+                    보세요" 분기는 절대 뜨지 않고, 진짜 원인이 "이 지역엔
+                    데이터가 없다"인 경우까지 "예산이 부족해요"로 잘못
+                    표시된다 — 모르는 것과 확인한 것을 같은 문구로 보여주는,
+                    이 앱이 가장 경계하는 오류다.
+
+                    그래서 `hasRegionFilter`는 `false`로 둔다. 지역을 이미
+                    하나로 확정한 뒤라 "넓혀 보라"는 조언 자체가 성립하지
+                    않는다. `units.length > 0`인데 예산이 안 맞는 경우는
+                    `ComplexList`의 기존 예산 기반 문구가 그대로, 올바르게
+                    처리한다.
+
+                    집계 창은 `AGGREGATION_WINDOW_LABEL`에서만 만든다 —
+                    "최근 6개월"을 직접 박아 넣으면 파이프라인이 창을 바꿨을
+                    때 이 문구만 남아 근거 기간을 실제와 다르게 말하게 된다
+                    (`src/data/complexes.ts` 참고).
+                  */}
+                  {regionComplexes.status === "success" &&
+                    regionComplexes.units.length === 0 && (
+                      <p className="region-empty">
+                        이 지역엔 {AGGREGATION_WINDOW_LABEL} 실거래가 자체가
+                        없어요. 다른 지역을 선택해 보세요.
+                      </p>
+                    )}
+
+                  {regionComplexes.status === "success" &&
+                    regionComplexes.units.length > 0 && (
+                      <>
+                        {/*
+                          `.dong-narrow`는 인쇄에서 지우는 선택자다
+                          (`src/print/hiddenInPrint.ts`) — 종이 위에서는
+                          고를 수 없는 장치다. 클래스가 없으면 그 규칙이
+                          이 select에 닿지 못한다.
+                        */}
+                        {dongOptions.length > 1 && (
+                          <div className="field dong-narrow">
+                            <label htmlFor="dong-narrow">행정동으로 좁히기</label>
+                            <select
+                              id="dong-narrow"
+                              value={selectedDong ?? ""}
+                              onChange={(e) =>
+                                setSelectedDong(
+                                  e.target.value === "" ? null : e.target.value,
+                                )
+                              }
+                            >
+                              <option value="">전체</option>
+                              {dongOptions.map((d) => (
+                                <option key={d} value={d}>
+                                  {d}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                        {complexList !== null && (
+                          <ComplexList
+                            result={complexList}
+                            dataAsOf={DATA_AS_OF}
+                            hasRegionFilter={false}
+                            noRepaymentCapacity={
+                              affordability.result.loanLimit.breakdown.DSR === 0
+                            }
+                            visibleCount={visibleCount}
+                            onShowMore={() => setVisibleCount((n) => n + 10)}
+                            onSelect={handleSelectUnit}
+                          />
+                        )}
+                      </>
+                    )}
                 </>
               )}
 

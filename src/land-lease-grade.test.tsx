@@ -1,12 +1,13 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import rawFinanceRules from "../rules/2026-08.json";
 import { App } from "./App";
 import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
 import { COMPLEX_UNITS, type ComplexUnit } from "./data/complexes";
 import { buildComplexList, type ComplexListResult } from "./lib/complex-list";
+import * as regionQuery from "./lib/regionQuery";
 import {
   calcAcquisitionCosts,
   calcBurdenAt,
@@ -438,13 +439,39 @@ describe("판정을 바꾸는 근거 문구가 룰셋에서 온다", () => {
  */
 describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => {
   beforeEach(() => window.localStorage.clear());
+  afterEach(() => vi.restoreAllMocks());
 
   async function openLandLeaseDetail() {
+    /*
+     * 목록의 출처가 번들 데이터에서 "고른 지역을 그때 조회한 결과"로
+     * 바뀌었다(App.tsx의 지역 선택 위자드). 이 파일이 잠그는 것은 여전히
+     * **화면에서 같은 경고가 두 번 뜨지 않는가**이므로, 조회 결과로
+     * 예전과 **같은 번들 데이터**를 돌려주어 화면을 그대로 재현한다 —
+     * 바뀐 것은 그 목록에 도달하는 경로뿐이다.
+     *
+     * `isRegulatedArea`를 `null`("모르는 지역")로 둔다. 불리언을 주면
+     * App이 그 값을 폼에 반영하면서 규제지역이 **가정에서 확정으로**
+     * 바뀌는데, 이 테스트는 그 축과 무관하고 예전 흐름에서도 가정인
+     * 채였다.
+     */
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [...COMPLEX_UNITS],
+      isRegulatedArea: null,
+    });
+
     render(<App />);
     // 16억 현금 · 2억 소득이면 토지임대부 평형이 목록에 뜬다.
     await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "160000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "20000");
     await userEvent.click(screen.getByLabelText("무주택"));
+
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
     const row = screen
       .getAllByRole("button")
       .find((b) => /토지임대부아파트/.test(b.textContent ?? ""));

@@ -1,8 +1,44 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { COMPLEX_UNITS, type ComplexUnit } from "./data/complexes";
+import * as regionQuery from "./lib/regionQuery";
 import { rules as financeRules } from "./state/useAffordability";
+
+/**
+ * 지역 실거래가 조회를 모의한다.
+ *
+ * 목록의 출처가 번들 데이터에서 "고른 지역을 그때 조회한 결과"로
+ * 바뀌었으므로(App.tsx의 지역 선택 위자드), 지역을 전제하는 테스트는
+ * 이 경계를 붙들어야 한다 — 실제 네트워크는 `src/no-network.test.ts`가
+ * 금지한다.
+ */
+function mockRegionQuery(
+  units: readonly ComplexUnit[],
+  isRegulatedArea: boolean | null,
+) {
+  return vi
+    .spyOn(regionQuery, "fetchRegionComplexes")
+    .mockResolvedValue({ units: [...units], isRegulatedArea });
+}
+
+/** 지역 선택 위자드에서 시도·시군구를 고르고 조회를 누른다 */
+async function selectRegion(sido: string, sigungu: string) {
+  await userEvent.selectOptions(screen.getByLabelText("광역단체"), sido);
+  await userEvent.selectOptions(screen.getByLabelText("자치구"), sigungu);
+  await userEvent.click(
+    screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+  );
+}
+
+/** 그 지역에서 가장 싼 평형 몇 개 — 2억 예산으로도 목록에 뜨는 것들 */
+function cheapestIn(regionCode: string, count: number): ComplexUnit[] {
+  return COMPLEX_UNITS.filter((u) => u.regionCode === regionCode)
+    .slice()
+    .sort((a, b) => a.maxPrice - b.maxPrice)
+    .slice(0, count);
+}
 
 /** 화면에 그려진 부담률(%)을 숫자로 읽는다. */
 function readRatio(): number {
@@ -62,6 +98,7 @@ function readAffordablePrice(): number {
 
 describe("예산 계산기 통합", () => {
   beforeEach(() => window.localStorage.clear());
+  afterEach(() => vi.restoreAllMocks());
 
   it("필수값을 채우기 전에는 결과를 그리지 않는다", () => {
     render(<App />);
@@ -238,9 +275,16 @@ describe("예산 계산기 통합", () => {
     expect(readAffordablePrice()).toBeGreaterThan(priceBefore);
   });
 
+  /**
+   * 규제지역 여부의 **근거**가 바뀌었다. 예전에는 화면이 고른 지역 코드를
+   * 번들의 `rules.regulatedRegionCodes`와 대조했고, 지금은 조회 응답이
+   * 그 사실을 함께 실어 온다. 어느 쪽이든 이 테스트가 지키는 것은 같다 —
+   * 근거가 "모르니까 안전하게 규제지역"에서 "당신이 고른 지역이라서
+   * 규제지역"으로 바뀌는 순간, 그것은 더 이상 가정이 아니다.
+   */
   it("지역을 고르면 규제지역 가정이 문구에서 빠진다", async () => {
-    // 근거가 "모르니까 안전하게 규제지역"에서 "당신이 고른 지역이라서
-    // 규제지역"으로 바뀐다 — 그 순간 그것은 더 이상 가정이 아니다.
+    mockRegionQuery(cheapestIn("11680", 3), true);
+
     render(<App />);
     await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
@@ -248,21 +292,51 @@ describe("예산 계산기 통합", () => {
 
     expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: /강남구/ }));
+    await selectRegion("서울특별시", "강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
 
     expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
   });
 
-  it("지역을 고르면 목록이 그 지역만 남는다", async () => {
+  /**
+   * 예전에는 번들에 실린 전체 목록을 클라이언트에서 걸러 "그 지역만"
+   * 남겼다. 지금은 목록 자체가 그 지역을 조회한 결과다 — 그래서 검사도
+   * "줄었는가"(옛 필터의 부수효과)가 아니라 **"고른 지역의 결과만
+   * 나오는가"**를 직접 본다.
+   */
+  it("목록은 고른 지역을 조회한 결과만 보여 준다", async () => {
+    const 강남 = cheapestIn("11680", 3);
+    const 서초 = cheapestIn("11650", 3);
+    expect(강남.length).toBe(3);
+    expect(서초.length).toBe(3);
+
+    const spy = mockRegionQuery(강남, true);
+
     render(<App />);
     await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
     await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
     await userEvent.click(screen.getByLabelText("무주택"));
 
-    const before = screen.queryAllByRole("listitem").length;
-    await userEvent.click(screen.getByRole("checkbox", { name: /강남구/ }));
-    const after = screen.queryAllByRole("listitem").length;
+    await selectRegion("서울특별시", "강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    expect(after).toBeLessThanOrEqual(before);
+    // 고른 지역 코드만 서버로 간다(부제가 약속하는 바로 그것이다).
+    expect(spy).toHaveBeenCalledWith("11680", null);
+
+    const 강남단지 = 강남[0]?.complexName ?? "";
+    const 서초단지 = 서초[0]?.complexName ?? "";
+    expect(강남단지).not.toBe(서초단지);
+
+    expect(screen.getByText(강남단지)).toBeInTheDocument();
+    expect(screen.queryByText(서초단지)).not.toBeInTheDocument();
+
+    // 대조군: 서초구를 조회하면 그 단지가 실제로 목록에 뜬다 — 위에서
+    // 빠진 이유가 예산이 아니라 "그 지역 조회 결과가 아니어서"임을
+    // 못박는다.
+    spy.mockResolvedValue({ units: [...서초], isRegulatedArea: true });
+    await selectRegion("서울특별시", "서초구");
+    await screen.findByText(서초단지);
+
+    expect(screen.queryByText(강남단지)).not.toBeInTheDocument();
   });
 });
