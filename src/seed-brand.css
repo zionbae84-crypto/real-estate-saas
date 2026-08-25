@@ -2,11 +2,11 @@
  * SEED Design 브랜드 토큰 재정의.
  *
  * SEED의 기본 브랜드 색은 carrot(당근 주황)이다. 이 서비스는 당근마켓이
- * 아니므로 브랜드 계열만 SEED가 함께 싣는 blue 팔레트로 다시 가리킨다.
+ * 아니므로 브랜드 계열을 Seline 스타일의 청록(cyan)으로 다시 가리킨다.
  *
- * **hex를 새로 지어내지 않고 SEED 자체 팔레트를 가리킨다.** 명도 단계와
- * 라이트/다크 값이 이미 검증돼 있다. 여기서 바꾸는 것은 "어느 팔레트를
- * 쓰는가"뿐이다.
+ * **Seline 고유 hex를 직접 쓴다.** Seline 팔레트는 SEED 팔레트 시스템
+ * 안에 없으므로 --seed-color-palette-* 변수로는 가리킬 수 없다 — 아래
+ * 나머지 의미 계층 토큰들과 마찬가지로 hex 리터럴을 쓴다.
  *
  * ⚠ **셀렉터를 SEED의 라이트 모드 셀렉터와 똑같이 맞춰야 한다.**
  * 맨 `:root`로 쓰면 명시도(0,1,0)가 SEED의
@@ -31,21 +31,19 @@
 :root[data-seed-color-mode="system"][data-seed-user-color-scheme="light"],
 :root[data-seed-color-mode="light-only"],
 :root [data-seed-color-mode="light-only"] {
-  --seed-color-bg-brand-solid: var(--seed-color-palette-blue-600);
-  --seed-color-bg-brand-solid-pressed: var(--seed-color-palette-blue-700);
-  --seed-color-bg-brand-weak: var(--seed-color-palette-blue-100);
-  --seed-color-bg-brand-weak-pressed: var(--seed-color-palette-blue-200);
-  --seed-color-fg-brand: var(--seed-color-palette-blue-600);
-  --seed-color-fg-brand-contrast: var(--seed-color-palette-blue-700);
-  --seed-color-stroke-brand-solid: var(--seed-color-palette-blue-700);
-  --seed-color-stroke-brand-weak: var(--seed-color-palette-blue-300);
+  --seed-color-bg-brand-solid: #3ba6f1;
+  --seed-color-bg-brand-solid-pressed: #3398e1;
+  --seed-color-bg-brand-weak: #c1e1f7;
+  --seed-color-bg-brand-weak-pressed: #a8d3f2;
+  --seed-color-fg-brand: #3ba6f1;
+  --seed-color-fg-brand-contrast: #3398e1;
+  --seed-color-stroke-brand-solid: #3398e1;
+  --seed-color-stroke-brand-weak: #3ba6f1;
 
   /*
    * Seline 스타일(따뜻한 시안 배경 + 청록 단색 악센트)로 의미 계층
-   * 전체를 새로 가리킨다. 위 brand 토큰들은 SEED 자체 팔레트를
-   * 가리켰지만, 아래는 Seline 고유 hex를 직접 쓴다 — Seline 팔레트가
-   * SEED 안에 없기 때문이다(이 파일 상단 주석의 "hex를 새로 지어내지
-   * 않는다" 원칙은 SEED 팔레트가 존재할 때의 얘기였다).
+   * 전체를 새로 가리킨다. 위 brand 토큰들과 마찬가지로 Seline 고유
+   * hex를 직접 쓴다 — Seline 팔레트가 SEED 안에 없기 때문이다.
    *
    * fg-brand-contrast(cyan-edge, #3398e1)는 흰 배경 대비 3.13:1로
    * 본문 크기 기준(4.5:1)에 못 미친다 — 실측, docs/superpowers/plans/
