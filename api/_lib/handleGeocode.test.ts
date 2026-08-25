@@ -71,4 +71,39 @@ describe("handleGeocodeRequest", () => {
     expect(result.status).toBe(502);
     expect(JSON.stringify(result.body)).not.toContain("s");
   });
+
+  it("캐시 조회가 실패해도 캐시 미스처럼 지오코딩으로 넘어가 결과를 담는다", async () => {
+    const fetchAddresses = vi.fn().mockResolvedValue(new Map([["11680-1", "서울특별시 강남구 역삼동 719-3"]]));
+    const cache = {
+      get: vi.fn().mockRejectedValue(new Error("Redis 연결 실패")),
+      set: vi.fn(async () => {}),
+    };
+    const geocode = vi.fn().mockResolvedValue({ lat: 1, lon: 1 });
+
+    const result = await handleGeocodeRequest(
+      { regionCode: "11680", dong: null },
+      { fetchAddresses, cache, geocode, key: "id", secret: "s" },
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ units: [{ complexKey: "11680-1", lat: 1, lon: 1 }] });
+    expect(geocode).toHaveBeenCalledWith("서울특별시 강남구 역삼동 719-3");
+  });
+
+  it("캐시 저장이 실패해도 이미 구한 좌표는 결과에 남는다", async () => {
+    const fetchAddresses = vi.fn().mockResolvedValue(new Map([["11680-1", "서울특별시 강남구 역삼동 719-3"]]));
+    const cache = {
+      get: vi.fn().mockResolvedValue(null),
+      set: vi.fn().mockRejectedValue(new Error("Redis 쓰기 실패")),
+    };
+    const geocode = vi.fn().mockResolvedValue({ lat: 1, lon: 1 });
+
+    const result = await handleGeocodeRequest(
+      { regionCode: "11680", dong: null },
+      { fetchAddresses, cache, geocode, key: "id", secret: "s" },
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ units: [{ complexKey: "11680-1", lat: 1, lon: 1 }] });
+  });
 });
