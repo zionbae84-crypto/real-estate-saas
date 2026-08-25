@@ -1,5 +1,5 @@
 import { redactKey } from "../../scripts/pipeline/fetch";
-import type { EmittedComplexUnit } from "../../scripts/pipeline/emit";
+import type { LiveComplexesResult } from "../../scripts/pipeline/live";
 
 export interface RegulatedRegions {
   regulated: string[];
@@ -7,7 +7,7 @@ export interface RegulatedRegions {
 }
 
 export interface HandleComplexesDeps {
-  fetchLive: (regionCode: string, dong: string | null) => Promise<EmittedComplexUnit[]>;
+  fetchLive: (regionCode: string, dong: string | null) => Promise<LiveComplexesResult>;
   key: string;
   regions: RegulatedRegions;
 }
@@ -45,10 +45,18 @@ export async function handleComplexesRequest(
   }
 
   try {
-    const units = await deps.fetchLive(regionCode, dong);
+    // `dataAsOf`(이 조회에 실제로 들어온 거래의 가장 최근 계약월)를 함께
+    // 실어 보낸다. 화면은 이 값으로만 "언제 계약분까지 반영했는지"를
+    // 말할 수 있다 — 옛 배치 파이프라인의 정적 상수는 다른 지역·다른
+    // 시점의 값이라 이 조회에 대해서는 확인된 적 없는 주장이 된다.
+    const { units, dataAsOf } = await deps.fetchLive(regionCode, dong);
     return {
       status: 200,
-      body: { units, isRegulatedArea: resolveIsRegulated(regionCode, deps.regions) },
+      body: {
+        units,
+        isRegulatedArea: resolveIsRegulated(regionCode, deps.regions),
+        dataAsOf,
+      },
     };
   } catch (e) {
     const message = redactKey(e instanceof Error ? e.message : String(e), deps.key);

@@ -9,6 +9,11 @@ export interface RegionComplexesState {
   status: RegionComplexesStatus;
   units: ComplexUnit[];
   isRegulatedArea: boolean | null;
+  /**
+   * 이 조회가 반영한 가장 최근 계약월(YYYY-MM). 모르면 `null`이다 —
+   * 화면은 그때 신선도 문구를 아예 쓰지 않는다(`regionQuery.ts` 참고).
+   */
+  dataAsOf: string | null;
   error: string | null;
   query: (regionCode: string) => void;
   retry: () => void;
@@ -37,6 +42,7 @@ export function useRegionComplexes(): RegionComplexesState {
   const [status, setStatus] = useState<RegionComplexesStatus>("idle");
   const [units, setUnits] = useState<ComplexUnit[]>([]);
   const [isRegulatedArea, setIsRegulatedArea] = useState<boolean | null>(null);
+  const [dataAsOf, setDataAsOf] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lastRegionCode = useRef<string | null>(null);
 
@@ -50,11 +56,13 @@ export function useRegionComplexes(): RegionComplexesState {
         if (lastRegionCode.current !== regionCode) return;
         setUnits(result.units);
         setIsRegulatedArea(result.isRegulatedArea);
+        setDataAsOf(result.dataAsOf);
         setStatus("success");
       })
       .catch((e: unknown) => {
         if (lastRegionCode.current !== regionCode) return;
         setUnits([]);
+        setDataAsOf(null);
         setError(e instanceof Error ? e.message : "알 수 없는 오류");
         setStatus("error");
       });
@@ -66,5 +74,5 @@ export function useRegionComplexes(): RegionComplexesState {
     if (lastRegionCode.current !== null) run(lastRegionCode.current);
   }, [run]);
 
-  return { status, units, isRegulatedArea, error, query, retry };
+  return { status, units, isRegulatedArea, dataAsOf, error, query, retry };
 }

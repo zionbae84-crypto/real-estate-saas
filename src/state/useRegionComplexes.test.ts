@@ -19,6 +19,7 @@ describe("useRegionComplexes", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [],
       isRegulatedArea: true,
+      dataAsOf: null,
     });
     const { result } = renderHook(() => useRegionComplexes());
 
@@ -27,6 +28,38 @@ describe("useRegionComplexes", () => {
 
     await waitFor(() => expect(result.current.status).toBe("success"));
     expect(result.current.isRegulatedArea).toBe(true);
+  });
+
+  it("조회가 반영한 계약월(dataAsOf)을 그대로 드러낸다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    const { result } = renderHook(() => useRegionComplexes());
+
+    expect(result.current.dataAsOf).toBeNull(); // 조회 전에는 모른다
+    act(() => result.current.query("11680"));
+    await waitFor(() => expect(result.current.status).toBe("success"));
+
+    expect(result.current.dataAsOf).toBe("2026-01");
+  });
+
+  it("실패하면 dataAsOf도 비운다 — 앞 조회의 기준월이 남으면 안 된다", async () => {
+    const spy = vi
+      .spyOn(regionQuery, "fetchRegionComplexes")
+      .mockResolvedValueOnce({ units: [], isRegulatedArea: null, dataAsOf: "2026-01" })
+      .mockRejectedValueOnce(new Error("조회 실패"));
+
+    const { result } = renderHook(() => useRegionComplexes());
+    act(() => result.current.query("11680"));
+    await waitFor(() => expect(result.current.dataAsOf).toBe("2026-01"));
+
+    act(() => result.current.query("11110"));
+    await waitFor(() => expect(result.current.status).toBe("error"));
+
+    expect(result.current.dataAsOf).toBeNull();
+    expect(spy).toHaveBeenCalledTimes(2);
   });
 
   it("실패하면 error 상태가 되고, units는 빈 배열로 폴백하지 않는다(undefined 유지)", async () => {
@@ -43,7 +76,7 @@ describe("useRegionComplexes", () => {
     const spy = vi
       .spyOn(regionQuery, "fetchRegionComplexes")
       .mockRejectedValueOnce(new Error("첫 실패"))
-      .mockResolvedValueOnce({ units: [], isRegulatedArea: null });
+      .mockResolvedValueOnce({ units: [], isRegulatedArea: null, dataAsOf: null });
 
     const { result } = renderHook(() => useRegionComplexes());
     act(() => result.current.query("11680"));
@@ -86,13 +119,13 @@ describe("useRegionComplexes", () => {
 
     // B가 먼저 도착한다.
     await act(async () => {
-      resolveB({ units: [unitOf("B단지")], isRegulatedArea: false });
+      resolveB({ units: [unitOf("B단지")], isRegulatedArea: false, dataAsOf: null });
     });
     await waitFor(() => expect(result.current.status).toBe("success"));
 
     // A가 뒤늦게 도착한다 — 이미 지나간 조회다.
     await act(async () => {
-      resolveA({ units: [unitOf("A단지")], isRegulatedArea: true });
+      resolveA({ units: [unitOf("A단지")], isRegulatedArea: true, dataAsOf: null });
     });
 
     expect(result.current.units.map((u) => u.complexName)).toEqual(["B단지"]);
@@ -117,7 +150,7 @@ describe("useRegionComplexes", () => {
     act(() => result.current.query("11110"));
 
     await act(async () => {
-      resolveB({ units: [], isRegulatedArea: false });
+      resolveB({ units: [], isRegulatedArea: false, dataAsOf: null });
     });
     await waitFor(() => expect(result.current.status).toBe("success"));
 

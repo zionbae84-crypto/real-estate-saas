@@ -15,7 +15,6 @@ import { RightsCheck } from "./components/RightsCheck";
 import { SafetyBadge } from "./components/SafetyBadge";
 import {
   AGGREGATION_WINDOW_LABEL,
-  DATA_AS_OF,
   type ComplexUnit,
 } from "./data/complexes";
 import { buildComplexList } from "./lib/complex-list";
@@ -647,7 +646,16 @@ export function App() {
                           complexList !== null && (
                             <ComplexList
                               result={complexList}
-                              dataAsOf={DATA_AS_OF}
+                              /*
+                                이 조회가 실제로 반영한 계약월이다.
+                                번들의 `DATA_AS_OF`(옛 배치 파이프라인이
+                                3개 구를 돌린 시점)를 쓰면, 전국 아무
+                                지역이나 그때그때 조회하는 지금 화면에서는
+                                확인한 적 없는 신선도를 사실처럼 말하게
+                                된다. 모르면(null) ComplexList가 그 줄을
+                                아예 그리지 않는다.
+                              */
+                              dataAsOf={regionComplexes.dataAsOf}
                               hasRegionFilter={false}
                               noRepaymentCapacity={
                                 affordability.result.loanLimit.breakdown.DSR === 0

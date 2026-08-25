@@ -1,9 +1,10 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { fetchLiveComplexes } from "./live";
 import { normalizeAll } from "./normalize";
 import { aggregate } from "./aggregate";
 import { toEmittedUnit } from "./emit";
 import { parseResponse } from "./parse-response";
+import { latestContractMonth } from "./run";
 import type { ReportConfig } from "./types";
 
 const CONFIG: ReportConfig = {
@@ -55,7 +56,7 @@ describe("fetchLiveComplexes", () => {
       return new Response(responseBody(items), { status: 200 });
     }) as typeof fetch;
 
-    const units = await fetchLiveComplexes(
+    const { units } = await fetchLiveComplexes(
       "11680",
       null,
       new Date("2026-01-15"),
@@ -74,7 +75,7 @@ describe("fetchLiveComplexes", () => {
     globalThis.fetch = (async () =>
       new Response(responseBody([tradeItem()]), { status: 200 })) as typeof fetch;
 
-    const units = await fetchLiveComplexes(
+    const { units } = await fetchLiveComplexes(
       "11680",
       null,
       new Date("2026-01-15"),
@@ -95,7 +96,7 @@ describe("fetchLiveComplexes", () => {
         { status: 200 },
       )) as typeof fetch;
 
-    const units = await fetchLiveComplexes(
+    const { units } = await fetchLiveComplexes(
       "11680",
       "삼성동",
       new Date("2026-01-15"),
@@ -106,6 +107,93 @@ describe("fetchLiveComplexes", () => {
 
     expect(units).toHaveLength(1);
     expect(units[0]?.legalDongName).toBe("삼성동");
+  });
+
+  it("dataAsOf는 들어온 거래 중 가장 최근 계약월(YYYY-MM)이다", async () => {
+    globalThis.fetch = (async (url: string | URL) => {
+      const ymd = new URL(url).searchParams.get("DEAL_YMD") ?? "";
+      // 202511·202601 두 달에만 거래가 있다. 가장 최근 쪽을 골라야 한다.
+      const items =
+        ymd === "202511"
+          ? [tradeItem({ dealYear: "2025", dealMonth: "11", dealDay: "3" })]
+          : ymd === "202601"
+            ? [tradeItem({ dealYear: "2026", dealMonth: "1", dealDay: "9" })]
+            : [];
+      return new Response(responseBody(items), { status: 200 });
+    }) as typeof fetch;
+
+    const { dataAsOf } = await fetchLiveComplexes(
+      "11680",
+      null,
+      new Date("2026-01-15"),
+      "dummy-key",
+      CONFIG,
+      async () => {},
+    );
+
+    expect(dataAsOf).toBe("2026-01");
+  });
+
+  /**
+   * 거래가 한 건도 없으면 최대값을 낼 대상이 없다. 오늘 날짜 같은 것으로
+   * 채우면 화면이 "그 달 계약분까지 반영했어요"라는, 우리가 확인한 적
+   * 없는 사실을 말하게 된다 — 근거를 실제보다 튼튼해 보이게 하는 쪽이라
+   * 이 앱이 가장 경계하는 오표기다.
+   */
+  it("거래가 0건이면 dataAsOf는 null이다 — 날짜를 지어내지 않는다", async () => {
+    globalThis.fetch = (async () =>
+      new Response(responseBody([]), { status: 200 })) as typeof fetch;
+
+    const { units, dataAsOf } = await fetchLiveComplexes(
+      "11680",
+      null,
+      new Date("2026-01-15"),
+      "dummy-key",
+      CONFIG,
+      async () => {},
+    );
+
+    expect(units).toEqual([]);
+    expect(dataAsOf).toBeNull();
+  });
+
+  /**
+   * 동으로 좁혀도 dataAsOf는 좁히기 **전** 거래 전체에서 낸다 — 이 값이
+   * 말하는 것은 "이 조회가 어느 계약월까지 반영했는가"이고, 그건 사용자가
+   * 목록을 어떻게 좁혔는지와 무관한 조회 자체의 성질이다.
+   */
+  it("dong으로 좁혀도 dataAsOf는 조회 전체 기준이다", async () => {
+    globalThis.fetch = (async (url: string | URL) => {
+      const ymd = new URL(url).searchParams.get("DEAL_YMD") ?? "";
+      const items =
+        ymd === "202601"
+          ? [
+              tradeItem({ umdNm: "삼성동", dealYear: "2025", dealMonth: "12", dealDay: "1" }),
+              tradeItem({
+                aptSeq: "11680-2",
+                aptNm: "다른아파트",
+                umdNm: "역삼동",
+                dealYear: "2026",
+                dealMonth: "1",
+                dealDay: "9",
+              }),
+            ]
+          : [];
+      return new Response(responseBody(items), { status: 200 });
+    }) as typeof fetch;
+
+    const { units, dataAsOf } = await fetchLiveComplexes(
+      "11680",
+      "삼성동",
+      new Date("2026-01-15"),
+      "dummy-key",
+      CONFIG,
+      async () => {},
+    );
+
+    expect(units.map((u) => u.legalDongName)).toEqual(["삼성동"]);
+    // 삼성동 거래는 2025-12뿐이지만, 조회 자체는 2026-01까지 받았다.
+    expect(dataAsOf).toBe("2026-01");
   });
 
   it("한 달이라도 실패하면 전체를 던진다 — 절반만 모은 데이터를 성공으로 두갑시키지 않는다", async () => {
@@ -125,7 +213,7 @@ describe("배치 파이프라인과의 패리티", () => {
 
     // 라이브 경로: fetchLiveComplexes가 매달 같은 응답을 받는다고 mock한다.
     globalThis.fetch = (async () => new Response(body, { status: 200 })) as typeof fetch;
-    const liveUnits = await fetchLiveComplexes("11680", null, now, "dummy-key", CONFIG, async () => {});
+    const live = await fetchLiveComplexes("11680", null, now, "dummy-key", CONFIG, async () => {});
 
     // 배치 경로: 같은 HTTP 응답 본문을 parseResponse로 직접 파싱해
     // normalizeAll → aggregate → toEmittedUnit을 순서대로 호출한다.
@@ -135,7 +223,11 @@ describe("배치 파이프라인과의 패리티", () => {
     const twelveMonths = Array.from({ length: 12 }, () => oneMonth).flat();
     const batchUnits = aggregate(normalizeAll(twelveMonths), now, CONFIG).map(toEmittedUnit);
 
-    expect(liveUnits).toEqual(batchUnits);
-    expect(liveUnits.length).toBe(2);
+    expect(live.units).toEqual(batchUnits);
+    expect(live.units.length).toBe(2);
+
+    // dataAsOf도 배치 경로(run.ts의 latestContractMonth)와 같은 규칙이다 —
+    // 같은 거래에서 가장 최근 계약월을 YYYY-MM으로 낸다.
+    expect(live.dataAsOf).toBe(latestContractMonth(twelveMonths));
   });
 });

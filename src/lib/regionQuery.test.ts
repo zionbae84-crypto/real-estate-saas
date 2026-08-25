@@ -36,6 +36,39 @@ describe("fetchRegionComplexes", () => {
     expect(result.isRegulatedArea).toBe(true);
   });
 
+  it("dataAsOf(YYYY-MM)를 함께 읽는다", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ units: [], isRegulatedArea: null, dataAsOf: "2026-01" }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+
+    expect((await fetchRegionComplexes("11680", null)).dataAsOf).toBe("2026-01");
+  });
+
+  /**
+   * 화면은 이 값을 "{dataAsOf} 계약분까지 반영했어요"라는 사실 서술로
+   * 그린다. 형식이 아닌 값(옛 배포판이라 필드가 아예 없는 경우 포함)을
+   * 그대로 흘려보내면 그 문장이 근거 없는 주장이 된다 — null로 좁혀
+   * 화면이 그 줄을 쓰지 않게 한다.
+   */
+  it("dataAsOf가 없거나 YYYY-MM 형식이 아니면 null로 좁힌다", async () => {
+    for (const bad of [undefined, null, "2026", "어제", 202601, {}]) {
+      globalThis.fetch = vi.fn(async () =>
+        new Response(
+          JSON.stringify({ units: [], isRegulatedArea: null, dataAsOf: bad }),
+          { status: 200 },
+        ),
+      ) as typeof fetch;
+
+      expect(
+        (await fetchRegionComplexes("11680", null)).dataAsOf,
+        `dataAsOf: ${JSON.stringify(bad)}`,
+      ).toBeNull();
+    }
+  });
+
   it("HTTP 실패면 던진다 — 빈 배열을 반환하지 않는다", async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(JSON.stringify({ error: "국토부 API 오류" }), { status: 502 }),

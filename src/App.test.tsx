@@ -72,6 +72,7 @@ async function selectTestRegion() {
   vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
     units: [DETAIL_TEST_UNIT],
     isRegulatedArea: null,
+    dataAsOf: null,
   });
 
   await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
@@ -219,7 +220,7 @@ describe("App - 지역 조회의 네 상태", () => {
     const spy = vi
       .spyOn(regionQuery, "fetchRegionComplexes")
       .mockRejectedValueOnce(new Error("네트워크 오류"))
-      .mockResolvedValueOnce({ units: [DETAIL_TEST_UNIT], isRegulatedArea: null });
+      .mockResolvedValueOnce({ units: [DETAIL_TEST_UNIT], isRegulatedArea: null, dataAsOf: null });
 
     render(<App />);
     await fillProfile();
@@ -246,6 +247,7 @@ describe("App - 지역 조회의 네 상태", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
 
     render(<App />);
@@ -274,6 +276,7 @@ describe("App - 지역 조회의 네 상태", () => {
         },
       ],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
 
     render(<App />);
@@ -353,6 +356,7 @@ describe("App - 행정동으로 좁히기", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
 
     render(<App />);
@@ -373,6 +377,7 @@ describe("App - 행정동으로 좁히기", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
 
     render(<App />);
@@ -394,6 +399,50 @@ describe("App - 행정동으로 좁히기", () => {
   });
 
   /**
+   * 목록의 신선도 문구는 **이 조회가 실제로 반영한 계약월**이어야 한다.
+   *
+   * 예전에는 번들 매니페스트의 정적 상수(`DATA_AS_OF`)를 그대로 넘겼다.
+   * 그 값은 옛 배치 파이프라인이 특정 3개 구를 돌린 시점의 것이라, 전국
+   * 아무 지역이나 그때그때 조회하는 지금 목록에 대해서는 우리가 확인한
+   * 적 없는 값이다 — 그런데 화면은 그것을 "{dataAsOf} 계약분까지
+   * 반영했어요"라는 사실 서술로 그린다.
+   */
+  it("신선도 문구는 조회가 실제로 반영한 계약월을 말한다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DONG_A_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: "2031-04",
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    expect(screen.getByText(/2031-04 계약분까지 반영했어요/)).toBeInTheDocument();
+  });
+
+  /**
+   * 모르면 말하지 않는다. 조회에 거래가 한 건도 없었으면 기준월을 낼
+   * 대상이 없는데, 그 자리를 오늘 날짜나 옛 상수로 메우면 근거를 실제보다
+   * 튼튼해 보이게 하는 오표기가 된다.
+   */
+  it("조회가 기준월을 모르면(null) 신선도 문구를 아예 쓰지 않는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DONG_A_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    expect(screen.queryByText(/계약분까지 반영했어요/)).not.toBeInTheDocument();
+  });
+
+  /**
    * 이 fix가 고치는 바로 그 버그. 고쳐지기 전에는 이 상황에서
    * `ComplexList`의 기본 빈 문구("현금이 더 있으면 선택지가 생겨요")가
    * 그대로 나왔다 — 이 동을 골라서 0건이 된 것인데 예산 탓으로 잘못
@@ -405,6 +454,7 @@ describe("App - 행정동으로 좁히기", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNAFFORDABLE_UNIT],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
 
     render(<App />);
@@ -458,6 +508,7 @@ describe("App - 행정동으로 좁히기", () => {
         DONG_B_UNAFFORDABLE_UNIT,
       ],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
 
     render(<App />);
@@ -500,6 +551,7 @@ describe("App - 행정동으로 좁히기", () => {
         DONG_B_UNAFFORDABLE_UNIT,
       ],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
 
     render(<App />);
@@ -529,6 +581,7 @@ describe("App - 행정동으로 좁히기", () => {
     const spy = vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
 
     render(<App />);
@@ -547,6 +600,7 @@ describe("App - 행정동으로 좁히기", () => {
     spy.mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
+      dataAsOf: null,
     });
     await chooseRegion();
     await screen.findByRole("region", { name: "살 수 있는 단지" });

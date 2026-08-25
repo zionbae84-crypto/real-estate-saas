@@ -21,8 +21,18 @@ const PAGE_SIZE = 10;
 
 export interface ComplexListProps {
   result: ComplexListResult;
-  /** 데이터 기준일(YYYY-MM) */
-  dataAsOf: string;
+  /**
+   * 이 목록이 반영한 가장 최근 계약월(YYYY-MM). **모르면 `null`이고,
+   * 그때는 신선도 줄을 아예 그리지 않는다.**
+   *
+   * 이 줄은 "{dataAsOf} 계약분까지 반영했어요"라는 사실 서술이다.
+   * 목록의 출처가 번들 데이터에서 "고른 지역을 그때 조회한 결과"로
+   * 바뀐 뒤로는, 옛 배치 실행의 정적 기준일을 여기에 넣으면 이 조회에
+   * 대해 확인한 적 없는 것을 말하게 된다 — 근거를 실제보다 튼튼해
+   * 보이게 하는 쪽이라 이 앱이 가장 경계하는 오표기다. 모르면 말하지
+   * 않는 것이 유일하게 정직한 처리다.
+   */
+  dataAsOf: string | null;
   /** 지역 필터가 걸려 있는가 — 0개 안내 문구를 고르는 데 쓴다 */
   hasRegionFilter: boolean;
   /** 상환 능력(DSR) 자체가 0인가 */
@@ -320,7 +330,9 @@ function BasisNote() {
   );
 }
 
-function Freshness({ dataAsOf }: { dataAsOf: string }) {
+function Freshness({ dataAsOf }: { dataAsOf: string | null }) {
+  // 모르면 말하지 않는다 — 위 prop 주석 참고.
+  if (dataAsOf === null) return null;
   return (
     <p className="complex-freshness">
       {dataAsOf} 계약분까지 반영했어요. 실거래 신고가 한 달쯤 늦어서 최근

@@ -3,6 +3,17 @@ import { narrowLandLeasehold, type ComplexUnit } from "../data/complexes";
 export interface RegionComplexesResult {
   units: ComplexUnit[];
   isRegulatedArea: boolean | null;
+  /**
+   * 이 조회에 실제로 들어온 거래 중 가장 최근 계약월(YYYY-MM). 거래가
+   * 없었거나 서버가 알려주지 않았으면 `null`이다.
+   *
+   * **번들의 `DATA_AS_OF`로 대신하지 않는다.** 그 상수는 옛 배치
+   * 파이프라인이 3개 구를 돌린 시점의 값이라, 지금 화면이 보여주는
+   * 임의의 지역·임의의 시점 조회에 대해서는 우리가 확인한 적 없는
+   * 주장이 된다 — 그런데 화면은 그걸 "{dataAsOf} 계약분까지 반영했어요"
+   * 라는 사실 서술로 그린다.
+   */
+  dataAsOf: string | null;
 }
 
 interface ApiUnit extends Omit<ComplexUnit, "landLeasehold"> {
@@ -12,6 +23,7 @@ interface ApiUnit extends Omit<ComplexUnit, "landLeasehold"> {
 interface ApiResponse {
   units: ApiUnit[];
   isRegulatedArea: boolean | null;
+  dataAsOf?: unknown;
 }
 
 interface ApiErrorBody {
@@ -45,5 +57,18 @@ export async function fetchRegionComplexes(
   return {
     units: body.units.map((u) => ({ ...u, landLeasehold: narrowLandLeasehold(u.landLeasehold) })),
     isRegulatedArea: body.isRegulatedArea,
+    dataAsOf: narrowDataAsOf(body.dataAsOf),
   };
+}
+
+/**
+ * 응답의 `dataAsOf`를 `YYYY-MM` 문자열 또는 `null`로 좁힌다.
+ *
+ * 형식이 아닌 값(옛 배포판이라 필드 자체가 없는 경우 포함)은 `null`로
+ * 간다 — 화면은 이 값을 "{dataAsOf} 계약분까지 반영했어요"라는 **사실
+ * 서술**로 그리므로, 확인되지 않은 값을 그대로 흘려보내면 그 문장이
+ * 근거 없는 주장이 된다. `null`이면 화면이 그 줄을 아예 쓰지 않는다.
+ */
+function narrowDataAsOf(value: unknown): string | null {
+  return typeof value === "string" && /^\d{4}-\d{2}$/.test(value) ? value : null;
 }

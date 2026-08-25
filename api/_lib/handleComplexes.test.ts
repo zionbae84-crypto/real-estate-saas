@@ -40,17 +40,35 @@ describe("handleComplexesRequest", () => {
   });
 
   it("성공하면 200과 units·isRegulatedArea(regulated 목록)를 반환한다", async () => {
-    const fetchLive = vi.fn().mockResolvedValue([UNIT]);
+    const fetchLive = vi.fn().mockResolvedValue({ units: [UNIT], dataAsOf: "2026-01" });
     const result = await handleComplexesRequest(
       { regionCode: "11680", dong: null },
       { fetchLive, key: "dummy", regions: REGIONS },
     );
     expect(result.status).toBe(200);
-    expect(result.body).toEqual({ units: [UNIT], isRegulatedArea: true });
+    expect(result.body).toEqual({
+      units: [UNIT],
+      isRegulatedArea: true,
+      dataAsOf: "2026-01",
+    });
+  });
+
+  /**
+   * 화면은 이 값으로만 "언제 계약분까지 반영했는지"를 말할 수 있다.
+   * 거래가 0건이면 `null`이 그대로 나가야 한다 — 여기서 오늘 날짜 같은
+   * 것으로 메우면, 화면이 확인한 적 없는 신선도를 사실처럼 말하게 된다.
+   */
+  it("dataAsOf가 null이면 null 그대로 내보낸다 — 서버가 날짜를 메우지 않는다", async () => {
+    const fetchLive = vi.fn().mockResolvedValue({ units: [], dataAsOf: null });
+    const result = await handleComplexesRequest(
+      { regionCode: "11680", dong: null },
+      { fetchLive, key: "dummy", regions: REGIONS },
+    );
+    expect((result.body as { dataAsOf: unknown }).dataAsOf).toBeNull();
   });
 
   it("nonRegulated 목록에 있으면 isRegulatedArea: false를 반환한다", async () => {
-    const fetchLive = vi.fn().mockResolvedValue([]);
+    const fetchLive = vi.fn().mockResolvedValue({ units: [], dataAsOf: null });
     const result = await handleComplexesRequest(
       { regionCode: "11110", dong: null },
       { fetchLive, key: "dummy", regions: REGIONS },
@@ -59,7 +77,7 @@ describe("handleComplexesRequest", () => {
   });
 
   it("어느 목록에도 없으면 isRegulatedArea: null을 반환한다", async () => {
-    const fetchLive = vi.fn().mockResolvedValue([]);
+    const fetchLive = vi.fn().mockResolvedValue({ units: [], dataAsOf: null });
     const result = await handleComplexesRequest(
       { regionCode: "99999", dong: null },
       { fetchLive, key: "dummy", regions: REGIONS },
