@@ -27,6 +27,16 @@ const ASSUMABLE_KEY_MAP: Partial<Record<keyof ProfileFormState, AssumableField>>
     exclusiveAreaSqm: "area",
   };
 
+/**
+ * 위 매핑의 역방향. `resetField`가 "이 가정 항목의 값이 어느 키인가"를
+ * 되찾는 데 쓴다 — 두 방향을 각각 손으로 적으면 언젠가 어긋난다.
+ */
+const ASSUMABLE_FIELD_KEY: Record<AssumableField, keyof ProfileFormState> = {
+  existingDebt: "existingDebtAnnualPayment",
+  regulatedArea: "isRegulatedArea",
+  area: "exclusiveAreaSqm",
+};
+
 export interface ProfileFormState {
   cash: number | null;
   annualIncome: number | null;
@@ -325,6 +335,44 @@ export function useProfileForm() {
     [],
   );
 
+  /**
+   * 가정 항목 하나를 **가정 상태로 되돌린다** — 값을 지금 코드가 정하는
+   * 기본값으로 되돌리고, `touched`에서 뺀다.
+   *
+   * `setField`의 반대 방향이 필요한 자리가 하나 있다: 지역 조회다. 지역
+   * X(규제 여부를 아는 지역)를 조회하면 `App.tsx`가 규제지역 값을
+   * `setField`로 반영하고, 그 값은 그 순간부터 가정이 아니라 **확인된
+   * 사실**이 되어 가정 문구에서 빠진다. 그 뒤 지역 Y(우리가 모르는
+   * 지역)를 조회했을 때 값을 그대로 두면, Y의 화면이 X의 값을 X의 확정
+   * 지위까지 함께 물려받는다 — 우리가 Y에 대해 아무것도 확인하지 못한
+   * 채로 "이 지역은 규제지역입니다"라고 단정하는 것이다. 지금은
+   * `nonRegulated` 목록이 비어 있어 보수적인 `true`만 넘어오지만, 그
+   * 목록이 채워지는 순간 비규제(LTV 70%) 판정이 규제지역(40%)인 Y로
+   * 새어 나가 **한도를 30%p 과대평가**한다.
+   *
+   * 사용자가 방금 체크박스를 직접 눌렀다가 곧바로 모르는 지역을
+   * 조회하는 경우까지 함께 되돌아간다 — 지금 상태 모양으로는 "지역
+   * 조회가 정한 값"과 "사용자가 직접 정한 값"을 구분할 수 없다. 드문
+   * 순서이고, 되돌아가도 사용자는 다시 누르면 된다. 반대쪽(가정 고지를
+   * 잃는 것)은 화면이 확인한 적 없는 것을 사실로 말하게 두는 일이라
+   * 훨씬 나쁘다.
+   */
+  const resetField = useCallback((field: AssumableField) => {
+    setState((prev) => {
+      const key = ASSUMABLE_FIELD_KEY[field];
+      // 이미 가정 상태면 새 객체를 만들지 않는다 — 이 함수를 부르는
+      // 자리가 useEffect라, 매번 새 상태를 내면 렌더 루프가 된다.
+      if (!prev.touched.includes(field) && prev[key] === DEFAULT_FORM_STATE[key]) {
+        return prev;
+      }
+      return {
+        ...prev,
+        [key]: DEFAULT_FORM_STATE[key],
+        touched: prev.touched.filter((f) => f !== field),
+      };
+    });
+  }, []);
+
   const reset = useCallback(() => setState(DEFAULT_FORM_STATE), []);
 
   // toProfile(state)가 매 렌더마다 새 객체를 만들면, useAffordability의
@@ -333,5 +381,5 @@ export function useProfileForm() {
   // state가 실제로 바뀔 때만 새 profile을 만들도록 메모이즈한다.
   const profile = useMemo(() => toProfile(state), [state]);
 
-  return { state, setField, reset, profile };
+  return { state, setField, resetField, reset, profile };
 }

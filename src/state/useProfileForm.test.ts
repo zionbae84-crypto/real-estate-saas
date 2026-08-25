@@ -603,3 +603,56 @@ describe("loadStoredState — 주택 수", () => {
     }
   });
 });
+
+/**
+ * `resetField`가 필요한 이유는 지역 조회다.
+ *
+ * 지역 X(규제 여부를 아는 지역)를 조회하면 `App.tsx`가
+ * `setField("isRegulatedArea", …)`을 부르고, 그 값은 **가정이 아니라
+ * 확인된 사실**이 되어 `touched`에 들어간다(가정 문구에서 빠진다).
+ * 그 다음 지역 Y(모르는 지역)를 조회하면 값을 손대지 않는데, 그러면
+ * Y의 화면이 **X의 값을 X의 확정 지위 그대로** 물려받는다 — 우리가
+ * Y에 대해 아무것도 모르는 채로 "이 지역은 규제지역입니다"라고 말하는
+ * 것이다. `api/_data/regulated-regions.json`의 `nonRegulated` 목록이
+ * 채워지는 순간 이건 LTV 한도 과대평가 버그가 된다.
+ */
+describe("useProfileForm — resetField가 항목을 가정 상태로 되돌린다", () => {
+  beforeEach(() => window.localStorage.clear());
+
+  it("값을 현재 기본값으로 되돌리고 touched에서 뺀다", () => {
+    const { result } = renderHook(() => useProfileForm());
+
+    act(() => result.current.setField("isRegulatedArea", false));
+    expect(result.current.state.isRegulatedArea).toBe(false);
+    expect(result.current.state.touched).toContain("regulatedArea");
+
+    act(() => result.current.resetField("regulatedArea"));
+
+    expect(result.current.state.isRegulatedArea).toBe(
+      DEFAULT_FORM_STATE.isRegulatedArea,
+    );
+    expect(result.current.state.touched).not.toContain("regulatedArea");
+  });
+
+  it("다른 항목의 touched·값은 건드리지 않는다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    act(() => {
+      result.current.setField("isRegulatedArea", false);
+      result.current.setField("exclusiveAreaSqm", 59);
+    });
+
+    act(() => result.current.resetField("regulatedArea"));
+
+    expect(result.current.state.touched).toEqual(["area"]);
+    expect(result.current.state.exclusiveAreaSqm).toBe(59);
+  });
+
+  it("이미 가정 상태면 상태 객체를 새로 만들지 않는다 — 렌더 루프를 만들지 않는다", () => {
+    const { result } = renderHook(() => useProfileForm());
+    const before = result.current.state;
+
+    act(() => result.current.resetField("regulatedArea"));
+
+    expect(result.current.state).toBe(before);
+  });
+});

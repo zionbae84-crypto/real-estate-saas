@@ -37,7 +37,7 @@ import type { AssumableField } from "./state/useProfileForm";
 import { useProfileForm } from "./state/useProfileForm";
 
 export function App() {
-  const { state, setField, reset, profile } = useProfileForm();
+  const { state, setField, resetField, reset, profile } = useProfileForm();
   // AssumptionLine이 어떤 가정 항목을 눌렀는지 여기서 받아, ProfileForm에
   // "그 항목만 제자리(폼 안)에서 열어라"고 전달한다. 이 상태가 없으면
   // AssumptionLine의 버튼도 ProfileForm의 openField 분기도 도달할 방법이
@@ -131,10 +131,21 @@ export function App() {
   const affordability = useAffordability(residentialProfile);
 
   /**
-   * 지역을 고르면 규제지역 여부를 API 응답으로 정한다. `null`(모르는
-   * 지역)이면 손대지 않는다 — 기존 가정(기본값: 규제지역)이 그대로 남는다.
+   * 지역을 고르면 규제지역 여부를 API 응답으로 정한다.
+   *
    * 목록에 있는 지역이면(true/false) 폼 상태에 반영해 위쪽 실구매 가능
-   * 가격도 같은 전제로 계산되게 한다.
+   * 가격도 같은 전제로 계산되게 한다. 그 순간 이 값은 가정이 아니라
+   * **확인된 사실**이 되므로 `setField`가 `touched`에도 넣어 가정 문구에서
+   * 뺀다.
+   *
+   * **`null`(모르는 지역)이면 가정 상태로 되돌린다** — 손대지 않고 두지
+   * 않는다. 앞서 아는 지역 X를 조회했다면 그 값이 X의 **확정 지위까지**
+   * 그대로 남아, 우리가 아무것도 확인하지 못한 지역 Y의 화면이 "이
+   * 지역은 규제지역입니다"라고 단정하게 된다. 지금은
+   * `api/_data/regulated-regions.json`의 `nonRegulated` 목록이 비어 있어
+   * 보수적인 `true`만 넘어오지만, 그 목록이 채워지는 순간 비규제(LTV
+   * 70%) 판정이 규제지역인 Y로 새어 나가 한도를 30%p 과대평가한다 —
+   * 그 목록이 존재하는 이유가 바로 채워지는 것이다.
    *
    * **폼 상태에 직접 반영한다.** 목록 전용 프로필을 따로 만들면 위의 최대
    * 가격과 아래 목록이 서로 다른 프로필로 계산돼, 화면이 두 개의 다른
@@ -144,8 +155,15 @@ export function App() {
     if (regionComplexes.status !== "success") return;
     if (regionComplexes.isRegulatedArea !== null) {
       setField("isRegulatedArea", regionComplexes.isRegulatedArea);
+    } else {
+      resetField("regulatedArea");
     }
-  }, [regionComplexes.status, regionComplexes.isRegulatedArea]);
+  }, [
+    regionComplexes.status,
+    regionComplexes.isRegulatedArea,
+    setField,
+    resetField,
+  ]);
 
   /**
    * 지역을 확정하면 그 지역의 실거래가를 조회한다.

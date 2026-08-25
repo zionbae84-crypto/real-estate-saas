@@ -300,13 +300,11 @@ describe("예산 계산기 통합", () => {
 
   /**
    * 위 테스트의 대조군(symmetric case) — `isRegulatedArea`가
-   * `true`가 아니라 `null`(모르는 지역)이면 App.tsx의 useEffect가
-   * (`if (regionComplexes.isRegulatedArea !== null) setField(...)`)
-   * 아예 `setField`를 부르지 않는다. 그러니 조회 전부터 있던 규제지역
-   * 가정이 조회가 끝난 뒤에도 **그대로 남아야** 한다 — null을 false로
-   * 오인해 프로필을 덮어쓰면 안 된다.
+   * `true`가 아니라 `null`(모르는 지역)이면 조회 전부터 있던 규제지역
+   * 가정이 조회가 끝난 뒤에도 **가정인 채로 남아야** 한다. null을
+   * false로 오인해 프로필을 덮어쓰면 안 된다.
    */
-  it("지역의 규제지역 여부를 모르면(null) 규제지역 가정을 건드리지 않는다", async () => {
+  it("지역의 규제지역 여부를 모르면(null) 규제지역 가정이 가정으로 남는다", async () => {
     mockRegionQuery(cheapestIn("11680", 3), null);
 
     render(<App />);
@@ -319,8 +317,46 @@ describe("예산 계산기 통합", () => {
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    // null이었으므로 프로필의 isRegulatedArea는 손대지 않았어야 한다 —
+    // null이었으므로 프로필의 isRegulatedArea는 확정되지 않았다 —
     // 가정 문구가 여전히 남아 있다.
+    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+  });
+
+  /**
+   * 위 두 테스트를 **이어 붙였을 때** 드러나는 결함.
+   *
+   * 아는 지역을 먼저 조회하면 규제지역 값이 확정되어 가정 문구에서
+   * 빠진다. 그 다음 모르는 지역을 조회했을 때 값을 손대지 않고 두면,
+   * 새 지역의 화면이 앞 지역의 값을 **확정 지위까지** 물려받는다 —
+   * 우리가 이 지역에 대해 아무것도 확인하지 못했는데 화면은 더 이상
+   * 그것을 가정이라고 말하지 않는다. 지금은 `nonRegulated` 목록이 비어
+   * 있어 넘어오는 값이 보수적인 true뿐이라 눈에 띄지 않지만, 그 목록이
+   * 채워지는 순간 비규제(LTV 70%) 판정이 모르는 지역으로 새어 나가
+   * 한도를 30%p 과대평가한다.
+   */
+  it("아는 지역 다음에 모르는 지역(null)을 조회하면 규제지역이 다시 가정으로 돌아간다", async () => {
+    const spy = mockRegionQuery(cheapestIn("11680", 3), true);
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+
+    // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
+    await selectRegion("서울특별시", "강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+
+    // 모르는 지역: 확정할 근거가 없다.
+    spy.mockResolvedValue({
+      units: [...cheapestIn("11650", 3)],
+      isRegulatedArea: null,
+    });
+    await selectRegion("서울특별시", "서초구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    // 가정 고지가 되살아나야 한다 — 앞 지역의 확정이 이 지역까지
+    // 따라오면 안 된다.
     expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
   });
 
