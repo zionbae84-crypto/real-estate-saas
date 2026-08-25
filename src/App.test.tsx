@@ -931,3 +931,45 @@ describe("App - 권리분석 문진", () => {
     );
   });
 });
+
+describe("App - 지도", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  async function fillProfile() {
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+  }
+
+  async function chooseRegion() {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  it("목록이 뜬 뒤에 지도 영역이 나타난다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DETAIL_TEST_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue([
+      { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
+    ]);
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    await screen.findByRole("region", { name: "단지 지도" });
+  });
+});

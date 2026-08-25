@@ -3,6 +3,7 @@ import { AssumptionLine } from "./components/AssumptionLine";
 import { BudgetResult } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
+import { ComplexMap } from "./components/ComplexMap";
 import { DiagnosisSummary } from "./components/DiagnosisSummary";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
@@ -29,6 +30,7 @@ import type { PriceAssessment } from "./lib/price";
 import type { PurchaseAssessment, PurchaseType } from "./lib/purchase";
 import type { RightsAssessment } from "./lib/rights";
 import { rules, useAffordability } from "./state/useAffordability";
+import { useComplexCoordinates } from "./state/useComplexCoordinates";
 import { useRegionComplexes } from "./state/useRegionComplexes";
 import { purchaseRules } from "./state/usePurchaseCheck";
 import { usePurchaseType } from "./state/usePurchaseType";
@@ -57,6 +59,8 @@ export function App() {
    * 결과"로 바뀌었다.
    */
   const regionComplexes = useRegionComplexes();
+  /** 지금 확정된 지역코드. 좌표 조회(useComplexCoordinates)가 이 값을 쓴다 */
+  const [currentRegionCode, setCurrentRegionCode] = useState<string | null>(null);
   /** 조회 결과 안에서 행정동으로 더 좁힌 값. null이면 그 지역 전체다 */
   const [selectedDong, setSelectedDong] = useState<string | null>(null);
   // ComplexList의 PAGE_SIZE와 같은 값이다 — 각 덩어리에서 이만큼씩 보여준다.
@@ -185,8 +189,21 @@ export function App() {
   function handleRegionSelect(regionCode: string) {
     setSelectedDong(null);
     setVisibleCount(10);
+    setCurrentRegionCode(regionCode);
     regionComplexes.query(regionCode);
   }
+
+  /**
+   * 지도용 좌표. 목록보다 늦게 채워진다 — 목록이 지도의 느린 응답을
+   * 기다리지 않아야 한다(useComplexCoordinates 문서, 부모 스펙 §3).
+   * 지역 조회가 성공하면(목록이 이미 뜬 뒤) 같은 지역으로 좌표도 조회한다.
+   */
+  const complexCoordinates = useComplexCoordinates();
+
+  useEffect(() => {
+    if (regionComplexes.status !== "success" || currentRegionCode === null) return;
+    complexCoordinates.query(currentRegionCode, null);
+  }, [regionComplexes.status, currentRegionCode]);
 
   /** 조회 결과에 실제로 있는 행정동만. 없는 동은 고를 수 있으면 안 된다 */
   const dongOptions = useMemo(
@@ -678,6 +695,18 @@ export function App() {
                           )
                         )}
                       </>
+                    )}
+
+                  {regionComplexes.status === "success" &&
+                    !dongFilteredEmpty &&
+                    complexList !== null && (
+                      <ComplexMap
+                        units={dongFilteredUnits}
+                        coordinates={complexCoordinates.coordinates}
+                        naverMapClientId={
+                          import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
+                        }
+                      />
                     )}
                 </>
               )}
