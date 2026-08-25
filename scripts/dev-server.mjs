@@ -47,7 +47,10 @@ const server = createHttpServer(async (req, res) => {
   vite.middlewares(req, res);
 });
 
-const port = 5180;
+// 네이버지도 JS SDK의 Web 서비스 URL 허용 목록에 등록된 포트를 쓴다
+// (콘솔 Application > maps > Web 서비스 URL). 다른 포트면 SDK가 500으로
+// 막는다.
+const port = 4173;
 server.listen(port, () => {
   console.log(`ready: http://localhost:${port}`);
 });
