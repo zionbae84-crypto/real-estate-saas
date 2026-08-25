@@ -8,7 +8,9 @@ export interface RegionCode {
 
 const REGION_CODES: readonly RegionCode[] = rawRegionCodes;
 
-export const SIDO_NAMES: readonly string[] = [...new Set(REGION_CODES.map((r) => r.sidoName))];
+export const SIDO_NAMES: readonly string[] = [...new Set(REGION_CODES.map((r) => r.sidoName))].sort(
+  (a, b) => a.localeCompare(b, "ko"),
+);
 
 export function sigunguBySido(
   sidoName: string,

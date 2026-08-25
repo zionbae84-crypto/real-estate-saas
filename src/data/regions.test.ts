@@ -5,6 +5,9 @@ describe("regions", () => {
   it("SIDO_NAMES는 중복 없이 정렬된 시도 목록이다", () => {
     expect(SIDO_NAMES).toContain("서울특별시");
     expect(new Set(SIDO_NAMES).size).toBe(SIDO_NAMES.length);
+    expect(SIDO_NAMES).toEqual(
+      [...SIDO_NAMES].sort((a, b) => a.localeCompare(b, "ko")),
+    );
   });
 
   it("sigunguBySido는 그 시도의 구만 반환한다", () => {
