@@ -706,6 +706,16 @@ export function App() {
                           )}
                         </div>
                         <div className="region-results-map">
+                          {/*
+                            이 안쪽 조건의 `status === "success"`와
+                            `hasRegionUnits`는 바깥 `region-results-grid`
+                            조건(위 641~642행)이 이미 보장한다 — 이 블록에
+                            들어왔다는 것 자체가 둘 다 참이라는 뜻이라
+                            여기서는 redundant하다. 그래도 diff 리뷰에서
+                            "왜 지워졌는지"를 되짚게 만들지 않으려 그대로
+                            남긴다. 실제로 걸러내는 건 `!dongFilteredEmpty`와
+                            `complexList !== null` 두 개뿐이다.
+                          */}
                           {regionComplexes.status === "success" &&
                             hasRegionUnits &&
                             !dongFilteredEmpty &&

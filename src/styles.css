@@ -1677,4 +1677,31 @@ body {
     break-after: avoid-page;
     page-break-after: avoid;
   }
+
+  /*
+   * `.region-results-sidebar`의 `overflow-y: auto` + `max-height: 600px`는
+   * 화면 전용 스크롤 상자다 — CSS 페이지네이션은 `overflow: auto`로 갇힌
+   * 상자 안의 내용을 여러 쪽으로 나누지 못하므로, 이 제약이 인쇄에 그대로
+   * 남으면 600px를 넘는 목록 행은 스크롤해야 보이던 자리에서 그냥 잘려
+   * 종이에 나오지 않는다 — 그 안에는 토지임대부 경고처럼 없으면 월
+   * 상환액 일부를 전체로 오해하게 만드는 문구도 있다(land-lease-note,
+   * hiddenInPrint.ts 참고). 그래서 인쇄에서는 높이 제한과 스크롤을 모두
+   * 풀어 목록이 페이지를 넘어가며 이어지게 한다.
+   *
+   * `.region-results-grid`를 `display: block`으로 바꾸는 것은 별개
+   * 문제다 — 두 컬럼 그리드(320px 사이드바 + 지도 컬럼)는 위에서
+   * `.complex-map`을 지워도 그리드 자체는 남아, 인쇄 여백을 "없음"으로
+   * 두면(Letter/A4 모두) 인쇄 가능 영역이 768px보다 넓어져 아래
+   * `@media (max-width: 768px)`의 모바일 1열 전환이 인쇄 중엔 걸리지
+   * 않는다 — 빈 오른쪽 절반이 그대로 종이에 남는다. `display: block`은
+   * 폭 조건 없이 무조건 1열로 흘러, 그 여백 설정에서도 안전하다.
+   */
+  .region-results-grid {
+    display: block;
+  }
+
+  .region-results-sidebar {
+    max-height: none;
+    overflow: visible;
+  }
 }

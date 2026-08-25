@@ -516,4 +516,87 @@ describe("인쇄 CSS", () => {
       expect(hasBreakInsideAvoid(".foo { color: red; }")).toBe(false);
     });
   });
+
+  describe("사이드바 스크롤 상자가 인쇄에서 목록을 잘라내지 않는다(오버플로우 클리핑 가드)", () => {
+    /**
+     * `.region-results-sidebar`는 화면에서 `max-height: 600px` +
+     * `overflow-y: auto`인 스크롤 상자다(단지 목록을 지도 옆에서 독립
+     * 스크롤시키려고 Task 6에서 추가됨). **CSS 페이지네이션은
+     * `overflow: auto`로 갇힌 상자 안의 내용을 여러 쪽으로 나누지
+     * 못한다** — 위쪽 "숨기기로 한 것이 실제로 숨겨진다" describe가
+     * 잡는 것과 다른 실패 모양이다: `display: none`은 아예 안 걸려
+     * 있으니 그 캐스케이드 검사는 통과하지만, 600px를 넘는 목록 행은
+     * 스크롤해야 보이던 자리에서 그냥 종이에 나오지 않고 조용히
+     * 잘린다. 그 안에는 토지임대부 경고(`land-lease-note`,
+     * MUST_SURVIVE_PRINT_CLASSES)처럼 없으면 월 상환액 일부를 전체로
+     * 오해하게 만드는 문구도 있다.
+     *
+     * jsdom은 실제 오버플로우 클리핑을 렌더링해 보여주지 못하므로(다른
+     * describe들과 같은 전제), 여기서도 CSS 텍스트에서 선언값을 직접
+     * 읽어 구조로 확인한다.
+     */
+
+    /** 블록 안에서 정확히 이 선택자만 겨눈 규칙들 중, 그 속성의 마지막
+     * 선언값(대소문자 무관, 소스 순서상 나중 규칙이 이긴다는 전제 —
+     * 이 파일에서 `.region-results-sidebar`·`.region-results-grid`는
+     * 특정도가 같은 단순 클래스 선택자만 쓰므로 이 전제로 충분하다). */
+    function lastDeclaredValue(
+      block: string,
+      selector: string,
+      property: string,
+    ): string | undefined {
+      let found: string | undefined;
+      const propRe = new RegExp(`${property}\\s*:\\s*([^;\\n]+)`, "gi");
+      for (const rule of parseRules(block)) {
+        if (!rule.selectors.includes(selector)) continue;
+        propRe.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = propRe.exec(rule.body)) !== null) {
+          found = (m[1] ?? "").trim().toLowerCase();
+        }
+      }
+      return found;
+    }
+
+    it("인쇄 블록이 사이드바의 높이 제한과 스크롤을 모두 푼다", () => {
+      expect(
+        lastDeclaredValue(printBlock ?? "", ".region-results-sidebar", "overflow"),
+        ".region-results-sidebar가 @media print 안에서 overflow: visible로 " +
+          "풀리지 않았습니다 — 600px를 넘는 목록 행이 종이에서 잘립니다.",
+      ).toBe("visible");
+      expect(
+        lastDeclaredValue(printBlock ?? "", ".region-results-sidebar", "max-height"),
+        ".region-results-sidebar가 @media print 안에서 max-height: none으로 " +
+          "풀리지 않았습니다 — 600px 제한이 인쇄에도 그대로 남습니다.",
+      ).toBe("none");
+    });
+
+    it("인쇄 블록이 결과 그리드를 1열로 강제한다(빈 지도 컬럼이 폭 조건 없이 사라지도록)", () => {
+      // `display: block`은 `@media (max-width: 768px)` 같은 폭 조건 없이
+      // 무조건 1열로 흘린다 — 인쇄 여백을 "없음"으로 두면 인쇄 가능
+      // 영역이 768px보다 넓어질 수 있어(Letter/A4), 폭 조건에 기대는
+      // 방식으로는 이 경우를 놓친다.
+      expect(
+        lastDeclaredValue(printBlock ?? "", ".region-results-grid", "display"),
+        ".region-results-grid가 @media print 안에서 display: block으로 " +
+          "1열 강제되지 않았습니다 — 지워진 지도 컬럼 자리가 빈 채로 " +
+          "종이에 남을 수 있습니다.",
+      ).toBe("block");
+    });
+
+    // 변이 검사: 이 가드가 실제로 뭔가를 잡아내는지, Task 6이 남긴 실제
+    // 결함 형태(화면용 규칙만 있고 인쇄 override가 없는 상태)로 확인한다.
+    it("override가 없는 블록은 잡아낸다(변이 검사) — 이 수정 직전 실제 결함 형태", () => {
+      const preFix = `
+        .region-results-sidebar {
+          max-height: 600px;
+          overflow-y: auto;
+        }
+      `;
+      expect(lastDeclaredValue(preFix, ".region-results-sidebar", "overflow")).toBeUndefined();
+      expect(lastDeclaredValue(preFix, ".region-results-sidebar", "max-height")).toBe(
+        "600px",
+      );
+    });
+  });
 });
