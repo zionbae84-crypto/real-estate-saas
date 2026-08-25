@@ -1,9 +1,11 @@
 import type { LocationAssessment } from "../lib/location";
 import type { PriceAssessment } from "../lib/price";
 import type { PurchaseAssessment } from "../lib/purchase";
-import type { RightsAssessment } from "../lib/rights";
-import type { DiagnosisSummary as DiagnosisSummaryResult } from "../lib/summary";
-import type { SummaryRules } from "../lib/summary";
+import type {
+  DiagnosisSummary as DiagnosisSummaryResult,
+  RightsAssessment,
+  SummaryRules,
+} from "../lib/summary";
 import { useDiagnosisSummary } from "../state/useDiagnosisSummary";
 
 export interface DiagnosisSummaryProps {

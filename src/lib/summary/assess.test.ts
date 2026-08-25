@@ -8,7 +8,6 @@ import rawFinanceRules from "../../../rules/2026-08.json";
 import rawLocationRules from "../../../rules/location-2026-08.json";
 import rawPriceRules from "../../../rules/price-2026-08.json";
 import rawPurchaseRules from "../../../rules/purchase-2026-08.json";
-import rawRightsRules from "../../../rules/rights-2026-08.json";
 import rawSummaryRules from "../../../rules/summary-2026-08.json";
 import { type BuyerProfile, parseRules } from "../finance";
 import { assessLocation, parseLocationRules } from "../location";
@@ -17,15 +16,12 @@ import { assessPrice, parsePriceRules } from "../price";
 import type { PriceAssessment, PriceEvidence } from "../price";
 import { assessPurchase, parsePurchaseRules } from "../purchase";
 import type { PurchaseAssessment } from "../purchase";
-import { assessRights, parseRightsRules } from "../rights";
-import type { RightsAnswer, RightsAnswers, RightsAssessment, RightsOption } from "../rights";
 import { buildDiagnosisSummary } from "./assess";
 import { parseSummaryRules } from "./rules";
-import type { DiagnosisSummaryInput, SummaryAxisId, SummaryRules } from "./types";
+import type { DiagnosisSummaryInput, RightsAssessment, SummaryAxisId, SummaryRules } from "./types";
 import { SUMMARY_AXIS_IDS } from "./types";
 
 const summaryRules: SummaryRules = parseSummaryRules(rawSummaryRules);
-const rightsRules = parseRightsRules(rawRightsRules);
 const purchaseRules = parsePurchaseRules(rawPurchaseRules);
 const priceRules = parsePriceRules(rawPriceRules);
 const locationRules = parseLocationRules(rawLocationRules);
@@ -33,61 +29,23 @@ const financeRules = parseRules(rawFinanceRules);
 
 /* ─────────────────────────── 권리분석 픽스처 ─────────────────────────── */
 
-const RIGHTS_PRICE = 1_000_000_000;
-const SMALL_AMOUNT = 10_000_000;
-
-function answerFor(option: RightsOption): RightsAnswer {
-  return {
-    optionId: option.id,
-    amountWon: option.amount === "input" ? SMALL_AMOUNT : null,
-  };
-}
-
-function bestCaseAnswers(): RightsAnswers {
-  const out: Record<string, RightsAnswer> = {};
-  for (const item of rightsRules.items) {
-    const option = item.options.find((o) => o.verdict === "checked");
-    if (option === undefined) throw new Error(`checked 선택지가 없는 항목: ${item.id}`);
-    out[item.id] = answerFor(option);
-  }
-  return out;
-}
-
 type RightsFixtureOverall = "stop" | "incomplete" | "expert" | "clear";
 
 /**
- * 권리분석 축이 각 overall을 실제로 내도록 만든 답 조합.
- *
- * `src/lib/rights/assess.test.ts`의 `bestCaseAnswers`·"빠뜨린 항목이
- * 있어도 stop이 이긴다" 테스트와 같은 방식이다 — 실제 엔진을 불러서
- * 만들었으므로, 이 테스트가 확인하는 것은 진짜 `RightsAssessment`다.
+ * 권리분석 문진은 이 앱에서 제거됐다(등기부등본 문진 제거) — 별도
+ * 도구로 나중에 다시 만든다. 그런데도 이 파일이 rights를 다른 세
+ * 축과 나란히 조합해 훑는 이유는 `./types.ts`의 `RightsAssessment`
+ * 문서에 적었다. 실제 엔진(`assessRights`)이 사라졌으므로, 여기서는
+ * `overall`이 요구하는 값만 채운 최소 픽스처를 직접 만든다 — 이
+ * 테스트가 확인하는 것은 권리 축 자체의 판정 로직이 아니라 "네 축
+ * 중 하나가 이 값일 때 진단 종합이 어떻게 반응하는가"이기 때문이다.
  */
 function rightsFixture(overall: RightsFixtureOverall): RightsAssessment {
-  if (overall === "incomplete") {
-    return assessRights(rightsRules, {}, null);
-  }
-  if (overall === "clear") {
-    return assessRights(rightsRules, bestCaseAnswers(), RIGHTS_PRICE);
-  }
-  if (overall === "expert") {
-    const item = rightsRules.items.find(
-      (i) =>
-        i.options.some((o) => o.verdict === "expert") &&
-        !i.options.some((o) => o.verdict === "stop"),
-    );
-    if (item === undefined) throw new Error("expert 전용 항목을 찾지 못했다");
-    const option = item.options.find((o) => o.verdict === "expert");
-    if (option === undefined) throw new Error("expert 선택지를 찾지 못했다");
-    const answers = { ...bestCaseAnswers(), [item.id]: answerFor(option) };
-    return assessRights(rightsRules, answers, RIGHTS_PRICE);
-  }
-  // stop
-  const item = rightsRules.items.find((i) => i.options.some((o) => o.verdict === "stop"));
-  if (item === undefined) throw new Error("stop 항목을 찾지 못했다");
-  const option = item.options.find((o) => o.verdict === "stop");
-  if (option === undefined) throw new Error("stop 선택지를 찾지 못했다");
-  const answers = { ...bestCaseAnswers(), [item.id]: answerFor(option) };
-  return assessRights(rightsRules, answers, RIGHTS_PRICE);
+  return {
+    overall,
+    overallLabel: `픽스처 ${overall}`,
+    overallNote: `픽스처 ${overall} 설명`,
+  };
 }
 
 /* ─────────────────────────── 구매 유형별 금융 픽스처 ─────────────────────────── */

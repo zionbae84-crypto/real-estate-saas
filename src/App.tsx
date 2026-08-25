@@ -12,7 +12,6 @@ import { ProfileForm } from "./components/ProfileForm";
 import { PurchaseCheck } from "./components/PurchaseCheck";
 import { PurchaseTypeSelect } from "./components/PurchaseTypeSelect";
 import { RegionSelect } from "./components/RegionSelect";
-import { RightsCheck } from "./components/RightsCheck";
 import { SafetyBadge } from "./components/SafetyBadge";
 import {
   AGGREGATION_WINDOW_LABEL,
@@ -28,7 +27,6 @@ import {
 import type { LocationAssessment } from "./lib/location";
 import type { PriceAssessment } from "./lib/price";
 import type { PurchaseAssessment, PurchaseType } from "./lib/purchase";
-import type { RightsAssessment } from "./lib/rights";
 import { rules, useAffordability } from "./state/useAffordability";
 import { useComplexCoordinates } from "./state/useComplexCoordinates";
 import { useRegionComplexes } from "./state/useRegionComplexes";
@@ -71,7 +69,7 @@ export function App() {
   /**
    * 진단 종합(`DiagnosisSummary`)이 읽는 네 축의 최신 판정.
    *
-   * **여기서 계산하지 않는다.** `RightsCheck`·`PurchaseCheck`·
+   * **여기서 계산하지 않는다.** `PurchaseCheck`·
    * `PriceCheck`·`LocationFacts`가 각자 이미 계산한 값을
    * `onAssessment` 콜백으로 올려 줄 뿐이다 — 복제해서 다시 계산하면
    * 이 상태와 그 컴포넌트들이 언젠가 어긋난다.
@@ -84,7 +82,6 @@ export function App() {
    * 되돌린다(그러지 않으면 다른 평형·다른 유형의 판정이 남아 있는
    * 축으로 오인된다).
    */
-  const [rightsAssessment, setRightsAssessment] = useState<RightsAssessment | null>(null);
   const [purchaseAssessment, setPurchaseAssessment] = useState<PurchaseAssessment | null>(null);
   const [priceAssessment, setPriceAssessment] = useState<PriceAssessment | null>(null);
   const [locationAssessment, setLocationAssessment] = useState<LocationAssessment | null>(null);
@@ -491,9 +488,6 @@ export function App() {
           매수 옆에 두면 그 한도를 이 매수에 쓸 수 있는 것처럼 읽힌다.
           `residentialProfile`이 그 계산 자체를 막고, 이 분기가 화면을
           막는다.
-
-          권리분석 문진은 이 분기 **밖**에 있다. 등기부는 어떤 목적으로
-          사든 같은 서류이고, 유형과 무관하게 봐야 한다.
         */}
         {purchaseType === "실거주" ? (
           <>
@@ -843,26 +837,6 @@ export function App() {
         )}
 
         {/*
-          권리분석 문진은 **예산 흐름에 붙이지 않고 독립된 자리**에 둔다.
-          이유가 둘 있다.
-
-          1. 문진의 대상이 다르다. 위 목록의 "단지 × 평형"은 실거래가를
-             집계한 단위이지 특정 호실이 아니다. 등기사항전부증명서는
-             호실 하나에 대해 떼는 문서이므로, 목록의 행에서 "이 집의
-             등기부"를 물을 수 있는 자리가 없다. 단지 상세에 붙이면
-             그 행의 숫자가 특정 매물의 권리 상태인 것처럼 읽혀, 이
-             제품이 절대 만들면 안 되는 오해가 된다.
-          2. 이 문진은 예산 계산 없이도 성립한다. 계약을 앞두고
-             등기부만 들고 온 사람이 현금·소득을 먼저 입력해야만 쓸 수
-             있게 하면, 가장 급한 사람이 가장 늦게 도달한다. 그래서
-             `affordability === null` 분기 **밖**에 둔다.
-
-          접힌 채로 시작하지만 인쇄에서는 강제로 펼쳐진다(styles.css의
-          `::details-content` 규칙) — 이 앱의 다른 <details>와 같다.
-        */}
-        <RightsCheck onAssessment={setRightsAssessment} />
-
-        {/*
           진단 종합은 권리분석 바로 다음, 화면의 맨 끝(면책 문구 바로
           위)에 둔다 — "지금까지 본 것 전부를 한자리에 모으는 마무리"로
           두는 이유는 `DiagnosisSummary.tsx` 문서에 적었다.
@@ -878,7 +852,7 @@ export function App() {
           않은 사람에게는 그 못 본 축조차 보이지 않는다.
         */}
         <DiagnosisSummary
-          rights={rightsAssessment}
+          rights={null}
           purchase={purchaseAssessment}
           price={priceAssessment}
           location={locationAssessment}

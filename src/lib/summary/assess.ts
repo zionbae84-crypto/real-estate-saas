@@ -1,9 +1,9 @@
 import type { PriceOverall } from "../price";
 import type { PurchaseOverall } from "../purchase";
-import type { RightsOverall } from "../rights";
 import type {
   DiagnosisSummary,
   DiagnosisSummaryInput,
+  RightsOverall,
   SummaryAxisLine,
   SummaryHeadline,
   SummaryRules,

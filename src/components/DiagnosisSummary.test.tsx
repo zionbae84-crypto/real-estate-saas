@@ -9,42 +9,32 @@ import rawFinanceRules from "../../rules/2026-08.json";
 import rawLocationRules from "../../rules/location-2026-08.json";
 import rawPriceRules from "../../rules/price-2026-08.json";
 import rawPurchaseRules from "../../rules/purchase-2026-08.json";
-import rawRightsRules from "../../rules/rights-2026-08.json";
 import { type BuyerProfile, parseRules } from "../lib/finance";
 import { assessLocation, parseLocationRules } from "../lib/location";
 import { assessPrice, parsePriceRules } from "../lib/price";
 import { assessPurchase, parsePurchaseRules } from "../lib/purchase";
-import { assessRights, parseRightsRules } from "../lib/rights";
+import type { RightsAssessment } from "../lib/summary";
 import { PRINT_HIDDEN_SELECTORS } from "../print/hiddenInPrint";
 import { summaryRules } from "../state/useDiagnosisSummary";
 import { DiagnosisSummary } from "./DiagnosisSummary";
 
-const rightsRules = parseRightsRules(rawRightsRules);
 const purchaseRules = parsePurchaseRules(rawPurchaseRules);
 const priceRules = parsePriceRules(rawPriceRules);
 const locationRules = parseLocationRules(rawLocationRules);
 const financeRules = parseRules(rawFinanceRules);
 
-/** 항목마다 첫 checked 선택지를 골라 이 문진이 낼 수 있는 최선을 만든다 */
-function bestCaseRights() {
-  const answers: Record<string, { optionId: string; amountWon: number | null }> = {};
-  for (const item of rightsRules.items) {
-    const option = item.options.find((o) => o.verdict === "checked");
-    if (option === undefined) throw new Error(`checked 선택지가 없는 항목: ${item.id}`);
-    answers[item.id] = {
-      optionId: option.id,
-      amountWon: option.amount === "input" ? 10_000_000 : null,
-    };
-  }
-  return assessRights(rightsRules, answers, 1_000_000_000);
+/**
+ * 권리분석 문진은 이 앱에서 제거됐다(등기부등본 문진 제거) — 별도
+ * 도구로 나중에 다시 만든다. `rights` 축이 여전히 값을 받을 수 있는
+ * 자리이므로(`../lib/summary`의 `RightsAssessment` 문서 참고), 이
+ * 파일의 조합 테스트를 위해 최소 픽스처를 직접 만든다.
+ */
+function bestCaseRights(): RightsAssessment {
+  return { overall: "clear", overallLabel: "픽스처 통과", overallNote: "픽스처 설명" };
 }
 
-function stopRights() {
-  const item = rightsRules.items.find((i) => i.options.some((o) => o.verdict === "stop"));
-  if (item === undefined) throw new Error("stop 항목을 찾지 못했다");
-  const option = item.options.find((o) => o.verdict === "stop");
-  if (option === undefined) throw new Error("stop 선택지를 찾지 못했다");
-  return assessRights(rightsRules, { [item.id]: { optionId: option.id, amountWon: null } }, 1_000_000_000);
+function stopRights(): RightsAssessment {
+  return { overall: "stop", overallLabel: "픽스처 중단", overallNote: "픽스처 설명" };
 }
 
 function clearPurchase() {

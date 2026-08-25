@@ -6,7 +6,6 @@ import type { ComplexUnit } from "./data/complexes";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import * as regionQuery from "./lib/regionQuery";
 import { rules } from "./state/useAffordability";
-import { rightsRules } from "./state/useRightsCheck";
 import type * as UseAffordabilityModule from "./state/useAffordability";
 
 // 룰셋의 effectiveFrom을 실제 값과 다르게 모의한다. App.tsx가 여전히
@@ -881,64 +880,6 @@ describe("App - 단지 상세(화면 4)", () => {
       const summaryAfter = container.querySelector(".print-summary");
       expect(summaryAfter?.textContent).toMatch(/90㎡\s*\(선택한 매물의 실제 면적\)/);
     });
-  });
-});
-
-/**
- * 권리분석 문진(진단 제품의 첫 조각)이 예산 흐름과 **독립된 자리**에
- * 있다는 것을 잠근다. 그 배선의 이유는 App.tsx의 호출부 주석에 적었다 —
- * 계약을 앞두고 등기부만 들고 온 사람이 현금·소득을 먼저 입력해야만
- * 도달할 수 있게 되면, 가장 급한 사람이 가장 늦게 도달한다.
- */
-describe("App - 권리분석 문진", () => {
-  beforeEach(() => {
-    window.localStorage.clear();
-  });
-
-  afterEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
-  }
-
-  it("현금·소득을 입력하기 전에도 문진에 도달할 수 있다", () => {
-    const { container } = render(<App />);
-    expect(container.querySelector(".rights-check")).not.toBeNull();
-    expect(
-      screen.getByText("등기부등본으로 권리 확인하기", { exact: false }),
-    ).toBeInTheDocument();
-  });
-
-  it("예산 계산이 나온 뒤에도, 지역을 고른 뒤에도, 단지 상세를 연 뒤에도 그대로 남는다", async () => {
-    const { container } = render(<App />);
-    await fillProfile();
-    expect(container.querySelector(".rights-check")).not.toBeNull();
-
-    // 지역 선택 단계가 새로 끼었다 — 문진은 이 단계와도 무관해야 한다.
-    await selectTestRegion();
-    expect(container.querySelector(".rights-check")).not.toBeNull();
-
-    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-    expect(container.querySelector(".rights-check")).not.toBeNull();
-  });
-
-  it("아무것도 답하지 않은 상태의 결론은 통과가 아니다", () => {
-    const { container } = render(<App />);
-    const overall = container.querySelector(".rights-overall");
-    expect(overall?.textContent).toBe(rightsRules.overall.incomplete.label);
-    expect(overall?.textContent).not.toBe(rightsRules.overall.clear.label);
-  });
-
-  it("예산 흐름을 망가뜨리지 않는다 — 실구매 가능 가격이 그대로 나온다", async () => {
-    const { container } = render(<App />);
-    await fillProfile();
-    expect(container.querySelector(".affordable-price")?.textContent).toMatch(
-      /억/,
-    );
   });
 });
 

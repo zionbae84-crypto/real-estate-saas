@@ -11,6 +11,7 @@ export { SUMMARY_AXIS_IDS } from "./types";
 export type {
   DiagnosisSummary,
   DiagnosisSummaryInput,
+  RightsAssessment,
   SummaryAxisId,
   SummaryAxisLine,
   SummaryAxisStatus,

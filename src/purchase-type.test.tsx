@@ -315,18 +315,3 @@ describe("유형을 오갈 때의 입력 보존", () => {
     expect(document.querySelector(".affordable-price")?.textContent).toBe(before);
   });
 });
-
-describe("권리분석 문진은 유형과 무관하다", () => {
-  // 등기부는 어떤 목적으로 사든 같은 서류다. 갭투자는 라디오에서 뺐으므로
-  // 이 화면에서 고를 수 있는 유형(실거주·월세수익형)만 확인한다.
-  it.each(["실거주", "월세수익형"] as const)(
-    "%s에서도 문진이 남아 있다",
-    async (type) => {
-      render(<App />);
-      await choose(type);
-      expect(
-        screen.getByText(/등기부등본으로 권리 확인하기/),
-      ).toBeInTheDocument();
-    },
-  );
-});

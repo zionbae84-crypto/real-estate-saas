@@ -39,8 +39,26 @@
  */
 import type { PriceAssessment, PriceOverall } from "../price";
 import type { PurchaseAssessment, PurchaseOverall } from "../purchase";
-import type { RightsAssessment, RightsOverall } from "../rights";
 import type { LocationAssessment } from "../location";
+
+/**
+ * 권리분석 문진(등기부등본 문진)은 이 앱에서 제거됐다 — 별도 도구로
+ * 나중에 다시 만든다. `App.tsx`는 이제 항상 `rights={null}`만 넘긴다.
+ *
+ * 그런데도 이 타입이 남아 있는 이유: 진단 종합은 네 축을 나란히
+ * 다루는 자리이고, 이 파일의 조합 검사(모든 축 상태 조합에서 안전·
+ * 등급 주장이 나오지 않는지)가 rights를 다른 세 축과 같은 모양으로
+ * 계속 취급한다. 원래 `src/lib/rights/assess.ts`가 정의하던
+ * `RightsAssessment`의 전체 모양(문항별 판정·특약 비율 등) 중 이
+ * 모듈이 실제로 읽는 세 필드만 남긴 최소 형태다.
+ */
+export type RightsOverall = "stop" | "incomplete" | "expert" | "clear";
+
+export interface RightsAssessment {
+  overall: RightsOverall;
+  overallLabel: string;
+  overallNote: string;
+}
 
 /** 네 축의 식별자. 화면에 나오는 순서와 같다(위험이 무거운 순서, 룰셋 참고) */
 export type SummaryAxisId = "rights" | "purchase" | "price" | "location";
