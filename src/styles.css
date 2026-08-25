@@ -22,7 +22,7 @@
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+  font-family: "Pretendard", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
   line-height: 1.6;
 }
 
@@ -35,7 +35,12 @@ body {
 .subtitle,
 .disclaimer {
   color: #666;
-  font-size: 0.875rem;
+  /*
+   * Seline 스케일의 caption(10px)까지 줄이면 이 앱에서는 가독성이
+   * 떨어진다. 대신 .hint와 같은 0.8125rem(13px)로 맞춰 caption류
+   * 텍스트 크기를 하나로 통일하면서 스케일 쪽으로 살짝 당긴다.
+   */
+  font-size: 0.8125rem;
 }
 
 .profile-form {
