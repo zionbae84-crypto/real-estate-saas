@@ -39,4 +39,38 @@
   --seed-color-fg-brand-contrast: var(--seed-color-palette-blue-700);
   --seed-color-stroke-brand-solid: var(--seed-color-palette-blue-700);
   --seed-color-stroke-brand-weak: var(--seed-color-palette-blue-300);
+
+  /*
+   * Seline 스타일(따뜻한 시안 배경 + 청록 단색 악센트)로 의미 계층
+   * 전체를 새로 가리킨다. 위 brand 토큰들은 SEED 자체 팔레트를
+   * 가리켰지만, 아래는 Seline 고유 hex를 직접 쓴다 — Seline 팔레트가
+   * SEED 안에 없기 때문이다(이 파일 상단 주석의 "hex를 새로 지어내지
+   * 않는다" 원칙은 SEED 팔레트가 존재할 때의 얘기였다).
+   *
+   * fg-brand-contrast(cyan-edge, #3398e1)는 흰 배경 대비 3.13:1로
+   * 본문 크기 기준(4.5:1)에 못 미친다 — 실측, docs/superpowers/plans/
+   * 2026-08-25-지도중심-리디자인.md Task 4 참고. 굵은 큰 글자나
+   * 비텍스트 요소에만 쓴다.
+   */
+  --seed-color-bg-layer-default: #fafaf9;
+  --seed-color-bg-layer-floating: #ffffff;
+  --seed-color-fg-neutral: #0c0a09;
+  --seed-color-fg-neutral-muted: #78716c;
+  --seed-color-fg-neutral-subtle: #a8a29e;
+  --seed-color-stroke-neutral-weak: #e8e6e5;
+  --seed-color-stroke-neutral-muted: #d6d3d1;
+  --seed-color-bg-neutral-weak: #f5f4f3;
+
+  /*
+   * 안전/주의/위험 등급색. 흰 배경·본문 크기 기준 4.5:1 이상을 직접
+   * 계산해서 골랐다(SEED 기본값이 실패했던 것과 같은 함정 — task-2-
+   * report.md 참고). -contrast는 텍스트·배지용 진한 값, -weak는
+   * 배경 전용 옅은 값이라 대비 검증 대상이 아니다.
+   */
+  --seed-color-fg-positive-contrast: #15803d;
+  --seed-color-bg-positive-weak: #ecfdf3;
+  --seed-color-fg-warning-contrast: #b45309;
+  --seed-color-bg-warning-weak: #fffbeb;
+  --seed-color-fg-critical-contrast: #b91c1c;
+  --seed-color-bg-critical-weak: #fef2f2;
 }
