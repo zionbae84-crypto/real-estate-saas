@@ -24,6 +24,8 @@ body {
   margin: 0;
   font-family: "Pretendard", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
   line-height: 1.6;
+  background: var(--seed-color-bg-layer-default);
+  color: var(--seed-color-fg-neutral);
 }
 
 .app {
@@ -34,7 +36,7 @@ body {
 
 .subtitle,
 .disclaimer {
-  color: #666;
+  color: var(--seed-color-fg-neutral-muted);
   /*
    * Seline 스케일의 caption(10px)까지 줄이면 이 앱에서는 가독성이
    * 떨어진다. 대신 .hint와 같은 0.8125rem(13px)로 맞춰 caption류
@@ -111,7 +113,7 @@ body {
 }
 
 .hint {
-  color: #666;
+  color: var(--seed-color-fg-neutral-muted);
   font-size: 0.8125rem;
   margin: 0.25rem 0 0;
 }
@@ -133,7 +135,7 @@ body {
 }
 
 .result-step--binding {
-  color: #444;
+  color: var(--seed-color-fg-neutral);
   margin: 0 0 1rem;
 }
 
@@ -143,7 +145,7 @@ body {
 
 .result-step--fold > summary {
   cursor: pointer;
-  color: #666;
+  color: var(--seed-color-fg-neutral-muted);
 }
 
 /*
@@ -167,7 +169,7 @@ body {
 
 .safe-line-label {
   font-size: 0.8125rem;
-  color: #666;
+  color: var(--seed-color-fg-neutral-muted);
 }
 
 .safe-line-amount {
@@ -293,7 +295,7 @@ body {
 }
 
 .prompt {
-  color: #666;
+  color: var(--seed-color-fg-neutral-muted);
   margin: 1.5rem 0;
 }
 
@@ -311,7 +313,7 @@ body {
 .binding-amount-label {
   display: block;
   font-size: 0.8125rem;
-  color: #666;
+  color: var(--seed-color-fg-neutral-muted);
 }
 
 /*
@@ -329,19 +331,19 @@ body {
 }
 
 .runner-up {
-  background: #eaf6ec;
+  background: var(--seed-color-bg-positive-weak);
   border-left: 3px solid var(--safe);
 }
 
 .runner-up-tied {
-  background: #fff6e5;
+  background: var(--seed-color-bg-warning-weak);
   border-left: 3px solid var(--caution);
 }
 
 .no-budget {
   margin: 1rem 0;
   padding: 1rem;
-  background: #fdecec;
+  background: var(--seed-color-bg-critical-weak);
   border-left: 4px solid var(--danger);
   border-radius: 0.25rem;
 }
@@ -349,13 +351,13 @@ body {
 .error-fallback {
   margin: 1rem 0;
   padding: 1rem;
-  background: #fdecec;
+  background: var(--seed-color-bg-critical-weak);
   border: 1px solid var(--danger);
   border-radius: 0.375rem;
 }
 
 .safety-note {
-  color: #666;
+  color: var(--seed-color-fg-neutral-muted);
   font-size: 0.875rem;
   margin: 0.5rem 0 0;
 }
@@ -393,7 +395,7 @@ body {
 }
 
 .policy-none {
-  color: #666;
+  color: var(--seed-color-fg-neutral-muted);
 }
 
 /*
@@ -415,7 +417,7 @@ body {
   width: 100%;
   text-align: left;
   padding: 0.625rem 0.875rem;
-  background: #f4f6f8;
+  background: var(--seed-color-bg-neutral-weak);
   border: 1px dashed var(--border);
   border-radius: 0.375rem;
   font: inherit;
@@ -424,7 +426,12 @@ body {
 }
 
 .assumption-item:hover {
-  background: #eef1f4;
+  /*
+   * bg-neutral-weak(#f5f4f3)와 같은 토큰으로 두면 호버 구분이 사라진다
+   * (task-5-brief.md 참고). 팔레트에 없던 "pressed" 단계를 seed-brand.css에
+   * 새로 추가해 이 자리에서만 쓴다.
+   */
+  background: var(--seed-color-bg-neutral-weak-pressed);
 }
 
 /*
@@ -452,10 +459,10 @@ body {
 .assumption-notice {
   margin: 0;
   padding: 0.625rem 0.875rem;
-  background: #f4f6f8;
+  background: var(--seed-color-bg-neutral-weak);
   border: 1px solid var(--border);
   border-radius: 0.375rem;
-  color: #555;
+  color: var(--seed-color-fg-neutral-muted);
 }
 
 /*
@@ -815,7 +822,7 @@ body {
   padding: 0.625rem 1.25rem;
   font: inherit;
   font-weight: 600;
-  color: #fff;
+  color: var(--seed-color-bg-layer-floating);
   background: var(--seed-color-bg-brand-solid);
   border: none;
   border-radius: 0.375rem;

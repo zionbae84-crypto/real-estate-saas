@@ -58,6 +58,13 @@
   --seed-color-stroke-neutral-weak: #e8e6e5;
   --seed-color-stroke-neutral-muted: #d6d3d1;
   --seed-color-bg-neutral-weak: #f5f4f3;
+  /*
+   * SEED 기본값(cool gray #eeeff1)은 위 따뜻한 stone 배경과 색감이
+   * 어긋난다. 호버 시에도 같은 stone 계열 안에서 한 단계만 어두워지게
+   * 값을 새로 고른다(task-5-brief.md 참고 — src/styles.css의
+   * .assumption-item:hover가 이 토큰을 쓴다).
+   */
+  --seed-color-bg-neutral-weak-pressed: #ececeb;
 
   /*
    * 안전/주의/위험 등급색. 흰 배경·본문 크기 기준 4.5:1 이상을 직접
