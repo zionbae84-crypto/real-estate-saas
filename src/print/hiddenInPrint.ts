@@ -109,6 +109,18 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // `.purchase-loan-note`("한도는 계산하지 않아요")는 아래
   // MUST_SURVIVE_PRINT_CLASSES가 지킨다.
   ".purchase-form",
+  // 단지 지도(네이버지도 SDK, ComplexMap.tsx). 인쇄는 정적 문서라 JS SDK가
+  // 그리는 지도 타일·마커를 종이로 옮길 방법이 없다 — 높이만 있고 안이
+  // 빈 400px 테두리 상자만 남는다. 지도가 가리키던 위치 정보는 이미
+  // 목록 행의 법정동명·주소로 남아 있어 종이에서 잃는 정보가 없다.
+  ".complex-map",
+  // 좌표 조회(idle/loading/error)의 상태 문구를 감싸는 공용 래퍼(App.tsx).
+  // 위에서 지도 자신을 이미 지웠으므로, 이 문구들을 인쇄에 남기면 근거를
+  // 잃은 "지도를 불러오고 있어요…"나 눌러도 반응 없는 "다시 시도" 버튼만
+  // 남는 고아 문구가 된다. 로딩·실패 두 상태를 하나의 래퍼로 감싸 한
+  // 선택자로 지운다 — 성공 상태의 지도 자체는 위 `.complex-map`이 따로
+  // 지운다.
+  ".complex-map-status",
 ];
 
 /**

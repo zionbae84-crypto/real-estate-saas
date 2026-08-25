@@ -1772,7 +1772,9 @@ body {
   .rights-check-action,
   .purchase-type-form,
   .purchase-form,
-  .price-check-form {
+  .price-check-form,
+  .complex-map,
+  .complex-map-status {
     display: none;
   }
 
