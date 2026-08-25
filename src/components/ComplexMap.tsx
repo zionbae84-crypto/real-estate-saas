@@ -144,6 +144,31 @@ export function priceTiers(groups: Array<{ complexKey: string; representative: C
 }
 
 /**
+ * 한 번에 그리는 마커 수의 상한.
+ *
+ * 마커 라벨은 `white-space: nowrap`으로 늘 펼쳐져 있고 실제 폭이
+ * 120~230px에 이른다("60㎡ 3억 9,000만원 ~ 5억 4,500만원"). 구 하나가
+ * 화면에 들어오는 줌에서 이런 상자를 수백 개 그리면 지도가 아니라
+ * 글자 벽이 된다 — 노원구·예산 18억으로 실측했을 때 마커 255개가
+ * 816×602 지도 위에서 겹치는 쌍이 11,537개였고, **255개 전부가**
+ * 무언가와 겹쳤다. 목록이 10개씩 끊어 보여주는 것과 같은 이유로
+ * 여기도 상한을 둔다.
+ *
+ * **어느 30개인가**: `units`가 들어온 순서 그대로 앞에서부터다. 그
+ * 순서는 목록이 쓰는 순서(부담이 낮은 것부터, `buildComplexList`)라,
+ * 지도에 남는 30개는 목록 맨 위 30개와 같은 단지들이다 — 두 창이
+ * 여기서도 어긋나지 않는다.
+ *
+ * **잘라낸 개수는 반드시 화면에 적는다.** 말없이 자르면 "이 지역엔
+ * 이만큼뿐"으로 읽힌다.
+ *
+ * 클러스터링(가까운 마커를 묶어 숫자로 표시)은 여기서 만들지 않는다 —
+ * 줌마다 다시 묶고 풀어야 하고, 묶인 마커의 가격 티어 색을 무엇으로
+ * 할지부터 새 결정이 줄줄이 따라온다. 이 화면이 감당할 크기가 아니다.
+ */
+const MARKER_LIMIT = 30;
+
+/**
  * 좌표를 아는 단지만 지도에 아이콘으로 그린다. 클릭하면 이름·가격
  * 범위·거래 건수 팝업이 뜬다 — 목록 행과 같은 정보이고, 단일 "적정가"
  * 숫자는 여기서도 내지 않는다(부모 스펙 §6).
@@ -167,12 +192,15 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
    * 없이 빈 600px 상자만 남으면 사용자에겐 고장과 구분되지 않는다.
    */
   const [noneLocated, setNoneLocated] = useState(false);
+  /** {@link MARKER_LIMIT}에 걸려 지도에 그리지 못한 단지 수 */
+  const [hiddenCount, setHiddenCount] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
     const cleanupFns: Array<() => void> = [];
     setLoadFailed(false);
     setNoneLocated(false);
+    setHiddenCount(0);
 
     loadNaverMaps(naverMapClientId)
       .then((naverGlobal) => {
@@ -184,7 +212,11 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
           return;
         }
 
-        const coords = withCoords.map((g) => coordinates.get(g.complexKey)!);
+        // 상한을 넘는 단지는 그리지 않고, 몇 개를 못 그렸는지만 남긴다.
+        const drawn = withCoords.slice(0, MARKER_LIMIT);
+        setHiddenCount(withCoords.length - drawn.length);
+
+        const coords = drawn.map((g) => coordinates.get(g.complexKey)!);
         /*
          * 중심을 **그리는 단지들의 평균 좌표**로 잡는다 — 예전에는
          * `withCoords[0]`(그룹핑 순서상 첫 단지) 하나를 그대로 중심으로
@@ -212,16 +244,27 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
          * 두 단지가 아주 가까울 때 거리 감각을 잃을 만큼 확대되지 않게.
          */
         if (coords.length > 1) {
-          map.fitBounds(
-            coords.map((c) => ({ lat: c.lat, lng: c.lon })),
-            { top: 48, right: 48, bottom: 48, left: 48, maxZoom: 16 },
+          const bounds = new naverGlobal.maps.LatLngBounds(
+            new naverGlobal.maps.LatLng(
+              Math.min(...coords.map((c) => c.lat)),
+              Math.min(...coords.map((c) => c.lon)),
+            ),
+            new naverGlobal.maps.LatLng(
+              Math.max(...coords.map((c) => c.lat)),
+              Math.max(...coords.map((c) => c.lon)),
+            ),
           );
+          map.fitBounds(bounds, { top: 48, right: 48, bottom: 48, left: 48, maxZoom: 18 });
         }
         // 재렌더로 이 effect가 다시 돌면(예: units/coordinates가 바뀌면) 같은
         // DOM 컨테이너에 새 Map을 또 만들기 전에, 이전 Map을 확실히 치운다.
         cleanupFns.push(() => map.destroy());
 
-        const groupsWithRepresentative = withCoords.map((g) => ({
+        // 가격 3분위는 **실제로 그린 단지들** 안에서 매긴다 — 그리지도
+        // 않은 단지가 분위 경계를 흔들면 화면의 색이 화면에 없는 것을
+        // 근거로 삼게 된다(priceTiers 문서의 "지금 지도에 그려지는
+        // 단지들" 참고).
+        const groupsWithRepresentative = drawn.map((g) => ({
           ...g,
           representative: representativeUnit(g.units),
         }));
@@ -266,6 +309,7 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
   }, [units, coordinates, naverMapClientId]);
 
   return (
+    <>
     <div ref={containerRef} className="complex-map" role="region" aria-label="단지 지도">
       {loadFailed && (
         <div className="region-query-error">
@@ -291,5 +335,19 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
         </p>
       )}
     </div>
+    {hiddenCount > 0 && (
+      /*
+        잘라낸 개수를 반드시 적는다 — 말없이 자르면 "이 지역엔 이만큼
+        뿐"으로 읽힌다. 지도 **밖**에 두는 이유는 지도가 실제로 떠 있는
+        상태이기 때문이다(위 두 문구는 지도가 없을 때만 뜬다).
+        `.complex-map-caveat`를 함께 쓴다 — 같은 성격의 한 줄이고,
+        인쇄에서 지우는 이유도 같다.
+      */
+      <p className="complex-map-caveat">
+        지도가 어지러워지지 않게 {MARKER_LIMIT}개만 표시했어요. 조건에 맞는
+        단지 {hiddenCount}개가 더 있고, 목록에서 전부 볼 수 있어요.
+      </p>
+    )}
+    </>
   );
 }

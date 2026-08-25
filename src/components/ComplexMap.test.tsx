@@ -109,6 +109,15 @@ function fakeNaverMaps() {
           public lng: number,
         ) {}
       },
+      // 실제 SDK는 sw/ne 두 LatLng으로 경계를 만든다. fitBounds에 좌표
+      // 리터럴 배열(`{lat, lng}[]`)을 넘기면 실제 브라우저에서 조용히
+      // 무시되는 것을 확인했다 — 그래서 경계를 명시적으로 만들어 넘긴다.
+      LatLngBounds: class {
+        constructor(
+          public sw: { lat: number; lng: number },
+          public ne: { lat: number; lng: number },
+        ) {}
+      },
       Point: class {
         constructor(
           public x: number,
@@ -250,10 +259,11 @@ describe("ComplexMap", () => {
     // 예전에는 그룹핑 순서상 첫 단지 하나를 그대로 중심으로 썼다 — 그리는
     // 집합이 작아진 지금은 그 단지가 무리의 가장자리일 수 있다.
     expect(createdMaps[0]!.options.center).toMatchObject({ lat: 37.2, lng: 127.2 });
-    expect(fitBoundsCalls[0]!.bounds).toEqual([
-      { lat: 37.0, lng: 127.0 },
-      { lat: 37.4, lng: 127.4 },
-    ]);
+    // 경계는 그리는 좌표 전부를 감싸는 sw/ne다.
+    expect(fitBoundsCalls[0]!.bounds).toMatchObject({
+      sw: { lat: 37.0, lng: 127.0 },
+      ne: { lat: 37.4, lng: 127.4 },
+    });
   });
 
   it("단지가 하나뿐이면 fitBounds를 부르지 않는다 — 폭 0인 경계는 최대 줌까지 당긴다", async () => {
@@ -409,6 +419,58 @@ describe("ComplexMap", () => {
     await screen.findByText(/59㎡/);
     const markerHtml = document.querySelector(".complex-map-marker")?.innerHTML ?? "";
     expect(markerHtml).not.toContain("<img");
+  });
+
+  it("단지가 30개를 넘으면 30개만 그리고, 못 그린 개수를 화면에 적는다", async () => {
+    // 라벨은 nowrap이라 실제 폭이 120~230px에 이른다. 구 하나가 들어오는
+    // 줌에서 수백 개를 그리면 지도가 글자 벽이 된다(노원구 실측: 마커
+    // 255개, 겹치는 쌍 11,537개, 255개 전부가 무언가와 겹침).
+    const units = Array.from({ length: 42 }, (_, i) =>
+      unit({ complexKey: `k${i}`, complexName: `단지${i}`, minPrice: 100_000_000 + i, maxPrice: 200_000_000 + i }),
+    );
+    const coordinates = new Map(units.map((u, i) => [u.complexKey, { lat: 37 + i * 0.001, lon: 127 + i * 0.001 }]));
+
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+
+    await screen.findByRole("region", { name: "단지 지도" });
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(30),
+    );
+    // 말없이 자르면 "이 지역엔 이만큼뿐"으로 읽힌다.
+    await screen.findByText(/30개만 표시했어요/);
+    await screen.findByText(/12개가 더 있고/);
+  });
+
+  it("30개 이하면 자르지 않고, 잘랐다는 문구도 뜨지 않는다", async () => {
+    const units = Array.from({ length: 5 }, (_, i) => unit({ complexKey: `k${i}` }));
+    const coordinates = new Map(units.map((u, i) => [u.complexKey, { lat: 37 + i * 0.01, lon: 127 + i * 0.01 }]));
+
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(5),
+    );
+    expect(screen.queryByText(/개만 표시했어요/)).not.toBeInTheDocument();
+  });
+
+  it("가격 3분위는 잘라내고 **실제로 그린** 단지들 안에서만 매긴다", async () => {
+    // 그리지도 않은 단지가 분위 경계를 흔들면, 화면의 색이 화면에 없는
+    // 것을 근거로 삼게 된다.
+    const units = Array.from({ length: 33 }, (_, i) =>
+      unit({ complexKey: `k${i}`, minPrice: 100_000_000 + i * 1_000_000, maxPrice: 200_000_000 + i * 1_000_000 }),
+    );
+    const coordinates = new Map(units.map((u, i) => [u.complexKey, { lat: 37 + i * 0.001, lon: 127 + i * 0.001 }]));
+
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(30),
+    );
+    // 30개를 Math.ceil(30/3)=10씩 셋으로 나눈다 — 33개 기준이었다면
+    // 11/11/8이 되어 개수가 달라진다.
+    expect(document.querySelectorAll(".complex-map-marker--low")).toHaveLength(10);
+    expect(document.querySelectorAll(".complex-map-marker--mid")).toHaveLength(10);
+    expect(document.querySelectorAll(".complex-map-marker--high")).toHaveLength(10);
   });
 
   it("단지가 3개 이상이면 가격 3분위 티어 클래스가 실제 마커 DOM에 반영된다", async () => {

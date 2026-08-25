@@ -1129,6 +1129,12 @@ describe("App - 지도", () => {
             public lng: number,
           ) {}
         },
+        LatLngBounds: class {
+          constructor(
+            public sw: unknown,
+            public ne: unknown,
+          ) {}
+        },
         Point: class {
           constructor(
             public x: number,
