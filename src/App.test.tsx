@@ -292,6 +292,182 @@ describe("App - 지역 조회의 네 상태", () => {
   });
 });
 
+/**
+ * 행정동으로 좁히는 `<select>`("행정동으로 좁히기")를 잠근다.
+ *
+ * 이 좁히기는 지역 조회 결과 **안**에서 한 번 더 거르는 필터라, 위
+ * "지역 조회의 네 상태" 블록이 지키는 것과 원인이 같은 종류의 오류를
+ * 한 단계 아래서 반복할 수 있다 — 동을 하나로 좁혔는데 그 동엔 예산이
+ * 안 맞아 결과가 0개인 경우, 진짜 원인은 "이 동을 골라서"인데 화면이
+ * `ComplexList`의 기본 문구("현금이 더 있으면 선택지가 생겨요")를
+ * 그대로 보여주면 예산 탓으로 잘못 돌리게 된다. 세 번째 테스트가 바로
+ * 그 결함을 잠근다.
+ */
+describe("App - 행정동으로 좁히기", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** 두 행정동에 걸쳐 단지가 있는 조회 결과. 둘 다 예산 안에 든다 */
+  const DONG_A_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|A동|2015|A동단지",
+    complexName: "A동단지",
+    legalDongName: "A동",
+  };
+  const DONG_B_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|B동|2015|B동단지",
+    complexName: "B동단지",
+    legalDongName: "B동",
+  };
+  /** B동에만 있는, 예산으로는 절대 못 사는 단지(B동을 고르면 0건이 된다) */
+  const DONG_B_UNAFFORDABLE_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|B동|2015|B동비싼단지",
+    complexName: "B동비싼단지",
+    legalDongName: "B동",
+    minPrice: 50_000_000_000,
+    maxPrice: 50_000_000_000,
+  };
+
+  async function fillProfile() {
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+  }
+
+  async function chooseRegion() {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  it("조회 결과에 행정동이 둘 이상이면 좁히기 select가 그 동들로 나타난다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DONG_A_UNIT, DONG_B_UNIT],
+      isRegulatedArea: null,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    const select = screen.getByLabelText("행정동으로 좁히기");
+    expect(select).toBeInTheDocument();
+    expect(
+      screen.getByRole("option", { name: "전체" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "A동" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "B동" })).toBeInTheDocument();
+  });
+
+  it("행정동을 하나로 좁히면 그 동의 단지만 목록에 남는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DONG_A_UNIT, DONG_B_UNIT],
+      isRegulatedArea: null,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    // 좁히기 전에는 두 동의 단지가 모두 보인다.
+    expect(screen.getByText("A동단지")).toBeInTheDocument();
+    expect(screen.getByText("B동단지")).toBeInTheDocument();
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("행정동으로 좁히기"),
+      "A동",
+    );
+
+    expect(screen.getByText("A동단지")).toBeInTheDocument();
+    expect(screen.queryByText("B동단지")).not.toBeInTheDocument();
+  });
+
+  /**
+   * 이 fix가 고치는 바로 그 버그. 고쳐지기 전에는 이 상황에서
+   * `ComplexList`의 기본 빈 문구("현금이 더 있으면 선택지가 생겨요")가
+   * 그대로 나왔다 — 이 동을 골라서 0건이 된 것인데 예산 탓으로 잘못
+   * 말한 것이다. 아래 단언 중 "지역 0건" 문구가 없다는 것과 "동 0건"
+   * 문구가 있다는 것 둘 다, 고치기 전 코드에서는 후자가 실패한다
+   * (그 문구 자체가 없었으므로) — 이 테스트가 그 결함을 잡아낸다.
+   */
+  it("좁힌 동에 예산이 맞는 단지가 없으면 동 탓이라고 말한다(지역 탓·예산 탓으로 돌리지 않는다)", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DONG_A_UNIT, DONG_B_UNAFFORDABLE_UNIT],
+      isRegulatedArea: null,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("행정동으로 좁히기"),
+      "B동",
+    );
+
+    // 동 전용 안내가 나온다.
+    expect(
+      screen.getByText(/이 동엔 조건에 맞는 단지가 없어요/),
+    ).toBeInTheDocument();
+    expect(screen.getByText(/다른 동을 선택하거나 전체로 넓혀 보세요/)).toBeInTheDocument();
+
+    // 지역 0건 문구(원인이 다르다)는 나오면 안 된다 — 지역 전체는
+    // 결과가 있었고(A동), 이번엔 동을 좁혀서 0건이 됐을 뿐이다.
+    expect(screen.queryByText(/실거래가 자체가 없어요/)).not.toBeInTheDocument();
+    // ComplexList의 기본 예산 부족 문구(오귀속의 근원)도 나오면 안 된다.
+    expect(
+      screen.queryByText(/살 수 있는 단지가 이 데이터에는 없어요/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/현금이 더 있으면 선택지가 생겨요/)).not.toBeInTheDocument();
+  });
+
+  it("지역을 다시 고르면 동 좁히기가 전체로 되돌아간다", async () => {
+    const spy = vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DONG_A_UNIT, DONG_B_UNIT],
+      isRegulatedArea: null,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("행정동으로 좁히기"),
+      "A동",
+    );
+    expect(screen.queryByText("B동단지")).not.toBeInTheDocument();
+
+    // 같은 지역을 다시 조회한다(예: 다시 시도하거나 재확정하는 상황과
+    // 같은 배선 — handleRegionSelect가 selectedDong을 되돌린다).
+    spy.mockResolvedValue({
+      units: [DONG_A_UNIT, DONG_B_UNIT],
+      isRegulatedArea: null,
+    });
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    // 좁히기가 "전체"로 되돌아갔으므로 두 동의 단지가 다시 모두 보인다.
+    expect(screen.getByText("A동단지")).toBeInTheDocument();
+    expect(screen.getByText("B동단지")).toBeInTheDocument();
+    expect(
+      (screen.getByLabelText("행정동으로 좁히기") as HTMLSelectElement).value,
+    ).toBe("");
+  });
+});
+
 describe("App - 단지 상세(화면 4)", () => {
   // useProfileForm은 localStorage에 저장·복원한다. App을 실제로
   // 렌더링하는 이 블록에서 지우지 않으면 이전 테스트가 입력한 값이

@@ -204,6 +204,33 @@ export function App() {
   );
 
   /**
+   * 행정동을 하나로 좁혔는데 그 동엔 예산에 맞는 단지가 하나도 없는가.
+   *
+   * **여기서 직접 가른다** — `ComplexList`의 `EmptyMessage`(기본 문구
+   * "지금 예산으로 살 수 있는 단지가 이 데이터에는 없어요. 현금이 더
+   * 있으면 선택지가 생겨요")에 맡기지 않는다. 위 지역 0건 분기와 같은
+   * 이유다: 행정동으로 좁힌 뒤 결과가 0개인 원인은 두 가지인데("이
+   * 동엔 없다" / "예산이 부족하다"), `ComplexList`는 이 둘을 가르지
+   * 못한다 — `dongFilteredUnits`가 이미 한 동으로 좁혀진 상태로
+   * 들어가므로 `emptyBecauseOfFilter`는 여기서도 지역 분기와 같은 이유로
+   * 구조적으로 항상 false다.
+   *
+   * 진짜 원인은 "예산이 부족하다"가 아니라 "**이 동**엔 맞는 게 없다"인
+   * 경우가 많다 — 사용자가 방금 스스로 동을 좁혔고, 예산은 그 전(동을
+   * 좁히기 전) 목록에서 이미 확인된 채였을 수 있다. 그런데도 화면이
+   * "현금이 더 있으면"이라고 말하면, 진짜 해법("동 선택을 넓혀 보세요")
+   * 대신 틀린 해법을 준다. 그래서 `selectedDong`이 걸려 있고 걸러진
+   * 결과가 0개면 `ComplexList`를 아예 부르지 않고 이 사실 하나만
+   * 말한다.
+   */
+  const dongFilteredEmpty =
+    selectedDong !== null &&
+    complexList !== null &&
+    complexList.withinSafe.length === 0 &&
+    complexList.unverified.length === 0 &&
+    complexList.beyondSafe.length === 0;
+
+  /**
    * 단지 목록의 행을 누르면 그 평형의 상세(상환 시뮬레이션)를 연다.
    *
    * 화면 상태(`selectedUnit`)만 바꾼다 — 프로필에는 아무것도 쓰지
@@ -535,11 +562,17 @@ export function App() {
                             <select
                               id="dong-narrow"
                               value={selectedDong ?? ""}
-                              onChange={(e) =>
+                              onChange={(e) => {
                                 setSelectedDong(
                                   e.target.value === "" ? null : e.target.value,
-                                )
-                              }
+                                );
+                                // 앞서 걸러지지 않은 목록에서 "더 보기"로
+                                // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
+                                // 좁힌 새 목록이 이전 목록의 스크롤
+                                // 깊이를 그대로 물려받는다
+                                // (handleRegionSelect와 같은 이유).
+                                setVisibleCount(10);
+                              }}
                             >
                               <option value="">전체</option>
                               {dongOptions.map((d) => (
@@ -550,18 +583,25 @@ export function App() {
                             </select>
                           </div>
                         )}
-                        {complexList !== null && (
-                          <ComplexList
-                            result={complexList}
-                            dataAsOf={DATA_AS_OF}
-                            hasRegionFilter={false}
-                            noRepaymentCapacity={
-                              affordability.result.loanLimit.breakdown.DSR === 0
-                            }
-                            visibleCount={visibleCount}
-                            onShowMore={() => setVisibleCount((n) => n + 10)}
-                            onSelect={handleSelectUnit}
-                          />
+                        {dongFilteredEmpty ? (
+                          <p className="dong-empty">
+                            이 동엔 조건에 맞는 단지가 없어요. 다른 동을
+                            선택하거나 전체로 넓혀 보세요.
+                          </p>
+                        ) : (
+                          complexList !== null && (
+                            <ComplexList
+                              result={complexList}
+                              dataAsOf={DATA_AS_OF}
+                              hasRegionFilter={false}
+                              noRepaymentCapacity={
+                                affordability.result.loanLimit.breakdown.DSR === 0
+                              }
+                              visibleCount={visibleCount}
+                              onShowMore={() => setVisibleCount((n) => n + 10)}
+                              onSelect={handleSelectUnit}
+                            />
+                          )
                         )}
                       </>
                     )}

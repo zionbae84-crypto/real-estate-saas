@@ -299,6 +299,32 @@ describe("예산 계산기 통합", () => {
   });
 
   /**
+   * 위 테스트의 대조군(symmetric case) — `isRegulatedArea`가
+   * `true`가 아니라 `null`(모르는 지역)이면 App.tsx의 useEffect가
+   * (`if (regionComplexes.isRegulatedArea !== null) setField(...)`)
+   * 아예 `setField`를 부르지 않는다. 그러니 조회 전부터 있던 규제지역
+   * 가정이 조회가 끝난 뒤에도 **그대로 남아야** 한다 — null을 false로
+   * 오인해 프로필을 덮어쓰면 안 된다.
+   */
+  it("지역의 규제지역 여부를 모르면(null) 규제지역 가정을 건드리지 않는다", async () => {
+    mockRegionQuery(cheapestIn("11680", 3), null);
+
+    render(<App />);
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+
+    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+
+    await selectRegion("서울특별시", "강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    // null이었으므로 프로필의 isRegulatedArea는 손대지 않았어야 한다 —
+    // 가정 문구가 여전히 남아 있다.
+    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+  });
+
+  /**
    * 예전에는 번들에 실린 전체 목록을 클라이언트에서 걸러 "그 지역만"
    * 남겼다. 지금은 목록 자체가 그 지역을 조회한 결과다 — 그래서 검사도
    * "줄었는가"(옛 필터의 부수효과)가 아니라 **"고른 지역의 결과만
