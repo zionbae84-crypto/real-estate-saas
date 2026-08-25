@@ -208,8 +208,11 @@ describe("ComplexMap", () => {
     render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
 
     const region = await screen.findByRole("region", { name: "단지 지도" });
-    // "아무 일도 안 일어남"이 아니라, 실제로 보이는 실패 안내가 있는지 확인한다.
-    await vi.waitFor(() => expect(region.textContent).toMatch(/불러오지 못했/));
+    // "아무 일도 안 일어남"이 아니라, 실제로 보이는 실패 안내가 있는지
+    // 확인한다. 문구는 SDK 로드 실패 전용이다 — 좌표 조회 실패("단지
+    // 위치를 불러오지 못했어요", App.tsx)와 같은 문구를 쓰면 무엇이
+    // 실패했는지 화면에서도 테스트에서도 구분되지 않는다.
+    await vi.waitFor(() => expect(region.textContent).toContain("지도를 표시하지 못했어요."));
   });
 
   it("units/coordinates가 바뀌어 effect가 재실행되면 이전 마커·지도를 정리한다", async () => {

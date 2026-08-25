@@ -137,7 +137,12 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
     <div ref={containerRef} className="complex-map" role="region" aria-label="단지 지도">
       {loadFailed && (
         <div className="region-query-error">
-          <p>지도를 불러오지 못했어요.</p>
+          {/*
+            네이버지도 SDK 자체를 못 불러온 경우다 — 좌표 조회 실패
+            ("단지 위치를 불러오지 못했어요", App.tsx)와 다른 원인이므로
+            다르게 말한다.
+          */}
+          <p>지도를 표시하지 못했어요.</p>
         </div>
       )}
     </div>

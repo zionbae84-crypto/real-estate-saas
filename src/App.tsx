@@ -741,7 +741,15 @@ export function App() {
 
                         {complexCoordinates.status === "error" && (
                           <div className="region-query-error">
-                            <p>지도 정보를 불러오지 못했어요.</p>
+                            {/*
+                              세 실패 문구는 원인이 다르므로 서로 다르게
+                              말한다: 목록 조회 실패("지금 실거래가를…"),
+                              좌표 조회 실패(여기), 네이버지도 SDK 로드
+                              실패("지도를 표시하지 못했어요" —
+                              ComplexMap.tsx). 같은 문구로 뭉치면 사용자도
+                              테스트도 무엇이 실패했는지 구분하지 못한다.
+                            */}
+                            <p>단지 위치를 불러오지 못했어요.</p>
                             <button
                               type="button"
                               onClick={() => {

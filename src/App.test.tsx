@@ -221,18 +221,17 @@ describe("App - 지역 조회의 네 상태", () => {
       .spyOn(regionQuery, "fetchRegionComplexes")
       .mockRejectedValueOnce(new Error("네트워크 오류"))
       .mockResolvedValueOnce({ units: [DETAIL_TEST_UNIT], isRegulatedArea: null, dataAsOf: null });
-    // 이 테스트는 지역 조회(목록) 재시도만 본다 — 지도용 좌표 조회가
-    // 실 네트워크로 나가 실패하면 그 실패 문구("지도 정보를 불러오지
-    // 못했어요")도 같은 "불러오지 못했어요" 부분 문자열을 담고 있어
-    // 아래 단언과 우연히 겹친다. 좌표 조회는 성공으로 고정해 이 테스트의
-    // 관심사(목록 조회 실패·재시도)와 분리한다.
+    // 재시도가 성공한 뒤 목록이 뜨면 지도용 좌표 조회가 이어서 돈다 —
+    // 테스트가 실 네트워크로 나가지 않게 고정한다. 아래 단언은 목록
+    // 조회 실패 문구를 **그대로** 찾으므로, 좌표 조회가 어떻게 끝나든
+    // 문구가 겹치지는 않는다(셋 다 원인별로 다른 문구다).
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue([]);
 
     render(<App />);
     await fillProfile();
     await chooseRegion();
 
-    await screen.findByText(/불러오지 못했어요/);
+    await screen.findByText("지금 실거래가를 불러오지 못했어요.");
     // **실패를 "결과 0건"으로 보여주지 않는다.** 둘을 뭉치면 데이터가
     // 없는 지역이라고 잘못 말하게 된다.
     expect(screen.queryByText(/실거래가 자체가 없어요/)).not.toBeInTheDocument();
@@ -243,7 +242,9 @@ describe("App - 지역 조회의 네 상태", () => {
     await userEvent.click(screen.getByRole("button", { name: "다시 시도" }));
 
     await screen.findByRole("region", { name: "살 수 있는 단지" });
-    expect(screen.queryByText(/불러오지 못했어요/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText("지금 실거래가를 불러오지 못했어요."),
+    ).not.toBeInTheDocument();
     // 재시도는 같은 지역 코드로 다시 묻는다.
     expect(spy).toHaveBeenCalledTimes(2);
     expect(spy).toHaveBeenNthCalledWith(2, "11680", null);
@@ -1032,10 +1033,12 @@ describe("App - 지도", () => {
 
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    // "지도 정보를 불러오지 못했어요"는 "좌표를 찾았는데 0건이었다"와는
+    // "단지 위치를 불러오지 못했어요"는 "좌표를 찾았는데 0건이었다"와는
     // 다른 문구여야 한다 — 실패("모른다")를 빈 성공("확인했더니 없다")과
-    // 같은 화면으로 보여주면 안 된다는 것이 이 앱의 원칙이다.
-    await screen.findByText("지도 정보를 불러오지 못했어요.");
+    // 같은 화면으로 보여주면 안 된다는 것이 이 앱의 원칙이다. 목록 조회
+    // 실패("지금 실거래가를…")·SDK 로드 실패("지도를 표시하지 못했어요")와도
+    // 원인이 달라 문구가 다르다.
+    await screen.findByText("단지 위치를 불러오지 못했어요.");
     expect(
       screen.queryByRole("region", { name: "단지 지도" }),
     ).not.toBeInTheDocument();
