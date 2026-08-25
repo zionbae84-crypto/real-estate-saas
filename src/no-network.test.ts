@@ -171,6 +171,11 @@ describe("네트워크 요청 없음", () => {
     expect(matches).toEqual(["src/lib/regionQuery.ts"]);
   });
 
+  it("regionQuery.test.ts만 fetch 모킹 예외이고, 정확히 하나만 존재한다", () => {
+    const matches = findByNameSuffix("src", "regionQuery.test.ts");
+    expect(matches).toEqual(["src/lib/regionQuery.test.ts"]);
+  });
+
   describe("패턴 핀 고정 — 각 정규식이 실제로 뭔가를 잡아내는지 검증", () => {
     // 정규식을 고치다 실수로 느슨해지면(예: 괄호를 다시 요구하게 되돌리면)
     // 여기서 바로 실패한다. 실제 소스 스캔 테스트만으로는 "패턴이 아무것도
