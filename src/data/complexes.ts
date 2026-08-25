@@ -139,7 +139,7 @@ export interface RegionSummary {
  * 1,691개 평형의 멀쩡한 정보까지 사라진다. 모르는 것을 모른다고 표시하는
  * 쪽이 더 정직하고 덜 파괴적이다.
  */
-function narrowLandLeasehold(value: string | null): "Y" | "N" | null {
+export function narrowLandLeasehold(value: string | null): "Y" | "N" | null {
   return value === "Y" || value === "N" ? value : null;
 }
 

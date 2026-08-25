@@ -125,6 +125,11 @@ function sourceFiles(dir: string): string[] {
     if (statSync(path).isDirectory()) return sourceFiles(path);
     if (!/\.(ts|tsx|css|html)$/.test(entry)) return [];
     if (entry.endsWith("no-network.test.ts")) return [];
+    if (entry === "regionQuery.ts") return []; // Task 4에서 추가한 유일한 fetch 예외
+    // regionQuery.ts의 동작 테스트. fetch를 모킹하므로 필연적으로 "fetch"
+    // 문자열을 담는다 — 실제 네트워크 호출이 아니라 그 유일한 예외를
+    // 검증하는 테스트 코드다.
+    if (entry === "regionQuery.test.ts") return [];
     return [path];
   });
 }
@@ -161,6 +166,11 @@ describe("네트워크 요청 없음", () => {
     expect(scanned.some((f) => f.endsWith("no-network.test.ts"))).toBe(false);
   });
 
+  it("regionQuery.ts만 fetch 예외이고, 정확히 하나만 존재한다", () => {
+    const matches = findByNameSuffix("src", "regionQuery.ts");
+    expect(matches).toEqual(["src/lib/regionQuery.ts"]);
+  });
+
   describe("패턴 핀 고정 — 각 정규식이 실제로 뭔가를 잡아내는지 검증", () => {
     // 정규식을 고치다 실수로 느슨해지면(예: 괄호를 다시 요구하게 되돌리면)
     // 여기서 바로 실패한다. 실제 소스 스캔 테스트만으로는 "패턴이 아무것도
@@ -191,5 +201,36 @@ describe("네트워크 요청 없음", () => {
         expect(FORBIDDEN.some((pattern) => pattern.test(snippet))).toBe(true);
       },
     );
+  });
+});
+
+describe("regionQuery 예외", () => {
+  const REGION_QUERY_PATH = "src/lib/regionQuery.ts";
+
+  it("regionQuery.ts는 정확히 하나만 존재하고, 그 안에 재무 필드 이름이 없다", () => {
+    const content = readFileSync(REGION_QUERY_PATH, "utf8");
+    const FORBIDDEN_FIELD_NAMES = [
+      "cash",
+      "annualIncome",
+      "existingDebtAnnualPayment",
+      "ownedHomeCount",
+      "isFirstTimeBuyer",
+      "isRegulatedArea",
+    ];
+    // isRegulatedArea는 응답 "받는" 쪽 타입 선언에는 등장해도 된다 —
+    // 여기서 막는 것은 "요청을 만드는 데 쓰였는가"이므로, 응답 타입
+    // 선언까지 전부 막으면 이 파일 자체를 만들 수 없다. 그래서
+    // isRegulatedArea는 이 목록에서 뺀다(요청 URL 생성부는 regionCode·
+    // dong만 받는다는 사실은 아래 별도 테스트가 확인한다).
+    const requestFields = FORBIDDEN_FIELD_NAMES.filter((f) => f !== "isRegulatedArea");
+    for (const field of requestFields) {
+      expect(content, `${field}가 regionQuery.ts에 등장하면 안 된다`).not.toContain(field);
+    }
+  });
+
+  it("regionQuery.ts는 상대경로 /api/complexes 외 다른 곳으로 요청하지 않는다", () => {
+    const content = readFileSync(REGION_QUERY_PATH, "utf8");
+    expect(content).toContain('"/api/complexes');
+    expect(content).not.toMatch(/https?:\/\//);
   });
 });
