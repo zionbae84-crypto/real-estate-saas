@@ -3,7 +3,7 @@
  *
  * **이 배열이 유일한 출처(source of truth)다.** `src/styles.css`의
  * `@media print` 블록은 정확히 이 선택자들에만 숨김 규칙(`display: none`)을
- * 건다 — `src/print/printCss.test.ts`가 두 쪽이 항상 일치하는지 검사한다.
+ * 건다 — `scripts/printCss.test.ts`가 두 쪽이 항상 일치하는지 검사한다.
  * CSS만 고치고 여기를 빼먹거나, 반대로 여기만 늘리고 CSS를 안 고치면
  * 그 테스트가 잡는다.
  *
@@ -53,7 +53,9 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 화면 부제의 개인정보 보호 안내("입력한 재무정보는 이 브라우저를
   // 벗어나지 않아요"). 브라우저에 남는다는 사실 자체가 "이 브라우저"를
   // 가리키는 말이라 종이 위에서는 지시 대상이 없어 뜻이 서지 않는다.
-  // 나머지 부제(룰셋 기준·수도권 범위)는 종이에서도 뜻이 있어 남긴다.
+  // 나머지 부제(룰셋 기준)는 종이에서도 뜻이 있어 남긴다 — "· 수도권"은
+  // 조회 범위가 전국으로 넓어지며 사실이 아니게 돼 화면에서 빠졌다
+  // (App.tsx의 부제 주석 참고).
   ".subtitle-privacy-note",
   // AssumptionLine 문구 안의 "눌러서 알려주세요/바꾸세요"류 조작 지시.
   // 문구 전체를 지우면 그 항목이 무엇을 가정했는지(사실)와 고치면
@@ -220,6 +222,9 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "diagnosis-summary-headline-note", // 헤드라인 설명(expert 부기 포함)
   "diagnosis-summary-axis", // 축별 줄(권리·구매·호가·입지 — notLooked 포함 언제나 네 줄)
   "diagnosis-summary-axis-status", // 그 줄의 상태 글자
-  "diagnosis-summary-target-mismatch", // 등기부 대상과 목록에서 고른 매물이 같은 집이라는 보장이 없다는 고지
+  // 이 종합이 다루지 않는 축(권리분석)이 있다는 것과, 호가·입지는
+  // 목록에서 고른 매물에 대한 것이라는 고지. 종이에서 사라지면 네 축을
+  // 나란히 본 문서가 권리분석까지 확인한 것처럼 읽힌다.
+  "diagnosis-summary-target-mismatch",
   "diagnosis-summary-disclaimer", // 새 판정이 아니라는 것과 점수로 뭉치지 않는다는 것
 ];

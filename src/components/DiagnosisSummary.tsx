@@ -92,8 +92,7 @@ export function DiagnosisSummaryView({
         입히는 고리일 뿐이고, 색이 하나도 적용되지 않아도(흑백 인쇄·
         색각 이상) 지금이 "사면 안 되는 신호가 있어요"인지 "이 진단이
         확인한 범위에서는 걸리는 게 없었어요"인지 읽을 수 있어야 한다.
-        `RightsVerdict`·`PurchaseVerdict`·`PriceCheck`·`LocationFacts`와
-        같은 규칙이다.
+        `PurchaseVerdict`·`PriceCheck`·`LocationFacts`와 같은 규칙이다.
       */}
       <p className="diagnosis-summary-headline" data-headline={summary.headline}>
         {summary.headlineLabel}

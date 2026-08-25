@@ -27,7 +27,7 @@ export interface PriceCheckProps {
    */
   budget: PriceBudgetInput | null;
   /**
-   * 진단 종합에 이 축의 최신 판정을 알린다. `RightsCheck.onAssessment`와
+   * 진단 종합에 이 축의 최신 판정을 알린다. `PurchaseCheck.onAssessment`와
    * 같은 배선·같은 이유다 — 새로 계산하지 않고 이미 낸 값을 올릴 뿐이다.
    */
   onAssessment?: (assessment: PriceAssessment) => void;
@@ -51,7 +51,7 @@ export interface PriceCheckProps {
  * **등급은 언제나 글자다.** `data-verdict`는 색을 입히는 고리일 뿐이고,
  * 색이 하나도 적용되지 않아도(흑백 인쇄·색각 이상) 무엇이 "이대로는
  * 멈춰 주세요"이고 무엇이 "판정을 유보했어요"인지 읽을 수 있어야
- * 한다. `RightsVerdict`·`PurchaseVerdict`와 같은 규칙이다.
+ * 한다. `PurchaseVerdict`·`LocationFacts`와 같은 규칙이다.
  *
  * 입력란은 인쇄에서 지운다(`.price-check-form`) — 종이에서는 채울 수
  * 없다. 대신 결과가 호가와 근거(거래 건수·범위)를 다시 적으므로
@@ -80,8 +80,8 @@ export function PriceCheck({ unit, budget, onAssessment }: PriceCheckProps) {
     budget,
   );
 
-  // `RightsCheck`와 같은 이유로 useLayoutEffect를 쓴다 — 페인트 전에
-  // 부모 상태를 갱신해 진단 종합이 한 프레임 늦지 않게 한다. 평형이
+  // useEffect가 아니라 useLayoutEffect다 — 페인트 **전에** 부모 상태를
+  // 갱신해, 진단 종합이 한 프레임 늦은 판정을 보여주지 않게 한다. 평형이
   // 바뀌어 이 컴포넌트가 다시 마운트되면(호출부의 key) 새 평형의
   // 판정으로 곧바로 갱신된다.
   useLayoutEffect(() => {

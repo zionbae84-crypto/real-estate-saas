@@ -3,9 +3,9 @@
  *
  * 권리분석·구매 유형별 금융·호가 위치·입지 사실, 네 축이 각각 판정을
  * 이미 냈다. 이 모듈은 그 네 값을 **다시 계산하지 않고 그대로 읽어서**
- * 한자리에 모을 뿐이다 — `src/lib/rights/types.ts`·
- * `src/lib/purchase/types.ts`·`src/lib/price/types.ts`·
- * `src/lib/location/types.ts`와 같은 태도이되, 여기는 판정을 새로 내는
+ * 한자리에 모을 뿐이다 — `src/lib/purchase/types.ts`·
+ * `src/lib/price/types.ts`·`src/lib/location/types.ts`와 같은
+ * 태도이되, 여기는 판정을 새로 내는
  * 자리가 아니라 **이미 나온 판정을 어떻게 나란히 읽을지**를 정하는
  * 자리라는 점이 다르다.
  *
@@ -48,9 +48,10 @@ import type { LocationAssessment } from "../location";
  * 그런데도 이 타입이 남아 있는 이유: 진단 종합은 네 축을 나란히
  * 다루는 자리이고, 이 파일의 조합 검사(모든 축 상태 조합에서 안전·
  * 등급 주장이 나오지 않는지)가 rights를 다른 세 축과 같은 모양으로
- * 계속 취급한다. 원래 `src/lib/rights/assess.ts`가 정의하던
- * `RightsAssessment`의 전체 모양(문항별 판정·특약 비율 등) 중 이
- * 모듈이 실제로 읽는 세 필드만 남긴 최소 형태다.
+ * 계속 취급한다. 지워진 권리분석 엔진이 정의하던 `RightsAssessment`의
+ * 전체 모양(문항별 판정·특약 비율 등) 중 이 모듈이 실제로 읽는 세
+ * 필드만 남긴 최소 형태다 — 그 엔진은 저장소에 없으니, 이 타입이
+ * 지금 이 앱에서 `RightsAssessment`의 유일한 정의다.
  */
 export type RightsOverall = "stop" | "incomplete" | "expert" | "clear";
 
@@ -135,9 +136,10 @@ export interface SummaryRules {
    * 헤드라인이 `expert`가 아닌데 세 판정 축(권리·구매·호가) 중
    * 하나라도 `expert`가 있으면 헤드라인 note 뒤에 덧붙이는 문장.
    *
-   * `src/lib/rights/assess.ts`의 `pendingExpertNote`와 같은 자리·같은
-   * 이유다 — 미완성 하나가 헤드라인을 차지하면서 이미 걸린 전문가 확인
-   * 필요 항목을 회색 문구 뒤로 숨기면 실제보다 덜 위험해 보인다.
+   * 미완성 하나가 헤드라인을 차지하면서 이미 걸린 전문가 확인 필요
+   * 항목을 회색 문구 뒤로 숨기면 실제보다 덜 위험해 보인다. 헤드라인은
+   * "지금 가장 먼저 읽어야 할 말" 하나만 고르므로, 고르지 못한 사실
+   * 중에서 **위험을 낮춰 읽히게 만드는 것**은 따로 덧붙여야 한다.
    */
   expertPendingNote: string;
   /**

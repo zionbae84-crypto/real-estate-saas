@@ -67,7 +67,9 @@ function judgeableOveralls(
  * 우선순위는 `stop > unresolved > expert > clear`다. 이유는
  * `rules/summary-2026-08.json`의 `headline._headlinePriorityNote`에
  * 있다 — 요약하면 (1) stop은 다른 축이 아무리 깨끗해도 상쇄되지 않고
- * (권리는 평균 내는 것이 아니다, `rights/assess.ts`와 같은 원칙),
+ * (축마다 결이 다른 판정이라 평균 낼 수 있는 것이 아니다: "사면 안
+ * 된다"는 신호 하나는 나머지가 깨끗하다고 옅어지지 않는다 — 각 축의
+ * `decideOverall`도 축 안에서 같은 원칙을 쓴다),
  * (2) 미완성·유보(`unresolved`)를 건너뛰고 결론으로 가면 "아직
  * 모른다"가 "괜찮다"로 접히고, (3) 우리가 판단 못 하는 신호(`expert`)가
  * 남아 있으면 "걸리는 게 없었다"(`clear`)고 부를 수 없다.
@@ -104,10 +106,11 @@ function decideHeadline(input: DiagnosisSummaryInput): SummaryHeadline {
  * 있는가.
  *
  * 있으면 {@link SummaryRules.expertPendingNote}를 헤드라인 note 뒤에
- * 덧붙인다. `src/lib/rights/assess.ts`의 `overallNoteFor`와 같은 이유 —
- * 미완성 하나가 헤드라인을 차지하면서 이미 걸린 전문가 확인 필요
- * 사실을 회색 문구 뒤로 숨기면 실제보다 덜 위험해 보인다. 이 저장소가
- * 한 번 겪은 문제다.
+ * 덧붙인다. 헤드라인은 "지금 가장 먼저 읽어야 할 말" 하나만 고르는데,
+ * 미완성 하나가 그 자리를 차지하면서 이미 걸린 전문가 확인 필요 사실을
+ * 회색 문구 뒤로 숨기면 화면이 실제보다 덜 위험해 보인다. 이 저장소가
+ * 한 번 겪은 문제이고, 그래서 고르지 못한 사실 중 **위험을 낮춰 읽히게
+ * 만드는 것**만은 헤드라인 뒤에 따로 덧붙인다.
  */
 function hasUnreportedExpert(
   input: DiagnosisSummaryInput,

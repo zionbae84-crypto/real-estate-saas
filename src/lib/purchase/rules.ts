@@ -48,7 +48,7 @@ const RENTAL_FIELD_IDS = [
 /**
  * 구매 유형 룰셋 JSON을 검증해 {@link PurchaseRules}로 바꾼다.
  *
- * `src/lib/rights/rules.ts`와 같은 태도다 — 사람이 손으로 고치는
+ * `src/lib/price/rules.ts`와 같은 태도다 — 사람이 손으로 고치는
  * 데이터이므로 틀렸을 때 어디가 틀렸는지 말해 준다. 여기서 지키는
  * 불변식은 **이 제품이 절대 하면 안 되는 계산**에 대한 것이다:
  *

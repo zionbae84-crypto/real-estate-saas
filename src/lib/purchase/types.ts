@@ -7,7 +7,8 @@
  *
  * 판정에 쓰이는 **값**(임계값·하락 단계·문구)은 여기 없다 — 전부
  * `rules/purchase-2026-08.json`에 있다. 이 파일은 그 데이터의 모양만
- * 정한다. `src/lib/rights/types.ts`와 같은 태도다.
+ * 정한다. `src/lib/price/types.ts`·`src/lib/location/types.ts`와 같은
+ * 태도다.
  *
  * ## 이 모듈이 하지 않는 것 — 대출 한도
  *

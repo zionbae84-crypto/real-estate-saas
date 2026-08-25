@@ -12,8 +12,8 @@
  *
  * 판정에 쓰이는 **값**(반경·문구)은 여기 없다 — 전부
  * `rules/location-2026-08.json`에 있다. 이 파일은 그 데이터의 모양만
- * 정한다. `src/lib/rights/types.ts`·`src/lib/purchase/types.ts`·
- * `src/lib/price/types.ts`와 같은 태도다.
+ * 정한다. `src/lib/purchase/types.ts`·`src/lib/price/types.ts`와 같은
+ * 태도다.
  *
  * ## 이 파일의 요점 — "모른다"와 "없다"를 구조로 가른다
  *

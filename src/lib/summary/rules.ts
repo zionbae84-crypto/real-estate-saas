@@ -17,8 +17,8 @@ const CLEAR_NOTE_MUST_MENTION = "뜻이 아니";
 /**
  * 진단 종합 룰셋 JSON을 검증해 {@link SummaryRules}로 바꾼다.
  *
- * `src/lib/location/rules.ts`·`src/lib/price/rules.ts`·
- * `src/lib/rights/rules.ts`와 같은 태도다. 여기서 지키는 불변식:
+ * `src/lib/location/rules.ts`·`src/lib/price/rules.ts`와 같은 태도다.
+ * 여기서 지키는 불변식:
  *
  * 1. **네 축(rights·purchase·price·location) 모두 `axes`와
  *    `notLooked`에 있어야 한다.** 하나라도 빠지면 그 축은 못 봤을 때

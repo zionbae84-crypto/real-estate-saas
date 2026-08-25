@@ -12,7 +12,7 @@ export interface LocationFactsProps {
   /** 단지 고유 ID. 좌표는 평형이 아니라 단지에 붙는다 */
   complexKey: string;
   /**
-   * 진단 종합에 이 축의 최신 상태를 알린다. `RightsCheck.onAssessment`와
+   * 진단 종합에 이 축의 최신 상태를 알린다. `PriceCheck.onAssessment`와
    * 같은 배선이다 — 판정이 아니라 상태(`state`)를 옮기는 축이라는 점만
    * 다르고, 여기서도 새로 계산하지 않는다.
    */
@@ -61,8 +61,9 @@ export interface LocationFactsProps {
 export function LocationFacts({ complexKey, onAssessment }: LocationFactsProps) {
   const { rules, assessment } = useLocationFacts(complexKey);
 
-  // `RightsCheck`와 같은 이유로 useLayoutEffect를 쓴다 — 페인트 전에
-  // 부모 상태를 갱신해 진단 종합이 한 프레임 늦지 않게 한다.
+  // useEffect가 아니라 useLayoutEffect다 — 페인트 **전에** 부모 상태를
+  // 갱신해, 진단 종합이 한 프레임 늦은 상태를 보여주지 않게 한다.
+  // (`PriceCheck`·`PurchaseCheck`도 같은 배선이다.)
   useLayoutEffect(() => {
     onAssessment?.(assessment);
   }, [assessment, onAssessment]);
@@ -93,8 +94,8 @@ export function LocationFactsView({
       {/*
         상태는 **글자**로 말한다. `data-state`는 색을 입히는 고리일 뿐이고,
         색이 하나도 적용되지 않아도(흑백 인쇄·색각 이상) 지금이 "아직
-        위치를 몰라요"인지 아닌지 읽을 수 있어야 한다. RightsVerdict·
-        PurchaseVerdict·PriceCheck와 같은 규칙이다.
+        위치를 몰라요"인지 아닌지 읽을 수 있어야 한다. PurchaseVerdict·
+        PriceCheck·DiagnosisSummary와 같은 규칙이다.
       */}
       <p className="location-state" data-state={assessment.state}>
         {assessment.stateLabel}

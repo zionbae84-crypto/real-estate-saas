@@ -86,8 +86,8 @@ export function usePurchaseCheck(type: InvestmentType): PurchaseCheckState {
    *
    * "대출이 있고 금액을 알아요"에 원리금을 적었다가 "대출을 끼지
    * 않아요"로 바꾼 뒤 다시 돌아오면, 사용자가 다시 적은 적 없는 금액으로
-   * DSCR이 돈다. 빈칸(=모름)에서 다시 시작하는 쪽이 언제나 안전하다.
-   * `useRightsCheck.selectOption`과 같은 판단이다.
+   * DSCR이 돈다. 빈칸(=모름)에서 다시 시작하는 쪽이 언제나 안전하다 —
+   * 사용자가 적은 적 없는 값으로 계산하느니, 계산하지 않는 편이 낫다.
    */
   const setLoanKind = useCallback((kind: RentalLoanAnswer["kind"]) => {
     setRentalInput((current) => ({

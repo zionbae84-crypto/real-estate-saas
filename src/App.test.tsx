@@ -671,6 +671,36 @@ describe("App - 단지 상세(화면 4)", () => {
     expect(screen.queryByText("살 수 있는 단지")).not.toBeInTheDocument();
   });
 
+  /**
+   * 권리분석 축은 이 앱에서 **영구히** 값이 없다.
+   *
+   * 등기부 문진이 제거됐고 별도 도구로 다시 만들 예정이라, `App.tsx`는
+   * `DiagnosisSummary`에 `rights={null}`만 넘긴다("아직 값이 없을 수도
+   * 있다"가 아니라 "영구히 없다" — `src/lib/summary/types.ts` 참고).
+   * 그 불변식을 붙잡아 두는 것이 아무것도 없어서, 언젠가 이 자리에
+   * 다른 값이 흘러 들어가도 아무도 모른다. 여기서 그 자리를 못박는다:
+   * **다른 축이 실제로 채워진 상태에서도** 권리 축만은 "확인 안 함"이다.
+   */
+  it("권리분석 축은 언제나 '확인 안 함'이다 — App은 rights={null}만 넘긴다", async () => {
+    render(<App />);
+    await fillProfile();
+    // 평형을 골라 호가·입지 축이 실제로 채워진 상태로 만든다 — 그래야
+    // "아무 축도 안 채워져서 통과한" 것이 아님이 드러난다.
+    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+
+    const rightsLine = document.querySelector(
+      '.diagnosis-summary-axis[data-axis="rights"]',
+    );
+    expect(rightsLine).not.toBeNull();
+    expect(rightsLine?.getAttribute("data-status")).toBe("notLooked");
+
+    const otherStatuses = [...document.querySelectorAll(".diagnosis-summary-axis")]
+      .filter((el) => el.getAttribute("data-axis") !== "rights")
+      .map((el) => el.getAttribute("data-status"));
+    expect(otherStatuses).toHaveLength(3);
+    expect(otherStatuses.some((status) => status !== "notLooked")).toBe(true);
+  });
+
   it("목록으로 버튼을 누르면 다시 목록이 보인다", async () => {
     render(<App />);
     await fillProfile();

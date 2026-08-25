@@ -10,7 +10,7 @@
  *
  * 판정에 쓰이는 **값**(최소 거래 건수·임계값·문구)은 여기 없다 — 전부
  * `rules/price-2026-08.json`에 있다. 이 파일은 그 데이터의 모양만
- * 정한다. `src/lib/rights/types.ts`·`src/lib/purchase/types.ts`와 같은
+ * 정한다. `src/lib/purchase/types.ts`·`src/lib/location/types.ts`와 같은
  * 태도다.
  *
  * ## 이 모듈이 하지 않는 것 — 점 추정

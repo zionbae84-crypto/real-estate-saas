@@ -1,7 +1,7 @@
 /**
  * 입지분석 엔진의 공개 표면.
  *
- * `src/lib/finance`·`src/lib/rights`·`src/lib/purchase`·`src/lib/price`와
+ * `src/lib/finance`·`src/lib/purchase`·`src/lib/price`와
  * 나란한 자리다. 진단 제품의 마지막 축이되, 앞의 셋과 달리 **판정을 내지
  * 않는다** — 여기서 나오는 것은 거리라는 사실뿐이고, 그 거리가 좋은지
  * 나쁜지는 이 모듈이 말할 수 없는 것이다.

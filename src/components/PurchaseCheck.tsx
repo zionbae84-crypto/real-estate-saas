@@ -21,7 +21,7 @@ const LOAN_KINDS: ReadonlyArray<RentalLoanAnswer["kind"]> = [
 export interface PurchaseCheckProps {
   type: InvestmentType;
   /**
-   * 진단 종합에 이 축의 최신 판정을 알린다. `RightsCheck.onAssessment`와
+   * 진단 종합에 이 축의 최신 판정을 알린다. `PriceCheck.onAssessment`와
    * 같은 배선·같은 이유다 — 새로 계산하지 않고 이미 낸 값을 올릴 뿐이다.
    */
   onAssessment?: (assessment: PurchaseAssessment) => void;
@@ -57,8 +57,9 @@ export function PurchaseCheck({ type, onAssessment }: PurchaseCheckProps) {
     assessment,
   } = usePurchaseCheck(type);
 
-  // `RightsCheck`와 같은 이유로 useLayoutEffect를 쓴다 — 페인트 전에
-  // 부모 상태를 갱신해 진단 종합이 한 프레임 늦지 않게 한다.
+  // useEffect가 아니라 useLayoutEffect다 — 페인트 **전에** 부모 상태를
+  // 갱신해, 진단 종합이 한 프레임 늦은 판정을 보여주지 않게 한다.
+  // (`PriceCheck`·`LocationFacts`도 같은 배선이다.)
   useLayoutEffect(() => {
     onAssessment?.(assessment);
   }, [assessment, onAssessment]);
