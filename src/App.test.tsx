@@ -412,6 +412,11 @@ describe("App - 행정동으로 좁히기", () => {
     await chooseRegion();
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
+    // 전제 확인: 좁히기 전에는 A동 단지가 실제로 보인다 — 이 단언이
+    // 없으면 픽스처가 어긋나 목록이 통째로 비어도(즉 진짜 원인이 예산
+    // 이어도) 아래 단언이 그대로 통과해 아무것도 증명하지 못한다.
+    expect(screen.getByText("A동단지")).toBeInTheDocument();
+
     await userEvent.selectOptions(
       screen.getByLabelText("행정동으로 좁히기"),
       "B동",
@@ -431,6 +436,93 @@ describe("App - 행정동으로 좁히기", () => {
       screen.queryByText(/살 수 있는 단지가 이 데이터에는 없어요/),
     ).not.toBeInTheDocument();
     expect(screen.queryByText(/현금이 더 있으면 선택지가 생겨요/)).not.toBeInTheDocument();
+  });
+
+  /**
+   * 위 fix가 한 단계 덜 갔던 자리.
+   *
+   * "동 탓" 문구는 **넓히면 달라진다**는 조언을 담고 있다("다른 동을
+   * 선택하거나 전체로 넓혀 보세요"). 그런데 지역 전체에도 예산에 맞는
+   * 단지가 하나도 없으면 전체로 넓혀도 결과는 똑같은 0건이다 — 그
+   * 조언은 사실이 아니고, 진짜 원인(예산)을 가린다. 앞서 고친 것과
+   * **같은 종류의 오귀속**을 방향만 뒤집어 반복하는 셈이다.
+   *
+   * 그래서 동을 걸지 않은 목록도 함께 만들어, 그쪽에 뭔가 있을 때만
+   * "동 탓"이라고 말한다. 지역 전체가 0건이면 `ComplexList`의 예산 기반
+   * 문구가 그대로 나와야 한다.
+   */
+  it("지역 전체에도 예산에 맞는 단지가 없으면 동 탓으로 돌리지 않는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [
+        { ...DONG_A_UNIT, minPrice: 50_000_000_000, maxPrice: 50_000_000_000 },
+        DONG_B_UNAFFORDABLE_UNIT,
+      ],
+      isRegulatedArea: null,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    // 전제 확인: 동을 좁히기 전(전체)부터 이미 0건이다.
+    expect(
+      screen.getByText(/살 수 있는 단지가 이 데이터에는 없어요/),
+    ).toBeInTheDocument();
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("행정동으로 좁히기"),
+      "A동",
+    );
+
+    // 동 탓 문구는 나오면 안 된다 — 전체로 넓혀도 결과가 같으므로
+    // "전체로 넓혀 보세요"는 거짓 조언이다.
+    expect(
+      screen.queryByText(/이 동엔 조건에 맞는 단지가 없어요/),
+    ).not.toBeInTheDocument();
+    // 진짜 원인(예산)을 말하는 ComplexList의 기존 문구가 그대로 나온다.
+    expect(
+      screen.getByText(/살 수 있는 단지가 이 데이터에는 없어요/),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * 위 테스트의 특수한 경우 — 아무것도 못 사는 이유가 "현금이 부족해서"가
+   * 아니라 "상환 능력(DSR)이 0이라서"인 경우다. `ComplexList`는 이미 그
+   * 둘을 갈라 각각 다른 해법을 말하는데(`noRepaymentCapacity`), 동 탓
+   * 문구가 앞에서 가로채면 그 구분이 통째로 사라진다. 지역 전체를 함께
+   * 보는 위 수정이 이 경우까지 구조적으로 함께 처리한다.
+   */
+  it("상환 능력이 0이라 0건이면 동 탓이 아니라 DSR 문구가 나온다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [
+        { ...DONG_A_UNIT, minPrice: 50_000_000_000, maxPrice: 50_000_000_000 },
+        DONG_B_UNAFFORDABLE_UNIT,
+      ],
+      isRegulatedArea: null,
+    });
+
+    render(<App />);
+    // 소득 0 → DSR 한도가 0이 된다(상환 능력 자체가 없다).
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "10000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "0");
+    await userEvent.click(screen.getByLabelText("무주택"));
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    await userEvent.selectOptions(
+      screen.getByLabelText("행정동으로 좁히기"),
+      "A동",
+    );
+
+    expect(
+      screen.queryByText(/이 동엔 조건에 맞는 단지가 없어요/),
+    ).not.toBeInTheDocument();
+    // 위 안전선 문구도 같은 말로 시작하므로, ComplexList가 내는 쪽
+    // (기존 부채를 줄이라는 해법이 붙은 문장)만 집어 확인한다.
+    expect(
+      screen.getByText(/살 수 있는 단지가 없어요. 기존 부채를 줄이면 한도가 늘어나요/),
+    ).toBeInTheDocument();
   });
 
   it("지역을 다시 고르면 동 좁히기가 전체로 되돌아간다", async () => {

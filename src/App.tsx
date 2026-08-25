@@ -222,6 +222,28 @@ export function App() {
   );
 
   /**
+   * 같은 목록을 **행정동 좁히기를 걸지 않고** 한 번 더 만든 것.
+   *
+   * 화면에는 절대 그리지 않는다 — 아래 `dongFilteredEmpty`가 "0건의
+   * 원인이 동인가"를 가르는 데에만 쓴다. 동을 좁혀 0건이 됐을 때, 동을
+   * 풀면 뭔가 나오는지를 이 목록으로 확인한다. 순수 함수라 두 번 불러도
+   * 결과가 같고, 둘 다 메모이즈돼 있어 비용도 미미하다.
+   */
+  const unfilteredComplexList = useMemo(
+    () =>
+      profile === null || purchaseType !== "실거주" ||
+      regionComplexes.status !== "success"
+        ? null
+        : buildComplexList({
+            units: regionComplexes.units,
+            profile,
+            rules,
+            regionCodes: [],
+          }),
+    [profile, purchaseType, regionComplexes.status, regionComplexes.units],
+  );
+
+  /**
    * 행정동을 하나로 좁혔는데 그 동엔 예산에 맞는 단지가 하나도 없는가.
    *
    * **여기서 직접 가른다** — `ComplexList`의 `EmptyMessage`(기본 문구
@@ -240,13 +262,28 @@ export function App() {
    * 대신 틀린 해법을 준다. 그래서 `selectedDong`이 걸려 있고 걸러진
    * 결과가 0개면 `ComplexList`를 아예 부르지 않고 이 사실 하나만
    * 말한다.
+   *
+   * **다만 지역 전체에도 0건이면 이 문구를 쓰지 않는다.** 이 문구가 담은
+   * 조언("다른 동을 선택하거나 전체로 넓혀 보세요")은 넓히면 결과가
+   * 달라진다는 뜻인데, 지역 전체가 이미 0건이면 전체로 넓혀도 똑같은
+   * 0건이다 — 사실이 아닌 조언으로 진짜 원인(예산 부족, 또는 상환 능력
+   * 0)을 가리는, 방향만 뒤집힌 **같은 오귀속**이다. 그때는 그대로
+   * `ComplexList`로 흘려보낸다: 그쪽은 `noRepaymentCapacity`(DSR이 0)와
+   * 일반 예산 부족을 이미 갈라 각각 다른 해법을 말하고, 그 문구들은
+   * 목록이 비어 있다는 사실만으로 올바르게 그려진다.
+   *
+   * 그래서 동을 걸지 않은 {@link unfilteredComplexList}를 함께 본다.
    */
+  const isEmptyList = (list: typeof complexList) =>
+    list !== null &&
+    list.withinSafe.length === 0 &&
+    list.unverified.length === 0 &&
+    list.beyondSafe.length === 0;
+
   const dongFilteredEmpty =
     selectedDong !== null &&
-    complexList !== null &&
-    complexList.withinSafe.length === 0 &&
-    complexList.unverified.length === 0 &&
-    complexList.beyondSafe.length === 0;
+    isEmptyList(complexList) &&
+    !isEmptyList(unfilteredComplexList);
 
   /**
    * 단지 목록의 행을 누르면 그 평형의 상세(상환 시뮬레이션)를 연다.
