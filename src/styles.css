@@ -708,6 +708,17 @@ body {
   margin-top: 0.5rem;
 }
 
+/*
+ * 지도 칸에 그릴 단지가 하나도 없을 때의 문구(App.tsx). 실패 문구
+ * (`.region-query-error`)와 같은 색을 쓰지 않는다 — 여기서는 아무것도
+ * 실패하지 않았다.
+ */
+.complex-map-empty {
+  color: var(--seed-color-fg-neutral-muted);
+  font-size: 0.9rem;
+  margin: 0;
+}
+
 .complex-list-note {
   margin: 0 0 0.5rem;
 }
@@ -925,6 +936,21 @@ body {
   border-radius: 0.375rem;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+/*
+ * 마커 라벨 둘째 줄의 거래 건수. 가격 문자열이 min===max에서 숫자
+ * 하나로 접히므로(formatRange), 이 줄이 없으면 마커는 아무 단서 없는
+ * 가격 하나를 늘 띄우게 된다 — 목록 행·팝업이 늘 달고 있는 "거래 N건"이
+ * 여기만 빠져 있었다(ComplexMap.tsx의 markerLabel 주석 참고).
+ *
+ * 같은 줄이 아니라 아랫줄에 둔다 — 마커 폭이 늘면 서로 겹친다.
+ */
+.complex-map-marker-trades {
+  display: block;
+  font-weight: 400;
+  font-size: 0.6875rem;
+  opacity: 0.85;
 }
 
 .complex-map-marker--low {
@@ -1647,6 +1673,8 @@ body {
   .price-check-form,
   .complex-map,
   .complex-map-status,
+  .complex-map-caveat,
+  .complex-map-empty,
   .housing-type-select {
     display: none;
   }

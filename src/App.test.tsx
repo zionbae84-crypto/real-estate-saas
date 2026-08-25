@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
 import type { ComplexUnit } from "./data/complexes";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
+import * as loadNaverMaps from "./lib/loadNaverMaps";
 import * as regionQuery from "./lib/regionQuery";
 import { rules } from "./state/useAffordability";
 import type * as UseAffordabilityModule from "./state/useAffordability";
@@ -1069,5 +1070,147 @@ describe("App - 지도", () => {
     expect(
       screen.queryByText("일부 단지의 위치를 확인하지 못했어요. 지도에 안 보이는 단지가 있을 수 있어요."),
     ).not.toBeInTheDocument();
+  });
+
+  /**
+   * 지도에 그려진 단지 = 목록에 뜬 단지.
+   *
+   * 예전에는 지도가 `dongFilteredUnits`(예산 필터 **전**)를 받아, 왼쪽
+   * 목록엔 예산에 맞는 몇 개만 뜨는데 오른쪽 지도엔 구 전체가 색까지
+   * 입혀 떴다. 지도 어디에도 "이건 예산으로 거른 게 아니에요"라고 적혀
+   * 있지 않았고, 마커 색(옅다=싸다)은 **그려진 집합** 기준의 3분위라
+   * 옅은 마커가 "내 예산에 맞는다"로 읽혔다.
+   */
+  it("지도에는 목록에 뜬 단지만 그린다 — 예산을 넘는 단지는 마커가 없다", async () => {
+    const markerEls: HTMLElement[] = [];
+    let mapContainer: HTMLElement | null = null;
+    const naverGlobal = {
+      maps: {
+        Map: class {
+          constructor(el: HTMLElement) {
+            mapContainer = el;
+          }
+          fitBounds() {}
+          destroy() {}
+        },
+        LatLng: class {
+          constructor(
+            public lat: number,
+            public lng: number,
+          ) {}
+        },
+        Point: class {
+          constructor(
+            public x: number,
+            public y: number,
+          ) {}
+        },
+        Marker: class {
+          constructor(opts: { icon?: { content?: string } }) {
+            if (opts.icon?.content !== undefined && mapContainer !== null) {
+              const el = document.createElement("div");
+              el.innerHTML = opts.icon.content;
+              mapContainer.appendChild(el);
+              markerEls.push(el);
+            }
+          }
+          setMap() {}
+        },
+        InfoWindow: class {
+          constructor(public opts: unknown) {}
+          getMap() {
+            return undefined;
+          }
+          open() {}
+          close() {}
+          setMap() {}
+        },
+        Event: {
+          addListener: () => ({}),
+          removeListener: () => {},
+        },
+      },
+    };
+    vi.spyOn(loadNaverMaps, "loadNaverMaps").mockResolvedValue(
+      naverGlobal as unknown as typeof naver,
+    );
+
+    // 예산(현금 15억·연소득 1.5억)으로는 도저히 살 수 없는 단지 하나를
+    // 같은 지역 결과에 섞는다. 좌표는 **둘 다** 준다 — 지도에서 빠지는
+    // 이유가 "좌표가 없어서"가 아니라 "예산 필터에 걸려서"여야 한다.
+    const TOO_EXPENSIVE: ComplexUnit = {
+      ...DETAIL_TEST_UNIT,
+      complexKey: "11680|테스트동|2015|비싼단지",
+      complexName: "비싼단지",
+      areaBucket: 130,
+      maxExclusiveAreaSqm: 130,
+      minPrice: 50_000_000_000,
+      maxPrice: 50_000_000_000,
+    };
+
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DETAIL_TEST_UNIT, TOO_EXPENSIVE],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [
+        { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
+        { complexKey: TOO_EXPENSIVE.complexKey, lat: 37.2, lon: 127.2 },
+      ],
+      partialFailureCount: 0,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    await screen.findByRole("region", { name: "단지 지도" });
+    await vi.waitFor(() => expect(markerEls.length).toBeGreaterThan(0));
+
+    const labels = markerEls.map((el) => el.textContent ?? "").join("|");
+    expect(labels).toContain("90㎡"); // 목록에 뜨는 단지
+    expect(labels).not.toContain("130㎡"); // 예산을 넘어 목록에 없는 단지
+    expect(markerEls).toHaveLength(1);
+
+    // 목록 쪽도 같은 집합인지 확인한다 — 한쪽만 보면 두 창이 어긋나도 통과한다.
+    expect(screen.getByRole("button", { name: /테스트단지/ })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /비싼단지/ })).not.toBeInTheDocument();
+  });
+
+  it("예산에 맞는 단지가 없으면 좌표를 묻지 않고, 실패가 아니라는 것이 드러나는 문구를 보여준다", async () => {
+    const TOO_EXPENSIVE: ComplexUnit = {
+      ...DETAIL_TEST_UNIT,
+      complexKey: "11680|테스트동|2015|비싼단지",
+      complexName: "비싼단지",
+      minPrice: 50_000_000_000,
+      maxPrice: 50_000_000_000,
+    };
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [TOO_EXPENSIVE],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    const fetchCoords = vi
+      .spyOn(regionQuery, "fetchComplexCoordinates")
+      .mockResolvedValue({ units: [], partialFailureCount: 0 });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    await screen.findByText("조건에 맞는 단지가 없어 지도에 표시할 단지가 없어요.");
+
+    // 그릴 것이 없다는 걸 이미 아는데 지오코딩 호출량을 쓰면 안 된다.
+    expect(fetchCoords).not.toHaveBeenCalled();
+    // 실패·로딩과 절대 같은 문구를 쓰지 않는다 — 여기서는 아무것도 실패하지 않았다.
+    expect(screen.queryByText("지도를 불러오고 있어요…")).not.toBeInTheDocument();
+    expect(screen.queryByText("단지 위치를 불러오지 못했어요.")).not.toBeInTheDocument();
+    expect(screen.queryByText("지도를 표시하지 못했어요.")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("region", { name: "단지 지도" }),
+    ).not.toBeInTheDocument();
+    // 지역에 데이터가 없다는 말과도 다르다 — 데이터는 있고, 예산이 안 맞았을 뿐이다.
+    expect(screen.queryByText(/실거래가 자체가/)).not.toBeInTheDocument();
   });
 });

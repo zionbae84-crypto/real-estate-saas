@@ -80,10 +80,22 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
 }
 
 /**
- * 마커 위에 항상 보이는 라벨. "면적+가격범위"만 담는다 — 단지 이름은
- * 여기 넣지 않는다(클릭 팝업에만) — 라벨이 길어지면 지도가 어지러워진다.
- * 단일 "적정가" 숫자를 내지 않는다는 원칙은 여기서도 그대로다 — 항상
- * `formatRange`(범위) 결과만 쓴다.
+ * 마커 위에 항상 보이는 라벨. "면적+가격범위+거래 건수"만 담는다 —
+ * 단지 이름은 여기 넣지 않는다(클릭 팝업에만) — 라벨이 길어지면 지도가
+ * 어지러워진다. 단일 "적정가" 숫자를 내지 않는다는 원칙은 여기서도
+ * 그대로다 — 항상 `formatRange`(범위) 결과만 쓴다.
+ *
+ * **거래 건수를 반드시 함께 낸다.** `formatRange`는 min===max일 때 숫자
+ * 하나로 접히므로("23억 5,000만원"), 건수가 없으면 이 라벨은 이 앱에서
+ * 유일하게 **아무 단서 없는 가격 숫자 하나가 늘 떠 있는 자리**가 된다 —
+ * 목록 행도 팝업도 같은 문자열 옆에 "거래 N건"을 늘 달고 있는데 여기만
+ * 빠져 있었다. 단서 없는 숫자 하나는 감정평가·적정가로 읽히고, 그건 이
+ * 제품이 절대 하지 않기로 한 말이다(부모 스펙 §6). 폭이 늘어 마커가
+ * 서로 겹치는 것을 막으려 같은 줄이 아니라 아랫줄(block span)에 붙인다.
+ *
+ * 여기 들어가는 단지 유래 값은 전부 {@link escapeHtml}을 거친다 —
+ * 이 파일은 이 앱에서 유일하게 React를 거치지 않는 HTML 문자열 자리다
+ * (위 escapeHtml 주석 참고).
  *
  * 티어 클래스(`complex-map-marker--${tier}`)를 여기서 직접 클래스 목록에
  * 넣는다 — 예전엔 이 함수가 `class="complex-map-marker"`만 돌려주고
@@ -96,7 +108,11 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
 function markerLabel(representative: ComplexUnit, tier: PriceTier): string {
   const area = escapeHtml(String(representative.areaBucket));
   const range = escapeHtml(formatRange(representative.minPrice, representative.maxPrice));
-  return `<div class="complex-map-marker complex-map-marker--${tier}">${area}㎡ ${range}</div>`;
+  const trades = escapeHtml(String(representative.tradeCount));
+  return (
+    `<div class="complex-map-marker complex-map-marker--${tier}">${area}㎡ ${range}` +
+    `<span class="complex-map-marker-trades">거래 ${trades}건</span></div>`
+  );
 }
 
 /**
@@ -135,24 +151,72 @@ export function priceTiers(groups: Array<{ complexKey: string; representative: C
 export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [loadFailed, setLoadFailed] = useState(false);
+  /**
+   * SDK는 정상인데 **그릴 좌표가 하나도 없는** 상태.
+   *
+   * `loadFailed`와 반드시 다른 상태로 둔다. 둘을 하나로 뭉치면 "지도를
+   * 못 불러왔다"(원인: 우리 쪽 스크립트/네트워크)와 "그릴 단지의 위치를
+   * 못 찾았다"(원인: 지오코딩이 그 주소들을 못 찾음)가 같은 문구로
+   * 나오고, 그건 이 앱이 가장 경계하는 오류다 — 모르는 것과 확인한 것을
+   * 같은 말로 보여주는 것.
+   *
+   * 예산에 맞는 단지만 지도에 그리게 되면서(App.tsx의 `mappedUnits`)
+   * 이 상태가 실제로 자주 일어날 수 있게 됐다. 예전처럼 구 전체
+   * 수십 개를 그릴 때는 그중 하나쯤은 좌표가 잡혔지만, 세 개만 그리는
+   * 지금은 그 셋이 모두 지오코딩에서 빠질 수 있다. 그때 아무 문구도
+   * 없이 빈 600px 상자만 남으면 사용자에겐 고장과 구분되지 않는다.
+   */
+  const [noneLocated, setNoneLocated] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
     const cleanupFns: Array<() => void> = [];
     setLoadFailed(false);
+    setNoneLocated(false);
 
     loadNaverMaps(naverMapClientId)
       .then((naverGlobal) => {
         if (cancelled || containerRef.current === null) return;
 
         const withCoords = groupByComplex(units).filter((g) => coordinates.has(g.complexKey));
-        if (withCoords.length === 0) return;
+        if (withCoords.length === 0) {
+          setNoneLocated(true);
+          return;
+        }
 
-        const first = coordinates.get(withCoords[0]!.complexKey)!;
+        const coords = withCoords.map((g) => coordinates.get(g.complexKey)!);
+        /*
+         * 중심을 **그리는 단지들의 평균 좌표**로 잡는다 — 예전에는
+         * `withCoords[0]`(그룹핑 순서상 첫 단지) 하나를 그대로 중심으로
+         * 썼다. 구 전체 수십 개를 그릴 때는 어디를 중심으로 잡아도
+         * 화면에 뭔가는 걸렸지만, 예산에 맞는 몇 개만 그리는 지금은
+         * 그 "첫 단지"가 무리의 가장자리일 수 있고 나머지가 화면 밖으로
+         * 밀린다.
+         */
+        const center = {
+          lat: coords.reduce((sum, c) => sum + c.lat, 0) / coords.length,
+          lon: coords.reduce((sum, c) => sum + c.lon, 0) / coords.length,
+        };
         const map = new naverGlobal.maps.Map(containerRef.current, {
-          center: new naverGlobal.maps.LatLng(first.lat, first.lon),
+          center: new naverGlobal.maps.LatLng(center.lat, center.lon),
           zoom: 14,
         });
+        /*
+         * 단지가 둘 이상이면 그 전부가 들어오도록 줌을 맞춘다. 고정
+         * 줌(14)만으로는 같은 구 안이어도 서로 멀리 떨어진 단지가 화면
+         * 밖으로 나간다 — 목록에는 있는데 지도에는 없는 것처럼 보이면
+         * 두 창이 어긋나 보인다(이 작업이 없애려던 바로 그 어긋남이다).
+         *
+         * 하나뿐이면 fitBounds가 폭 0인 경계를 받아 최대 줌까지
+         * 당겨 버리므로 그대로 둔다. `maxZoom`도 같은 이유로 건다 —
+         * 두 단지가 아주 가까울 때 거리 감각을 잃을 만큼 확대되지 않게.
+         */
+        if (coords.length > 1) {
+          map.fitBounds(
+            coords.map((c) => ({ lat: c.lat, lng: c.lon })),
+            { top: 48, right: 48, bottom: 48, left: 48, maxZoom: 16 },
+          );
+        }
         // 재렌더로 이 effect가 다시 돌면(예: units/coordinates가 바뀌면) 같은
         // DOM 컨테이너에 새 Map을 또 만들기 전에, 이전 Map을 확실히 치운다.
         cleanupFns.push(() => map.destroy());
@@ -212,6 +276,19 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
           */}
           <p>지도를 표시하지 못했어요.</p>
         </div>
+      )}
+      {noneLocated && (
+        /*
+          SDK는 떴고 좌표 조회도 성공했는데, 그리라고 받은 단지들 중
+          위치를 아는 것이 하나도 없는 경우다. 위 로드 실패와도, App.tsx의
+          좌표 조회 실패("단지 위치를 불러오지 못했어요")와도, 조건에 맞는
+          단지가 아예 없는 경우("조건에 맞는 단지가 없어…", App.tsx)와도
+          원인이 달라 각각 다르게 말한다.
+        */
+        <p className="complex-map-caveat">
+          지도에 표시할 단지의 위치를 확인하지 못했어요. 목록은 그대로
+          쓰실 수 있어요.
+        </p>
       )}
     </div>
   );

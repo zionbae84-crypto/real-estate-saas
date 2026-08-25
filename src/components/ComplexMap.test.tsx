@@ -77,6 +77,8 @@ function fakeNaverMaps() {
   const markers: Array<{ position: unknown; listeners: Record<string, () => void>; removed: boolean }> = [];
   const infoWindows: Array<{ content: string; opened: boolean; removed: boolean }> = [];
   const destroyedMaps: unknown[] = [];
+  const createdMaps: Array<{ options: { center?: { lat: number; lng: number } } }> = [];
+  const fitBoundsCalls: Array<{ bounds: unknown; options?: unknown }> = [];
   // Map 생성자가 받는 실제 컨테이너 엘리먼트를 기억해 둔다 — Marker가
   // icon.content HTML을 여기 심어야 screen.getByText로 검증할 수 있다
   // (실제 네이버지도 SDK도 HtmlIcon을 지도 컨테이너 안 DOM에 렌더링한다).
@@ -86,8 +88,15 @@ function fakeNaverMaps() {
     maps: {
       Map: class {
         destroyed = false;
-        constructor(el: HTMLElement, _opts: unknown) {
+        options: { center?: { lat: number; lng: number } } = {};
+        constructor(el: HTMLElement, opts: { center?: { lat: number; lng: number } }) {
           mapContainerEl = el;
+          this.options = opts;
+          createdMaps.push(this);
+        }
+        // 실제 SDK의 fitBounds. 여러 단지를 한 화면에 담기 위해 호출한다.
+        fitBounds(bounds: unknown, options?: unknown) {
+          fitBoundsCalls.push({ bounds, options });
         }
         destroy() {
           this.destroyed = true;
@@ -168,7 +177,7 @@ function fakeNaverMaps() {
     },
   };
 
-  return { naverGlobal, markers, infoWindows, destroyedMaps };
+  return { naverGlobal, markers, infoWindows, destroyedMaps, createdMaps, fitBoundsCalls };
 }
 
 describe("ComplexMap", () => {
@@ -195,9 +204,71 @@ describe("ComplexMap", () => {
     // 테스트가 마커 자체의 동작을 더 구체적으로 확인한다).
   });
 
-  it("빈 좌표 목록이면 지도 영역은 뜨되 마커가 없다(에러 없이)", async () => {
+  it("그릴 좌표가 하나도 없으면 로드 실패와 **다른** 문구로 그 사실을 말한다", async () => {
     render(<ComplexMap units={[unit()]} coordinates={new Map()} naverMapClientId="test-id" />);
-    await screen.findByRole("region", { name: "단지 지도" });
+    const region = await screen.findByRole("region", { name: "단지 지도" });
+
+    // 예산에 맞는 단지만 그리게 되면서(App.tsx의 mappedUnits) 이 경우가
+    // 실제로 자주 일어날 수 있게 됐다 — 그때 빈 600px 상자만 남으면
+    // 사용자에겐 고장과 구분되지 않는다. SDK 로드 실패 문구를 재사용하면
+    // 그것대로 원인을 잘못 말하는 것이라, 문구가 서로 달라야 한다.
+    await vi.waitFor(() =>
+      expect(region.textContent).toContain("지도에 표시할 단지의 위치를 확인하지 못했어요."),
+    );
+    expect(region.textContent).not.toContain("지도를 표시하지 못했어요.");
+  });
+
+  it("마커 라벨에 거래 건수가 함께 나온다 — 단서 없는 가격 숫자 하나로 뜨지 않는다", async () => {
+    // formatRange는 min===max면 숫자 하나로 접힌다. 그 숫자가 아무 단서
+    // 없이 지도에 늘 떠 있으면 감정평가·적정가로 읽힌다(부모 스펙 §6).
+    const units = [unit({ complexKey: "1", areaBucket: 84, tradeCount: 7, minPrice: 2_350_000_000, maxPrice: 2_350_000_000 })];
+    const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
+
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+
+    await screen.findByText(/84㎡/);
+    const marker = document.querySelector(".complex-map-marker");
+    expect(marker?.textContent).toContain("거래 7건");
+  });
+
+  it("단지가 여럿이면 전부 화면에 들어오도록 fitBounds를 부르고, 중심은 평균 좌표다", async () => {
+    const { naverGlobal, createdMaps, fitBoundsCalls } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(naverGlobal as unknown as typeof naver);
+
+    const units = [
+      unit({ complexKey: "a", areaBucket: 59, tradeCount: 1 }),
+      unit({ complexKey: "b", areaBucket: 84, tradeCount: 1 }),
+    ];
+    const coordinates = new Map([
+      ["a", { lat: 37.0, lon: 127.0 }],
+      ["b", { lat: 37.4, lon: 127.4 }],
+    ]);
+
+    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+    await vi.waitFor(() => expect(fitBoundsCalls).toHaveLength(1));
+
+    // 예전에는 그룹핑 순서상 첫 단지 하나를 그대로 중심으로 썼다 — 그리는
+    // 집합이 작아진 지금은 그 단지가 무리의 가장자리일 수 있다.
+    expect(createdMaps[0]!.options.center).toMatchObject({ lat: 37.2, lng: 127.2 });
+    expect(fitBoundsCalls[0]!.bounds).toEqual([
+      { lat: 37.0, lng: 127.0 },
+      { lat: 37.4, lng: 127.4 },
+    ]);
+  });
+
+  it("단지가 하나뿐이면 fitBounds를 부르지 않는다 — 폭 0인 경계는 최대 줌까지 당긴다", async () => {
+    const { naverGlobal, fitBoundsCalls, markers } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(naverGlobal as unknown as typeof naver);
+
+    render(
+      <ComplexMap
+        units={[unit({ complexKey: "a" })]}
+        coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        naverMapClientId="test"
+      />,
+    );
+    await vi.waitFor(() => expect(markers).toHaveLength(1));
+    expect(fitBoundsCalls).toHaveLength(0);
   });
 
   it("마커를 클릭하면 팝업이 열리고, 정보 팝업엔 적정가 숫자가 없다", async () => {

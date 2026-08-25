@@ -197,26 +197,6 @@ export function App() {
    */
   const complexCoordinates = useComplexCoordinates();
 
-  /**
-   * 이 지역 조회에 단지가 하나라도 있었는가.
-   *
-   * 좌표 조회를 걸지, 지도 자리를 그릴지를 이 값 하나로 정한다 — 두
-   * 자리에서 각각 `units.length`를 세면 한쪽만 고쳐져 어긋난다. 단지가
-   * 0건인 지역에서 좌표를 묻는 것은 **그릴 것이 없다는 걸 이미 아는
-   * 채로** 국토부·네이버 API 호출량을 쓰는 일이고, 화면에는 "이 지역엔
-   * 데이터가 없어요" 옆에 지도 로딩/실패 안내가 나란히 뜬다.
-   */
-  const hasRegionUnits = regionComplexes.units.length > 0;
-
-  useEffect(() => {
-    if (regionComplexes.status !== "success" || currentRegionCode === null) return;
-    if (!hasRegionUnits) return;
-    complexCoordinates.query(currentRegionCode, null);
-    // `complexCoordinates.query`는 useCallback([], ...)이라 참조가 안
-    // 고정돼 있다 — 그래도 의존성에 적어 둔다. 이 effect가 그 사실에
-    // 조용히 기대고 있으면, 훅 쪽이 바뀌는 날 여기서 무한 루프가 난다.
-  }, [regionComplexes.status, currentRegionCode, hasRegionUnits, complexCoordinates.query]);
-
   /** 조회 결과에 실제로 있는 행정동만. 없는 동은 고를 수 있으면 안 된다 */
   const dongOptions = useMemo(
     () => [...new Set(regionComplexes.units.map((u) => u.legalDongName))].sort(),
@@ -323,6 +303,77 @@ export function App() {
     selectedDong !== null &&
     isEmptyList(complexList) &&
     !isEmptyList(unfilteredComplexList);
+
+  /**
+   * 지도에 그리는 단지들. **목록에 뜨는 단지와 정확히 같은 집합이다.**
+   *
+   * `complexList`가 이미 두 가지를 순서대로 건 결과(동 좁히기 →
+   * 예산 필터)이므로, 그 세 덩어리를 도로 합치기만 하면 두 창이
+   * 어긋날 방법이 없다. 예전처럼 지도에 `dongFilteredUnits`(예산
+   * 필터 전)를 넘기지 않는다 — 그러면 왼쪽 목록엔 3개인데 오른쪽
+   * 지도엔 40개가 뜨고, 지도 어디에도 "이건 예산으로 거른 게
+   * 아니에요"라고 적혀 있지 않았다. 더 나쁜 것은 마커 색(옅다=싸다)이
+   * **그려진 집합** 기준의 3분위라, 옅은 마커가 "이 지역 기준으로
+   * 싼 편"일 뿐인데 "내 예산에 맞는다"로 읽혔다는 점이다.
+   *
+   * 같은 필터를 여기서 다시 구현하지 않고 `complexList`에서 되꺼내는
+   * 것이 핵심이다. 조건을 두 번 적으면 한쪽만 고쳐지는 날이 오고,
+   * 그날 두 창은 조용히 다른 집합을 말한다.
+   *
+   * 세 덩어리를 모두 넣는다 — 목록도 셋을 모두 그린다(무리 없음·
+   * 확인 필요·부담이 큼). 지도에서 `withinSafe`만 그리면 지도가
+   * 목록보다 낙관적으로 말하게 된다.
+   */
+  const mappedUnits = useMemo(
+    () =>
+      complexList === null
+        ? []
+        : [
+            ...complexList.withinSafe,
+            ...complexList.unverified,
+            ...complexList.beyondSafe,
+          ].map((entry) => entry.unit),
+    [complexList],
+  );
+
+  /**
+   * 지도에 그릴 단지가 하나라도 있는가.
+   *
+   * 좌표 조회를 걸지, 지도를 그릴지를 **이 값 하나로** 정한다. 두
+   * 자리에서 각각 길이를 세면 한쪽만 고쳐져 어긋난다. 그릴 것이 없는
+   * 줄 이미 아는 채로 국토부·네이버 지오코딩 호출량을 쓰지 않는다.
+   *
+   * 예전에는 같은 역할을 `hasRegionUnits`(이 지역 조회에 단지가 하나라도
+   * 있었는가)가 했다. 지도가 지역 전체가 아니라 예산에 맞는 단지만
+   * 그리게 되면서 기준이 여기로 내려왔다.
+   */
+  const hasMappedUnits = mappedUnits.length > 0;
+
+  /*
+   * 좌표 조회를 건다.
+   *
+   * **이 effect는 `hasMappedUnits`(지도에 실제로 그릴 단지가 있는가)
+   * 아래에 있어야 한다** — 의존성 배열은 렌더 중에 평가되므로, 선언보다
+   * 위에 두면 TDZ에 걸린다.
+   *
+   * 조건이 예전의 "이 지역에 단지가 하나라도 있는가"(`hasRegionUnits`)에서
+   * 여기로 옮겨 온 이유: 지도가 이제 예산에 맞는 단지만 그리므로, 지역에
+   * 단지가 많아도 예산에 맞는 것이 0개면 그릴 것이 없다. 그릴 것이 없는
+   * 줄 이미 아는 채로 지오코딩 호출량을 쓰지 않는다.
+   *
+   * 좌표는 여전히 **지역 전체**로 한 번 받아 온다(`query(regionCode, null)`) —
+   * 캐시 단위를 지역으로 두어야 동을 바꾸거나 예산을 조금 움직일 때마다
+   * 다시 묻지 않는다. 지도에 무엇을 그릴지는 아래 렌더가 `mappedUnits`로
+   * 따로 정한다.
+   */
+  useEffect(() => {
+    if (regionComplexes.status !== "success" || currentRegionCode === null) return;
+    if (!hasMappedUnits) return;
+    complexCoordinates.query(currentRegionCode, null);
+    // `complexCoordinates.query`는 useCallback([], ...)이라 참조가 안
+    // 고정돼 있다 — 그래도 의존성에 적어 둔다. 이 effect가 그 사실에
+    // 조용히 기대고 있으면, 훅 쪽이 바뀌는 날 여기서 무한 루프가 난다.
+  }, [regionComplexes.status, currentRegionCode, hasMappedUnits, complexCoordinates.query]);
 
   /**
    * 단지 목록의 행을 누르면 그 평형의 상세(상환 시뮬레이션)를 연다.
@@ -723,19 +774,50 @@ export function App() {
                         </div>
                         <div className="region-results-map">
                           {/*
-                            이 안쪽 조건의 `status === "success"`와
-                            `hasRegionUnits`는 바깥 `region-results-grid`
-                            조건(위 641~642행)이 이미 보장한다 — 이 블록에
-                            들어왔다는 것 자체가 둘 다 참이라는 뜻이라
+                            이 안쪽 조건의 `status === "success"`는 바깥
+                            `region-results-grid` 조건이 이미 보장한다 — 이
+                            블록에 들어왔다는 것 자체가 참이라는 뜻이라
                             여기서는 redundant하다. 그래도 diff 리뷰에서
                             "왜 지워졌는지"를 되짚게 만들지 않으려 그대로
-                            남긴다. 실제로 걸러내는 건 `!dongFilteredEmpty`와
-                            `complexList !== null` 두 개뿐이다.
+                            남긴다. 실제로 걸러내는 건 `complexList !== null`과
+                            아래 `hasMappedUnits` 분기다.
+
+                            예전에 있던 `!dongFilteredEmpty`는 뺐다 — 동으로
+                            좁혀 0건이면 `mappedUnits`도 반드시 0이라 아래
+                            분기가 이미 같은 경우를 잡는다. 두 조건을 함께
+                            두면 "동 때문에 0건"일 때만 지도 칸이 통째로
+                            비고(아무 문구도 없이), "예산 때문에 0건"일 때는
+                            문구가 뜨는, 같은 사실을 두 가지로 보여주는
+                            어긋남이 생긴다.
                           */}
                           {regionComplexes.status === "success" &&
-                            hasRegionUnits &&
-                            !dongFilteredEmpty &&
-                            complexList !== null && (
+                            complexList !== null &&
+                            !hasMappedUnits && (
+                              /*
+                                지도에 그릴 단지가 없다. **원인을 여기서
+                                단정하지 않는다** — 원인은 왼쪽(모바일에선
+                                아래) 목록 칸이 이미 자기 문구로 말한다:
+                                동으로 좁혀서면 `.dong-empty`, 예산 때문이면
+                                `ComplexList`의 예산/상환능력 문구. 여기서
+                                "예산이 부족해요"라고 적으면 동 때문에 빈
+                                경우에 틀린 원인을 말하게 되고, 그건 이
+                                화면이 이미 한 번 겪은 오귀속이다.
+
+                                그래서 이 문구는 지도 칸이 아는 사실 하나만
+                                말한다: 그릴 것이 없다. "지도를 표시하지
+                                못했어요"(SDK 실패)·"단지 위치를 불러오지
+                                못했어요"(좌표 조회 실패)와 절대 같은 말을
+                                쓰지 않는다 — 여기는 아무것도 실패하지
+                                않았다.
+                              */
+                              <p className="complex-map-empty">
+                                조건에 맞는 단지가 없어 지도에 표시할 단지가
+                                없어요.
+                              </p>
+                            )}
+                          {regionComplexes.status === "success" &&
+                            complexList !== null &&
+                            hasMappedUnits && (
                               <>
                                 {/*
                                   좌표 조회(complexCoordinates)는 목록 조회와 별개로
@@ -800,7 +882,13 @@ export function App() {
                                 {complexCoordinates.status === "success" && (
                                   <>
                                     <ComplexMap
-                                      units={dongFilteredUnits}
+                                      /*
+                                        목록과 **정확히 같은 집합**을 넘긴다
+                                        (`mappedUnits` 정의의 주석 참고).
+                                        `dongFilteredUnits`(예산 필터 전)를
+                                        넘기면 두 창이 다른 단지를 말한다.
+                                      */
+                                      units={mappedUnits}
                                       coordinates={complexCoordinates.coordinates}
                                       naverMapClientId={
                                         import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
