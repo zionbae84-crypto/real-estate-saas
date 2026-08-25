@@ -91,3 +91,72 @@ describe("지도 마커 티어 대비율 — 배경 대비 텍스트, 본문 크
     expect(contrastRatio("#0f5f96", "#ffffff")).toBeGreaterThanOrEqual(4.5);
   });
 });
+
+/**
+ * `--seed-color-fg-brand-contrast`(#3398e1)의 대비율과 **쓸 수 있는
+ * 자리의 경계**를 못박는다.
+ *
+ * `src/seed-brand.css`는 이 토큰을 "굵은 큰 글자나 비텍스트 요소에만"
+ * 쓰라고 스스로 적어 뒀지만, 그 규칙을 검사하는 것이 아무것도 없었다 —
+ * 그래서 `.complex-detail-back`(본문 크기 16px/400, 상세에서 목록으로
+ * 돌아가는 유일한 길)이 이 토큰을 쓴 채로 통과해 나갔다. 위 등급색·
+ * 마커 티어는 검사하면서 이 토큰만 빠져 있었던 것이 그 회귀가 새어
+ * 나간 자리다.
+ *
+ * 두 배경을 모두 잰다. 이 앱의 페이지 바탕은 `bg-layer-default`
+ * (#fafaf9)이고, 카드 면(`.complex-row` 등)만 `bg-layer-floating`
+ * (#ffffff)이다 — 흰 배경 기준 하나만 재면 실제로 글자가 놓이는
+ * 바탕보다 후하게 나온다.
+ */
+describe("fg-brand-contrast(#3398e1) — 큰 굵은 글자 전용 토큰", () => {
+  const BRAND_CONTRAST = "#3398e1";
+  const CANVAS = "#fafaf9"; // bg-layer-default — 페이지 바탕
+  const CARD = "#ffffff"; // bg-layer-floating — 카드 면
+
+  it("본문 크기 기준(4.5:1)을 어느 배경에서도 넘지 못한다 — 본문 글자에 쓰면 안 된다", () => {
+    expect(contrastRatio(BRAND_CONTRAST, CARD)).toBeLessThan(4.5);
+    expect(contrastRatio(BRAND_CONTRAST, CANVAS)).toBeLessThan(4.5);
+  });
+
+  it("실측값을 못박는다 — 흰 배경 3.13:1, 페이지 바탕 2.99:1", () => {
+    // 값이 바뀌면 여기서 먼저 깨진다. 위 주석의 근거 숫자가 조용히
+    // 낡는 일(이 브랜치가 실제로 겪은 일)을 막는다.
+    expect(contrastRatio(BRAND_CONTRAST, CARD)).toBeCloseTo(3.13, 2);
+    expect(contrastRatio(BRAND_CONTRAST, CANVAS)).toBeCloseTo(2.99, 2);
+  });
+
+  it("돌아가기 버튼이 쓰는 색(fg-neutral)은 본문 기준을 넉넉히 넘는다", () => {
+    // `.complex-detail-back`이 이 토큰 대신 쓰는 값. 상세에서 목록으로
+    // 돌아가는 유일한 길이라 본문 기준을 반드시 넘어야 한다.
+    expect(contrastRatio("#0c0a09", CANVAS)).toBeGreaterThanOrEqual(4.5);
+  });
+});
+
+/**
+ * 위 규칙이 실제 CSS와 어긋나지 않는지 소스에서 확인한다.
+ *
+ * 대비율만 재면 "이 토큰을 어디에 썼는가"는 잡히지 않는다 — 이번에
+ * 새어 나간 회귀가 정확히 그 모양이었다.
+ */
+describe("fg-brand-contrast를 쓰는 자리", () => {
+  const STYLES = readFileSync("src/styles.css", "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+
+  /** `--seed-color-fg-brand-contrast`를 color로 쓰는 규칙의 선택자들 */
+  const users = [...STYLES.matchAll(/([^{}]+)\{[^{}]*color:\s*var\(--seed-color-fg-brand-contrast\)/g)].map(
+    (m) => m[1]!.trim().split("\n").pop()!.trim(),
+  );
+
+  it("큰 굵은 글자 세 자리에서만 쓴다", () => {
+    // 늘리려면 그 자리가 정말 큰 굵은 글자인지 먼저 확인하고 여기에
+    // 적어야 한다. 본문 크기 글자는 4.5:1을 넘지 못한다(위 테스트).
+    expect(users.sort()).toEqual([
+      ".affordable-price",
+      ".safe-line-item--max .safe-line-amount",
+      ".slider-price--max",
+    ]);
+  });
+
+  it("돌아가기 버튼은 더 이상 이 토큰을 쓰지 않는다", () => {
+    expect(users).not.toContain(".complex-detail-back");
+  });
+});

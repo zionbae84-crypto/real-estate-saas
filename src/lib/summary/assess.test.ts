@@ -329,6 +329,44 @@ describe("진단 종합", () => {
       expect(summary.axes.every((a) => a.status === "notLooked")).toBe(true);
       // 판정 가능한 축이 하나도 없으므로 clear로 내리지 않는다.
       expect(summary.headline).not.toBe("clear");
+      expect(summary.headline).toBe("unresolved");
+    });
+
+    /**
+     * 헤드라인 문구가 **보지 않은 상태에서도** 참이어야 한다.
+     *
+     * `unresolved`는 두 가지를 함께 담는다: (1) 아직 아무것도 보지
+     * 않았다(세 판정 축이 모두 null — 실거주 매수로 아직 평형을 고르지
+     * 않은 첫 화면이 정확히 이 상태다), (2) 어떤 축이 미완성이거나
+     * 유보다. 예전 문구는 (2)만 말해서, 모든 사용자가 처음 보는 화면에서
+     * "어떤 축이 진행 중이거나 유보됐다"는 **관측한 적 없는 사실**을
+     * 단언했다. 등기부 문진이 있던 시절엔 그 축이 실제로 incomplete를
+     * 내며 렌더돼 참이었지만, 그 기능이 빠지며 거짓이 됐다.
+     */
+    it("아무 축도 보지 않았을 때 헤드라인 문구가 '아직 확인하지 않았다'를 함께 말한다", () => {
+      const summary = buildDiagnosisSummary(summaryRules, {
+        rights: null,
+        purchase: null,
+        price: null,
+        location: null,
+      });
+
+      expect(summary.headlineNote).toContain("아직 확인하지 않았거나");
+      // 진행 중/유보를 **단독으로** 단언하며 시작하지 않는다.
+      expect(summary.headlineNote.startsWith("확인이 끝나지 않았거나")).toBe(false);
+    });
+
+    it("같은 문구가 실제로 미완성인 축이 있을 때도 그대로 참이다", () => {
+      const summary = buildDiagnosisSummary(
+        summaryRules,
+        inputFor("notLooked", "notLooked", "withheld", "notLooked"),
+      );
+
+      expect(summary.headline).toBe("unresolved");
+      // 두 경우가 같은 헤드라인을 쓰므로, 문구는 둘 다에서 참인 선택지
+      // 나열이어야 한다 — 어느 한쪽만 참인 단언이면 다른 쪽에서 거짓이 된다.
+      expect(summary.headlineNote).toContain("판정을 유보한 축이 있어요");
+      expect(summary.headlineNote).toContain("아직 확인하지 않았거나");
     });
   });
 

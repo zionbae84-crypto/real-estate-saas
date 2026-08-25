@@ -29,14 +29,14 @@
     }
   },
   "headline": {
-    "_headlinePriorityNote": "stop > unresolved > expert > clear 순서다. (1) stop이 하나라도 있으면 다른 축이 아무리 깨끗해도 그것이 헤드라인이다 — 권리·구매·호가 각 축의 decideOverall이 이미 같은 원칙을 쓴다(권리는 평균 내는 것이 아니다). (2) unresolved(incomplete·withheld를 묶은 것)가 stop 다음인 이유는 미완성·유보가 통과가 아니기 때문이다 — 빈칸이나 유보를 건너뛰고 expert·clear로 넘어가면 '아직 모른다'가 '괜찮다'로 접힌다. (3) expert가 clear보다 앞인 이유는 각 축 안에서도 같다 — 우리가 판단 못 하는 신호가 남아 있는데 결론을 '걸리는 게 없었다'고 부르면 안 된다. 이 순서는 stop 우선·incomplete 우선(권리·구매)·incomplete 우선(호가, askingPrice 없음 우선) 등 개별 축의 decideOverall 순서와 상대적 위치가 어긋나지 않는다 — 어느 축에서 봐도 stop이 가장 급하고 expert가 clear보다 급하다.",
+    "_headlinePriorityNote": "stop > unresolved > expert > clear 순서다. (1) stop이 하나라도 있으면 다른 축이 아무리 깨끗해도 그것이 헤드라인이다 — 권리·구매·호가 각 축의 decideOverall이 이미 같은 원칙을 쓴다(권리는 평균 내는 것이 아니다). (2) unresolved(incomplete·withheld를 묶은 것)가 stop 다음인 이유는 미완성·유보가 통과가 아니기 때문이다 — 빈칸이나 유보를 건너뛰고 expert·clear로 넘어가면 '아직 모른다'가 '괜찮다'로 접힌다. (3) expert가 clear보다 앞인 이유는 각 축 안에서도 같다 — 우리가 판단 못 하는 신호가 남아 있는데 결론을 '걸리는 게 없었다'고 부르면 안 된다. 이 순서는 stop 우선·incomplete 우선(권리·구매)·incomplete 우선(호가, askingPrice 없음 우선) 등 개별 축의 decideOverall 순서와 상대적 위치가 어긋나지 않는다 — 어느 축에서 봐도 stop이 가장 급하고 expert가 clear보다 급하다.\n\n**unresolved는 '아직 결론을 낼 수 없다' 전부를 담는다.** 미완성(incomplete)·유보(withheld)뿐 아니라, 판정 가능한 축이 **하나도 없는** 경우(세 축이 모두 null — 실거주 매수로 아직 평형을 고르지 않은 첫 화면이 정확히 이 상태다)도 여기로 내린다. 확인한 것이 하나도 없는 상태를 clear로 부르는 것이 이 계산이 낼 수 있는 가장 위험한 오답이기 때문이다(src/lib/summary/assess.ts의 decideHeadline 참고). 그래서 unresolved의 note는 '아직 확인하지 않았거나'로 시작한다 — 예전 문구('확인이 끝나지 않았거나 판정을 유보한 축이 있어요')는 어떤 축이 진행 중이거나 유보됐다고 말하는데, 첫 화면에서는 진행 중인 축도 유보한 축도 없어 사실이 아니었다.",
     "stop": {
       "label": "사면 안 되는 신호가 있어요",
       "note": "위 네 가지 중 하나 이상이 '멈춰야 한다'고 말하고 있어요. 그게 풀리기 전에는 계약도, 계약금도 미뤄 주세요."
     },
     "unresolved": {
       "label": "아직 결론을 낼 수 없어요",
-      "note": "확인이 끝나지 않았거나 판정을 유보한 축이 있어요. 빈칸이나 유보는 통과가 아니에요 — 아래 축별 상태에서 무엇이 남았는지 확인해 주세요."
+      "note": "아직 확인하지 않았거나, 확인이 끝나지 않았거나, 판정을 유보한 축이 있어요. 빈칸도 유보도 통과가 아니에요 — 아래 축별 상태에서 무엇이 남았는지 확인해 주세요."
     },
     "expert": {
       "label": "전문가 확인이 꼭 필요해요",
