@@ -25,6 +25,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       fetchAddresses: (rc, d) => fetchComplexAddresses(rc, d, new Date(), dataKey),
       cache,
       geocode: (address) => geocodeAddress(address, clientId, clientSecret),
+      // 502 경로에서 실제로 새어나갈 수 있는 키는 국토부 키다 —
+      // fetchComplexAddresses가 키를 쿼리 파라미터에 담아 요청하므로
+      // 그 URL이 네트워크 오류 메시지에 실려 온다(api/complexes.ts와 같다).
+      dataKey,
       key: clientId,
       secret: clientSecret,
     },
