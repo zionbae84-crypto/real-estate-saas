@@ -35,4 +35,73 @@ describe("useComplexCoordinates", () => {
     await waitFor(() => expect(result.current.status).toBe("error"));
     expect(result.current.coordinates.size).toBe(0);
   });
+
+  /**
+   * 지역/동을 연달아 바꿔 조회하면 앞선 요청의 응답이 뒤늦게 도착할 수
+   * 있다(지오코딩 API 응답 시간이 지역마다 다름). 이때 무조건 setState를
+   * 하면 화면이 최신 지역을 보여주는 채로 지나간 지역의 좌표를
+   * 뒤집어쓴다 — `useRegionComplexes`에서 이미 한 번 고쳐진 것과 같은
+   * 버그 클래스다.
+   */
+  it("응답이 역순으로 도착해도 마지막으로 고른 지역의 좌표만 반영한다", async () => {
+    let resolveA: (v: Awaited<ReturnType<typeof regionQuery.fetchComplexCoordinates>>) => void = () => {};
+    let resolveB: (v: Awaited<ReturnType<typeof regionQuery.fetchComplexCoordinates>>) => void = () => {};
+
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockImplementation(
+      (regionCode: string) =>
+        new Promise((resolve) => {
+          if (regionCode === "11680") resolveA = resolve;
+          else resolveB = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useComplexCoordinates());
+
+    act(() => result.current.query("11680", null)); // A: 먼저 고른 지역
+    act(() => result.current.query("11110", null)); // B: 나중에 고른 지역
+
+    // B가 먼저 도착한다.
+    await act(async () => {
+      resolveB([{ complexKey: "11110-1", lat: 37.5, lon: 127.5 }]);
+    });
+    await waitFor(() => expect(result.current.status).toBe("success"));
+
+    // A가 뒤늦게 도착한다 — 이미 지나간 조회다.
+    await act(async () => {
+      resolveA([{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }]);
+    });
+
+    expect(result.current.status).toBe("success");
+    expect(result.current.coordinates.get("11110-1")).toEqual({ lat: 37.5, lon: 127.5 });
+    expect(result.current.coordinates.has("11680-1")).toBe(false);
+  });
+
+  it("뒤늦게 도착한 실패도 현재 조회의 상태를 덮지 않는다", async () => {
+    let rejectA: (e: Error) => void = () => {};
+    let resolveB: (v: Awaited<ReturnType<typeof regionQuery.fetchComplexCoordinates>>) => void = () => {};
+
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockImplementation(
+      (regionCode: string) =>
+        new Promise((resolve, reject) => {
+          if (regionCode === "11680") rejectA = reject;
+          else resolveB = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useComplexCoordinates());
+    act(() => result.current.query("11680", null));
+    act(() => result.current.query("11110", null));
+
+    await act(async () => {
+      resolveB([{ complexKey: "11110-1", lat: 37.5, lon: 127.5 }]);
+    });
+    await waitFor(() => expect(result.current.status).toBe("success"));
+
+    await act(async () => {
+      rejectA(new Error("A 조회 실패"));
+    });
+
+    expect(result.current.status).toBe("success");
+    expect(result.current.coordinates.get("11110-1")).toEqual({ lat: 37.5, lon: 127.5 });
+  });
 });
