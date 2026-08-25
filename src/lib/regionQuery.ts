@@ -72,3 +72,36 @@ export async function fetchRegionComplexes(
 function narrowDataAsOf(value: unknown): string | null {
   return typeof value === "string" && /^\d{4}-\d{2}$/.test(value) ? value : null;
 }
+
+export interface ComplexCoordinate {
+  complexKey: string;
+  lat: number;
+  lon: number;
+}
+
+interface GeocodeApiResponse {
+  units: ComplexCoordinate[];
+}
+
+/**
+ * 지역의 단지 좌표를 조회한다. `fetchRegionComplexes`와 같은 파일에 두는
+ * 이유는 이 파일이 `src/`에서 `fetch`를 쓸 수 있는 유일한 곳이기
+ * 때문이다 — 새 엔드포인트라고 새 예외 파일을 또 만들지 않는다.
+ */
+export async function fetchComplexCoordinates(
+  regionCode: string,
+  dong: string | null,
+): Promise<ComplexCoordinate[]> {
+  const params = new URLSearchParams({ regionCode });
+  if (dong !== null) params.set("dong", dong);
+
+  const res = await fetch(`/api/geocode?${params.toString()}`);
+
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as ApiErrorBody | null;
+    throw new Error(body?.error ?? `조회 실패 (HTTP ${res.status})`);
+  }
+
+  const body = (await res.json()) as GeocodeApiResponse;
+  return body.units;
+}

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchRegionComplexes } from "./regionQuery";
+import { fetchComplexCoordinates, fetchRegionComplexes } from "./regionQuery";
 
 describe("fetchRegionComplexes", () => {
   it("성공하면 units와 isRegulatedArea를 반환한다", async () => {
@@ -120,5 +120,38 @@ describe("fetchRegionComplexes", () => {
 
     await fetchRegionComplexes("11680", "역삼동");
     expect(requestedUrl).toBe("/api/complexes?regionCode=11680&dong=%EC%97%AD%EC%82%BC%EB%8F%99");
+  });
+});
+
+describe("fetchComplexCoordinates", () => {
+  it("성공하면 좌표 목록을 반환한다", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({ units: [{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }] }),
+        { status: 200 },
+      ),
+    ) as typeof fetch;
+
+    const result = await fetchComplexCoordinates("11680", null);
+    expect(result).toEqual([{ complexKey: "11680-1", lat: 37.1, lon: 127.1 }]);
+  });
+
+  it("HTTP 실패면 던진다", async () => {
+    globalThis.fetch = vi.fn(async () =>
+      new Response(JSON.stringify({ error: "실패" }), { status: 502 }),
+    ) as typeof fetch;
+
+    await expect(fetchComplexCoordinates("11680", null)).rejects.toThrow("실패");
+  });
+
+  it("/api/geocode로 요청한다", async () => {
+    let requestedUrl = "";
+    globalThis.fetch = vi.fn(async (url: string | URL) => {
+      requestedUrl = url.toString();
+      return new Response(JSON.stringify({ units: [] }), { status: 200 });
+    }) as typeof fetch;
+
+    await fetchComplexCoordinates("11680", null);
+    expect(requestedUrl).toBe("/api/geocode?regionCode=11680");
   });
 });
