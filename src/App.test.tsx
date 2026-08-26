@@ -2364,6 +2364,77 @@ describe("전체화면 결과 셸", () => {
       return container.querySelector(".budget-panel");
     }
 
+    /**
+     * 패널이 열려 있는 동안 그 **뒤에 완전히 가려지는** 사이드바가
+     * 키보드 초점을 받지 않는지(리뷰 findings M2).
+     *
+     * `.budget-panel`은 372px 사이드바 열을 정확히 덮는 절대 배치
+     * 오버레이인데(styles.css), DOM 순서는 패널 → 사이드바다. `inert`가
+     * 없으면 패널을 지나 Tab을 계속 누를 때 보이지 않는 행정동
+     * `<select>`와 `.complex-row` 버튼에 초점이 간다 — 그 상태에서
+     * Enter를 누르면 평형이 선택되고 패널이 발밑에서 닫힌다
+     * (WCAG 2.4.3 초점 순서 / 2.4.7 초점 표시).
+     *
+     * **"지도 조작을 막지 않는다"와 충돌하지 않는다.** 브리프가 지키려는
+     * 것은 지도의 조작성이고, 지도는 사이드바 열 밖(`.region-results-map`)
+     * 이라 `inert`가 닿지 않는다 — 마커는 그대로 눌린다. 아래 마지막
+     * 테스트가 그 사실을 함께 못박는다.
+     *
+     * ⚠ **jsdom은 `inert`를 강제하지 않는다**(이 저장소가 이미 아는
+     * 함정 — progress.md의 Task 3 항목). 그래서 이 테스트는 "Tab이 실제로
+     * 건너뛰는가"를 확인할 수 없고, **속성이 붙는가**만 확인한다. 브라우저
+     * 쪽 동작은 `inert` 명세에 맡긴다.
+     */
+    it("패널이 열려 있는 동안 사이드바가 inert다", async () => {
+      const { container } = await renderResults();
+      const sidebar = container.querySelector(".region-results-sidebar")!;
+
+      // 닫혀 있는 동안에는 당연히 조작할 수 있어야 한다.
+      expect(sidebar).not.toHaveAttribute("inert");
+
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+      expect(sidebar).toHaveAttribute("inert");
+
+      await userEvent.click(trigger());
+      expect(sidebar).not.toHaveAttribute("inert");
+    });
+
+    it("패널이 열려도 지도 열은 inert가 아니다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+
+      expect(container.querySelector(".region-results-map")).not.toHaveAttribute(
+        "inert",
+      );
+      // 지도가 사이드바의 자손이 아니라는 것도 함께 못박는다 — 자손이면
+      // 사이드바에 건 inert가 지도까지 끌고 들어간다.
+      expect(
+        container
+          .querySelector(".region-results-sidebar")!
+          .contains(container.querySelector(".region-results-map")),
+      ).toBe(false);
+    });
+
+    it("패널이 열린 채 마커를 누르면 패널이 닫히고 그 단지가 강조된다", async () => {
+      const { container, markers } = await renderResults();
+      await vi.waitFor(() => expect(markers.length).toBe(2));
+
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      markers[1]!.listeners.click!();
+
+      await vi.waitFor(() => {
+        expect(panel(container)).toHaveClass("budget-panel--closed");
+        expect(
+          container.querySelector(".region-results-sidebar"),
+        ).not.toHaveAttribute("inert");
+      });
+      const focused = container.querySelector(".complex-row--focused");
+      expect(focused?.textContent).toContain("대출단지");
+    });
+
     it("상단바의 '실구매 가능 가격'이 버튼이고, 누르면 예산 상세가 펼쳐진다", async () => {
       const { container } = await renderResults();
 

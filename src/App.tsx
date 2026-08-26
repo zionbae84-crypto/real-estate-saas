@@ -1141,6 +1141,13 @@ export function App() {
                 조건도 그대로**다 — 바뀐 것은 어디에 그리는가뿐이다.
               */
               <ResultShell
+                /*
+                  패널이 사이드바 열을 완전히 덮는 동안 그 열을 `inert`로
+                  잠근다(ResultShell의 `panelOpen` 문서 참고). `open`과
+                  **같은 파생값**을 넘긴다 — 따로 계산하면 언젠가 둘이
+                  어긋나 "보이지 않는데 조작되는" 상태가 돌아온다.
+                */
+                panelOpen={budgetPanelOpen}
                 summary={
                   <>
                     {state.cash !== null && (

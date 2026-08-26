@@ -24,6 +24,30 @@ export interface ResultShellProps {
    * 세로로 쌓아 보여주던 것과 같은 순서다.
    */
   panel?: ReactNode;
+  /**
+   * {@link panel}이 펼쳐져 있는가. 참이면 **사이드바 열을 `inert`로**
+   * 잠근다(리뷰 findings M2).
+   *
+   * 패널은 372px 사이드바 열을 정확히 덮는 절대 배치 오버레이인데 DOM
+   * 순서는 패널 → 사이드바다. 잠그지 않으면 패널을 지나 Tab을 계속
+   * 누를 때 **완전히 가려진** 행정동 `<select>`와 `.complex-row` 버튼에
+   * 초점이 간다 — 거기서 Enter를 누르면 보이지도 않는 평형이 선택되고
+   * 패널이 발밑에서 닫힌다(WCAG 2.4.3 / 2.4.7).
+   *
+   * **패널 자신은 잠기지 않는다** — `.budget-panel`은 그리드의 자식이지
+   * 사이드바의 자손이 아니다. **지도도 잠기지 않는다**: 브리프가 지키려는
+   * "패널이 열려 있어도 지도는 그대로 조작된다"는 그대로 성립한다(지도는
+   * `.region-results-map`, 사이드바 열 밖이다). 잠기는 것은 정확히
+   * "패널에 가려 보이지 않는 것"뿐이다.
+   *
+   * `inert` 하나로 포커스와 접근성 트리 노출을 동시에 끊는다 —
+   * `aria-hidden`만 걸면 스크린리더에서만 사라지고 Tab은 그대로 들어간다.
+   * 렌더링·인쇄에는 영향이 없다(`.results-screen`의 `inert`와 같다).
+   *
+   * 이 prop은 **`open` 상태를 그대로 받는다** — `panel`이 `ReactNode`라
+   * 셸이 그 안을 들여다볼 수 없기 때문이다.
+   */
+  panelOpen?: boolean;
 }
 
 /**
@@ -80,6 +104,7 @@ export function ResultShell({
   sidebar,
   map,
   panel,
+  panelOpen = false,
 }: ResultShellProps) {
   useEffect(() => lockBodyScroll(), []);
 
@@ -100,7 +125,10 @@ export function ResultShell({
 
       <div className="region-results-grid">
         {panel}
-        <div className="region-results-sidebar">{sidebar}</div>
+        {/* `panelOpen` prop 문서 참고 — 패널에 완전히 가려지는 동안만 잠근다. */}
+        <div className="region-results-sidebar" inert={panelOpen}>
+          {sidebar}
+        </div>
         <div className="region-results-map">{map}</div>
       </div>
     </div>
