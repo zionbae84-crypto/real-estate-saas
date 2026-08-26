@@ -1021,23 +1021,66 @@ describe("App - 단지 상세(화면 4)", () => {
     it("인쇄에서 지우는 요소 안에 보호 대상 클래스가 들어 있지 않다", async () => {
       const { container } = render(<App />);
 
-      function check(phase: string) {
+      function check(state: string) {
         for (const selector of PRINT_HIDDEN_SELECTORS) {
           for (const hidden of container.querySelectorAll(selector)) {
             for (const cls of MUST_SURVIVE_PRINT_CLASSES) {
               expect(
                 hidden.querySelector(`.${cls}`),
-                `${phase} 단계에서 ${selector} 안에 .${cls}가 있습니다 — ` +
+                `${state}에서 ${selector} 안에 .${cls}가 있습니다 — ` +
                   "조상이 인쇄에서 지워지면 이 보호 대상도 함께 사라집니다.",
               ).toBeNull();
+              /*
+               * 재검토 수정(Important 3): 조상뿐 아니라 **자기 자신**도
+               * 본다. 숨김 대상 요소가 보호 대상 클래스를 함께 달고 있으면
+               * 그 요소는 자기 자신째로 종이에서 사라진다 —
+               * `hidden.querySelector`는 후손만 보므로 그 형태를 놓친다.
+               */
+              expect(
+                hidden.classList.contains(cls),
+                `${state}에서 ${selector}가 보호 대상 클래스 .${cls}를 ` +
+                  "함께 달고 있습니다 — 그 요소 자신이 인쇄에서 사라집니다.",
+              ).toBe(false);
             }
           }
         }
       }
 
-      check("입력");
+      check("빈 입력 화면(실거주)");
       await fillProfile();
-      check("결과");
+      check("프로필을 채운 실거주 화면");
+
+      /*
+       * 재검토 수정(Important 3): 투자 경로도 반드시 지난다.
+       *
+       * 이 검사는 형태로는 완전한 교차곱인데 실제로 방문한 상태는 둘 다
+       * 실거주였다. 투자 경로에는 `PurchaseTypeSelect`
+       * (`.purchase-type-form`, 인쇄에서 숨김)와 `PurchaseCheck`
+       * (`.purchase-form`, 숨김 / `purchase-loan-note`·`purchase-verdict`·
+       * `purchase-print-summary`가 그 바로 옆에 보호 대상으로) 라는,
+       * 이 검사가 정확히 겨누는 조상-후손 배치가 있다 — 그리고 지난
+       * 수정 물결이 재배치한 것이 바로 그 배치다.
+       */
+      await userEvent.click(
+        screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
+      );
+
+      // 전제: 이 상태가 실제로 그 배치를 화면에 그렸다. 이게 없으면
+      // 아래 check()가 아무것도 순회하지 않고 공허하게 통과할 수 있다.
+      for (const selector of [
+        ".purchase-type-form",
+        ".purchase-form",
+        ".purchase-loan-note",
+        ".purchase-verdict",
+        ".purchase-print-summary",
+      ]) {
+        expect(
+          container.querySelector(selector),
+          `${selector}가 투자 화면에 없습니다 — 이 검사의 전제가 깨졌습니다.`,
+        ).not.toBeNull();
+      }
+
+      check("월세수익형 투자 화면");
     });
 
     it("계산이 나오면 인쇄 버튼이 나타나고, 누르면 브라우저 인쇄 대화상자를 연다", async () => {

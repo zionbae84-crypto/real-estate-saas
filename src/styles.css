@@ -68,8 +68,12 @@ h2 {
  * 예산 계산 단계는 세로 1단이라 42rem이 읽기 좋은 줄 길이를 준다. 지역
  * 결과 화면은 사이드바(320px)+지도를 나란히 두는 그리드라 그보다 넓은
  * 자리가 필요하다 — `.app` 자체를 넓히고, 세로 1단이어야 하는 나머지
- * 직계 자식들에게는 아래 규칙으로 42rem을 개별적으로 되돌린다
+ * 자식들에게는 아래 규칙으로 42rem을 개별적으로 되돌린다
  * (`.region-results-grid`만 예외).
+ *
+ * `.app`의 직계 자식은 지금 `.entry-screen`과 `.results-screen` 둘뿐이고,
+ * 세로 1단으로 흐르는 내용은 전부 그 `.results-screen` 아래에 있다 —
+ * 그래서 아래 규칙이 두 줄이다.
  */
 .app {
   max-width: 72rem;
@@ -97,8 +101,14 @@ h2 {
  * 되면 폭을 `max-width`에 맞추므로, "전체 화면 영상"(design.md §3)이 어떤
  * 화면에서도 672px를 넘지 못하고 나머지 폭으로는 오버레이 뒤의 결과
  * 화면이 비쳤다.
+ *
+ * 첫 줄에서 `.region-results-grid` 항은 뺐다(재검토 수정 Minor). 그
+ * 그리드는 `.results-screen`의 자식이지 `.app`의 직계 자식이 아니라
+ * (`.results-screen`의 `display: contents`는 상자만 없앨 뿐 선택자가 보는
+ * DOM 구조는 그대로다) 그 항은 아무것도 걸러내지 못하는 죽은 조건이었다.
+ * 예외가 필요한 자리는 아래 둘째 줄 하나뿐이다.
  */
-.app > :not(.region-results-grid, .entry-screen),
+.app > :not(.entry-screen),
 .results-screen > :not(.region-results-grid) {
   max-width: 42rem;
   margin-inline: auto;
