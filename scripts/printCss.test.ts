@@ -585,6 +585,39 @@ describe("인쇄 CSS", () => {
       ).toBe("block");
     });
 
+    /**
+     * 리뷰 수정(Important 3) — **Task 4가 새로 건 두 제약도 여기서 잠근다.**
+     *
+     * 전체화면 셸은 화면에서 `position: fixed; inset: 0`이고 상단바는
+     * `overflow-x: auto`다. 둘 다 design.md §6이 "인쇄에서 반드시 푼다"고
+     * 정한 종류의 제약인데(고정 요소는 첫 장에 한 번만 찍히고 그 안의
+     * 내용은 뷰포트 한 화면 분량에서 잘린다 / `overflow`로 갇힌 상자는
+     * CSS 페이지네이션이 나누지 못한다), 그 해제를 붙들어 두는 것이
+     * 아무것도 없었다 — 유일한 근거가 한 번 돌린 브라우저 실측이었고
+     * 그건 CI에서 다시 돌지 않는다. 이 저장소는 Task 3에서 인쇄를 두 번
+     * 깼고, 두 번 다 "화면 쪽만 고치고 인쇄 해제를 안 옮긴" 형태였다.
+     *
+     * `.region-results-sidebar`와 **같은 방식**으로 검사한다(위 두 it과
+     * 같은 `lastDeclaredValue`) — 이 셋은 성질이 같은 하나의 계약이다.
+     */
+    it("인쇄 블록이 전체화면 셸의 고정 배치를 푼다", () => {
+      expect(
+        lastDeclaredValue(printBlock ?? "", ".result-shell", "position"),
+        ".result-shell이 @media print 안에서 position: static으로 풀리지 " +
+          "않았습니다 — 고정 레이어는 첫 장에 한 번만 찍히고, 그 안에 든 " +
+          "목록·토지임대부 경고·면책이 통째로 종이에서 사라집니다(design.md §6).",
+      ).toBe("static");
+    });
+
+    it("인쇄 블록이 상단바의 가로 스크롤을 푼다", () => {
+      expect(
+        lastDeclaredValue(printBlock ?? "", ".result-topbar", "overflow"),
+        ".result-topbar가 @media print 안에서 overflow: visible로 풀리지 " +
+          "않았습니다 — 종이 폭을 넘는 요약 항목(실구매 가능 가격·지역)이 " +
+          "가로 스크롤 상자 안에서 잘립니다(design.md §6).",
+      ).toBe("visible");
+    });
+
     // 변이 검사: 이 가드가 실제로 뭔가를 잡아내는지, Task 6이 남긴 실제
     // 결함 형태(화면용 규칙만 있고 인쇄 override가 없는 상태)로 확인한다.
     it("override가 없는 블록은 잡아낸다(변이 검사) — 이 수정 직전 실제 결함 형태", () => {
@@ -598,6 +631,20 @@ describe("인쇄 CSS", () => {
       expect(lastDeclaredValue(preFix, ".region-results-sidebar", "max-height")).toBe(
         "600px",
       );
+    });
+
+    // 셸·상단바 쪽도 같은 변이 검사를 건다 — 화면용 규칙만 있는 블록에서는
+    // 해제 값이 잡히지 않아야 이 두 단언이 실제로 뭔가를 확인한 것이 된다.
+    it("셸·상단바의 인쇄 해제가 없으면 잡아낸다(변이 검사)", () => {
+      const screenOnly = `
+        .result-shell { position: fixed; inset: 0; display: grid; }
+        .result-topbar { display: flex; overflow-x: auto; }
+      `;
+      expect(lastDeclaredValue(screenOnly, ".result-shell", "position")).toBe("fixed");
+      // `overflow-x`는 `overflow`가 아니다 — 해제로 세지 않는다.
+      expect(
+        lastDeclaredValue(screenOnly, ".result-topbar", "overflow"),
+      ).toBeUndefined();
     });
   });
 
