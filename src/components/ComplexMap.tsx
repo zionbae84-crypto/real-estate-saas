@@ -53,6 +53,25 @@ function groupByComplex(units: readonly ComplexUnit[]): Array<{ complexKey: stri
 }
 
 /**
+ * `units`를 단지로 묶은 뒤, 좌표를 아는 것만 남긴다 — 지도가 실제로
+ * 그릴 수 있는 단지 목록이다.
+ *
+ * App.tsx가 부분 실패 캐비앗("일부 단지의 위치를 확인하지 못했어요")을
+ * 띄울지 말지도 이 계산으로 판단한다(App.tsx의 `hasPartialFailures` 조건
+ * 참고) — 지도가 "그릴 게 하나도 없다"고 이미 말하고 있는데 그 아래
+ * "일부만 못 찾았다"는 문구가 같이 뜨면 서로 어긋난다. 두 자리가 같은
+ * 함수로 같은 입력을 계산해야 그 어긋남이 생기지 않는다(별도 콜백으로
+ * 상태를 끌어올리면 렌더 한 틀 늦게 갱신될 수 있어 이 계산을 그대로
+ * 공유하는 쪽을 택했다).
+ */
+export function groupWithCoords(
+  units: readonly ComplexUnit[],
+  coordinates: ReadonlyMap<string, { lat: number; lon: number }>,
+): Array<{ complexKey: string; units: ComplexUnit[] }> {
+  return groupByComplex(units).filter((g) => coordinates.has(g.complexKey));
+}
+
+/**
  * 마커 팝업 안의 HTML. 단지 이름은 맨 위에 한 번, 그 아래 평형마다 한 줄.
  *
  * 목록 행과 같은 정보만 낸다 — 가격은 범위와 거래 건수로만 말하고, 단일
@@ -206,7 +225,7 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
       .then((naverGlobal) => {
         if (cancelled || containerRef.current === null) return;
 
-        const withCoords = groupByComplex(units).filter((g) => coordinates.has(g.complexKey));
+        const withCoords = groupWithCoords(units, coordinates);
         if (withCoords.length === 0) {
           setNoneLocated(true);
           return;
@@ -328,10 +347,15 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
           좌표 조회 실패("단지 위치를 불러오지 못했어요")와도, 조건에 맞는
           단지가 아예 없는 경우("조건에 맞는 단지가 없어…", App.tsx)와도
           원인이 달라 각각 다르게 말한다.
+
+          리뷰 수정(Minor 3): "지도에 표시할 단지의 위치를 확인하지
+          못했어요"는 위 SDK 로드 실패 문구와 표현이 너무 비슷해, 재시도
+          버튼의 유무로만 두 상태가 구분됐다. 실제 원인은 "요청이
+          깨졌다"가 아니라 "주소를 좌표로 바꾸지 못했다"이므로, 그 차이를
+          문구 자체가 지고 가도록 "주소로는"을 앞세운다.
         */
         <p className="complex-map-caveat">
-          지도에 표시할 단지의 위치를 확인하지 못했어요. 목록은 그대로
-          쓰실 수 있어요.
+          주소로는 위치를 찾을 수 없었어요. 목록은 그대로 쓰실 수 있어요.
         </p>
       )}
     </div>
@@ -342,10 +366,26 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
         상태이기 때문이다(위 두 문구는 지도가 없을 때만 뜬다).
         `.complex-map-caveat`를 함께 쓴다 — 같은 성격의 한 줄이고,
         인쇄에서 지우는 이유도 같다.
+
+        리뷰 수정(Important 1): `hiddenCount`는 `withCoords`(좌표를 아는
+        단지)를 기준으로 셌는데, 예전 문구는 "조건에 맞는 단지"라고
+        말해 목록 전체(좌표 미확인 포함)를 가리키는 것처럼 읽혔다. 예:
+        조건에 맞는 42개 중 35개만 지오코딩에 성공하면, 잘린 12개
+        옆에서도 "5개가 더 있고"처럼 실제보다 적게 말할 수 있었다 — 이
+        앱이 이미 다섯 번 겪은 "A 창의 말을 B 창의 다른 필터링 결과로
+        낸다" 오류와 같은 모양이다. 숫자는 그대로 두고("지도에 표시할
+        수 있는 단지"), 그 숫자가 실제로 재는 대상에 맞춰 말을 바꿨다.
+
+        리뷰 수정(Minor 5): 잘린 30개는 임의가 아니라 목록과 같은 순서
+        (부담이 낮은 것부터, `groupByComplex`가 `units` 순서를 그대로
+        보존하고 `units`는 부담 오름차순이다)의 맨 위 30개다. "부담이
+        낮은"을 넣어 그 사실을 짧게 밝힌다 — 안 밝히면 어느 30개가
+        남았는지 임의로 잘린 것처럼 읽힌다.
       */
       <p className="complex-map-caveat">
-        지도가 어지러워지지 않게 {MARKER_LIMIT}개만 표시했어요. 조건에 맞는
-        단지 {hiddenCount}개가 더 있고, 목록에서 전부 볼 수 있어요.
+        지도가 어지러워지지 않게 부담이 낮은 {MARKER_LIMIT}개만 표시했어요.
+        지도에 표시할 수 있는 단지 {hiddenCount}개가 더 있고, 목록에서 전부
+        볼 수 있어요.
       </p>
     )}
     </>

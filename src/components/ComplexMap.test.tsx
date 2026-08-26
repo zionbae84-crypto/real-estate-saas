@@ -222,7 +222,7 @@ describe("ComplexMap", () => {
     // 사용자에겐 고장과 구분되지 않는다. SDK 로드 실패 문구를 재사용하면
     // 그것대로 원인을 잘못 말하는 것이라, 문구가 서로 달라야 한다.
     await vi.waitFor(() =>
-      expect(region.textContent).toContain("지도에 표시할 단지의 위치를 확인하지 못했어요."),
+      expect(region.textContent).toContain("주소로는 위치를 찾을 수 없었어요."),
     );
     expect(region.textContent).not.toContain("지도를 표시하지 못했어요.");
   });

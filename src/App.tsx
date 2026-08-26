@@ -3,7 +3,7 @@ import { AssumptionLine } from "./components/AssumptionLine";
 import { BudgetResult } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
-import { ComplexMap } from "./components/ComplexMap";
+import { ComplexMap, groupWithCoords } from "./components/ComplexMap";
 import { DiagnosisSummary } from "./components/DiagnosisSummary";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
@@ -903,13 +903,24 @@ export function App() {
                                       성공적으로 찾은 단지는 그대로 지도에 남아
                                       있으니 "지도가 비어 있다"와 다르게 말해야
                                       한다.
+
+                                      리뷰 수정(Minor 4): 위 조건만으로는 ComplexMap이
+                                      이미 "주소로는 위치를 찾을 수 없었어요"(noneLocated)를
+                                      보여주고 있을 때도 이 줄이 함께 뜰 수 있었다 —
+                                      "**일부** 단지의 위치를…"이 안엔 "하나도"라고
+                                      말하는 문구와 부딪힌다. `groupWithCoords`로
+                                      ComplexMap 내부와 같은 계산(좌표를 아는 단지가
+                                      하나라도 있는가)을 여기서도 돌려, 하나도 없을
+                                      땐 이 줄을 접는다 — 있을 땐 그대로 뜬다.
                                     */}
-                                    {complexCoordinates.hasPartialFailures && (
-                                      <p className="complex-map-caveat">
-                                        일부 단지의 위치를 확인하지 못했어요. 지도에
-                                        안 보이는 단지가 있을 수 있어요.
-                                      </p>
-                                    )}
+                                    {complexCoordinates.hasPartialFailures &&
+                                      groupWithCoords(mappedUnits, complexCoordinates.coordinates)
+                                        .length > 0 && (
+                                        <p className="complex-map-caveat">
+                                          일부 단지의 위치를 확인하지 못했어요. 지도에
+                                          안 보이는 단지가 있을 수 있어요.
+                                        </p>
+                                      )}
                                   </>
                                 )}
                               </>

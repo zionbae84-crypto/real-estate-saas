@@ -1102,6 +1102,43 @@ describe("App - 지도", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("좌표를 하나도 못 찾았으면(주소 확인 실패) 부분 실패 문구를 덧붙이지 않는다", async () => {
+    // 리뷰 수정(Minor 4): partialFailureCount > 0이면서 동시에 좌표를 하나도
+    // 못 찾은 경우, ComplexMap이 이미 "주소로는 위치를 찾을 수 없었어요"를
+    // 보여주고 있다. 그 아래 "**일부** 단지의 위치를 확인하지 못했어요"가
+    // 또 뜨면 "일부"가 "전부"를 가리켜 두 문구가 서로 부딪힌다 — 여기서는
+    // 뜨지 않아야 한다.
+    //
+    // ComplexMap이 noneLocated를 판단하는 effect는 loadNaverMaps가
+    // resolve된 뒤에야 돈다(위 "지도에는 목록에 뜬 단지만…" 테스트와 같은
+    // 이유) — withCoords가 이미 빈 배열이라 naverGlobal.maps를 실제로
+    // 건드리기 전에 return하므로 빈 객체로도 충분하다.
+    vi.spyOn(loadNaverMaps, "loadNaverMaps").mockResolvedValue(
+      {} as unknown as typeof naver,
+    );
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [DETAIL_TEST_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [], // 지오코딩 성공은 했지만 이 단지의 좌표는 못 찾았다.
+      partialFailureCount: 2,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    // ComplexMap의 캐비앗은 "주소로는 위치를 찾을 수 없었어요. 목록은
+    // 그대로 쓰실 수 있어요."로 한 <p> 안에 두 문장이 들어가 있어,
+    // 첫 문장만으로 정확히 일치시키려면 정규식이 필요하다.
+    await screen.findByText(/주소로는 위치를 찾을 수 없었어요\./);
+    expect(
+      screen.queryByText("일부 단지의 위치를 확인하지 못했어요. 지도에 안 보이는 단지가 있을 수 있어요."),
+    ).not.toBeInTheDocument();
+  });
+
   /**
    * 지도에 그려진 단지 = 목록에 뜬 단지.
    *
