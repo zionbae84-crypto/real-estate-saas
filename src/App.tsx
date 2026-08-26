@@ -735,10 +735,10 @@ export function App() {
   /**
    * 단지 상세를 닫는다.
    *
-   * `PriceCheck`·`LocationFacts`가 통째로 사라지면 그 컴포넌트들의
-   * `onAssessment`는 다시 불리지 않는다 — 그래서 여기서 명시적으로
-   * 비운다. 비우지 않으면 방금 닫은 매물의 판정이 "지금 보고 있는
-   * 매물"인 것처럼 진단 종합에 남는다.
+   * 호가·입지 판정을 함께 비우는 이유는 {@link clearComplexSelection}에
+   * 적었다. 이 핸들러가 그 함수를 감싸기만 하는 얇은 껍데기인 것은
+   * 의도다 — `ComplexDetail`의 `onClose`가 받는 이름을 그대로 두면서도
+   * 리셋 지점은 하나로 남는다.
    */
   function handleCloseDetail() {
     clearComplexSelection();
