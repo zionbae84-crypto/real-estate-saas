@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
+  BODY_TEXT_MIN_RATIO,
   BRAND_CSS as overrideCss,
   SCRIM_FLOOR,
   STYLES_CSS,
@@ -308,6 +309,66 @@ describe("spec 상태색 원색 — 흰 배경 대비, 본문 크기 텍스트�
  *   프로젝트가 재정의한 **토큰 값**으로만 영향을 받으므로, 위쪽
  *   "design.md §1" 블록의 값 검사가 그 몫을 맡는다.
  */
+/**
+ * 평형대 칩(화면 1의 네 번째 질문) — **새로 만든 컨트롤이라 실측을 여기
+ * 못박는다.**
+ *
+ * 아래 "텍스트 색 사용처 전수 검사"가 `styles.css`의 모든 `color` 규칙을
+ * 이미 훑지만, 그 검사는 규칙 하나라도 통과하면 조용해진다 — 어느 값이
+ * 얼마였는지는 남지 않는다. 새 컨트롤의 네 상태(고름·안 고름 × 이름·범위)가
+ * 실제로 몇 대 몇이었는지를 숫자로 남겨, 팔레트가 움직였을 때 **어느
+ * 방향으로** 움직였는지 diff에서 보이게 한다.
+ *
+ * 칩이 앉는 면은 둘이다: 고르지 않은 칩은 영상 위 스크림 바닥(#2a2f35),
+ * 고른 칩은 자기 배경 `--paper`(#eef1f4)다.
+ */
+describe("평형대 칩 대비율 실측 — 본문 크기 기준 4.5:1", () => {
+  const paper = rawToken("--paper");
+
+  /**
+   * 고르지 않은 칩의 글자색은 이 화면의 **라벨 색 규칙**
+   * (`.entry-screen .field label`, `--haze-lift`)이 정한다 — 칩 자신의
+   * 규칙은 명시도가 낮아 색을 이기지 못한다(브라우저 `getComputedStyle`
+   * 로 확인: `rgb(154, 167, 180)` = `#9aa7b4`). 그래서 실측도 그 색으로
+   * 잰다 — 칩 규칙에 적힌 색을 재면 화면에 없는 값을 검사하게 된다.
+   */
+  it("안 고른 칩의 구간 이름: --haze-lift on 스크림 바닥 = 5.50:1", () => {
+    const ratio = contrastRatio(rawToken("--haze-lift"), SCRIM_FLOOR);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("5.50");
+  });
+
+  it("안 고른 칩의 범위 라벨: --haze on 스크림 바닥 = 4.70:1", () => {
+    const ratio = contrastRatio(rawToken("--haze"), SCRIM_FLOOR);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("4.70");
+  });
+
+  it("고른 칩의 구간 이름: --ink on --paper = 16.48:1", () => {
+    const ratio = contrastRatio(rawToken("--ink"), paper);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("16.48");
+  });
+
+  it("고른 칩의 범위 라벨: --on-sheet on --paper = 14.55:1", () => {
+    const ratio = contrastRatio(rawToken("--on-sheet"), paper);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("14.55");
+  });
+
+  /**
+   * 고른 칩의 범위 라벨에 **밝은 면 보조색을 쓰지 않은 이유**를 숫자로
+   * 남긴다. `--on-sheet-soft`는 흰 바탕(#ffffff)에서는 통과하지만 이 칩의
+   * 면(`--paper`)에서는 **4.49:1**로 0.01 모자란다 — 아슬아슬하게 통과하는
+   * 값을 골라 두면 팔레트가 한 칸만 움직여도 조용히 무너진다.
+   */
+  it("--on-sheet-soft는 이 면에서 4.49:1이라 쓰지 않았다", () => {
+    const ratio = contrastRatio(rawToken("--on-sheet-soft"), paper);
+    expect(ratio).toBeLessThan(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("4.49");
+  });
+});
+
 describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color 규칙", () => {
   interface ColorRule {
     selector: string;

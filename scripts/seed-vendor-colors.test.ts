@@ -3,8 +3,6 @@ import { fireEvent, render } from "@testing-library/react";
 import { createElement } from "react";
 import { describe, expect, it } from "vitest";
 import { App } from "../src/App";
-import { ProfileForm } from "../src/components/ProfileForm";
-import { DEFAULT_FORM_STATE } from "../src/state/useProfileForm";
 import {
   BODY_TEXT_MIN_RATIO,
   SCRIM_FLOOR,
@@ -91,16 +89,17 @@ const VENDOR_CSS = readFileSync(
  * 새 SEED 컴포넌트를 이 화면에 넣는 사람은 아무것도 하지 않아도 그
  * 컴포넌트가 이 검사에 들어온다.
  *
- * 한 번의 렌더로는 못 보는 자리를 다음 셋으로 메운다:
+ * 한 번의 렌더로 못 보는 자리는 하나 남았다:
  *
  * - **오류 상태**: `#cash`에 숫자로 읽을 수 없는 값을 넣어
  *   `MoneyInput`의 `errorMessage` 슬롯을 띄운다.
- * - **조건부 필드**: `ProfileForm`은 `openField`/`touched`에 따라 규제지역
- *   체크박스·부채 입력·전용면적 입력을 더 그린다. App의 UI만으로는 한
- *   렌더에서 전부 띄울 수 없어(그 필드들을 여는 `AssumptionLine`은 결과
- *   화면에 있다) **App이 `.entry-screen` 안에 넣는 바로 그 컴포넌트**를
- *   직접 렌더해 채운다.
- * - **선택 상태**: 체크된 체크박스는 체크마크 아이콘을 더 그린다.
+ *
+ * 예전에는 조건부 필드(규제지역 체크박스·부채 입력·전용면적 입력)와
+ * 선택 상태(체크된 체크박스의 체크마크 아이콘)를 띄우려고 `ProfileForm`을
+ * 따로 한 번 더 렌더했다. 화면 1이 네 질문으로 줄면서 그 입력란들이 전부
+ * 사라졌고, **SEED 체크박스도 화면 1에서 함께 사라졌다**(평형대 칩은
+ * 네이티브 `<input type="checkbox">`다 — `AreaBandSelect.tsx`). 조건부로
+ * 더 그릴 것이 없으므로 App 한 번의 렌더가 곧 모집합이다.
  */
 const RENDERED_SEED_CLASSES: ReadonlySet<string> = (() => {
   const classes = new Set<string>();
@@ -129,23 +128,6 @@ const RENDERED_SEED_CLASSES: ReadonlySet<string> = (() => {
   collect(entry);
   app.unmount();
 
-  const form = render(
-    createElement(ProfileForm, {
-      state: {
-        ...DEFAULT_FORM_STATE,
-        // 체크된 체크박스(체크마크 아이콘)와 조건부 필드를 함께 띄운다.
-        isFirstTimeBuyer: true,
-        isRegulatedArea: true,
-        existingDebtAnnualPayment: 1_200_000,
-        touched: ["regulatedArea", "area"],
-      },
-      setField: () => {},
-      openField: "regulatedArea",
-    }),
-  );
-  collect(form.container);
-  form.unmount();
-
   return classes;
 })();
 
@@ -158,9 +140,11 @@ const RENDERED_SEED_CLASSES: ReadonlySet<string> = (() => {
  * {@link RENDERED_SEED_CLASSES}가 유도한다.
  */
 const BROWSER_OBSERVED_CLASSES = [
-  "seed-checkbox__root",
-  "seed-checkbox__label",
-  "seed-checkmark__root",
+  // 체크박스 셋(`seed-checkbox__root`·`seed-checkbox__label`·
+  // `seed-checkmark__root`)은 빠졌다. 화면 1이 네 질문으로 줄면서
+  // 생애최초·규제지역 체크박스가 사라졌고, 새로 생긴 평형대 칩은
+  // SEED가 아니라 네이티브 `<input type="checkbox">`다
+  // (`AreaBandSelect.tsx`) — 이 화면에 SEED 체크박스가 더 이상 없다.
   "seed-field__root",
   "seed-field__header",
   "seed-field__footer",
@@ -429,10 +413,11 @@ describe("화면 1에 렌더되는 SEED 클래스 유도", () => {
   });
 
   it("상태에서만 나타나는 클래스까지 잡는다", () => {
-    // 컨트롤러의 브라우저 실측이 놓친 자리들. 이 둘이 빠지면 오류 상태와
-    // 선택 상태가 검사 밖으로 나간다.
+    // 컨트롤러의 브라우저 실측이 놓친 자리. 이것이 빠지면 오류 상태가
+    // 검사 밖으로 나간다. (선택 상태의 체크마크 아이콘은 화면 1에서
+    // SEED 체크박스가 사라지면서 함께 없어졌다 — 평형대 칩은 네이티브
+    // 체크박스라 SEED 클래스를 하나도 그리지 않는다.)
     expect(RENDERED_SEED_CLASSES.has("seed-field__errorMessage")).toBe(true);
-    expect(RENDERED_SEED_CLASSES.has("seed-checkmark__icon")).toBe(true);
   });
 });
 
@@ -441,7 +426,7 @@ describe("명시도 계산기 (파서 전제)", () => {
     [".a", [0, 1, 0]],
     ["p", [0, 0, 1]],
     ["#x", [1, 0, 0]],
-    [".entry-screen .seed-checkbox__label", [0, 2, 0]],
+    [".entry-screen .seed-field-label__root", [0, 2, 0]],
     [".a::placeholder", [0, 1, 1]],
     [".a[data-readonly]", [0, 2, 0]],
     [".a:hover", [0, 2, 0]],
@@ -457,9 +442,16 @@ describe("명시도 계산기 (파서 전제)", () => {
 describe("SEED 벤더 CSS 훑기 (파서 전제)", () => {
   it("훑을 규칙을 실제로 찾았다 — 파서가 빈손으로 통과하지 않는다", () => {
     expect(VENDOR_COLOR_RULES.length).toBeGreaterThan(0);
-    // 이 사고를 낸 바로 그 규칙이 목록에 있어야 한다.
+    /*
+     * 이 사고를 낸 바로 그 규칙(`.seed-checkbox__label`)은 화면 1에서
+     * SEED 체크박스가 사라지면서 모집합에서 함께 빠졌다 — 그 자리가
+     * 없어졌으니 지킬 것도 없다. 대신 **지금 이 화면에 실제로 있는**
+     * 같은 형태의 규칙 하나를 못박는다: `MoneyInput`의 라벨이다. 이
+     * 검사의 내용은 특정 클래스가 아니라 "파서가 빈손으로 통과하지
+     * 않는다"이므로, 살아 있는 자리를 짚어야 뜻이 선다.
+     */
     expect(
-      VENDOR_COLOR_RULES.some((r) => r.selector === ".seed-checkbox__label"),
+      VENDOR_COLOR_RULES.some((r) => r.selector === ".seed-field-label__root"),
     ).toBe(true);
   });
 
@@ -557,9 +549,11 @@ describe("반대 방향 — override가 아무것도 지키지 않는 채로 남
  * 잡히는지 확인한다.
  */
 describe("변이 검사 — 가드가 실제로 문다", () => {
-  const checkbox = VENDOR_COLOR_RULES.find(
-    (r) => r.selector === ".seed-checkbox__label",
-  );
+  // 화면 1에 실제로 남아 있는, 벤더가 색을 거는 자리 하나를 표본으로
+  // 쓴다(예전 표본이던 `.seed-checkbox__label`은 이 화면에서 사라졌다).
+  const SAMPLE = ".seed-field-label__root";
+  const SAMPLE_CLASS = "seed-field-label__root";
+  const sample = VENDOR_COLOR_RULES.find((r) => r.selector === SAMPLE);
 
   const uncoveredAgainst = (overrides: Override[]): string[] =>
     VENDOR_COLOR_RULES.filter(
@@ -567,31 +561,29 @@ describe("변이 검사 — 가드가 실제로 문다", () => {
     ).map((v) => v.selector);
 
   it("override를 하나 지우면 그 벤더 규칙이 드러난다", () => {
-    expect(checkbox).toBeDefined();
+    expect(sample).toBeDefined();
     const poisoned = ENTRY_OVERRIDES.filter(
-      (o) => !o.subjectClasses.includes("seed-checkbox__label"),
+      (o) => !o.subjectClasses.includes(SAMPLE_CLASS),
     );
     expect(poisoned.length).toBeLessThan(ENTRY_OVERRIDES.length);
-    expect(uncoveredAgainst(poisoned)).toContain(".seed-checkbox__label");
+    expect(uncoveredAgainst(poisoned)).toContain(SAMPLE);
   });
 
   it("명시도가 모자란 override는 덮은 것으로 쳐 주지 않는다", () => {
     // 벤더 규칙과 **같은** 명시도(0,1,0)짜리 override. 실제 캐스케이드
     // 에서는 소스 순서에 기대게 되는 형태라 통과시키면 안 된다.
     const weak: Override = {
-      selector: ".seed-checkbox__label",
+      selector: SAMPLE,
       color: "var(--paper)",
-      subjectClasses: ["seed-checkbox__label"],
+      subjectClasses: [SAMPLE_CLASS],
       pseudoElement: "",
-      specificity: specificity(".seed-checkbox__label"),
+      specificity: specificity(SAMPLE),
       hex: resolveColor("var(--paper)"),
     };
     const withoutReal = ENTRY_OVERRIDES.filter(
-      (o) => !o.subjectClasses.includes("seed-checkbox__label"),
+      (o) => !o.subjectClasses.includes(SAMPLE_CLASS),
     );
-    expect(uncoveredAgainst([...withoutReal, weak])).toContain(
-      ".seed-checkbox__label",
-    );
+    expect(uncoveredAgainst([...withoutReal, weak])).toContain(SAMPLE);
   });
 
   it("밝은 면 글자색을 override에 쓰면 대비 검사가 잡는다", () => {

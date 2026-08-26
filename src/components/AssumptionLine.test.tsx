@@ -1,410 +1,223 @@
-import { fireEvent, render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { rules } from "../state/useAffordability";
 import {
+  ASSUMED_REMOVED_INPUTS,
   DEFAULT_FORM_STATE,
-  loadStoredState,
-  type AssumableField,
   type ProfileFormState,
 } from "../state/useProfileForm";
-import { AssumptionLine, buildAssumptionItems } from "./AssumptionLine";
+import {
+  AssumptionLine,
+  buildAssumptionItems,
+  removedInputNotices,
+} from "./AssumptionLine";
 
-function renderLine(overrides: {
-  state?: Partial<ProfileFormState>;
-  onOpen?: (field: AssumableField) => void;
-} = {}) {
-  const state: ProfileFormState = { ...DEFAULT_FORM_STATE, ...overrides.state };
-  const onOpen = overrides.onOpen ?? vi.fn();
-  render(<AssumptionLine state={state} onOpen={onOpen} />);
-  return { onOpen };
+const THRESHOLD = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
+
+function state(overrides: Partial<ProfileFormState> = {}): ProfileFormState {
+  return { ...DEFAULT_FORM_STATE, ...overrides };
 }
 
-describe("AssumptionLine", () => {
-  it("가정 중인 항목을 전부 문구에 드러낸다", () => {
-    renderLine();
-    expect(screen.getByText(/기존 대출 없음/)).toBeInTheDocument();
-    expect(screen.getByText(/규제지역/)).toBeInTheDocument();
+const texts = (s: ProfileFormState, areaOverridden = false) =>
+  buildAssumptionItems(s, THRESHOLD, areaOverridden).map((i) => i.text);
+
+const joined = (s: ProfileFormState, areaOverridden = false) =>
+  texts(s, areaOverridden).join("\n");
+
+describe("없앤 입력 넷은 조용한 기본값이 아니라 문장으로 남는다", () => {
+  /**
+   * ⚠ **이 저장소가 여섯 번 반복한 사고를 겨누는 테스트다.**
+   *
+   * 화면 1에서 입력란 넷을 지우는 것과 여기서 문장 넷을 남기는 것은 한
+   * 쌍이다. 한쪽만 하면 사용자가 확인한 적 없는 값이 조용히 계산을
+   * 움직이게 된다.
+   */
+  it("생애최초·기존 대출·주택 수·규제지역이 각각 자기 문장을 남긴다", () => {
+    const all = joined(state());
+    expect(all).toMatch(/생애최초/);
+    expect(all).toMatch(/기존 대출/);
+    expect(all).toMatch(/무주택/);
+    expect(all).toMatch(/규제지역/);
   });
 
-  it("사용자가 값을 넣은 항목은 문구에서 빠진다", () => {
-    renderLine({
-      state: { touched: ["existingDebt"], existingDebtAnnualPayment: 3_000_000 },
-    });
-    expect(screen.queryByText(/기존 대출 없음/)).not.toBeInTheDocument();
-  });
-
-  it("문구는 실제 기본값에서 만들어진다 — 하드코딩이 아니다", () => {
-    // 규제지역 기본값을 뒤집은 상태를 넘기면 문구도 따라 바뀌어야 한다.
-    renderLine({ state: { isRegulatedArea: false } });
-    expect(screen.queryByText(/규제지역으로 계산/)).not.toBeInTheDocument();
-  });
-
-  it("기존 부채 가정은 고치면 숫자가 내려간다는 것을 드러낸다", () => {
-    // 다른 가정들과 방향이 반대인 유일한 항목이다.
-    renderLine();
-    expect(screen.getByText(/기존 대출 없음/)).toBeInTheDocument();
-  });
-
-  it("각 가정 항목을 눌러 그 항목만 열 수 있다", () => {
-    const onOpen = vi.fn();
-    renderLine({ onOpen });
-    fireEvent.click(screen.getByRole("button", { name: /기존 대출/ }));
-    expect(onOpen).toHaveBeenCalledWith("existingDebt");
-  });
-
-  it("모든 항목을 사용자가 정했으면 아무 문구도 보이지 않는다", () => {
-    renderLine({
-      state: {
-        touched: ["existingDebt", "regulatedArea", "area"],
-        existingDebtAnnualPayment: 1_200_000,
-      },
-    });
-    expect(screen.queryByRole("button")).not.toBeInTheDocument();
-  });
-
-  describe("리뷰 수정: 저장된 부채가 있으면 문구가 거짓말하지 않는다 (Important 1)", () => {
-    it("옛 저장본을 복원해 실제 부채가 반영돼 있으면 '없음'이라고 말하지 않는다", () => {
-      // loadStoredState로 실제 복원 경로를 거친다 — touched는 옛 저장본에
-      // 없으므로 빈 배열로 채워지지만, 부채 금액 자체는 그대로 복원되어
-      // 엔진 계산에 반영된다. 이 상태에서 "기존 대출 없음으로 계산했어요"라고
-      // 말하면 계산과 문구가 어긋난다.
-      const restored = loadStoredState({
-        getItem: () =>
-          JSON.stringify({
-            cash: 200_000_000,
-            annualIncome: 50_000_000,
-            existingDebtAnnualPayment: 6_000_000,
-          }),
-      });
-      expect(restored.touched).toEqual([]); // 전제 확인: touched는 비어 있다
-      expect(restored.existingDebtAnnualPayment).toBe(6_000_000); // 전제 확인: 값은 살아 있다
-
-      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
-      expect(screen.queryByText(/기존 대출 없음/)).not.toBeInTheDocument();
-    });
-
-    it("touched가 비어 있어도 실제 값이 null이면 여전히 가정 문구를 보여준다", () => {
-      const restored = loadStoredState({
-        getItem: () =>
-          JSON.stringify({ cash: 200_000_000, annualIncome: 50_000_000 }),
-      });
-      expect(restored.existingDebtAnnualPayment).toBeNull();
-
-      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
-      expect(screen.getByText(/기존 대출 없음/)).toBeInTheDocument();
-    });
-  });
-
-  describe("리뷰 수정: 면적 임계값은 룰셋에서 유도한다 (Important 2)", () => {
-    it("buildAssumptionItems가 받은 threshold 값을 그대로 문구에 쓴다 — 85 하드코딩이 아니다 (임계값 초과 방향)", () => {
-      const items = buildAssumptionItems(
-        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 120 },
-        100,
-      );
-      const areaItem = items.find((item) => item.field === "area");
-      expect(areaItem?.text).toContain("100㎡ 이하면");
-      expect(areaItem?.text).not.toContain("85㎡");
-    });
-
-    it("실제 컴포넌트는 룰셋의 ruralTaxAreaThresholdSqm 값을 문구에 반영한다", () => {
-      renderLine();
-      const threshold = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
-      // 기본값이 임계값과 같아(초과가 아니어서) "넘으면" 방향 문구가
-      // 나온다 — 위 "면적 문구가 방향을 분기한다" 블록과 같은 이유다.
-      expect(
-        screen.getByText(new RegExp(`${threshold}㎡를 넘으면`)),
-      ).toBeInTheDocument();
-    });
-  });
-
-  describe("리뷰 수정: 면적 문구가 방향을 분기한다 (Important 1)", () => {
-    // C2를 고쳐도 이 문제는 남는다 — 문장이 "임계값 이하면 늘어날 수
-    // 있다"는 한 방향만 말한다. 가정 면적이 이미 임계값 이하(농특세 미부과)로
-    // 계산 중이면, 진실을 말해도 부대비용이 "줄어들" 수는 없다 — 오히려
-    // 실제 면적이 임계값을 넘으면 부대비용이 늘어 가격이 "낮아질" 수
-    // 있다는 반대 방향이 진실이다. regulatedArea 항목이 이미 이 양방향
-    // 분기를 제대로 다루고 있으므로 같은 방식을 따른다.
-    it("가정 면적이 임계값을 넘으면(농특세 부과) — 고치면 늘어날 수 있다고 말한다", () => {
-      const items = buildAssumptionItems(
-        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 120 },
-        100,
-      );
-      const areaItem = items.find((item) => item.field === "area");
-      expect(areaItem?.text).toMatch(/늘어날 수 있어요/);
-      expect(areaItem?.text).not.toMatch(/낮아질 수 있어요/);
-    });
-
-    it("가정 면적이 임계값 이하면(농특세 미부과) — 고치면 낮아질 수 있다고 반대로 말한다", () => {
-      const items = buildAssumptionItems(
-        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 80 },
-        100,
-      );
-      const areaItem = items.find((item) => item.field === "area");
-      expect(areaItem?.text).toContain("100㎡를 넘으면");
-      expect(areaItem?.text).toMatch(/낮아질 수 있어요/);
-      expect(areaItem?.text).not.toMatch(/늘어날 수 있어요/);
-    });
-
-    it("실제 기본값(임계값과 같음)은 초과가 아니므로 낮아질 수 있다고 반대로 말한다", () => {
-      renderLine();
-      expect(
-        screen.getByText(/부대비용이 늘어 살 수 있는 가격이 낮아질 수 있어요/),
-      ).toBeInTheDocument();
-    });
-  });
-
-  describe("리뷰 수정: 옛 갈아타기 정보를 조용히 버리지 않고 알린다 (Important 3, 방향 a)", () => {
-    it("무주택으로 처리됐지만 옛 매도 정보가 남아 있으면 알림 문구를 보여준다", () => {
-      const restored = loadStoredState({
-        getItem: () =>
-          JSON.stringify({
-            cash: 50_000_000,
-            annualIncome: 100_000_000,
-            status: "갈아타기",
-            existingHome: {
-              expectedSalePrice: 700_000_000,
-              remainingLoan: 300_000_000,
-              capitalGainsTax: 20_000_000,
-            },
-          }),
-      });
-      expect(restored.status).toBe("무주택"); // 전제 확인: Important 3 수정으로 무주택 처리됨
-      expect(restored.existingHome.expectedSalePrice).toBe(700_000_000); // 전제 확인: 데이터는 보존됨
-
-      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
-      expect(screen.getByText(/갈아타기/)).toBeInTheDocument();
-    });
-
-    it("옛 매도 정보가 없으면 알림 문구를 보여주지 않는다", () => {
-      renderLine(); // DEFAULT_FORM_STATE — existingHome이 전부 null
-      expect(screen.queryByText(/갈아타기/)).not.toBeInTheDocument();
-    });
-
-    it("알림 문구는 버튼이 아니다 — 고칠 UI가 없으므로 눌러도 아무 일도 없다는 것을 정직하게 드러낸다", () => {
-      const restored = loadStoredState({
-        getItem: () =>
-          JSON.stringify({
-            cash: 50_000_000,
-            annualIncome: 100_000_000,
-            status: "갈아타기",
-            existingHome: {
-              expectedSalePrice: 700_000_000,
-              remainingLoan: 300_000_000,
-              capitalGainsTax: 20_000_000,
-            },
-          }),
-      });
-      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
-      const notice = screen.getByText(/갈아타기/);
-      expect(notice.closest("button")).toBeNull();
-    });
-  });
-
-  describe("리뷰 수정: 커버리지 보강 (Minor 3)", () => {
-    it("면적 문구에 실제 전용면적 값이 들어간다", () => {
-      renderLine({ state: { exclusiveAreaSqm: 59 } });
-      expect(
-        screen.getByText(/59㎡로 가정하고 계산했어요/),
-      ).toBeInTheDocument();
-    });
-
-    it("규제지역 버튼을 누르면 onOpen(\"regulatedArea\")가 불린다", () => {
-      const onOpen = vi.fn();
-      renderLine({ onOpen });
-      fireEvent.click(screen.getByRole("button", { name: /규제지역/ }));
-      expect(onOpen).toHaveBeenCalledWith("regulatedArea");
-    });
-
-    it("전용면적 버튼을 누르면 onOpen(\"area\")가 불린다", () => {
-      const onOpen = vi.fn();
-      renderLine({ onOpen });
-      fireEvent.click(screen.getByRole("button", { name: /전용면적/ }));
-      expect(onOpen).toHaveBeenCalledWith("area");
-    });
-  });
-
-  describe("상세가 열려 있는 동안 전용면적 가정이 사라진다", () => {
-    // touched를 건드리지 않고도(App.tsx가 프로필에 저장하지 않으므로)
-    // areaOverridden 플래그만으로 항목이 빠져야 한다.
-    it("areaOverridden이 참이면 buildAssumptionItems가 area 항목을 만들지 않는다", () => {
-      const items = buildAssumptionItems(
-        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 86 },
-        85,
-        true,
-      );
-      expect(items.find((item) => item.field === "area")).toBeUndefined();
-    });
-
-    it("areaOverridden이 거짓(기본값)이면 여느 때처럼 area 항목이 있다", () => {
-      const items = buildAssumptionItems(
-        { ...DEFAULT_FORM_STATE, exclusiveAreaSqm: 86 },
-        85,
-      );
-      expect(items.find((item) => item.field === "area")).toBeDefined();
-    });
-
-    it("컴포넌트에 areaOverridden=true를 주면 전용면적 문구가 화면에서 빠진다", () => {
-      render(
-        <AssumptionLine state={DEFAULT_FORM_STATE} onOpen={vi.fn()} areaOverridden />,
-      );
-      expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
-    });
-
-    it("areaOverridden을 주지 않으면(기본값 false) 전용면적 문구가 그대로 있다", () => {
-      render(<AssumptionLine state={DEFAULT_FORM_STATE} onOpen={vi.fn()} />);
-      expect(screen.getByText(/전용면적.*로 가정하고 계산했어요/)).toBeInTheDocument();
-    });
-  });
-
-  describe("리뷰 수정: data-field ↔ CSS 선택자 짝을 잠근다 (Minor)", () => {
-    // styles.css의 `.assumption-item[data-field="existingDebt"]`는 경고색을
-    // 이 리터럴 문자열에 걸어 둔다. CSS는 타입 검사를 받지 않으므로
-    // AssumableField의 "existingDebt" 값이 바뀌어도 컴파일은 통과하고
-    // 경고색만 조용히 사라진다. data-field가 기존 부채 버튼에만 붙고
-    // 나머지 둘에는 붙지 않는다는 것을 잠가 둔다.
-    it("data-field 속성은 기존 부채 버튼에만 붙고, 규제지역·전용면적 버튼에는 붙지 않는다", () => {
-      renderLine();
-
-      const existingDebtButton = screen.getByRole("button", { name: /기존 대출/ });
-      const regulatedAreaButton = screen.getByRole("button", { name: /규제지역/ });
-      const areaButton = screen.getByRole("button", { name: /전용면적/ });
-
-      expect(existingDebtButton).toHaveAttribute("data-field", "existingDebt");
-      expect(regulatedAreaButton).not.toHaveAttribute("data-field");
-      expect(areaButton).not.toHaveAttribute("data-field");
-    });
-  });
-
-  describe("리뷰 수정(인쇄 결함 2): 조작 지시만 별도 span으로 감싸 인쇄에서 지운다", () => {
-    /**
-     * printHiddenPhrase는 text의 정확한 부분 문자열이어야 렌더링 시
-     * 실제로 잘려 나간다(renderAssumptionText의 indexOf 계약). 이 계약이
-     * 깨지면(오타 등으로 부분 문자열이 아니게 되면) 렌더 함수가 조용히
-     * 원문 전체를 그대로 보여줘 인쇄 결함 2가 되돌아온다 — 그래서 모든
-     * 항목에서 이 계약 자체를 잠근다.
-     */
-    it.each([
-      { state: {}, field: "existingDebt" },
-      { state: { isRegulatedArea: true }, field: "regulatedArea" },
-      { state: { isRegulatedArea: false }, field: "regulatedArea" },
-      { state: { exclusiveAreaSqm: 120 }, field: "area" }, // 임계값 초과
-      { state: { exclusiveAreaSqm: 80 }, field: "area" }, // 임계값 이하
-    ] satisfies Array<{ state: Partial<ProfileFormState>; field: AssumableField }>)(
-      "$field 항목의 printHiddenPhrase는 text의 부분 문자열이다 ($state)",
-      ({ state, field }) => {
-        const items = buildAssumptionItems(
-          { ...DEFAULT_FORM_STATE, ...state },
-          100,
-        );
-        const item = items.find((i) => i.field === field);
-        expect(item?.printHiddenPhrase).toBeDefined();
-        expect(item?.text).toContain(item?.printHiddenPhrase);
-      },
+  /**
+   * `ASSUMED_REMOVED_INPUTS`에 항목을 하나 더 넣으면서 문장을 빠뜨릴 수
+   * 없어야 한다. 타입(`Record<keyof AssumedRemovedInputs, string>`)이 이미
+   * 강제하지만, 그 강제가 실제로 서 있는지 여기서 한 번 더 센다 — 타입만
+   * 믿으면 언젠가 `Partial`이나 인덱스 시그니처로 느슨해진 것을 아무도
+   * 눈치채지 못한다.
+   */
+  it("가정값 하나하나가 빠짐없이 문장을 갖는다", () => {
+    const notices = removedInputNotices(ASSUMED_REMOVED_INPUTS);
+    expect(Object.keys(notices).sort()).toEqual(
+      Object.keys(ASSUMED_REMOVED_INPUTS).sort(),
     );
+    for (const [key, text] of Object.entries(notices)) {
+      expect(text.length, `${key}의 문장이 비어 있다`).toBeGreaterThan(10);
+    }
+  });
 
-    it("기존 부채 항목: 조작 지시(.assumption-action)만 별도로 감싸고, 가정 사실·방향 경고는 그 바깥에 그대로 남는다", () => {
-      const { container } = render(
-        <AssumptionLine state={DEFAULT_FORM_STATE} onOpen={vi.fn()} />,
-      );
-
-      const button = screen.getByRole("button", { name: /기존 대출/ });
-      const action = button.querySelector(".assumption-action");
-      expect(action).not.toBeNull();
-      expect(action?.textContent).toBe("매달 갚는 돈이 있다면 눌러서 알려주세요 — ");
-
-      // 화면 전체 문구는 인쇄 결함 수정 전과 정확히 같아야 한다(스크린
-      // 문구를 망가뜨리면 안 된다는 요구사항).
-      expect(button.textContent).toBe(
-        "기존 대출 없음으로 계산했어요. 매달 갚는 돈이 있다면 눌러서 " +
-          "알려주세요 — 반영하면 살 수 있는 가격이 낮아질 수 있어요.",
-      );
-
-      // action span을 뺀 나머지(=인쇄에 남는 것)에는 가정 사실과 방향
-      // 경고가 둘 다 있어야 한다 — 조작 지시만 빠지고 근거는 남는다는
-      // 요구사항을 DOM 구조로 직접 확인한다.
-      const printedText = Array.from(button.childNodes)
-        .filter((node) => node !== action)
-        .map((node) => node.textContent ?? "")
-        .join("");
-      expect(printedText).toContain("기존 대출 없음으로 계산했어요.");
-      expect(printedText).toContain("반영하면 살 수 있는 가격이 낮아질 수 있어요.");
-      expect(printedText).not.toContain("눌러서");
-      expect(container).toBeTruthy(); // container는 위 button 조회에 이미 쓰였다(전제 확인용)
+  /**
+   * 문장을 하드코딩하면 가정값을 바꾼 날 화면이 거짓말을 한다.
+   */
+  it("문장은 실제 가정값에서 만든다 — 값을 바꾸면 문장도 바뀐다", () => {
+    const flipped = removedInputNotices({
+      isFirstTimeBuyer: true,
+      existingDebtAnnualPayment: 1_200_000,
+      ownedHomeCount: 2,
     });
+    expect(flipped.isFirstTimeBuyer).toMatch(/생애최초 우대를 받는 것으로/);
+    expect(flipped.existingDebtAnnualPayment).toMatch(/120만원/);
+    expect(flipped.ownedHomeCount).toMatch(/유주택 2채/);
+  });
 
-    it("printHiddenPhrase가 없는 항목(갈아타기 알림)은 span 없이 그대로 렌더링된다", () => {
-      const restored = loadStoredState({
-        getItem: () =>
-          JSON.stringify({
-            cash: 50_000_000,
-            annualIncome: 100_000_000,
-            status: "갈아타기",
-            existingHome: {
-              expectedSalePrice: 700_000_000,
-              remainingLoan: 300_000_000,
-              capitalGainsTax: 20_000_000,
-            },
-          }),
-      });
-      render(<AssumptionLine state={restored} onOpen={vi.fn()} />);
-      const notice = screen.getByText(/갈아타기/);
-      expect(notice.querySelector(".assumption-action")).toBeNull();
-    });
+  /**
+   * 셋 중 둘은 **낙관 방향**의 가정이다 — 진실이 다르면 살 수 있는 가격이
+   * 지금 화면보다 **낮다**. 이 제품이 가장 경계하는 방향이라 그 사실이
+   * 문장에 있어야 한다. 생애최초만 반대다.
+   */
+  it("진실이 다르면 숫자가 어느 쪽으로 움직이는지 말한다", () => {
+    const notices = removedInputNotices(ASSUMED_REMOVED_INPUTS);
+    expect(notices.existingDebtAnnualPayment).toMatch(/낮아요/);
+    expect(notices.ownedHomeCount).toMatch(/낮아요/);
+    expect(notices.isFirstTimeBuyer).toMatch(/높아질 수 있어요/);
+  });
+
+  it("사용자가 무엇을 하든 이 넷은 사라지지 않는다", () => {
+    // 옛 화면에서는 값을 정하면 그 문구가 사라졌다. 이제 정할 방법이
+    // 없으므로 사라질 경로도 없어야 한다.
+    for (const s of [
+      state(),
+      state({ touched: ["regulatedArea"] }),
+      state({ cash: 300_000_000, annualIncome: 70_000_000 }),
+      state({ areaBands: ["대형"] }),
+    ]) {
+      const all = joined(s);
+      expect(all).toMatch(/생애최초/);
+      expect(all).toMatch(/기존 대출/);
+      expect(all).toMatch(/무주택/);
+    }
   });
 });
 
-/**
- * **주택 수는 가정 항목이 아니다.**
- *
- * 답을 듣기 전에는 계산 자체를 시작하지 않으므로(`toProfile`), 이 문구가
- * 그려지는 시점에는 사용자가 이미 답한 상태다. 가정하지 않은 것을
- * "가정 중"이라고 말하면 그것도 거짓말이고, 고칠 버튼을 두 곳에 두면
- * 어느 쪽이 진짜인지 흐려진다 — 주택 수는 폼에서만 고친다.
- */
-describe("주택 수는 가정 문구에 나오지 않는다", () => {
-  for (const ownedHomeCount of [0, 1, 3]) {
-    it(`${ownedHomeCount}채여도 주택 수를 말하는 항목이 없다`, () => {
-      const items = buildAssumptionItems(
-        {
-          ...DEFAULT_FORM_STATE,
-          ownedHomeCount,
-          existingDebtAnnualPayment: 0,
-          touched: ["regulatedArea", "area"],
-        },
-        85,
-      );
-      expect(items.some((item) => /주택 수|무주택|유주택/.test(item.text))).toBe(
-        false,
-      );
-    });
-  }
+describe("규제지역 — 값의 출처가 둘이라 문장도 둘이다", () => {
+  it("지역 조회가 판정했으면 '판정했어요'라고 적는다", () => {
+    expect(
+      joined(state({ touched: ["regulatedArea"], isRegulatedArea: true })),
+    ).toMatch(/규제지역으로 판정했어요/);
+    expect(
+      joined(state({ touched: ["regulatedArea"], isRegulatedArea: false })),
+    ).toMatch(/비규제지역으로 판정했어요/);
+  });
 
   /**
-   * 옛 갈아타기 정보 안내는 **주택 수를 언급하지 않는다.**
-   *
-   * 그 문구가 말하는 것은 "집이 없다"가 아니라 "기존 주택을 팔아 그
-   * 돈을 보태는 계산을 하지 않았다"이다. 주택 수를 언급하면 유주택이라고
-   * 답한 사람에게 그 답을 못 들은 것처럼 말하게 된다.
+   * 판정이 오지 않은 지역까지 "판정했어요"라고 적으면, 우리가 아무것도
+   * 확인하지 못한 지역에 대해 화면이 단정하게 된다 — 모르는 것과 확인한
+   * 것을 같은 문구로 보여주는, 이 앱이 가장 경계하는 오류다.
    */
-  it("유주택이어도 옛 갈아타기 안내가 무주택 기준이라고 말하지 않는다", () => {
-    const items = buildAssumptionItems(
-      {
-        ...DEFAULT_FORM_STATE,
-        ownedHomeCount: 2,
-        touched: ["regulatedArea", "area"],
-        existingDebtAnnualPayment: 0,
+  it("판정이 없으면 '확인하지 못해'라고 적고 방향까지 말한다", () => {
+    const unknown = joined(state({ isRegulatedArea: true }));
+    expect(unknown).toMatch(/확인하지 못해/);
+    expect(unknown).toMatch(/늘어날 수 있어요/);
+    expect(unknown).not.toMatch(/판정했어요/);
+  });
+
+  it("비규제로 가정 중이면 반대 방향을 말한다", () => {
+    const s = joined(state({ isRegulatedArea: false }));
+    expect(s).toMatch(/비규제지역으로 보고 계산했어요/);
+    expect(s).toMatch(/줄어들어요/);
+  });
+});
+
+describe("전용면적 — 헤드라인과 목록이 다른 면적 위에 서 있다는 사실", () => {
+  /**
+   * ⚠ 평형대 질문(④)은 **범위**를 고르는 축이고, 헤드라인은 **한 값**이
+   * 필요하다. 범위에서 한 값을 뽑는 규칙을 새로 만들면 그 규칙이 화면
+   * 어디에도 적히지 않은 채 헤드라인을 움직인다 — 그래서 헤드라인은
+   * 룰셋의 가정을 그대로 쓰고, 이 문구가 그 사실을 말한다.
+   */
+  it("헤드라인이 가정한 면적과, 각 줄이 실제 면적을 쓴다는 사실을 함께 말한다", () => {
+    const s = joined(state());
+    expect(s).toMatch(new RegExp(`전용 ${DEFAULT_FORM_STATE.exclusiveAreaSqm}㎡`));
+    expect(s).toMatch(/각 줄은 그 평형의 실제/);
+    expect(s).toMatch(new RegExp(`${THRESHOLD}㎡를 넘는`));
+  });
+
+  it("임계값은 인자로 받는다 — 룰셋이 바뀌면 문구도 따라간다", () => {
+    const s = buildAssumptionItems(state(), 100)
+      .map((i) => i.text)
+      .join("\n");
+    expect(s).toMatch(/100㎡를 넘는/);
+  });
+
+  /**
+   * 단지 상세를 열면 화면 전체가 그 평형의 실제 면적으로 계산된다
+   * (App.tsx의 `effectiveProfile`). 그동안 "85㎡로 가정했다"는 문구는
+   * 거짓말이 된다.
+   */
+  it("상세를 열어 실제 면적으로 계산 중이면 이 문구를 빼고, 나머지는 남긴다", () => {
+    const s = joined(state(), true);
+    expect(s).not.toMatch(/가정해/);
+    expect(s).toMatch(/무주택/);
+    expect(s).toMatch(/규제지역/);
+  });
+});
+
+describe("옛 갈아타기 정보", () => {
+  it("남아 있는데 반영되지 않았으면 그 사실을 말한다", () => {
+    const s = joined(
+      state({
         existingHome: {
-          expectedSalePrice: 700_000_000,
-          remainingLoan: 0,
+          expectedSalePrice: 500_000_000,
+          remainingLoan: null,
           capitalGainsTax: null,
         },
-      },
-      85,
+      }),
     );
+    expect(s).toMatch(/매도 자금은 반영되지 않았어요/);
+  });
 
-    const notice = items.find((item) => /갈아타기/.test(item.text));
-    expect(notice).toBeDefined();
-    expect(notice?.text).toMatch(/매도 자금은 반영되지 않았어요/);
-    expect(notice?.text).not.toMatch(/무주택/);
+  it("남은 값이 없으면 말하지 않는다", () => {
+    expect(joined(state())).not.toMatch(/갈아타기/);
+  });
+});
+
+describe("렌더 — 전부 순수 정보 문구다", () => {
+  /**
+   * 예전에는 항목마다 버튼이 있어 누르면 그 입력란이 폼에서 열렸다.
+   * 입력란이 사라졌으니 누를 곳도 사라졌다 — 버튼 모양만 남기면 눌러도
+   * 아무 일도 일어나지 않는 죽은 컨트롤이 되고, 그건 이 저장소가 이미
+   * 두 번 낸 실패다.
+   */
+  it("버튼이 하나도 없다", () => {
+    const { container } = render(<AssumptionLine state={state()} />);
+    expect(container.querySelectorAll("button")).toHaveLength(0);
+    expect(container.querySelectorAll(".assumption-item")).toHaveLength(0);
+  });
+
+  it("모든 항목이 .assumption-notice다 — 인쇄에서 살아남는 클래스다", () => {
+    const { container } = render(<AssumptionLine state={state()} />);
+    const items = buildAssumptionItems(state(), THRESHOLD);
+    expect(container.querySelectorAll(".assumption-notice")).toHaveLength(
+      items.length,
+    );
+  });
+
+  /**
+   * 조작 지시("눌러서 알려주세요")가 남아 있으면 종이 위에서 누를 수 없는
+   * 지시문이 되고, 화면에서는 누를 곳 없는 지시가 된다. 이제 어느 문구도
+   * 조작을 지시하지 않으므로 인쇄용 부분 숨김(.assumption-action)도 함께
+   * 사라졌다.
+   */
+  it("조작을 지시하는 문구가 하나도 없다", () => {
+    const { container } = render(<AssumptionLine state={state()} />);
+    expect(container.textContent).not.toMatch(/눌러서/);
+    expect(container.querySelectorAll(".assumption-action")).toHaveLength(0);
+  });
+
+  it("목록 자체는 .assumption-line이다", () => {
+    const { container } = render(<AssumptionLine state={state()} />);
+    expect(container.querySelector("ul.assumption-line")).not.toBeNull();
+    expect(screen.getAllByRole("listitem").length).toBeGreaterThanOrEqual(5);
   });
 });

@@ -18,6 +18,7 @@ import {
   AGGREGATION_WINDOW_LABEL,
   type ComplexUnit,
 } from "./data/complexes";
+import { matchesAreaBands } from "./lib/area-band";
 import { buildComplexList, burdenTierOf } from "./lib/complex-list";
 import { unitKey } from "./components/ComplexList";
 import { regionNameByCode } from "./data/regions";
@@ -33,16 +34,17 @@ import { useComplexCoordinates } from "./state/useComplexCoordinates";
 import { useRegionComplexes } from "./state/useRegionComplexes";
 import { purchaseRules } from "./state/usePurchaseCheck";
 import { usePurchaseType } from "./state/usePurchaseType";
-import type { AssumableField } from "./state/useProfileForm";
 import { useProfileForm } from "./state/useProfileForm";
 
 export function App() {
   const { state, setField, resetField, reset, profile } = useProfileForm();
-  // AssumptionLine이 어떤 가정 항목을 눌렀는지 여기서 받아, ProfileForm에
-  // "그 항목만 제자리(폼 안)에서 열어라"고 전달한다. 이 상태가 없으면
-  // AssumptionLine의 버튼도 ProfileForm의 openField 분기도 도달할 방법이
-  // 없다(둘 다 그 자체로는 완결돼 있지만 이어 주는 배선이 없었다).
-  const [openField, setOpenField] = useState<AssumableField | null>(null);
+  /*
+   * 예전에는 여기 `openField`가 있었다 — `AssumptionLine`의 칩을 누르면
+   * `ProfileForm`이 그 입력란을 제자리에서 펼치는 배선이다. 화면 1이 네
+   * 질문으로 줄면서 그 입력란들(기존 대출·규제지역·전용면적)이 전부
+   * 사라졌으므로 펼칠 것도, 누를 것도 없다. 가정 문구는 이제 전부
+   * 순수 정보(`assumption-notice`)라 `onOpen` 자체를 받지 않는다.
+   */
   /**
    * 구매 유형. **언제나 실거주다** — 유형 선택은 사용자 지시로
    * 제거됐고, 이 앱은 실거주 전용이 됐다(usePurchaseType 문서 참고).
@@ -332,28 +334,6 @@ export function App() {
   }
 
   /**
-   * 가정 문구(`AssumptionLine`)의 항목을 눌렀다. 그 항목을 열고,
-   * **화면 1로 함께 되돌린다.**
-   *
-   * 되돌리지 않으면 이 버튼은 눌러도 아무 일도 일어나지 않는다:
-   * 그 항목을 여는 곳은 `ProfileForm`인데, 그 폼은 이제 `EntryScreen`
-   * 안에 있고 `EntryScreen`은 `phase === "결과"` 내내
-   * `display: none`이다 — 그리고 이 칩들이 보이는 단계가 바로 그
-   * "결과"뿐이다. 칩의 문구가 직접 "눌러서 알려주세요"라고 지시하므로,
-   * 눌러서 아무 일도 일어나지 않으면 화면이 자기 지시를 지키지
-   * 않는 것이 된다(`AssumptionLine`이 스스로 적은 원칙 — "숨긴 가정을
-   * 조용히 깔지 않고, 결과 옆에 두어 눌러서 고칠 수 있게 한다").
-   *
-   * `handleBackToEntry`와 같은 이유로 화면 단계만 바꾼다 — 프로필도
-   * 지역 조회 결과도 그대로 남으므로, 값을 고치고 "이 지역으로
-   * 조회하기"를 다시 누르면 결과로 돌아온다.
-   */
-  function handleOpenAssumption(field: AssumableField) {
-    setOpenField(field);
-    setPhase("입력");
-  }
-
-  /**
    * 지도용 좌표. 목록보다 늦게 채워진다 — 목록이 지도의 느린 응답을
    * 기다리지 않아야 한다(useComplexCoordinates 문서, 부모 스펙 §3).
    * 지역 조회가 성공하면(목록이 이미 뜬 뒤) 같은 지역으로 좌표도 조회한다.
@@ -370,18 +350,54 @@ export function App() {
   const currentRegionName =
     currentRegionCode === null ? null : regionNameByCode(currentRegionCode);
 
-  /** 조회 결과에 실제로 있는 행정동만. 없는 동은 고를 수 있으면 안 된다 */
+  /**
+   * 사용자가 고른 평형대(화면 1의 네 번째 질문)만 남긴 조회 결과.
+   *
+   * **거르는 축이 하나 늘었고, 그래서 0건의 원인도 하나 늘었다.**
+   * "이 지역엔 거래가 없어요"·"그 평형대엔 매물이 없어요"·"예산으로는
+   * 못 사요"는 서로 다른 말이고, 섞으면 사용자에게 틀린 해법을 준다
+   * (넓혀야 할 것이 지역인지 평형대인지 예산인지가 달라진다). 이
+   * 저장소가 여섯 번 반복한 실패의 정확한 형태라, 아래 렌더에서 세
+   * 원인을 각자 자기 문구로 가른다.
+   *
+   * 면적 판정은 `areaBucket`(반올림한 표시용 값)이 아니라
+   * `maxExclusiveAreaSqm`(그 버킷에 실제로 들어간 거래들의 최대 전용면적)
+   * 으로 한다 — 목록·상세·부대비용이 전부 그 값으로 85㎡ 경계를
+   * 가르므로, 여기서만 반올림값을 쓰면 "중소형을 골랐는데 농특세가 붙는
+   * 집이 목록에 있다"가 된다.
+   */
+  const areaFilteredUnits = useMemo(
+    () =>
+      regionComplexes.units.filter((u) =>
+        matchesAreaBands(
+          u.maxExclusiveAreaSqm,
+          state.areaBands,
+          rules.acquisitionTax.ruralTaxAreaThresholdSqm,
+        ),
+      ),
+    [regionComplexes.units, state.areaBands],
+  );
+
+  /**
+   * 조회 결과에 실제로 있는 행정동만. 없는 동은 고를 수 있으면 안 된다.
+   *
+   * **평형대로 거른 뒤의 목록에서 뽑는다** — 거르기 전에서 뽑으면, 고른
+   * 평형대에는 한 건도 없는 동이 선택지에 남아 고르는 순간 빈 목록이
+   * 된다. 그때 화면은 "이 동엔 조건에 맞는 단지가 없어요"라고 말하는데,
+   * 사용자가 방금 고른 것은 동이라 원인을 동으로 읽게 된다 — 진짜
+   * 원인(평형대)을 가리는 오귀속이다.
+   */
   const dongOptions = useMemo(
-    () => [...new Set(regionComplexes.units.map((u) => u.legalDongName))].sort(),
-    [regionComplexes.units],
+    () => [...new Set(areaFilteredUnits.map((u) => u.legalDongName))].sort(),
+    [areaFilteredUnits],
   );
 
   const dongFilteredUnits = useMemo(
     () =>
       selectedDong === null
-        ? regionComplexes.units
-        : regionComplexes.units.filter((u) => u.legalDongName === selectedDong),
-    [regionComplexes.units, selectedDong],
+        ? areaFilteredUnits
+        : areaFilteredUnits.filter((u) => u.legalDongName === selectedDong),
+    [areaFilteredUnits, selectedDong],
   );
 
   /**
@@ -418,8 +434,15 @@ export function App() {
    *
    * 화면에는 절대 그리지 않는다 — 아래 `dongFilteredEmpty`가 "0건의
    * 원인이 동인가"를 가르는 데에만 쓴다. 동을 좁혀 0건이 됐을 때, 동을
-   * 풀면 뭔가 나오는지를 이 목록으로 확인한다. 순수 함수라 두 번 불러도
-   * 결과가 같고, 둘 다 메모이즈돼 있어 비용도 미미하다.
+   * 풀면 뭔가 나오는지를 이 목록으로 확인한다.
+   *
+   * **평형대 필터는 여기서도 걸린 채다**(`areaFilteredUnits`에서 만든다).
+   * 푸는 것은 동 하나뿐이라야 이 대조가 "동 때문인가"만 답한다 — 평형대까지
+   * 함께 풀면 평형대 때문에 빈 경우에도 "다른 동을 선택해 보세요"라고
+   * 말하게 되고, 그건 넓혀야 할 축을 틀리게 짚는 오귀속이다.
+   *
+   * `buildComplexList`는 순수 함수라 두 번 불러도 결과가 같고, 둘 다
+   * 메모이즈돼 있어 비용도 미미하다.
    */
   const unfilteredComplexList = useMemo(
     () =>
@@ -427,12 +450,12 @@ export function App() {
       regionComplexes.status !== "success"
         ? null
         : buildComplexList({
-            units: regionComplexes.units,
+            units: areaFilteredUnits,
             profile,
             rules,
             regionCodes: [],
           }),
-    [profile, purchaseType, regionComplexes.status, regionComplexes.units],
+    [profile, purchaseType, regionComplexes.status, areaFilteredUnits],
   );
 
   /**
@@ -696,14 +719,13 @@ export function App() {
    * 그 평형의 실제 면적이 이미 화면 전체의 계산을 바꿔치기하고 있으므로
    * (위 `effectiveProfile` 주석 참고), 인쇄물도 그 사실을 "선택한 매물의
    * 실제 면적"이라고 밝혀야 한다 — 그렇지 않으면 사용자가 실제로는
-   * 값을 확정한 적 없는데 "직접 입력"이라고 오인시키게 된다.
+   * 값을 확정한 적 없는데 가정값이라고 오인시키게 된다.
+   *
+   * 갈래가 셋에서 둘로 줄었다 — 전용면적을 직접 입력하는 칸이 화면 1에서
+   * 사라졌으므로 "직접 입력"에 이르는 경로가 없다.
    */
   const areaSource: AreaSource =
-    selectedUnit !== null
-      ? "selectedUnit"
-      : state.touched.includes("area")
-        ? "touched"
-        : "assumed";
+    selectedUnit !== null ? "selectedUnit" : "assumed";
 
   /**
    * PrintSummary에 넘길, 지금 실제로 계산에 쓰이는 전용면적(㎡).
@@ -830,18 +852,18 @@ export function App() {
           받았기 때문이다. 유형 선택이 사라지면서 이 앱은 실거주
           전용이 됐고, 이 화면은 언제나 그려진다.
         */}
-        <ProfileForm
-          state={state}
-          setField={setField}
-          openField={openField}
-          areaOverridden={selectedUnit !== null}
-        />
+        <ProfileForm state={state} setField={setField} />
 
         {/*
-          프로필이 아직 안 끝났으면(주택 수 미답 포함) 지역 선택을
-          보여주지 않는다 — 예산을 모르는 채로 지역부터 확정하게
-          두지 않는다. 대신 무엇이 모자란지를 바로 아래 else 가지가
-          같은 조건에서 말한다(리뷰 수정 Important 5).
+          예산을 모르는 채로 지역부터 확정하게 두지 않는다. 대신 무엇이
+          모자란지를 아래 가지들이 각자 말한다(리뷰 수정 Important 5).
+
+          ⚠ **모자란 축이 둘이고, 둘을 한 문장으로 뭉치지 않는다.**
+          돈(현금·연 소득)이 없으면 예산 자체를 계산할 수 없고, 평형대를
+          하나도 고르지 않았으면 계산은 되지만 보여줄 매물을 고를 수
+          없다 — 원인이 다르면 해야 할 일도 다르다. 한 문구로 합치면
+          평형대만 비운 사용자가 현금을 다시 들여다보게 된다. 이
+          저장소가 여섯 번 반복한 실패의 형태 그대로다.
         */}
         {affordability === null || residentialProfile === null ? (
           /*
@@ -863,7 +885,18 @@ export function App() {
             사용자가 아니라 테스트 하네스만 볼 수 있는 자리에 있었다.
           */
           <p className="prompt">
-            현금·연소득·주택 수를 알려주면 살 수 있는 가격을 계산해요.
+            현금과 연 소득을 알려주면 살 수 있는 가격을 계산해요.
+          </p>
+        ) : state.areaBands.length === 0 ? (
+          /*
+            평형대를 하나도 고르지 않았다. 예산은 이미 계산됐지만 보여줄
+            매물을 고를 기준이 없다 — 빈 선택을 조용히 "전체"로 바꿔
+            읽지 않는다(`lib/area-band.ts`의 `matchesAreaBands`). 그렇게
+            읽으면 화면이 사용자가 고른 적 없는 조건으로 결과를 그리면서
+            그 사실을 말하지 않게 된다.
+          */
+          <p className="prompt">
+            찾는 평형대를 하나 이상 골라 주세요.
           </p>
         ) : (
           <>
@@ -1292,9 +1325,16 @@ export function App() {
                     areaSource={areaSource}
                     rules={rules}
                   />
+                  {/*
+                    ⚠ **없앤 입력 넷의 가정이 여기 자기 문장으로 남는다.**
+                    화면 1에서 입력란을 지우는 것과 여기서 문장을 남기는
+                    것은 한 쌍이다 — 한쪽만 하면 조용히 깔린 기본값이
+                    되고, 그게 이 저장소가 여섯 번 반복한 사고의
+                    시작점이다. 전부 순수 정보 문구다(고칠 입력란이
+                    없으므로 누를 곳도 없다).
+                  */}
                   <AssumptionLine
                     state={state}
-                    onOpen={handleOpenAssumption}
                     areaOverridden={selectedUnit !== null}
                   />
                   <BudgetResult
@@ -1447,8 +1487,32 @@ export function App() {
                       </p>
                     )}
 
+                  {/*
+                    ⚠ **"그 평형대엔 매물이 없어요"는 "그 지역엔 거래가
+                    없어요"와도, "예산으로는 못 사요"와도 다른 말이다.**
+                    셋을 섞으면 넓혀야 할 축을 틀리게 짚어 준다 — 지역인지,
+                    평형대인지, 예산인지가 각각 다른 해법이다. 이 저장소가
+                    여섯 번 반복한 실패의 정확한 형태라 여기서 직접 가른다:
+                    위 `.region-empty`가 지역 축을, 이 줄이 평형대 축을,
+                    아래 `.dong-empty`와 `ComplexList`의 문구가 각각 동 축과
+                    예산 축을 맡는다.
+
+                    조건이 `units.length > 0`을 함께 보는 이유는 그것이
+                    "지역에는 거래가 있었다"는 사실을 이미 확인해 주기
+                    때문이다 — 그 확인 없이 이 문구를 내면 거래가 아예 없는
+                    지역에서도 평형대를 탓하게 된다.
+                  */}
                   {regionComplexes.status === "success" &&
-                    regionComplexes.units.length > 0 && (
+                    regionComplexes.units.length > 0 &&
+                    areaFilteredUnits.length === 0 && (
+                      <p className="area-band-empty">
+                        고른 평형대에 해당하는 매물이 이 지역엔 없어요.
+                        평형대를 넓혀 보세요.
+                      </p>
+                    )}
+
+                  {regionComplexes.status === "success" &&
+                    areaFilteredUnits.length > 0 && (
                       <>
                           {/*
                             매물 유형(아파트/오피스텔) 필터 자리 — 지금은

@@ -133,9 +133,8 @@ describe("App - 지역 선택 위자드", () => {
 
   it("현금·소득을 입력하면 지역 선택 단계가 나타난다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
     expect(screen.getByRole("region", { name: "지역 선택" })).toBeInTheDocument();
   });
 
@@ -149,9 +148,8 @@ describe("App - 지역 선택 위자드", () => {
    */
   it("지역 선택 단계는 전국 2단 선택이고, 조회 전에는 단지 목록이 없다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
 
     expect(screen.getByLabelText("광역단체")).toBeInTheDocument();
     expect(
@@ -191,9 +189,8 @@ describe("App - 지역 조회의 네 상태", () => {
   });
 
   async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
   }
 
   async function chooseRegion() {
@@ -312,6 +309,142 @@ describe("App - 지역 조회의 네 상태", () => {
 });
 
 /**
+ * ⚠ **평형대 필터가 만든 새 빈 상태를 잠근다.**
+ *
+ * 0건의 원인이 하나 늘었다. "이 지역엔 거래가 없어요"·"그 평형대엔
+ * 매물이 없어요"·"이 동엔 조건에 맞는 단지가 없어요"·"예산으로는 못
+ * 사요"는 **서로 다른 말**이고, 사용자가 넓혀야 할 축이 각각 지역·
+ * 평형대·동·예산으로 다르다. 섞으면 틀린 해법을 준다 — 이 저장소가 여섯
+ * 번 반복한 실패의 정확한 형태다.
+ */
+describe("App - 평형대로 좁히기", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** 전용 90㎡ — 중형이다(85㎡ 초과 102㎡ 이하) */
+  const MEDIUM_UNIT = DETAIL_TEST_UNIT;
+  /** 전용 45㎡ — 소형이다 */
+  const SMALL_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|테스트동|2015|소형단지",
+    complexName: "소형단지",
+    areaBucket: 45,
+    maxExclusiveAreaSqm: 45,
+  };
+
+  async function fillMoney() {
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+  }
+
+  async function chooseRegion() {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  const uncheckBandsExcept = async (keep: string) => {
+    for (const chip of screen.getAllByRole("checkbox")) {
+      const name = chip.getAttribute("value");
+      if (name !== keep && (chip as HTMLInputElement).checked) {
+        await userEvent.click(chip);
+      }
+    }
+  };
+
+  it("고른 평형대의 매물만 목록에 남는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [SMALL_UNIT, MEDIUM_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillMoney();
+    await uncheckBandsExcept("소형");
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    expect(screen.getByText("소형단지")).toBeInTheDocument();
+    expect(screen.queryByText("테스트단지")).not.toBeInTheDocument();
+  });
+
+  /**
+   * 거래는 있었고 예산도 넉넉하다 — 원인은 오직 평형대다. 그 사실을
+   * 말하고, 지역·예산·동 탓으로 돌리지 않는다.
+   */
+  it("고른 평형대에 매물이 없으면 평형대 탓이라고 말한다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [MEDIUM_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillMoney();
+    await uncheckBandsExcept("소형");
+    await chooseRegion();
+    await screen.findByText(/고른 평형대에 해당하는 매물이/);
+
+    expect(screen.getByText(/평형대를 넓혀 보세요/)).toBeInTheDocument();
+    // 다른 세 원인은 말하지 않는다.
+    expect(screen.queryByText(/실거래가 자체가 없어요/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/살 수 있는 단지가 이 데이터에는 없어요/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/이 동엔 조건에 맞는 단지가 없어요/)).toBeNull();
+  });
+
+  /**
+   * 거래가 아예 없는 지역에서는 평형대를 탓하지 않는다 — 평형대를
+   * 넓혀도 결과가 달라지지 않으므로 그 조언은 거짓이다.
+   */
+  it("지역에 거래가 아예 없으면 지역 탓이라고 말한다(대조군)", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillMoney();
+    await uncheckBandsExcept("소형");
+    await chooseRegion();
+    await screen.findByText(/실거래가 자체가 없어요/);
+
+    expect(screen.queryByText(/고른 평형대에 해당하는 매물이/)).toBeNull();
+  });
+
+  /**
+   * 평형대로 걸러 남은 것이 없으면 **동 좁히기 자체가 나오지 않아야**
+   * 한다 — 고를 수 있는 동이 남아 있으면, 그 동을 고른 사용자가 0건의
+   * 원인을 동으로 읽는다.
+   */
+  it("평형대로 0건이면 동 좁히기를 내지 않는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [MEDIUM_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillMoney();
+    await uncheckBandsExcept("소형");
+    await chooseRegion();
+    await screen.findByText(/고른 평형대에 해당하는 매물이/);
+
+    expect(screen.queryByLabelText("행정동으로 좁히기")).toBeNull();
+  });
+});
+
+/**
  * 행정동으로 좁히는 `<select>`("행정동으로 좁히기")를 잠근다.
  *
  * 이 좁히기는 지역 조회 결과 **안**에서 한 번 더 거르는 필터라, 위
@@ -355,9 +488,8 @@ describe("App - 행정동으로 좁히기", () => {
   };
 
   async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
   }
 
   async function chooseRegion() {
@@ -572,9 +704,8 @@ describe("App - 행정동으로 좁히기", () => {
 
     render(<App />);
     // 소득 0 → DSR 한도가 0이 된다(상환 능력 자체가 없다).
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "10000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "0");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "10000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "0");
     await chooseRegion();
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
@@ -689,9 +820,8 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
   };
 
   async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
   }
 
   async function queryRegion(sigungu: string) {
@@ -788,9 +918,14 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
     expect(summary).not.toMatch(/90㎡/);
   });
 
-  it("가정 칩으로 화면 1에 돌아가 다시 조회해도 마찬가지다", async () => {
-    // handleOpenAssumption도 phase만 "입력"으로 되돌린다 — 같은 상태에
-    // 같은 경로로 닿는다.
+  /**
+   * 예전에는 이 자리가 "가정 칩으로 화면 1에 돌아가는" 경로였다. 화면 1이
+   * 네 질문으로 줄면서 고칠 입력란이 사라졌고, 칩도 함께 사라졌다(가정
+   * 문구는 이제 전부 순수 정보다). 남은 경로는 **예산 상세 패널을 연 채
+   * "조건 다시 넣기"로 돌아가는 것**이고, 그 경로도 같은 상태에 닿는지
+   * 여기서 잠근다 — 패널이 열려 있어도 상세 리셋이 빠지지 않아야 한다.
+   */
+  it("예산 패널을 연 채 화면 1에 돌아가 다시 조회해도 마찬가지다", async () => {
     const spy = vi
       .spyOn(regionQuery, "fetchRegionComplexes")
       .mockResolvedValue({
@@ -810,16 +945,17 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
     await userEvent.click(screen.getByRole("button", { name: /강남단지/ }));
     expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
 
-    // 상단바의 "실구매 가능 가격"을 눌러 예산 상세 패널을 열고, 그 안의
-    // 가정 칩으로 화면 1에 돌아간다.
+    // 상단바의 "실구매 가능 가격"을 눌러 예산 상세 패널을 연다. 가정
+    // 문구는 그 안에 있고, 전부 누를 수 없는 정보 문구다.
     await userEvent.click(
       screen.getByRole("button", { name: /실구매 가능 가격/ }),
     );
-    const chip = screen
-      .getAllByRole("button")
-      .find((b) => b.className.includes("assumption-item"));
-    expect(chip).toBeDefined();
-    await userEvent.click(chip!);
+    expect(
+      screen.getAllByRole("button").filter((b) =>
+        b.className.includes("assumption-item"),
+      ),
+    ).toHaveLength(0);
+    await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
 
     spy.mockResolvedValue({
       units: [SEOCHO_UNIT],
@@ -860,9 +996,8 @@ describe("App - 단지 상세(화면 4)", () => {
   async function fillProfile() {
     // "150000"·"15000"은 단위 없이 쓴 만원 표기다(MoneyInput 기본
     // 해석) — 각각 15억, 1억 5천만원.
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
     await selectTestRegion();
   }
 
@@ -901,15 +1036,15 @@ describe("App - 단지 상세(화면 4)", () => {
     await fillProfile();
 
     // 아직 고르기 전에는 전용면적이 가정 중이라는 문구가 있다.
-    expect(screen.getByText(/전용면적 85㎡로 가정하고 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/전용 85㎡를 가정해/)).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
     // 이 평형(전용 90㎡)을 반영했으므로 가정 문구 자체가 더 이상
     // 화면에 없다 — 상세가 열려 있는 동안 areaOverridden이 참이 되어
     // AssumptionLine이 전용면적 항목을 빼기 때문이다.
-    expect(screen.queryByText(/전용면적 85㎡로 가정하고 계산했어요/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/전용 85㎡를 가정해/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/전용 \d+㎡를 가정해/)).not.toBeInTheDocument();
   });
 
   it("상세가 열린 동안에는 실구매 가능 가격이 그 평형 기준으로 바뀌고, 목록으로 돌아가면 원래 값으로 되돌아간다", async () => {
@@ -939,13 +1074,13 @@ describe("App - 단지 상세(화면 4)", () => {
     await fillProfile();
 
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-    expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/전용 \d+㎡를 가정해/)).not.toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
 
     // 목록으로 돌아오면 다시 가정이므로 문구도 다시 나타나야 한다 —
     // 원래 가정 면적(85㎡) 그대로다.
-    expect(screen.getByText(/전용면적 85㎡로 가정하고 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/전용 85㎡를 가정해/)).toBeInTheDocument();
 
     // 프로필(및 localStorage)에는 상세에서 본 90㎡가 전혀 쓰이지
     // 않았어야 한다 — touched에도 "area"가 없고, 저장된 exclusiveAreaSqm도
@@ -983,24 +1118,25 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(container.querySelector(".safety-badge-label")).toBeNull();
     });
 
-    it("상세가 열려 있는 동안에는 전용면적 입력란을 내보내지 않는다", async () => {
-      // 상세가 열려 있으면 화면 계산이 그 평형의 면적을 쓰므로,
-      // 입력란에 값을 넣어도 화면이 꿈쩍하지 않는다 — 입력이 조용히
-      // 무시되는 상태다. 무시할 거라면 물어보지 않는다.
+    /**
+     * 전용면적 입력란은 화면 1이 네 질문으로 줄면서 사라졌다. 남은 것은
+     * **문구**다: 상세가 열려 있는 동안에는 화면 계산이 그 평형의 실제
+     * 면적을 쓰므로 "85㎡를 가정해 계산했다"는 문구가 거짓말이 된다.
+     */
+    it("상세가 열려 있는 동안에는 전용면적 가정 문구를 내보내지 않는다", async () => {
       render(<App />);
       await fillProfile();
 
-      await userEvent.click(
-        screen.getByRole("button", { name: /전용면적 85㎡로 가정하고 계산했어요/ }),
-      );
-      expect(screen.getByLabelText("전용면적 (㎡)")).toBeInTheDocument();
+      // 어떤 상태에서도 입력란은 없다.
+      expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
+      expect(screen.getByText(/전용 85㎡를 가정해/)).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-      expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
+      expect(screen.queryByText(/전용 85㎡를 가정해/)).not.toBeInTheDocument();
 
-      // 상세를 닫으면 다시 물어볼 수 있어야 한다.
+      // 상세를 닫으면 다시 가정이므로 문구도 돌아온다.
       await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-      expect(screen.getByLabelText("전용면적 (㎡)")).toBeInTheDocument();
+      expect(screen.getByText(/전용 85㎡를 가정해/)).toBeInTheDocument();
     });
 
     it("상세를 열면 포커스가 상세로 옮겨간다", async () => {
@@ -1030,29 +1166,28 @@ describe("App - 단지 상세(화면 4)", () => {
    * 인쇄다(그 단계에서 인쇄해도 종이에는 나와야 한다).
    */
   /**
-   * 리뷰 수정(Important 5). "현금·연소득·주택 수를 알려주면…" 안내는
-   * 그 존재 이유인 모든 상태에서 100% 보이지 않는 자리에 있었다 —
-   * 실거주 경로에서 그 조건은 사실상 `phase === "입력"`을 뜻하고, 그
-   * 동안 결과 트리는 불투명한 오버레이 **밑에** 깔려 있기 때문이다.
-   * 현금·소득만 넣고 주택 수를 답하지 않은 사람은 조회 버튼이 그냥
-   * 나타나지 않는 것을 보고, 화면 어디에서도 무엇이 모자란지 듣지
-   * 못했다.
+   * 리뷰 수정(Important 5). "무엇이 모자란지" 안내는 그 존재 이유인 모든
+   * 상태에서 100% 보이지 않는 자리에 있었다 — 실거주 경로에서 그 조건은
+   * 사실상 `phase === "입력"`을 뜻하고, 그 동안 결과 트리는 불투명한
+   * 오버레이 **밑에** 깔려 있기 때문이다.
+   *
+   * ⚠ **모자랄 수 있는 축이 둘이고, 둘은 서로 다른 말이다.** 돈(현금·연
+   * 소득)이 없으면 예산 자체를 계산할 수 없고, 평형대를 하나도 고르지
+   * 않았으면 계산은 되지만 보여줄 매물을 고를 수 없다 — 해야 할 일이
+   * 다르므로 문구도 달라야 한다. 한 문구로 뭉치면 평형대만 비운 사용자가
+   * 현금을 다시 들여다보게 된다. 이 저장소가 여섯 번 반복한 실패의
+   * 형태다.
    */
   describe("리뷰 수정: 무엇이 모자란지 화면 1에서 말한다", () => {
-    it("주택 수를 답하지 않으면 그 안내가 입력 화면 안에 있다", async () => {
+    it("돈을 안 넣었으면 그 안내가 입력 화면 안에 있다", () => {
       const { container } = render(<App />);
-      await userEvent.type(
-        screen.getByLabelText("사용가능 현금 예산"),
-        "150000",
-      );
-      await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
 
       // 전제: 아직 조회 버튼이 없다(무엇이 모자란지 화면이 말해야 하는 상태).
       expect(
         screen.queryByRole("button", { name: "이 지역으로 조회하기" }),
       ).not.toBeInTheDocument();
 
-      const prompt = screen.getByText(/현금·연소득·주택 수를 알려주면/);
+      const prompt = screen.getByText(/현금과 연 소득을 알려주면/);
       const entry = container.querySelector(".entry-screen");
       // 화면 1 안에 있다 — 오버레이에 가려지는 결과 트리 쪽이 아니다.
       expect(entry?.contains(prompt)).toBe(true);
@@ -1063,18 +1198,54 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(entry).not.toHaveClass("entry-screen--hidden");
     });
 
-    it("주택 수를 답하면 안내가 사라지고 지역 선택이 나타난다(대조군)", async () => {
+    it("돈을 넣으면 안내가 사라지고 지역 선택이 나타난다(대조군)", async () => {
       render(<App />);
-      await userEvent.type(
-        screen.getByLabelText("사용가능 현금 예산"),
-        "150000",
-      );
-      await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-      await userEvent.click(screen.getByLabelText("무주택"));
+      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
 
       expect(
-        screen.queryByText(/현금·연소득·주택 수를 알려주면/),
+        screen.queryByText(/현금과 연 소득을 알려주면/),
       ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).toBeInTheDocument();
+    });
+
+    /**
+     * 평형대를 전부 끄면 조회 버튼이 사라진다. **빈 선택을 조용히
+     * "전체"로 바꿔 읽지 않는다** — 그렇게 읽으면 화면이 사용자가 고른 적
+     * 없는 조건으로 결과를 그리면서 그 사실을 말하지 않게 된다.
+     */
+    it("평형대를 전부 끄면 돈 안내가 아니라 평형대 안내가 나온다", async () => {
+      render(<App />);
+      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+
+      for (const chip of screen.getAllByRole("checkbox")) {
+        await userEvent.click(chip);
+      }
+
+      expect(screen.getByText(/찾는 평형대를 하나 이상/)).toBeInTheDocument();
+      // 원인을 섞지 않는다 — 돈은 이미 넣었다.
+      expect(
+        screen.queryByText(/현금과 연 소득을 알려주면/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "이 지역으로 조회하기" }),
+      ).not.toBeInTheDocument();
+    });
+
+    it("칩을 하나 다시 켜면 곧바로 빠져나온다 — 갇히는 화면이 아니다", async () => {
+      render(<App />);
+      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+      for (const chip of screen.getAllByRole("checkbox")) {
+        await userEvent.click(chip);
+      }
+
+      await userEvent.click(screen.getAllByRole("checkbox")[0]!);
+
+      expect(screen.queryByText(/찾는 평형대를 하나 이상/)).toBeNull();
       expect(
         screen.getByRole("button", { name: "이 지역으로 조회하기" }),
       ).toBeInTheDocument();
@@ -1121,51 +1292,52 @@ describe("App - 단지 상세(화면 4)", () => {
     });
   });
 
-  describe("리뷰 수정: 가정 칩을 누르면 입력 화면으로 돌아간다", () => {
-    it("결과 화면에서 칩을 누르면 입력 화면이 다시 보이고 그 항목이 열린다", async () => {
+  /**
+   * ⚠ **없앤 입력 넷의 가정이 결과 화면에 문장으로 남는지, 그리고 그
+   * 문장이 죽은 버튼이 아닌지를 함께 잠근다.**
+   *
+   * 예전에는 이 자리가 "가정 칩을 누르면 그 입력란이 열린다"였다. 입력란이
+   * 사라졌으므로 누를 곳도 사라졌고, 버튼 모양만 남기면 눌러도 아무 일도
+   * 일어나지 않는 죽은 컨트롤이 된다 — 이 저장소가 이미 두 번 낸 실패다.
+   * 그래서 검사 방향이 뒤집혔다: **문장은 있어야 하고, 버튼은 없어야
+   * 한다.**
+   */
+  describe("없앤 입력의 가정이 결과 화면에 남는다", () => {
+    it("네 문장이 전부 결과 화면에 있다", async () => {
+      render(<App />);
+      await fillProfile();
+
+      expect(screen.getByText(/무주택으로 계산했어요/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/기존 대출이 없다고 보고 계산했어요/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText(/생애최초 우대는 빼고 계산했어요/),
+      ).toBeInTheDocument();
+      // 규제지역은 값의 출처(지역 판정 여부)에 따라 문구가 갈린다. 이
+      // 하네스의 조회는 isRegulatedArea가 null(모르는 지역)이라 여전히
+      // 가정이고, 그 사실과 방향이 함께 적힌다.
+      expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
+    });
+
+    it("가정 문구는 하나도 버튼이 아니다 — 눌러도 아무 일 없는 칩을 만들지 않는다", async () => {
       const { container } = render(<App />);
       await fillProfile();
 
-      // 전제: 지금은 결과 단계라 입력 화면이 시각적으로 숨어 있다.
-      expect(container.querySelector(".entry-screen")).toHaveClass(
-        "entry-screen--hidden",
-      );
-      // 전제: 그 항목의 입력란은 아직 폼에 없다.
-      expect(
-        screen.queryByLabelText("매달 나가는 대출금"),
-      ).not.toBeInTheDocument();
-
-      await userEvent.click(
-        screen.getByRole("button", { name: /기존 대출 없음으로 계산했어요/ }),
-      );
-
-      expect(container.querySelector(".entry-screen")).not.toHaveClass(
-        "entry-screen--hidden",
-      );
-      expect(
-        screen.getByLabelText("매달 나가는 대출금"),
-      ).toBeInTheDocument();
+      const line = container.querySelector(".assumption-line");
+      expect(line).not.toBeNull();
+      expect(line!.querySelectorAll("button")).toHaveLength(0);
+      expect(container.querySelectorAll(".assumption-item")).toHaveLength(0);
+      expect(container.querySelectorAll(".assumption-action")).toHaveLength(0);
     });
 
-    it("화면 단계만 되돌린다 — 프로필도 지역 조회 결과도 그대로다", async () => {
-      render(<App />);
+    it("가정 문구는 예산 상세 패널 안에 있다 — 값의 근거와 같은 자리다", async () => {
+      const { container } = render(<App />);
       await fillProfile();
-      const priceBefore =
-        document.querySelector(".affordable-price")?.textContent;
 
-      await userEvent.click(
-        screen.getByRole("button", { name: /기존 대출 없음으로 계산했어요/ }),
-      );
-
-      // 입력값(현금)도, 그 값으로 낸 계산도 그대로다.
-      expect(screen.getByLabelText("사용가능 현금 예산")).toHaveValue("150000");
-      expect(document.querySelector(".affordable-price")?.textContent).toBe(
-        priceBefore,
-      );
-      // 조회 결과도 남아 있어, 다시 조회하지 않아도 목록이 그대로다.
-      expect(
-        screen.getByRole("region", { name: "살 수 있는 단지" }),
-      ).toBeInTheDocument();
+      const panel = container.querySelector(".budget-panel");
+      expect(panel).not.toBeNull();
+      expect(panel!.querySelector(".assumption-line")).not.toBeNull();
     });
   });
 
@@ -1389,9 +1561,8 @@ describe("App - 지도", () => {
   });
 
   async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
   }
 
   async function chooseRegion() {
@@ -1917,9 +2088,8 @@ describe("전체화면 결과 셸", () => {
 
   /** 단위는 만원이다(150000 = 15억). */
   async function fillProfile(cash = "150000", income = "15000") {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), cash);
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), income);
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), cash);
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), income);
   }
 
   async function chooseRegion() {

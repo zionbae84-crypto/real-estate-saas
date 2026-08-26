@@ -36,9 +36,9 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 못하는 형태다 — 그래서 그 한 줄을 `App.tsx`가 이 레이어 **밖**에서
   // 그리도록 옮겼다. 라디오는 이제 없지만 그 줄은 그대로 밖에 남는다.
   ".entry-screen",
-  // 프로필 입력 폼 전체(현금·소득·생애최초·기존부채·규제지역·전용면적
-  // 입력란). 값 자체는 지우지 않는다 — `PrintSummary`가 같은 값을 종이에
-  // 맞는 평문으로 별도로 인쇄한다(App.tsx 참고). 입력란만 골라 숨기는
+  // 프로필 입력 폼 전체(현금·연 소득·평형대 칩). 값 자체는 지우지
+  // 않는다 — `PrintSummary`가 같은 값을 종이에 맞는 평문으로 별도로
+  // 인쇄한다(App.tsx 참고). 입력란만 골라 숨기는
   // 대신 폼 전체를 숨기기로 한 이유: SEED TextField·Checkbox는 라벨·
   // 힌트·입력란이 한 덩어리로 묶여 있어 "입력란만" 골라내려면 SEED 내부
   // DOM 구조에 의존해야 하는데, 그 구조는 우리가 보장할 수 있는 계약이
@@ -94,13 +94,6 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 조회 범위가 전국으로 넓어지며 사실이 아니게 돼 화면에서 빠졌다
   // (App.tsx의 부제 주석 참고).
   ".subtitle-privacy-note",
-  // AssumptionLine 문구 안의 "눌러서 알려주세요/바꾸세요"류 조작 지시.
-  // 문구 전체를 지우면 그 항목이 무엇을 가정했는지(사실)와 고치면
-  // 숫자가 어느 방향으로 움직이는지(경고)까지 함께 사라진다 — 그래서
-  // 조작 지시 부분만 별도 span으로 감싸 그 부분만 지운다. 같은 문자열
-  // 하나(AssumptionItem.text)에서 잘라 쓰므로 화면·인쇄용 문구를 두 벌로
-  // 관리하지 않는다(AssumptionLine.tsx의 renderAssumptionText 참고).
-  ".assumption-action",
   // PriceSlider 한계 경고 안의 "슬라이더를 내려 ~ 확인해 보세요" 조작
   // 지시. "이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요"는
   // 이 인쇄물에서 가장 중요한 문장 중 하나라 반드시 남아야 하고, 뒤의
@@ -211,7 +204,11 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "warning-list", // 엔진이 낸 경고
   "disclaimer", // 면책 문구(footer)
   "assumption-line", // 가정 문구 목록(무엇을 가정했는지)
-  "assumption-item", // 가정 문구(고칠 수 있는 항목) — 버튼 겉모양만 지운다
+  // 가정 문구 한 줄. 화면 1이 네 질문으로 줄면서 **없앤 입력 넷**
+  // (생애최초·기존 대출·주택 수·규제지역)의 가정이 전부 여기 남는다 —
+  // 종이를 건네받은 사람에게 이 줄들이 빠지면, 그 사람은 자기 사정이
+  // 반영된 숫자로 읽는다. 예전에 함께 있던 `assumption-item`(눌러서
+  // 고치는 버튼 갈래)은 고칠 입력란이 사라지면서 함께 없어졌다.
   "assumption-notice", // 가정 문구(순수 정보 항목)
   "print-summary", // 전제(입력값)·룰셋 기준·인쇄일 요약
   "slider-price", // 슬라이더가 가리키는 가격(아래 배지 계산의 전제)

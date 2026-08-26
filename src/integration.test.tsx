@@ -118,95 +118,73 @@ describe("예산 계산기 통합", () => {
   it("필수값을 채우기 전에는 결과를 그리지 않는다", () => {
     render(<App />);
     expect(screen.queryByText("실구매 가능 가격")).not.toBeInTheDocument();
-    expect(screen.getByText(/현금·연소득·주택 수를 알려주면/)).toBeInTheDocument();
+    expect(screen.getByText(/현금과 연 소득을 알려주면/)).toBeInTheDocument();
   });
 
   /**
-   * 주택 수는 현금·소득과 같은 층위의 **필수 답**이다.
+   * ⚠ **주택 수는 더 이상 묻지 않는다 — 무주택으로 가정한다**(스펙 §3).
    *
-   * 미입력을 무주택으로 대신 채우면 디딤돌·보금자리론 자격이 모두 열려
-   * 정책 한도가 커지고 실구매력이 올라간다 — 사용자가 확인한 적 없는
-   * 값으로 "더 빌릴 수 있다"고 답하는, 이 제품이 가장 피해야 하는
-   * 방향이다. 그래서 답을 듣기 전에는 아무 숫자도 내지 않는다.
+   * 예전에는 현금·소득과 같은 층위의 필수 답이었다. 화면 1이 네 질문으로
+   * 줄면서 그 입력이 사라졌고, 미답을 기다리는 대신 **가정하고 그 사실을
+   * 적는다.** 가정은 낙관 방향이므로(무주택이면 디딤돌·보금자리론 자격이
+   * 모두 열려 한도가 커진다) 그 문장이 반드시 화면에 있어야 한다 —
+   * 이 테스트가 그 짝을 잠근다.
    */
-  it("현금·소득만 넣고 주택 수를 답하지 않으면 결과가 나오지 않는다", async () => {
+  it("현금·소득만 넣으면 결과가 나오고, 무주택 가정이 화면에 적힌다", async () => {
     render(<App />);
 
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
 
-    expect(screen.queryByText("실구매 가능 가격")).not.toBeInTheDocument();
-    expect(screen.getByText(/현금·연소득·주택 수를 알려주면/)).toBeInTheDocument();
+    expect(screen.queryByText(/현금과 연 소득을 알려주면/)).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByLabelText("무주택"));
     // 제목으로 찾는다 — 전체화면 셸의 상단바 요약이 **같은 라벨**로 같은
     // 숫자를 함께 보여주므로(App.tsx의 ResultSummaryItem "실구매 가능
-    // 가격"), 평문 검색은 둘을 구분하지 못한다. 여기서 확인하려는 것은
-    // `BudgetResult`가 실제로 그려졌는가다.
+    // 가격"), 평문 검색은 둘을 구분하지 못한다.
     expect(
       screen.getByRole("heading", { name: "실구매 가능 가격" }),
     ).toBeInTheDocument();
+
+    // 가정 문구는 예산 상세 패널 안에 있다(닫혀 있어도 DOM에는 있다).
+    expect(screen.getByText(/무주택으로 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/기존 대출이 없다고 보고 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/생애최초 우대는 빼고 계산했어요/)).toBeInTheDocument();
   });
 
   /**
-   * 유주택을 고르면 몇 채인지 적을 수 있고, 그 답이 실제 계산을 좁힌다 —
-   * 물어만 보고 쓰지 않으면 사용자는 반영됐다고 믿는다.
+   * 무주택 가정이 **실제 계산에도** 그대로 들어간다 — 문구만 적고 다른
+   * 값을 넘기면 화면이 두 말을 하게 된다. 무주택이면 보금자리론 자격이
+   * 열린다는 사실로 확인한다.
    */
-  it("유주택을 고르면 주택 수를 적을 수 있고, 그 답이 정책대출 자격을 좁힌다", async () => {
+  it("무주택 가정이 정책대출 자격에 실제로 반영된다", async () => {
     render(<App />);
-
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "5000");
-    await userEvent.click(screen.getByLabelText("무주택"));
-
-    // 무주택이면 보금자리론 자격이 있다.
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "5000");
     expect(screen.getByText("보금자리론")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByLabelText("유주택"));
-    const countInput = screen.getByLabelText("갖고 있는 주택 수 (채)");
-    expect(countInput).toHaveValue(1);
-    // 1주택도 보금자리론까지는 받을 수 있다(공시: 본건 담보주택 제외
-    // 무주택 또는 1주택).
-    expect(screen.getByText("보금자리론")).toBeInTheDocument();
-
-    // 2주택이 되면 받을 수 있는 정책대출이 사라진다.
-    await userEvent.clear(countInput);
-    await userEvent.type(countInput, "2");
-    expect(screen.queryByText("보금자리론")).not.toBeInTheDocument();
   });
 
   /**
-   * **묻고 나서 쓰지 않으면 사용자는 반영됐다고 믿는다.**
-   *
    * 취득세는 주택 수를 반영하지 못한다(중과세율을 확인하지 못했다).
-   * 그래서 유주택이라고 답한 사람에게는 그 사실이 화면에 있어야 하고,
-   * 무주택이라고 답한 사람에게는 그 경고가 나가면 안 된다 — 그 사람에게는
+   * 무주택으로 가정하므로 유주택용 경고는 나가지 않는다 — 그 사람에게는
    * 거짓이고, 거짓 경고는 진짜 경고까지 함께 닳게 만든다.
    */
-  it("취득세 고지가 주택 수 답에 따라 갈린다", async () => {
+  it("취득세 고지는 무주택 가정에 맞는 쪽이 나온다", async () => {
     const 유주택문구 = financeRules.acquisitionTax.householdCountNote;
     const 무주택문구 = financeRules.acquisitionTax.householdCountNoteNoHome;
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "5000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "5000");
 
     expect(screen.getByText(무주택문구)).toBeInTheDocument();
     expect(screen.queryByText(유주택문구)).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByLabelText("유주택"));
-
-    expect(screen.getByText(유주택문구)).toBeInTheDocument();
-    expect(screen.queryByText(무주택문구)).not.toBeInTheDocument();
   });
 
   it("현금과 소득을 넣으면 결과와 슬라이더가 나타난다", async () => {
     render(<App />);
 
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
 
     // 위와 같은 이유로 제목으로 찾는다(상단바 요약이 같은 라벨을 쓴다).
     expect(
@@ -226,9 +204,8 @@ describe("예산 계산기 통합", () => {
 
   it("슬라이더를 내리면 월 상환액과 부담률이 줄어든다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
 
     const slider = screen.getByRole("slider");
     // SEED 썸은 <div role="slider">라 네이티브 max 속성이 없다 —
@@ -250,9 +227,8 @@ describe("예산 계산기 통합", () => {
 
   it("최대치에서는 그것이 한계라는 경고가 뜬다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
 
     expect(
       screen.getByText(/빌릴 수 있는 한계예요\. 무리 없는 선은 따로 있어요/),
@@ -261,41 +237,38 @@ describe("예산 계산기 통합", () => {
 
   it("입력이 localStorage에 남아 새로고침 후 복원된다", async () => {
     const { unmount } = render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     unmount();
 
     render(<App />);
-    expect(screen.getByLabelText("사용가능 현금 예산")).toHaveValue("20000");
+    expect(screen.getByLabelText(/얼마 있어요/)).toHaveValue("20000");
   });
 
   /**
    * 폼에서 엔진을 거쳐 화면 숫자까지 이어지는 유일한 종단 검증.
    *
-   * Task 3에서 규제지역 체크박스가 ProfileForm 첫 화면에서 빠지고
-   * AssumptionLine 뒤의 openField로만 도달하게 되면서 지워졌던 테스트다
-   * (그때는 AssumptionLine이 App에 배선되지 않아 열 방법이 없었다). 이제
-   * AssumptionLine이 배선됐으니 그 버튼을 눌러 규제지역 필드를 열고,
-   * 체크를 끄면(비규제지역 = 수도권) LTV 한도가 40% → 70%로 올라 실구매력이
-   * 오른다는 사실을 화면 숫자로 직접 확인한다.
+   * ⚠ **규제지역 체크박스는 사라졌다**(스펙 §2) — 이제 그 값을 정하는
+   * 것은 **지역 조회의 자동 판정**이다. 그래서 검증 경로도 바뀌었다:
+   * 비규제로 판정된 지역을 조회하면 LTV 한도가 40% → 70%로 올라
+   * 실구매력이 오른다. 체크박스를 없앤 대신 그 축이 죽지 않았다는 것을
+   * 화면 숫자로 직접 확인하는 자리다.
    */
-  it("규제지역 체크를 끄면 실구매력이 올라간다", async () => {
+  it("지역이 비규제로 판정되면 실구매력이 올라간다", async () => {
+    mockRegionQuery(cheapestIn("11680", 3), true);
+
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
 
     const priceBefore = readAffordablePrice();
     expect(priceBefore).toBeGreaterThan(0);
 
-    // 기본값(가정)은 규제지역(true)이므로 AssumptionLine 문구는
-    // "규제지역으로 계산했어요"다(AssumptionLine.tsx의 buildAssumptionItems 참고).
-    await userEvent.click(screen.getByText(/규제지역으로 계산했어요/));
+    const spy = mockRegionQuery(cheapestIn("11680", 3), false);
+    await selectRegion("서울특별시", "강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    expect(spy).toHaveBeenCalled();
 
-    const checkbox = screen.getByRole("checkbox", { name: /규제지역/ });
-    expect(checkbox).toBeChecked();
-    await userEvent.click(checkbox);
-    expect(checkbox).not.toBeChecked();
-
+    expect(screen.getByText(/비규제지역으로 판정했어요/)).toBeInTheDocument();
     expect(readAffordablePrice()).toBeGreaterThan(priceBefore);
   });
 
@@ -306,20 +279,22 @@ describe("예산 계산기 통합", () => {
    * 근거가 "모르니까 안전하게 규제지역"에서 "당신이 고른 지역이라서
    * 규제지역"으로 바뀌는 순간, 그것은 더 이상 가정이 아니다.
    */
-  it("지역을 고르면 규제지역 가정이 문구에서 빠진다", async () => {
+  it("지역을 고르면 문구가 '가정했어요'에서 '판정했어요'로 바뀐다", async () => {
     mockRegionQuery(cheapestIn("11680", 3), true);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
 
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/확인하지 못해/)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/고른 지역은 규제지역으로 판정했어요/),
+    ).toBeInTheDocument();
   });
 
   /**
@@ -332,18 +307,18 @@ describe("예산 계산기 통합", () => {
     mockRegionQuery(cheapestIn("11680", 3), null);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
 
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
     // null이었으므로 프로필의 isRegulatedArea는 확정되지 않았다 —
     // 가정 문구가 여전히 남아 있다.
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
+    expect(screen.queryByText(/판정했어요/)).not.toBeInTheDocument();
   });
 
   /**
@@ -362,14 +337,13 @@ describe("예산 계산기 통합", () => {
     const spy = mockRegionQuery(cheapestIn("11680", 3), true);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
 
     // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
-    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/확인하지 못해/)).not.toBeInTheDocument();
 
     // 모르는 지역: 확정할 근거가 없다.
     spy.mockResolvedValue({
@@ -383,7 +357,7 @@ describe("예산 계산기 통합", () => {
 
     // 가정 고지가 되살아나야 한다 — 앞 지역의 확정이 이 지역까지
     // 따라오면 안 된다.
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
   });
 
   /**
@@ -401,14 +375,13 @@ describe("예산 계산기 통합", () => {
     const spy = mockRegionQuery(cheapestIn("11680", 3), true);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
 
     // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
-    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/확인하지 못해/)).not.toBeInTheDocument();
 
     // 다음 지역 조회는 실패한다 — 이 지역에 대해 아무것도 알아내지 못했다.
     spy.mockRejectedValueOnce(new Error("네트워크 오류"));
@@ -418,7 +391,7 @@ describe("예산 계산기 통합", () => {
 
     // 가정 고지가 되살아나야 한다 — 앞 지역의 확정이 실패한 조회까지
     // 그대로 따라오면 안 된다.
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
   });
 
   /**
@@ -436,9 +409,8 @@ describe("예산 계산기 통합", () => {
     const spy = mockRegionQuery(강남, true);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });

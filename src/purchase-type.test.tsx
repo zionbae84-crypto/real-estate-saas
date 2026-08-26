@@ -37,9 +37,8 @@ const CASH = 1_500_000_000;
 const INCOME = 150_000_000;
 
 async function fillProfile() {
-  await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-  await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-  await userEvent.click(screen.getByLabelText("무주택"));
+  await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+  await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
 }
 
 /**
@@ -142,7 +141,7 @@ describe("저장소에 남은 옛 투자 유형", () => {
     expect(reachable(budgetTrigger)).toBe(false);
     // 화면 1 안의 입력은 닿는다 — 이 헬퍼가 전부 false를 내는 것이
     // 아님을 함께 확인한다.
-    expect(reachable(screen.getByLabelText("사용가능 현금 예산"))).toBe(true);
+    expect(reachable(screen.getByLabelText(/얼마 있어요/))).toBe(true);
   });
 
   it.each(["실거주", "월세수익형", "갭투자", "전세", ""] as const)(
@@ -154,7 +153,7 @@ describe("저장소에 남은 옛 투자 유형", () => {
       expect(container.querySelector(".entry-screen")).not.toHaveClass(
         "entry-screen--hidden",
       );
-      expect(reachable(screen.getByLabelText("사용가능 현금 예산"))).toBe(true);
+      expect(reachable(screen.getByLabelText(/얼마 있어요/))).toBe(true);
       expect(
         operableControls(container).length,
         "새로 연 화면에서 사용자가 조작할 수 있는 컨트롤이 하나도 " +

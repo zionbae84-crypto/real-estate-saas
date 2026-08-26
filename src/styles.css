@@ -154,48 +154,74 @@ h2 {
 }
 
 /*
- * 주택 수 질문. 라디오 두 개(무주택·유주택)와, 유주택일 때만 나타나는
- * 숫자 입력 하나로 이뤄진다.
+ * 평형대 질문(화면 1의 네 번째 질문). 네이티브 체크박스 넷을 라벨로
+ * 감싼 칩이다 — SEED 체크박스를 재구현하지 않으면서 키보드 조작·포커스
+ * 순서·스크린 리더 노출을 브라우저에 맡긴다(AreaBandSelect.tsx 참고).
  *
- * 색으로 뜻을 전달하는 것이 하나도 없다 — 무엇을 골랐는지는 라디오
- * 자체와 글자가 말하고, 주택 수에 따라 무엇이 달라지는지는 힌트 문장이
- * 말한다. 흑백으로 인쇄되거나 색이 보이지 않아도 뜻이 그대로 남는다.
+ * 색으로 뜻을 전달하는 것이 하나도 없다 — 무엇을 골랐는지는 체크박스
+ * 자체와 글자가 말한다. 흑백으로 인쇄되거나 색이 보이지 않아도 뜻이
+ * 그대로 남는다.
  *
  * 인쇄에서는 .profile-form 전체가 지워지므로 이 질문도 함께 사라진다 —
- * 대신 고른 답이 PrintSummary에 평문 한 줄로 남는다.
+ * 대신 고른 답이 PrintSummary에 "찾는 평형대" 한 줄로 남는다.
  */
-.owned-home-field {
+.area-band-select {
   border: 1px solid var(--border);
   border-radius: 0.375rem;
   padding: 0.5rem 1rem 0.75rem;
   margin: 0;
 }
 
-.owned-home-field legend {
+.area-band-select legend {
   font-weight: 600;
   padding: 0 0.25rem;
 }
 
-.owned-home-options {
-  display: flex;
-  gap: 1.25rem;
+/*
+ * 2열 고정이다. `auto-fit`으로 두면 패널 폭에 따라 3열이 되어 마지막
+ * 칩 하나만 다음 줄에 홀로 남는 배치(3+1)가 실제로 나왔다 — 네 구간이
+ * 한 축의 눈금인데 셋과 하나로 갈려 보이면 그 축이 읽히지 않는다.
+ * 2×2는 폭과 무관하게 같은 모양이다.
+ */
+.area-band-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.5rem;
   margin-top: 0.5rem;
 }
 
 /*
- * .field label이 block·bold라 라디오 라벨까지 그 모양이 된다. 이
- * 자리에서는 라디오와 글자가 한 줄로 붙어야 하므로 되돌린다.
+ * .field label이 block·bold라 칩 라벨까지 그 모양이 된다. 이 자리에서는
+ * 체크박스와 글자가 한 줄로 붙어야 하므로 되돌린다.
  */
-.owned-home-field .owned-home-option {
+.area-band-select .area-band-option {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.5rem;
   font-weight: 400;
   cursor: pointer;
 }
 
-.owned-home-count {
-  margin-top: 0.75rem;
+/*
+ * DESIGN.md의 Stat Block 규율 — 라벨 작게 위, 값 크게 아래, 왼쪽 정렬.
+ * 여기서 라벨은 범위(`~60㎡`)이고 값은 구간 이름(`소형`)이다. DOM
+ * 순서는 이름 → 범위(접근성 이름이 "소형 ~60㎡"로 읽힌다)이고, 눈에
+ * 보이는 순서만 여기서 뒤집는다.
+ */
+.area-band-text {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+}
+
+.area-band-name {
+  font-weight: 600;
+}
+
+.area-band-range {
+  /* .hint·.field-note와 같은 13px. caption류 크기를 하나로 유지한다 */
+  font-size: 0.8125rem;
+  color: var(--seed-color-fg-neutral-muted);
 }
 
 .hint {
@@ -528,49 +554,17 @@ h2 {
   list-style: none;
 }
 
-.assumption-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 0.625rem 0.875rem;
-  background: var(--seed-color-bg-neutral-weak);
-  border: 1px dashed var(--border);
-  border-radius: 0.375rem;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-.assumption-item:hover {
-  /*
-   * bg-neutral-weak(2026-08-26 팔레트 교체 후 #eef3f7)와 같은 토큰으로
-   * 두면 호버 구분이 사라진다(task-5-brief.md 참고). 팔레트에 없던
-   * "pressed" 단계를 seed-brand.css에 새로 추가해 이 자리에서만 쓴다.
-   */
-  background: var(--seed-color-bg-neutral-weak-pressed);
-}
-
 /*
- * 가정 문구 셋 중 기존 부채만 고치면 숫자가 "내려갈" 수 있다 — 나머지
- * 둘(규제지역·전용면적)은 고치면 오히려 올라갈 수 있는 중립 가정이다.
- * 그 방향 차이를 warning 계열로만 드러낸다. 셋 다 노랗게 칠하면 이
- * 구분이 사라지므로, data-field로 기존 부채 항목만 짚어 색을 입힌다.
- */
-.assumption-item[data-field="existingDebt"] {
-  background: var(--seed-color-bg-warning-weak);
-  border-color: var(--warn);
-}
-
-.assumption-item[data-field="existingDebt"]:hover {
-  background: var(--seed-color-bg-warning-weak-pressed);
-}
-
-/*
- * assumption-notice: 눌러도 아무 일도 없는 순수 정보 문구(옛 갈아타기
- * 정보가 조용히 버려졌다는 알림 등)다. .assumption-item과 같은 카드
- * 자리를 차지하지만, 대시 테두리(=눌러서 고칠 수 있다는 신호)를 빼서
- * 버튼이 아니라는 사실을 시각적으로도 정직하게 드러낸다. 룰이 없으면
- * 맨 텍스트로 렌더링돼 같은 목록 안의 버튼 항목들과 위계가 어긋난다.
+ * assumption-notice: **가정 문구는 전부 이것 하나가 됐다.**
+ *
+ * 예전에는 눌러서 고칠 수 있는 항목(`.assumption-item`, 대시 테두리에
+ * 호버 배경이 있는 버튼)과 순수 정보 문구 둘로 갈렸다. 화면 1이 네
+ * 질문으로 줄면서 고칠 입력란이 전부 사라졌으므로 누를 곳도 사라졌고,
+ * 버튼 겉모양만 남기면 눌러도 아무 일도 일어나지 않는 죽은 컨트롤이
+ * 된다 — 그래서 그 갈래를 통째로 지웠다(AssumptionLine.tsx 참고).
+ *
+ * 테두리가 실선인 것이 그 사실을 시각적으로도 말한다: 대시 테두리는
+ * 이 저장소에서 "눌러서 고칠 수 있다"는 신호였다.
  */
 .assumption-notice {
   margin: 0;
@@ -600,14 +594,11 @@ h2 {
  *   병합(--merged)으로 바뀔 때 둘 다 <p>라 같은 노드를 재사용한다(색이
  *   danger에서 safe로, 배경이 없음에서 positive-weak로 바뀐다). --split은
  *   <div>라 이 두 상태와는 다른 노드로 갈리지만, 셀렉터 자체는 안전하다.
- * - .assumption-item: hover 시 배경이 바뀐다(존재 가정 항목은 warning
- *   계열 hover 배경도 별도로 있다).
  * - .slider-price: 슬라이더가 최댓값에 닿으면 같은 <p>에 --max 클래스가
  *   붙어 브랜드색으로 바뀐다(값을 다시 내리면 원래 색으로 돌아간다).
  */
 .safety-level,
 .safe-line,
-.assumption-item,
 .slider-price {
   transition:
     color var(--seed-duration-color-transition) var(--seed-timing-function-easing),
@@ -674,12 +665,16 @@ h2 {
 }
 
 /*
- * 조회 실패·결과 0건 안내. 셋 다 목록 자리를 대신 채우는 문구다.
- * `.dong-empty`는 지역 전체가 아니라 좁힌 행정동 하나에 결과가
- * 없다는 안내다(`.region-empty`와 원인이 다르다 — App.tsx 참고).
+ * 조회 실패·결과 0건 안내. 넷 다 목록 자리를 대신 채우는 문구다.
+ * **원인이 각각 다르므로 문구도 각각 다르다**(App.tsx 참고):
+ * `.region-empty`는 이 지역에 거래 자체가 없다는 것,
+ * `.area-band-empty`는 고른 평형대에 매물이 없다는 것,
+ * `.dong-empty`는 좁힌 행정동 하나에 결과가 없다는 것이다. 넓혀야 할
+ * 축이 각각 지역·평형대·동으로 다르므로 섞으면 틀린 해법을 준다.
  */
 .region-query-error,
 .region-empty,
+.area-band-empty,
 .dong-empty {
   margin-top: 1rem;
 }
@@ -1243,7 +1238,7 @@ h2 {
  * 이 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES` 열 개가 들어 있다
  * (`no-budget`, `binding-explainer`, `cost-breakdown`, `policy-loan-list`,
  * `slider-price`, `slider-warning`, `safe-line`, `assumption-line`,
- * `assumption-item`, `assumption-notice`). 패널의 기본 상태는 **닫힘**이고
+ * `assumption-notice`). 패널의 기본 상태는 **닫힘**이고
  * `Cmd+P`는 어느 단계에서든 눌린다 — 닫힘 규칙(`display: none`)이 인쇄에
  * 닿는 순간 그 열 개가 종이에서 통째로 사라진다.
  *
@@ -2101,7 +2096,6 @@ body.body-scroll-locked {
   .complex-detail-back,
   .budget-detail-close,
   .subtitle-privacy-note,
-  .assumption-action,
   .slider-action,
   .fold-more-hint,
   .purchase-form,
@@ -2135,18 +2129,6 @@ body.body-scroll-locked {
   /* 이 종이가 어떤 구매 유형을 전제하는지 평문 한 줄로 남긴다. */
   .purchase-type-print {
     display: block;
-  }
-
-  /*
-   * 가정 문구(AssumptionLine)는 인쇄에서도 남지만, 대시 테두리·호버
-   * 배경은 "눌러서 고칠 수 있다"는 신호다. 종이 위에서는 누를 수 없으니
-   * 그 신호(조작 장치의 겉모양)만 지우고 문구(정보)는 그대로 둔다.
-   */
-  .assumption-item {
-    border: none;
-    background: none;
-    padding: 0;
-    cursor: default;
   }
 
   /* 인쇄물 전용 요약을 이제 드러낸다. */
@@ -2221,7 +2203,6 @@ body.body-scroll-locked {
   .no-budget,
   .binding-explainer,
   .policy-loan-list li,
-  .assumption-item,
   .assumption-notice,
   .safe-line-item,
   .print-summary dl > div,
@@ -2514,15 +2495,15 @@ body.body-scroll-locked {
  * `<select>`만 밑줄 모양으로 다시 칠한다.
  */
 /*
- * **SEED 클래스 이름을 직접 적는다**(`.seed-field-label__root`·
- * `.seed-checkbox__label`). 요소 이름(`label`)에만 기대면 두 가지로
- * 진다:
+ * **SEED 클래스 이름을 직접 적는다**(`.seed-field-label__root`).
+ * 요소 이름(`label`)에만 기대면 두 가지로 진다:
  *
- * 1. SEED의 `Checkbox`는 바깥 `<label>` 안에 라벨 텍스트를 **`<span>`**
- *    으로 그리고, 그 span에 `.seed-checkbox__label { color:
- *    var(--seed-color-fg-neutral) }`(all.css)을 다시 못박는다. `label`에
- *    건 우리 색은 바깥 요소에만 닿아 안쪽 span에서 졌다 — 라벨 두 개가
- *    실측 대비 **1.13:1**로 사실상 보이지 않은 채 나갔다.
+ * 1. SEED는 라벨 텍스트를 바깥 `<label>`이 아니라 안쪽 요소에 그리고,
+ *    그 요소에 `color: var(--seed-color-fg-neutral)`(all.css)을 다시
+ *    못박는다. `label`에 건 우리 색은 바깥 요소에만 닿아 안쪽에서
+ *    졌다 — 예전에 체크박스 라벨 두 개가 실측 대비 **1.13:1**로
+ *    사실상 보이지 않은 채 나간 사고가 정확히 이 형태였다(그 체크박스
+ *    자체는 화면 1이 네 질문으로 줄면서 사라졌지만, 형태는 남는다).
  * 2. SEED가 태그를 바꾸면(예: `<label>` → `<span>`) 요소 이름에 건
  *    규칙은 아무 말 없이 사라진다.
  *
@@ -2532,8 +2513,7 @@ body.body-scroll-locked {
 .entry-screen .money-input label,
 .entry-screen .field label,
 .entry-screen .seed-field-label__root,
-.entry-screen .seed-checkbox__label,
-.entry-screen .owned-home-field legend {
+.entry-screen .area-band-select legend {
   color: var(--haze-lift);
   font-family: inherit;
 }
@@ -2622,33 +2602,78 @@ body.body-scroll-locked {
 }
 
 /*
- * 주택 보유 — 세그먼트 두 개(design.md §3). 라디오 자체는 남기되(접근성·
- * 로직 불변), 시각적으로는 테두리를 공유하는 두 칸으로 보이게 한다.
- * 선택된 쪽만 밝은 바탕(--paper)에 어두운 글자(--ink)다.
+ * 평형대 — 칩 넷(design.md §3의 세그먼트 규율을 그대로 잇는다).
+ * 체크박스 자체는 남기되(접근성·로직 불변), 시각적으로는 테두리를 두른
+ * 칸으로 보이게 한다. 고른 쪽만 밝은 바탕(--paper)에 어두운 글자
+ * (--ink)다 — 색 말고 체크박스와 글자가 이미 상태를 말하므로, 색은
+ * 그것을 반복할 뿐이다.
  */
-.entry-screen .owned-home-options {
-  display: flex;
+.entry-screen .area-band-options {
+  gap: 0.5rem;
+}
+
+/*
+ * 색을 여기서 정하지 않는다. 이 요소는 `<label>`이고 `.field` 안에 있어,
+ * 이 화면의 라벨 색 규칙(`.entry-screen .field label`, 명시도 0-2-1)이
+ * 이미 `--haze-lift`를 건다 — 여기(0-2-0)에 색을 적으면 캐스케이드에서
+ * 지는 **죽은 선언**이 된다(브라우저 `getComputedStyle`로 확인했다. 옛
+ * 주택 보유 세그먼트의 `color: var(--paper-dim)`이 실제로 그 상태였다).
+ * 고른 칩만 `:has(input:checked)`(0-3-0)로 그 규칙을 이겨 색을 바꾼다.
+ */
+.entry-screen .area-band-option {
   border: 1px solid var(--rule);
-  gap: 0;
+  padding: 0.5rem 0.625rem;
 }
 
-.entry-screen .owned-home-option {
-  flex: 1;
-  justify-content: center;
-  padding: 0.5rem 0.75rem;
-  color: var(--paper-dim);
-}
-
-.entry-screen .owned-home-option:first-child {
-  border-right: 1px solid var(--rule);
-}
-
-.entry-screen .owned-home-option:has(input:checked) {
+/*
+ * 고른 칩. 밝은 면이 되므로 안의 범위 라벨도 어두운 면 색
+ * (`--haze`)에서 밝은 면 색으로 함께 넘어가야 한다 — 안 넘기면 흰
+ * 바탕 위에 어두운 면 전용 회색이 남아 대비가 무너진다.
+ */
+.entry-screen .area-band-option:has(input:checked) {
   background: var(--paper);
   color: var(--ink);
 }
 
-.entry-screen .owned-home-field {
+.entry-screen .area-band-option:has(input:checked) .area-band-range {
+  /*
+   * 배경을 여기서도 한 번 더 적는다. 부모 칩이 이미 `--paper`를 깔지만,
+   * `scripts/seed-semantic-tokens.test.ts`의 전수 검사는 **규칙 하나**를
+   * 단위로 "이 글자가 어느 면에 앉는가"를 판단한다 — 배경 선언이 없는
+   * 규칙은 그 선택자가 `.entry-screen`으로 시작한다는 이유로 영상 위
+   * 스크림 바닥을 면으로 잡고, 그러면 밝은 면 전용 색이 어두운 면에
+   * 앉은 것으로 계산돼 2.65:1로 떨어진다. 실제로 앉는 면을 규칙에
+   * 적어 두면 검사와 화면이 같은 것을 본다.
+   */
+  background: var(--paper);
+  /*
+   * 밝은 면 보조색(`--on-sheet-soft`, #61707e)은 이 면(`--paper`,
+   * #eef1f4) 위에서 **4.49:1**로 본문 기준에 0.01 모자란다(실측).
+   * 흰 바탕(#ffffff)이었다면 통과하지만 이 칩의 면은 `--paper`다 —
+   * 아슬아슬하게 통과하는 값을 골라 두면 팔레트가 한 칸만 움직여도
+   * 조용히 무너진다. 그래서 밝은 면 본문색을 그대로 쓴다. 위계는 색이
+   * 아니라 **크기와 굵기**가 진다(범위 13px 보통, 이름 16px 600 —
+   * 브라우저 `getComputedStyle` 실측).
+   */
+  color: var(--on-sheet);
+}
+
+/* 고르지 않은 칩의 범위 라벨. 어두운 면의 보조 색이다. */
+.entry-screen .area-band-range {
+  color: var(--haze);
+}
+
+/*
+ * 체크박스는 네이티브 그대로 두고 포커스 표시만 이 화면의 규칙
+ * (황동 아웃라인)에 맞춘다 — `:focus-visible`이 input에 걸리므로 칩
+ * 전체를 감싸 어디에 포커스가 있는지 한눈에 보이게 한다.
+ */
+.entry-screen .area-band-option:has(input:focus-visible) {
+  outline: 2px solid var(--brass-lift);
+  outline-offset: 2px;
+}
+
+.entry-screen .area-band-select {
   border: none;
   padding: 0;
 }
