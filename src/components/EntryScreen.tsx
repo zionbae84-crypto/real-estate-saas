@@ -1,4 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
+import { BODY_SCROLL_LOCK_CLASS } from "../print/bodyScrollLock";
 
 export interface EntryScreenProps {
   /**
@@ -76,16 +77,33 @@ export function EntryScreen({ phase, children }: EntryScreenProps) {
    * 고정이다) 스크롤바만 움직인다.
    *
    * design.md §4가 결과 화면에 요구한 `body { overflow: hidden }`과 같은
-   * 처리를, 지금 실제로 전체화면인 이 화면에 건다. 원래 값을 기억했다가
-   * 되돌린다 — 화면이 걷히면(또는 이 컴포넌트가 사라지면) 결과 화면은
-   * 다시 세로로 흐르는 문서라 스크롤이 필요하다.
+   * 처리를, 지금 실제로 전체화면인 이 화면에 건다. 화면이 걷히면(또는
+   * 이 컴포넌트가 사라지면) 결과 화면은 다시 세로로 흐르는 문서라
+   * 스크롤이 필요하므로 잠금을 뗀다.
+   *
+   * **재검토 수정(Critical 2): 인라인 스타일이 아니라 클래스로 건다.**
+   * 예전에는 `document.body.style.overflow`를 직접 썼는데, 그러면 이
+   * 잠금은 `@media print`가 `!important` 없이는 풀 수 없는 것이 된다 —
+   * 그리고 이 잠금이 걸려 있는 `phase === "입력"` 상태가 바로 앞선
+   * 리뷰(Critical 1)가 "인쇄되어야 한다"고 고친 상태다(그 화면의 인쇄
+   * 버튼은 지금 `inert`라 Cmd+P가 유일한 경로다). 자세한 이유는
+   * `src/print/bodyScrollLock.ts`와 `styles.css`의 해당 규칙에 적었다.
+   *
+   * 클래스로 걸면 다른 코드가 쓴 `body.style.overflow`를 덮어쓰지도
+   * 않는다 — 예전 구현은 잠글 때 값을 기억했다가 풀 때 그대로 되돌려,
+   * 그 사이 다른 곳이 쓴 값을 조용히 지웠다. 지금은 인라인 스타일을
+   * 아예 건드리지 않는다.
+   *
+   * 클래스를 뗄 때 `remove`만 부르는 것도 같은 이유다 — 다른 곳이 같은
+   * 이유로 이 클래스를 붙였을 가능성은 없지만(이 컴포넌트 하나뿐이다),
+   * `remove`는 없는 클래스에 대해서도 안전하고 다른 클래스는 건드리지
+   * 않는다.
    */
   useEffect(() => {
     if (phase !== "입력") return;
-    const previous = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
+    document.body.classList.add(BODY_SCROLL_LOCK_CLASS);
     return () => {
-      document.body.style.overflow = previous;
+      document.body.classList.remove(BODY_SCROLL_LOCK_CLASS);
     };
   }, [phase]);
 

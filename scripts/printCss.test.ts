@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import { BODY_SCROLL_LOCK_CLASS } from "../src/print/bodyScrollLock";
 import {
   MUST_SURVIVE_PRINT_CLASSES,
   PRINT_HIDDEN_SELECTORS,
@@ -597,6 +598,88 @@ describe("인쇄 CSS", () => {
       expect(lastDeclaredValue(preFix, ".region-results-sidebar", "max-height")).toBe(
         "600px",
       );
+    });
+  });
+
+  /**
+   * 재검토 수정(Critical 2): **화면 1의 문서 스크롤 잠금이 인쇄에서
+   * 풀리지 않았다.**
+   *
+   * `EntryScreen`은 `phase === "입력"`인 내내 문서 스크롤을 잠근다 —
+   * 그런데 그 상태가 바로 앞선 리뷰(Critical 1)가 "인쇄할 수 있어야
+   * 한다"고 고친 상태다(그 화면의 인쇄 버튼은 지금 `inert`라 Cmd+P가
+   * 유일한 경로다). `<html>`의 `overflow` 기본값이 `visible`이라
+   * `<body>`의 `hidden`은 뷰포트로 전파되고, 크롬·파이어폭스에서
+   * 인쇄물이 첫 장에서 잘린다.
+   *
+   * 잠금이 **인라인 스타일**이면 `!important` 없이는 풀 수 없어
+   * `@media print`가 손댈 수 없었다. 그래서 클래스로 바꾸고 여기서
+   * 그 해제를 구조로 잠근다 — design.md §6의 규칙(`overflow`/
+   * `max-height` 제약을 건 요소는 반드시 `@media print`에서 푼다)이
+   * 그대로 걸리는 자리다.
+   *
+   * 앞선 라운드의 실사용 인쇄 확인이 이걸 못 잡은 이유도 남겨 둔다:
+   * 그 확인은 `document.body.innerText`를 읽었고(overflow는 거기
+   * 영향을 주지 않는다), 잠금이 들어오기 두 커밋 **전에** 돌았다.
+   */
+  describe("화면 1의 문서 스크롤 잠금이 인쇄에서 풀린다", () => {
+    const LOCK = `body.${BODY_SCROLL_LOCK_CLASS}`;
+    /** `@media print` 블록을 걷어낸 나머지(= 화면용) CSS */
+    const outsidePrint = DECLARATIONS.replace(printBlock ?? " ", "");
+
+    /** 그 블록에서 이 선택자에 마지막으로 선언된 `overflow` 값 */
+    function overflowFor(block: string, selector: string): string | undefined {
+      let found: string | undefined;
+      for (const rule of parseRules(block)) {
+        if (!rule.selectors.includes(selector)) continue;
+        const re = /overflow\s*:\s*([^;\n}]+)/gi;
+        let m: RegExpExecArray | null;
+        while ((m = re.exec(rule.body)) !== null) {
+          found = (m[1] ?? "").trim().toLowerCase();
+        }
+      }
+      return found;
+    }
+
+    it("잠금이 클래스로 걸려 있다 — 인라인 스타일이면 이 규칙 자체가 없다", () => {
+      expect(
+        overflowFor(outsidePrint, LOCK),
+        `${LOCK}에 overflow: hidden 규칙이 없습니다. 잠금이 다시 ` +
+          "인라인 스타일로 돌아갔다면 @media print가 !important 없이는 " +
+          "풀 수 없습니다.",
+      ).toBe("hidden");
+    });
+
+    it("인쇄 블록이 그 잠금을 푼다", () => {
+      // `!important`가 붙어 있으면 값이 "visible !important"로 잡혀
+      // 이 단언이 깨진다 — 공용 스타일시트에 !important를 심지 않았다는
+      // 것까지 여기서 함께 잠근다.
+      expect(
+        overflowFor(printBlock ?? "", LOCK),
+        `@media print가 ${LOCK}의 스크롤 잠금을 풀지 않습니다 — ` +
+          "body의 overflow: hidden이 뷰포트로 전파돼 인쇄물이 첫 장에서 " +
+          "잘립니다(design.md §6).",
+      ).toBe("visible");
+    });
+
+    it("푸는 규칙이 캐스케이드에서 이긴다(특정도가 같으니 순서가 가른다)", () => {
+      // 두 규칙의 특정도는 (0,1,1)로 같다. `!important`를 쓰지 않기로
+      // 했으므로 인쇄 블록이 화면용 규칙보다 **뒤에** 있어야 이긴다.
+      const screenRuleIndex = DECLARATIONS.indexOf(LOCK);
+      const printBlockIndex = DECLARATIONS.search(PRINT_MEDIA_START);
+      expect(screenRuleIndex).toBeGreaterThan(-1);
+      expect(printBlockIndex).toBeGreaterThan(-1);
+      expect(
+        screenRuleIndex,
+        "화면용 잠금 규칙이 @media print 블록보다 뒤에 있습니다 — " +
+          "특정도가 같아 나중 규칙이 이기므로 인쇄 해제가 무효가 됩니다.",
+      ).toBeLessThan(printBlockIndex);
+    });
+
+    it("해제 규칙이 없으면 잡아낸다(변이 검사)", () => {
+      const preFix = `body.${BODY_SCROLL_LOCK_CLASS} { overflow: hidden; }`;
+      expect(overflowFor(preFix, LOCK)).toBe("hidden");
+      expect(overflowFor("", LOCK)).toBeUndefined();
     });
   });
 });

@@ -6,11 +6,14 @@ import type { ComplexUnit } from "./data/complexes";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import * as loadNaverMaps from "./lib/loadNaverMaps";
 import * as regionQuery from "./lib/regionQuery";
+import { BODY_SCROLL_LOCK_CLASS } from "./print/bodyScrollLock";
 import {
   MUST_SURVIVE_PRINT_CLASSES,
   PRINT_HIDDEN_SELECTORS,
 } from "./print/hiddenInPrint";
 import { rules } from "./state/useAffordability";
+import { purchaseRules } from "./state/usePurchaseCheck";
+import { PURCHASE_TYPE_STORAGE_KEY } from "./state/usePurchaseType";
 import type * as UseAffordabilityModule from "./state/useAffordability";
 
 // 룰셋의 effectiveFrom을 실제 값과 다르게 모의한다. App.tsx가 여전히
@@ -1481,5 +1484,66 @@ describe("App - 지도", () => {
     ).not.toBeInTheDocument();
     // 지역에 데이터가 없다는 말과도 다르다 — 데이터는 있고, 예산이 안 맞았을 뿐이다.
     expect(screen.queryByText(/실거래가 자체가/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 재검토 수정(Critical 2): 화면 1의 문서 스크롤 잠금은 **인쇄에서 풀 수
+ * 있는 형태**여야 한다.
+ *
+ * 인라인 스타일(`document.body.style.overflow = "hidden"`)로 걸면
+ * `@media print`가 `!important` 없이는 손댈 수 없고, `<html>`의
+ * `overflow` 기본값(`visible`) 때문에 `<body>`의 `hidden`이 뷰포트로
+ * 전파돼 인쇄물이 첫 장에서 잘린다. 그 인쇄 CSS 쪽 계약은
+ * `scripts/printCss.test.ts`가 잠그고, 여기서는 **컴포넌트가 실제로
+ * 클래스를 쓰는지**를 잠근다 — 두 쪽 중 하나만 지켜지면 잠금은 다시
+ * 인쇄를 깨뜨린다.
+ */
+describe("재검토 수정: 화면 1의 문서 스크롤 잠금", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.body.style.overflow = "";
+  });
+
+  afterEach(() => {
+    document.body.style.overflow = "";
+  });
+
+  it("화면 1이 떠 있는 동안 body에 잠금 클래스가 붙는다", () => {
+    const { container } = render(<App />);
+    expect(container.querySelector(".entry-screen")).not.toHaveClass(
+      "entry-screen--hidden",
+    );
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+  });
+
+  it("잠금은 인라인 스타일을 건드리지 않는다 — 다른 곳이 쓴 값도 그대로다", () => {
+    // 예전 구현은 잠글 때 값을 기억했다가 풀 때 그대로 되돌려, 그 사이
+    // 다른 곳이 쓴 값을 조용히 지웠다.
+    document.body.style.overflow = "auto";
+    render(<App />);
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+    expect(document.body.style.overflow).toBe("auto");
+  });
+
+  it("화면 1이 걷히면 잠금이 떨어진다", async () => {
+    const { container } = render(<App />);
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+
+    // 투자 유형을 고르면 화면 1이 걷히고 결과 화면이 선다.
+    await userEvent.click(
+      screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
+    );
+
+    expect(container.querySelector(".entry-screen")).toHaveClass(
+      "entry-screen--hidden",
+    );
+    expect(document.body).not.toHaveClass(BODY_SCROLL_LOCK_CLASS);
+  });
+
+  it("저장된 투자 유형으로 새로 열면 처음부터 잠기지 않는다", () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "월세수익형");
+    render(<App />);
+    expect(document.body).not.toHaveClass(BODY_SCROLL_LOCK_CLASS);
   });
 });
