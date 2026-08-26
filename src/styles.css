@@ -2656,7 +2656,7 @@ body.body-scroll-locked {
  * SEED가 그리는 힌트 슬롯(`MoneyInput`이 `description`으로 넘긴다).
  * 기본값은 `--seed-color-fg-neutral-subtle` → `--on-sheet-faint`로
  * **밝은 면 전용** 값이라, 이 어두운 패널 위에서는 거의 읽히지 않는다
- * (#637280 on #181f26 = 3.37:1, 계산값).
+ * (#637280 on 스크림 바닥 = 3.37~2.72:1, 계산값).
  *
  * 같은 역할(`.hint`)과 같은 색을 쓴다 — 두 힌트가 나란히 서는 화면이라
  * 색이 갈리면 뜻이 다른 것처럼 읽힌다. 클래스 이름은 SEED가 정하는
@@ -2726,7 +2726,7 @@ body.body-scroll-locked {
  * 보이지 않았다(전수 검사가 잡은 자리 — 리뷰 findings에는 없었다).
  * 어두운 면에서 "주의" 자리를 맡는 색은 황동 쪽이다. `.entry-screen
  * .echo`가 이미 쓰는 `--brass-lift`를 그대로 쓴다 — 스크림 바닥 대비
- * 7.96:1(계산값).
+ * 7.96:1(영상 평균색 기준) / 6.46:1(가장 밝은 픽셀 기준), 둘 다 계산값.
  */
 .entry-screen .purchase-type-restore-notice {
   color: var(--brass-lift);

@@ -133,15 +133,20 @@ function rawToken(name: string): string {
 }
 
 /**
- * 배경 영상의 평균색. `src/seed-brand.css` 머리주석이 적은
- * rgb(104, 117, 132)을 그대로 옮겼다.
+ * 스크림 아래에 깔리는 영상에서 **가장 밝은 픽셀**.
  *
- * 평균이라는 점이 이 값의 한계다 — 밝은 프레임은 이보다 밝고, 그만큼
- * 스크림 위 글자의 대비는 아래 계산보다 떨어진다. 그래서 아래
- * `SCRIM_FLOOR` 기준을 겨우 넘기는 값이 아니라 여유가 있는 값을 고른다
- * (보고서에 흰 프레임 최악값까지 계산해 뒀다).
+ * `src/seed-brand.css` 머리주석은 영상의 평균색을 rgb(104, 117, 132)로
+ * 적어 두었지만, 여기서는 평균을 쓰지 않는다. 브라우저에서 실제로 재
+ * 봤더니(dev 서버 4173, `<video>`를 캔버스에 그려 픽셀 읽기, t = 0·3·
+ * 6·9·12·15초) **입력 패널이 덮는 왼쪽 열의 평균은 rgb(123~135,
+ * 139~150, 153~162)로 전체 평균보다 밝았고, 그 안에 순백(255,255,255)
+ * 픽셀이 매 프레임 있었다.** 평균으로 계산했다면 실제 최악의 자리보다
+ * 낙관적인 숫자를 못박게 된다.
+ *
+ * 그래서 기준을 **가장 밝은 픽셀**로 잡는다 — 이 기준을 통과하면 영상의
+ * 어느 프레임, 어느 픽셀 위에서도 통과한다.
  */
-const VIDEO_AVERAGE = "#687584";
+const VIDEO_BRIGHTEST = "#ffffff";
 
 /**
  * 입력 패널(화면 1)이 실제로 앉는 면.
@@ -165,7 +170,7 @@ const SCRIM_PANEL_ALPHA = (() => {
   return Number.parseFloat(m[1]!);
 })();
 
-const SCRIM_FLOOR = composite(rawToken("--ink"), SCRIM_PANEL_ALPHA, VIDEO_AVERAGE);
+const SCRIM_FLOOR = composite(rawToken("--ink"), SCRIM_PANEL_ALPHA, VIDEO_BRIGHTEST);
 
 /**
  * 등급색(--safe/--warn/--risk, src/styles.css :root)이 실제로 가리키는
