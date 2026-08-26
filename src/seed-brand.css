@@ -45,10 +45,26 @@
    * 전체를 새로 가리킨다. 위 brand 토큰들과 마찬가지로 Seline 고유
    * hex를 직접 쓴다 — Seline 팔레트가 SEED 안에 없기 때문이다.
    *
-   * fg-brand-contrast(cyan-edge, #3398e1)는 흰 배경 대비 3.13:1로
-   * 본문 크기 기준(4.5:1)에 못 미친다 — 실측, docs/superpowers/plans/
-   * 2026-08-25-지도중심-리디자인.md Task 4 참고. 굵은 큰 글자나
-   * 비텍스트 요소에만 쓴다.
+   * fg-brand-contrast(cyan-edge, #3398e1)는 흰 배경 대비 3.13:1, 이 앱의
+   * 실제 캔버스(--seed-color-bg-layer-default, #fafaf9) 대비로는
+   * **2.99:1**이다 — 실측, docs/superpowers/plans/
+   * 2026-08-25-지도중심-리디자인.md Task 4, src/styles.css의
+   * `.safe-line-item--max .safe-line-amount` 규칙 위 주석 참고. 두 수치
+   * 모두 본문 크기 기준(4.5:1)에는 크게 못 미치고,
+   * fafaf9 캔버스 위에서는 큰 글자 기준(3:1)에도 아슬아슬하게 못
+   * 미친다(0.01 차이) — 그래서 굵은 큰 글자나 비텍스트 요소에만 쓴다.
+   *
+   * 리뷰 수정(Minor 2): 이 토큰을 실제로 쓰는 자리는 세 곳뿐이고
+   * (`.affordable-price`, `.safe-line-item--max .safe-line-amount`,
+   * `.slider-price--max` — 모두 src/styles.css, 전부 굵은 큰 글자), 세
+   * 자리 모두 이 0.01 미달을 감수하기로 한 것도 같은 이유(한 화면에
+   * 같은 금액이 여러 번 나오는데 한 자리만 색이 다르면 더 이상하다)다.
+   * 다음 색 체계 정비 때는 **이 세 자리를 반드시 함께** 옮겨야 한다 —
+   * 한 곳만 진하게 바꾸면 같은 금액이 화면에서 두 색으로 보인다.
+   * 참고로 계산해 보면 #3194dc는 fafaf9 대비 3.14:1(큰 글자 기준만
+   * 겨우 넘김), #2879b4는 4.48:1(본문 크기 기준까지 넘겨 이 토큰이
+   * "굵은 큰 글자 전용"일 필요가 아예 없어진다) — 값은 참고용이며 이
+   * 커밋에서 실제로 바꾸지는 않는다.
    */
   --seed-color-bg-layer-default: #fafaf9;
   --seed-color-bg-layer-floating: #ffffff;
