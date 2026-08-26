@@ -2608,25 +2608,19 @@ describe("전체화면 결과 셸", () => {
      * 절반(그 숨김이 `@media print`에 닿지 않는다)은
      * `scripts/printCss.test.ts`가 구조로 잠근다.
      *
-     * 목록을 열거하지 않고 **열었을 때 실제로 있던 것과 대조**한다 —
-     * 프로필에 따라 조건부로 나타나는 클래스가 섞여 있어, 손으로 적으면
-     * 그 목록이 화면과 조용히 어긋난다.
+     * **모집합은 `MUST_SURVIVE_PRINT_CLASSES` 그대로다**(리뷰 findings m3).
+     * 예전에는 "패널 안에 있는 열 개"를 손으로 적어 뒀는데, 그 목록이
+     * 화면과 어긋나도 아무것도 깨지지 않았다 — 패널이 새 값을 품게 되면
+     * 그 값은 검사 대상에서 조용히 빠진다. 보호 대상 목록 전체를 훑으면
+     * 그럴 자리가 없다(패널 밖의 보호 대상도 함께 지켜지므로 검사가 더
+     * 넓어질 뿐 약해지지 않는다).
+     *
+     * **파생되는 것은 기준선이지 모집합이 아니다.** 어느 클래스가 실제로
+     * 화면에 있는지는 프로필에 따라 다르므로, 열었을 때 있던 것을 기준선
+     * 으로 잡고 닫은 뒤와 대조한다.
      */
-    const PANEL_PRINT_CLASSES = [
-      "no-budget",
-      "binding-explainer",
-      "cost-breakdown",
-      "policy-loan-list",
-      "slider-price",
-      "slider-warning",
-      "safe-line",
-      "assumption-line",
-      "assumption-item",
-      "assumption-notice",
-    ];
-
     function protectedPresent(container: HTMLElement): string[] {
-      return PANEL_PRINT_CLASSES.filter(
+      return MUST_SURVIVE_PRINT_CLASSES.filter(
         (cls) => container.querySelector(`.${cls}`) !== null,
       );
     }
@@ -2638,6 +2632,14 @@ describe("전체화면 결과 셸", () => {
       const whileOpen = protectedPresent(container);
       // 전제: 실제로 여러 개가 있었다. 없으면 아래 대조가 공허하다.
       expect(whileOpen.length).toBeGreaterThanOrEqual(6);
+      // 그중 패널 **안**에 있는 것들이 실제로 잡혔는지도 확인한다 —
+      // 모집합을 넓히면서 정작 이 테스트가 지켜야 할 자리가 빠지면
+      // 대조는 통과해도 아무것도 지키지 못한다.
+      const panelElement = panel(container)!;
+      const insidePanel = whileOpen.filter(
+        (cls) => panelElement.querySelector(`.${cls}`) !== null,
+      );
+      expect(insidePanel.length).toBeGreaterThanOrEqual(6);
 
       await userEvent.click(trigger());
       expect(panel(container)).toHaveClass("budget-panel--closed");
