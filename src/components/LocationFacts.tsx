@@ -12,9 +12,13 @@ export interface LocationFactsProps {
   /** 단지 고유 ID. 좌표는 평형이 아니라 단지에 붙는다 */
   complexKey: string;
   /**
-   * 진단 종합에 이 축의 최신 상태를 알린다. `PriceCheck.onAssessment`와
-   * 같은 배선이다 — 판정이 아니라 상태(`state`)를 옮기는 축이라는 점만
-   * 다르고, 여기서도 새로 계산하지 않는다.
+   * 이 축의 최신 상태를 바깥에 알린다. 새로 계산하지 않고 이미 낸 값을
+   * 올릴 뿐이다 — 판정이 아니라 상태(`state`)를 옮기는 축이라는 점만
+   * `PriceCheck.onAssessment`와 다르다.
+   *
+   * ⚠ **지금 이 값을 받는 화면은 없다.** 받던 곳(진단 종합)이 지워졌고,
+   * `ComplexDetail`도 더 이상 흘려보내지 않는다. 축을 다시 모으는 화면이
+   * 붙는 날을 위한 자리로만 남아 있다.
    */
   onAssessment?: (assessment: LocationAssessment) => void;
   /**

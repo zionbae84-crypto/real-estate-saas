@@ -138,6 +138,23 @@ describe("buildPrintSummaryItems", () => {
       expect(area).not.toMatch(/가정/);
     });
 
+    /**
+     * ⚠ **하나도 안 골랐으면 기준이 없다.** 같은 종이에 "찾는 평형대 =
+     * 고르지 않음"이 찍히는데 그 아래에서 "85㎡ 이하 (고른 평형대가 전부
+     * 이 범위)"를 단언하면, 종이가 스스로 모순된다 — 고른 것이 없는데
+     * "전부 이 범위"라고 말한다.
+     *
+     * 도달 경로: 현금·소득 입력 → 평형대 고름 → 지역 조회 → "조건 다시
+     * 넣기" → 평형대 전부 해제 → Cmd+P. 화면은 이 상태를 맞게 다룬다
+     * ("하나 이상 골라 주세요"). 종이에서만 어긋났다.
+     */
+    it("평형대를 하나도 안 골랐으면 면적 기준을 단언하지 않는다", () => {
+      const area = valueOf("전용면적", { ...FIXED_STATE, areaBands: [] });
+      expect(area).not.toMatch(/이하/);
+      expect(area).not.toMatch(/초과/);
+      expect(area).toBe("기준 없음 (찾는 평형대를 고르지 않았어요)");
+    });
+
     it("매물을 골랐으면 그 평형의 실제 면적을 적고, 가정이라 하지 않는다", () => {
       const area = valueOf("전용면적", FIXED_STATE, {
         source: "selectedUnit",

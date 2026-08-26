@@ -21,8 +21,11 @@ const LOAN_KINDS: ReadonlyArray<RentalLoanAnswer["kind"]> = [
 export interface PurchaseCheckProps {
   type: InvestmentType;
   /**
-   * 진단 종합에 이 축의 최신 판정을 알린다. `PriceCheck.onAssessment`와
-   * 같은 배선·같은 이유다 — 새로 계산하지 않고 이미 낸 값을 올릴 뿐이다.
+   * 이 축의 최신 판정을 바깥에 알린다. 새로 계산하지 않고 이미 낸 값을
+   * 올릴 뿐이다(`PriceCheck.onAssessment`와 같은 배선).
+   *
+   * ⚠ **지금 이 값을 받는 화면은 없다** — 이 컴포넌트 자체가 수익형과
+   * 함께 도달 불가 상태로 남아 있다(일부러 지우지 않았다).
    */
   onAssessment?: (assessment: PurchaseAssessment) => void;
 }

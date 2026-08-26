@@ -158,6 +158,27 @@ describe("전용면적 — 고른 평형대에 85㎡ 초과가 섞였는가", ()
     expect(s).toMatch(/농특세/);
   });
 
+  /**
+   * ⚠ **없는 줄을 약속하지 않는다.** 목록은 고른 평형대로 걸러진
+   * 뒤이므로(App.tsx의 `areaFilteredUnits`) 중대형만 고른 사용자에게
+   * "85㎡ 이하인 줄"은 하나도 나올 수 없다. 방향은 무해하지만(경고가 더
+   * 붙을 뿐 숫자를 부풀리지 않는다) 이 저장소가 가장 공들여 노이즈를
+   * 없애는 자리에서 노이즈다.
+   *
+   * 앞 문장(농특세 기준으로 계산했다)은 그대로 남는다 — 그건 헤드라인이
+   * 실제로 쓴 전제라 여전히 참이다.
+   */
+  it("중대형만 골랐으면 '85㎡ 이하인 줄' 약속을 빼고, 전제는 남긴다", () => {
+    const s = joined(state({ areaBands: ["중대형"] }));
+    expect(s).toMatch(/농특세/);
+    expect(s).not.toMatch(/이하인 줄/);
+  });
+
+  it("이하 구간을 함께 골랐으면 그 줄이 실제로 나오므로 약속을 남긴다", () => {
+    const s = joined(state({ areaBands: ["소형", "중대형"] }));
+    expect(s).toMatch(new RegExp(`${THRESHOLD}㎡ 이하인 줄`));
+  });
+
   it("임계값은 인자로 받는다 — 룰셋이 바뀌면 문구도 따라간다", () => {
     const s = buildAssumptionItems(state({ areaBands: ["중대형"] }), 100)
       .map((i) => i.text)

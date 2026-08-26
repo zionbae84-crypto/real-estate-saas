@@ -723,8 +723,20 @@ describe("인쇄 CSS", () => {
    */
   describe("화면 1의 문서 스크롤 잠금이 인쇄에서 풀린다", () => {
     const LOCK = `body.${BODY_SCROLL_LOCK_CLASS}`;
+    /**
+     * `printBlock`이 `null`일 때 "아무것도 지우지 않는다"는 뜻을 나르는
+     * 센티널. CSS에 절대 나타나지 않는 문자다.
+     *
+     * ⚠ **예전에는 아래 `replace` 인자에 리터럴 NUL 바이트를 적었다.**
+     * 그 한 바이트 때문에 `file`이 이 파일을 `data`로 판정하고, 평범한
+     * `grep`이 이 파일을 **조용히 건너뛴다**(`grep -a`라야 보인다).
+     * 그래서 이번 리뷰에서 리뷰어가 "인쇄 펼침 규칙에 가드가 없다"는
+     * 거짓 Critical을 낼 뻔했다 — 가드는 멀쩡히 여기 있었다. 뜻은 그대로
+     * 두고 표현만 바꾼다(소스에 NUL 바이트가 들어가지 않는다).
+     */
+    const NEVER_IN_CSS = String.fromCharCode(0);
     /** `@media print` 블록을 걷어낸 나머지(= 화면용) CSS */
-    const outsidePrint = DECLARATIONS.replace(printBlock ?? " ", "");
+    const outsidePrint = DECLARATIONS.replace(printBlock ?? NEVER_IN_CSS, "");
 
     /** 그 블록에서 이 선택자에 마지막으로 선언된 `overflow` 값 */
     function overflowFor(block: string, selector: string): string | undefined {

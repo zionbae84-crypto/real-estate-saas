@@ -230,7 +230,7 @@ describe("ComplexList", () => {
       // 보인다.
       const { container } = renderList(
         { withinSafe: [entry(unit())] },
-        { headlineAssumedAboveThreshold: true },
+        { headlineBasisDiffersFromRows: true },
       );
       const note = container.querySelector(".complex-list-note")?.textContent ?? "";
       expect(note).toMatch(/실제 전용면적/);
@@ -252,7 +252,7 @@ describe("ComplexList", () => {
       // 보여줄 행이 없으면 기준을 밝힐 행도 없다.
       const { container } = renderList(
         undefined,
-        { headlineAssumedAboveThreshold: true },
+        { headlineBasisDiffersFromRows: true },
       );
       expect(container.querySelector(".complex-list-note")).toBeNull();
     });

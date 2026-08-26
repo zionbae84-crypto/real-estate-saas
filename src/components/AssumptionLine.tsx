@@ -1,5 +1,8 @@
 import { formatWon } from "../format/won";
-import { includesAreaAboveThreshold } from "../lib/area-band";
+import {
+  includesAreaAboveThreshold,
+  mixesAreaAcrossThreshold,
+} from "../lib/area-band";
 import { rules } from "../state/useAffordability";
 import {
   ASSUMED_REMOVED_INPUTS,
@@ -144,12 +147,26 @@ export function buildAssumptionItems(
     ruralTaxAreaThresholdSqm,
   );
   if (!areaOverridden && headlineAssumedAboveThreshold) {
+    /*
+     * ⚠ **뒷문장은 그런 줄이 실제로 나올 수 있을 때만 붙인다.** 목록은
+     * 고른 평형대로 걸러진 뒤라(App.tsx의 `areaFilteredUnits`) 중대형만
+     * 고른 사용자에게 "85㎡ 이하인 줄"은 하나도 나올 수 없다 — 그때 이
+     * 약속은 존재할 수 없는 줄을 가리킨다. 앞문장(헤드라인이 쓴 전제)은
+     * 그 경우에도 참이므로 그대로 둔다.
+     */
+    const listMayShowCheaperRows = mixesAreaAcrossThreshold(
+      state.areaBands,
+      ruralTaxAreaThresholdSqm,
+    );
     items.push({
       text:
         `고른 평형대에 ${ruralTaxAreaThresholdSqm}㎡ 초과가 있어, 위 실구매 ` +
         "가능 가격은 농특세가 붙고 정책대출 면적 제한이 걸리는 기준으로 " +
-        "계산했어요. 목록의 각 줄은 그 평형의 실제 전용면적으로 계산하니, " +
-        `${ruralTaxAreaThresholdSqm}㎡ 이하인 줄은 부담이 이보다 적어요.`,
+        "계산했어요." +
+        (listMayShowCheaperRows
+          ? " 목록의 각 줄은 그 평형의 실제 전용면적으로 계산하니, " +
+            `${ruralTaxAreaThresholdSqm}㎡ 이하인 줄은 부담이 이보다 적어요.`
+          : ""),
     });
   }
 

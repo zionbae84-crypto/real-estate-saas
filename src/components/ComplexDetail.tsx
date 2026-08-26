@@ -3,8 +3,7 @@ import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
-import type { LocationAssessment } from "../lib/location";
-import type { PriceAssessment, PriceBudgetInput } from "../lib/price";
+import type { PriceBudgetInput } from "../lib/price";
 import { rules } from "../state/useAffordability";
 import { locationRules } from "../state/useLocationFacts";
 import { priceRules } from "../state/usePriceCheck";
@@ -34,12 +33,6 @@ export interface ComplexDetailProps {
    */
   priceBudget: PriceBudgetInput | null;
   onClose: () => void;
-  /**
-   * 진단 종합에 이 평형의 호가·입지 판정을 알린다. `PriceCheck`·
-   * `LocationFacts`로 그대로 흘려보낼 뿐, 여기서 계산하지 않는다.
-   */
-  onPriceAssessment?: (assessment: PriceAssessment) => void;
-  onLocationAssessment?: (assessment: LocationAssessment) => void;
 }
 
 /**
@@ -117,8 +110,6 @@ export function ComplexDetail({
   householdCountNote,
   priceBudget,
   onClose,
-  onPriceAssessment,
-  onLocationAssessment,
 }: ComplexDetailProps) {
   /**
    * 상세가 열리면 포커스를 이 화면으로 옮긴다.
@@ -332,7 +323,6 @@ export function ComplexDetail({
           key={`${unit.complexKey}|${unit.areaBucket}`}
           unit={unit}
           budget={priceBudget}
-          onAssessment={onPriceAssessment}
           // 제목은 바로 위 summary가 같은 문구로 이미 적었다.
           showTitle={false}
         />
@@ -373,7 +363,6 @@ export function ComplexDetail({
         </summary>
         <LocationFacts
           complexKey={unit.complexKey}
-          onAssessment={onLocationAssessment}
           // 제목은 바로 위 summary가 같은 문구로 이미 적었다.
           showTitle={false}
         />

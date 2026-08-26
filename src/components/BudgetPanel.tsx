@@ -41,13 +41,14 @@ export interface BudgetPanelProps {
  *
  * ## 닫혀 있어도 **언마운트하지 않는다** (이 파일에서 가장 중요한 것)
  *
- * 이 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES` 열 개가 들어 있다:
+ * 이 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES` 아홉 개가 들어 있다:
  * `no-budget`, `binding-explainer`, `cost-breakdown`, `policy-loan-list`,
  * `slider-price`, `slider-warning`, `safe-line`, `assumption-line`,
- * `assumption-item`, `assumption-notice`.
+ * `assumption-notice`. (여기 함께 적혀 있던 `assumption-item`은 눌러서
+ * 고치는 버튼 갈래가 사라지면서 보호 대상에서도 없어졌다.)
  *
  * 패널의 기본 상태는 **닫힘**이고, `Cmd+P`는 어느 단계에서든 눌린다 —
- * 닫혀 있을 때 언마운트하면 그 사람의 종이에서 이 열 개가 통째로
+ * 닫혀 있을 때 언마운트하면 그 사람의 종이에서 이 아홉 개가 통째로
  * 사라진다. 그래서 열림·닫힘은 **클래스 하나**(`--closed`)로만 표시하고,
  * 실제 숨김은 `src/styles.css`의 **`@media screen` 블록 안**에서 한다 —
  * `screen`은 인쇄 미디어와 절대 매치되지 않으므로 그 숨김이 종이에 닿을

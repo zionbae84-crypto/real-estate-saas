@@ -15,7 +15,8 @@ export interface PurchaseVerdictProps {
  * 색이 하나도 적용되지 않아도(흑백 인쇄·색각 이상) 무엇이 "이대로는
  * 사면 안 돼요"이고 무엇이 "아직 낼 수 없어요"인지 읽을 수 있어야 한다.
  * 그래서 모든 지표에 `verdictLabel`(룰셋의 `verdictLabels`)이 텍스트로
- * 붙는다. `PriceCheck`·`LocationFacts`·`DiagnosisSummary`와 같은 규칙이다.
+ * 붙는다. `PriceCheck`·`LocationFacts`와 같은 규칙이다(예전에는 이
+ * 규칙을 `DiagnosisSummary`도 따랐다 — 그 화면은 지워졌다).
  *
  * 이 화면은 인쇄에서 **그대로 남는다.** 입력란은 종이에서 채울 수 없어
  * 지우지만(`PRINT_HIDDEN_SELECTORS`), 결과는 배우자·부모님·중개사에게

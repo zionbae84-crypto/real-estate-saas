@@ -21,12 +21,34 @@ const CSS = readFileSync("src/styles.css", "utf8");
 /** 주석을 걷어낸 CSS. 주석 안의 예시가 실제 규칙으로 오인되지 않게 한다 */
 const DECLARATIONS = CSS.replace(/\/\*[\s\S]*?\*\//g, "");
 
+/** 정규식 메타문자를 전부 이스케이프한다 */
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * 최상위(미디어 쿼리 밖) 규칙 하나의 본문.
+ *
+ * ⚠ **첫 일치를 집어 오지 않고, 일치가 정확히 하나임을 요구한다.**
+ * 예전에는 `String.match`의 첫 일치를 그대로 썼다 — 같은 선택자의
+ * 오버라이드가 `styles.css` **앞쪽**에 생기면, 이 검사는 아래쪽의 진짜
+ * 규칙 대신 그 오버라이드를 읽고 조용히 통과하거나 조용히 어긋난다.
+ * 여럿이면 어느 쪽을 봐야 하는지 이 파일이 정할 수 없으므로 **깨뜨린다**
+ * (고칠 사람에게 그 사실을 알리는 것이 이 검사의 값이다).
+ *
+ * 이스케이프도 점 하나가 아니라 메타문자 전체에 건다 — 예전 코드는
+ * `replace(".", "\\.")`이라 **첫 점만** 이스케이프했고, 점이 둘 이상인
+ * 선택자(`.a.b`·`.entry-screen .area-band-options`)를 넘기면 나머지
+ * 점이 "아무 글자 하나"로 풀려 엉뚱한 규칙을 물었다.
+ */
 function ruleBody(selector: string): string {
-  const match = DECLARATIONS.match(
-    new RegExp(`(?:^|})\\s*${selector.replace(".", "\\.")}\\s*{([^}]*)}`),
-  );
-  expect(match, `${selector} 규칙이 없다`).not.toBeNull();
-  return match![1]!;
+  const matches = [
+    ...DECLARATIONS.matchAll(
+      new RegExp(`(?:^|})\\s*${escapeRegExp(selector)}\\s*{([^}]*)}`, "g"),
+    ),
+  ];
+  expect(matches.length, `${selector} 최상위 규칙이 하나가 아니다`).toBe(1);
+  return matches[0]![1]!;
 }
 
 describe("평형대 칩 배치", () => {

@@ -1474,9 +1474,10 @@ describe("App - 단지 상세(화면 4)", () => {
 
       /*
        * Task 5: 예산 상세 패널이 **열린** 상태도 지난다. 이 패널 안에는
-       * 보호 대상 클래스가 열 개 들어 있고(no-budget·binding-explainer·
+       * 보호 대상 클래스가 아홉 개 들어 있고(no-budget·binding-explainer·
        * cost-breakdown·policy-loan-list·slider-price·slider-warning·
-       * safe-line·assumption-line·assumption-item·assumption-notice),
+       * safe-line·assumption-line·assumption-notice — 함께 적혀 있던
+       * `assumption-item`은 버튼 갈래가 사라지며 함께 없어졌다),
        * 그 위에 새 조상(`.budget-panel`)과 새 숨김 대상
        * (`.budget-detail-close`)이 함께 생겼다 — 이 검사가 정확히 겨누는
        * 배치다.

@@ -8,6 +8,7 @@ import {
   describeAreaBands,
   includesAreaAboveThreshold,
   matchesAreaBands,
+  mixesAreaAcrossThreshold,
   type AreaBand,
 } from "./area-band";
 
@@ -156,6 +157,41 @@ describe("고른 평형대에 임계값 초과가 섞였는가", () => {
   it("임계값이 바뀌면 판정도 함께 움직인다", () => {
     expect(includesAreaAboveThreshold(["중소형"], 100)).toBe(false);
     expect(includesAreaAboveThreshold(["중대형"], 100)).toBe(true);
+  });
+});
+
+/**
+ * "초과가 섞였는가"와 **다른 질문**이다. 화면이 "85㎡ 이하인 줄은 부담이
+ * 이보다 적어요"·"그보다 비싼 집이 여기 보일 수 있어요"라고 약속하려면
+ * 그런 줄이 **실제로 나올 수 있어야** 한다. 목록은 고른 평형대로 걸러진
+ * 뒤이므로(App.tsx의 `areaFilteredUnits`), 중대형만 골랐다면 임계값 이하
+ * 줄은 하나도 나올 수 없다 — 그때 그 약속은 없는 줄을 가리킨다.
+ */
+describe("고른 평형대가 임계값을 가로지르는가", () => {
+  it("초과와 이하를 함께 고르면 참이다", () => {
+    expect(mixesAreaAcrossThreshold(["소형", "중대형"], THRESHOLD)).toBe(true);
+    expect(mixesAreaAcrossThreshold([...AREA_BANDS], THRESHOLD)).toBe(true);
+  });
+
+  it("중대형만 고르면 거짓이다 — 임계값 이하 줄이 나올 수 없다", () => {
+    expect(mixesAreaAcrossThreshold(["중대형"], THRESHOLD)).toBe(false);
+  });
+
+  it("이하 구간만 고르면 거짓이다 — 가로지를 초과가 없다", () => {
+    expect(mixesAreaAcrossThreshold(["소형", "중소형"], THRESHOLD)).toBe(false);
+  });
+
+  it("빈 선택은 거짓이다", () => {
+    expect(mixesAreaAcrossThreshold([], THRESHOLD)).toBe(false);
+  });
+
+  /**
+   * 임계값이 100이 되면 "중소형"(60~100)은 초과를 품지 않게 되므로
+   * 소형+중소형은 여전히 거짓이고, 중소형+중대형은 참이 된다.
+   */
+  it("임계값이 바뀌면 판정도 함께 움직인다", () => {
+    expect(mixesAreaAcrossThreshold(["중소형", "중대형"], 100)).toBe(true);
+    expect(mixesAreaAcrossThreshold(["중대형"], 100)).toBe(false);
   });
 });
 

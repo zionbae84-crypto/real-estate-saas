@@ -146,6 +146,19 @@ function describeAreaBasis(
   if (basis.source === "selectedUnit") {
     return `${basis.sqm}㎡ (선택한 매물의 실제 면적)`;
   }
+  /*
+   * ⚠ **하나도 고르지 않은 상태는 "전부 이하"가 아니다.** 빈 선택은
+   * "전체"가 아니라 "고르지 않았다"이고(`lib/area-band`의
+   * `matchesAreaBands`), 같은 종이의 "찾는 평형대" 줄도 그렇게 적는다.
+   * 그런데 아래 else 분기로 떨어지면 종이가 "고른 평형대가 전부 이
+   * 범위"라고 **고른 것이 없는데** 단언하게 된다.
+   *
+   * 화면은 이 상태를 맞게 다룬다("평형대를 하나 이상 골라 주세요").
+   * 종이에는 화면을 보지 않은 사람이 읽으므로 더더욱 지어내지 않는다.
+   */
+  if (state.areaBands.length === 0) {
+    return "기준 없음 (찾는 평형대를 고르지 않았어요)";
+  }
   return includesAreaAboveThreshold(state.areaBands, ruralTaxAreaThresholdSqm)
     ? `${ruralTaxAreaThresholdSqm}㎡ 초과 기준 (고른 평형대에 맞춘 가정)`
     : `${ruralTaxAreaThresholdSqm}㎡ 이하 (고른 평형대가 전부 이 범위)`;
