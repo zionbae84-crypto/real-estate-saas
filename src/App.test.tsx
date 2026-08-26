@@ -861,6 +861,58 @@ describe("App - 단지 상세(화면 4)", () => {
    * 접근성 트리 노출을 함께 끊는다. `display: none`이 아니어야 하는 이유는
    * 인쇄다(그 단계에서 인쇄해도 종이에는 나와야 한다).
    */
+  /**
+   * 리뷰 수정(Important 5). "현금·연소득·주택 수를 알려주면…" 안내는
+   * 그 존재 이유인 모든 상태에서 100% 보이지 않는 자리에 있었다 —
+   * 실거주 경로에서 그 조건은 사실상 `phase === "입력"`을 뜻하고, 그
+   * 동안 결과 트리는 불투명한 오버레이 **밑에** 깔려 있기 때문이다.
+   * 현금·소득만 넣고 주택 수를 답하지 않은 사람은 조회 버튼이 그냥
+   * 나타나지 않는 것을 보고, 화면 어디에서도 무엇이 모자란지 듣지
+   * 못했다.
+   */
+  describe("리뷰 수정: 무엇이 모자란지 화면 1에서 말한다", () => {
+    it("주택 수를 답하지 않으면 그 안내가 입력 화면 안에 있다", async () => {
+      const { container } = render(<App />);
+      await userEvent.type(
+        screen.getByLabelText("사용가능 현금 예산"),
+        "150000",
+      );
+      await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+
+      // 전제: 아직 조회 버튼이 없다(무엇이 모자란지 화면이 말해야 하는 상태).
+      expect(
+        screen.queryByRole("button", { name: "이 지역으로 조회하기" }),
+      ).not.toBeInTheDocument();
+
+      const prompt = screen.getByText(/현금·연소득·주택 수를 알려주면/);
+      const entry = container.querySelector(".entry-screen");
+      // 화면 1 안에 있다 — 오버레이에 가려지는 결과 트리 쪽이 아니다.
+      expect(entry?.contains(prompt)).toBe(true);
+      expect(container.querySelector(".results-screen")?.contains(prompt)).toBe(
+        false,
+      );
+      // 그 화면 1은 지금 보이는 중이다.
+      expect(entry).not.toHaveClass("entry-screen--hidden");
+    });
+
+    it("주택 수를 답하면 안내가 사라지고 지역 선택이 나타난다(대조군)", async () => {
+      render(<App />);
+      await userEvent.type(
+        screen.getByLabelText("사용가능 현금 예산"),
+        "150000",
+      );
+      await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+      await userEvent.click(screen.getByLabelText("무주택"));
+
+      expect(
+        screen.queryByText(/현금·연소득·주택 수를 알려주면/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe("리뷰 수정: 오버레이 뒤의 결과 트리는 조작할 수 없다", () => {
     it("입력 단계에서는 결과 화면 전체가 inert다", async () => {
       const { container } = render(<App />);

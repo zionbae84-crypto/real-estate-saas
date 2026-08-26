@@ -691,11 +691,32 @@ export function App() {
             {/*
               프로필이 아직 안 끝났으면(주택 수 미답 포함) 지역 선택을
               보여주지 않는다 — 예산을 모르는 채로 지역부터 확정하게
-              두지 않는다. 아래 `ErrorBoundary` 안의 같은 조건(affordability
-              === null)과 짝이다 — 프로필 미완성일 때 그쪽은 "현금·연소득
-              ·주택 수를 알려주면…" 안내를 보여준다.
+              두지 않는다. 대신 무엇이 모자란지를 바로 아래 else 가지가
+              같은 조건에서 말한다(리뷰 수정 Important 5).
             */}
-            {affordability !== null && residentialProfile !== null && (
+            {affordability === null || residentialProfile === null ? (
+              /*
+                리뷰 수정(Important 5): 무엇이 비어서 조회 버튼이 안
+                나오는지 이 화면에서 말한다.
+
+                예전에는 이 문구가 결과 트리 쪽(아래 `ErrorBoundary` 안)
+                에만 있었다. 그런데 그 조건(`affordability === null ||
+                residentialProfile === null`)은 실거주 경로에서 사실상
+                `phase === "입력"`을 뜻하고, 그 동안 결과 트리는 이
+                불투명한 오버레이 **밑에** 깔려 있다 — 존재 이유인 모든
+                상태에서 100% 보이지 않는 문구였다. 현금·소득만 넣고
+                주택 수를 답하지 않은 사람은 "이 지역으로 조회하기"가
+                그냥 나타나지 않는 것을 보고, 화면 어디에서도 무엇이
+                모자란지 듣지 못했다.
+
+                `App.tsx`가 여섯 번 반복한 버그 형태(어떤 상태가 자기
+                원인을 말하지 않는 것)의 뒤집힌 판이다 — 문구는 있었지만
+                사용자가 아니라 테스트 하네스만 볼 수 있는 자리에 있었다.
+              */
+              <p className="prompt">
+                현금·연소득·주택 수를 알려주면 살 수 있는 가격을 계산해요.
+              </p>
+            ) : (
               <>
                 <RegionSelect onSelect={handleRegionSelect} />
 
@@ -773,18 +794,17 @@ export function App() {
             주택 수도 필수 답이 됐다 — 미입력을 무주택으로 대신 채우면
             정책대출 자격이 넓어져 한도가 커지는데, 그건 사용자가 확인한
             적 없는 값으로 낙관적인 답을 내는 것이다(useProfileForm.ts의
-            `ownedHomeCount` 주석 참고). 그래서 `toProfile`이 null을
-            돌려주고 이 안내가 대신 나온다.
+            `ownedHomeCount` 주석 참고). 그래서 `toProfile`이 null이면
+            이 트리는 아무 숫자도 그리지 않는다. **무엇이 모자란지를
+            말하는 안내는 화면 1(`EntryScreen`) 쪽에 있다** — 이 조건이
+            참인 동안 이 트리는 그 불투명한 오버레이 밑에 깔려 있어,
+            여기 적으면 아무도 읽을 수 없다(리뷰 수정 Important 5).
 
             `residentialProfile`을 함께 보는 이유는 타입 좁히기다 —
             아래에서 이 프로필로 취득세 고지를 골라야 하는데, 두 값이
             같은 조건에서 생기고 사라지므로 조건도 함께 둔다.
           */}
-          {affordability === null || residentialProfile === null ? (
-            <p className="prompt">
-              현금·연소득·주택 수를 알려주면 살 수 있는 가격을 계산해요.
-            </p>
-          ) : (
+          {affordability !== null && residentialProfile !== null && (
             <>
               {/*
                 화면에서는 숨고 인쇄에서만 나온다(styles.css의 .print-summary).
