@@ -2031,6 +2031,54 @@ describe("전체화면 결과 셸", () => {
   });
 
   /**
+   * 리뷰 수정 Important 2 — **상세 열림 × 마커 클릭.**
+   *
+   * 상세가 열려 있는 동안 `effectiveProfile`이 화면 전체의 계산을 그
+   * 평형의 면적으로 바꿔치기한다. 그 상태에서 다른 단지의 마커를 눌렀는데
+   * 상세가 그대로면, 사이드바는 A를 그리고 지도는 B를 강조하는 —
+   * 이 저장소가 여섯 번 낸 바로 그 어긋남이 된다.
+   */
+  it("상세가 열린 채 다른 단지의 마커를 누르면 상세가 닫히고 그 단지로 옮겨 간다", async () => {
+    const { container, markers } = await renderResults();
+    await vi.waitFor(() => expect(markers.length).toBe(2));
+
+    // A(현금단지)의 상세를 연다.
+    await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+
+    // B(대출단지)의 마커를 누른다. 마커 순서는 목록 순서를 따른다.
+    markers[1]!.listeners.click!();
+
+    await vi.waitFor(() => {
+      // 상세가 닫히고 목록으로 돌아온다 — 두 창이 다시 같은 것을 본다.
+      expect(
+        screen.queryByRole("region", { name: "단지 상세" }),
+      ).not.toBeInTheDocument();
+      const focused = container.querySelector(".complex-row--focused");
+      expect(focused?.textContent).toContain("대출단지");
+    });
+    // 지도 쪽 강조도 B 하나다.
+    const focusedMarkers = container.querySelectorAll<HTMLElement>(
+      ".complex-map-marker--focused",
+    );
+    expect(focusedMarkers).toHaveLength(1);
+    expect(focusedMarkers[0]!.dataset.complexKey).toBe(LOAN_UNIT.complexKey);
+  });
+
+  it("상세가 열린 채 **그 단지의** 마커를 누르면 상세는 그대로다", async () => {
+    const { markers } = await renderResults();
+    await vi.waitFor(() => expect(markers.length).toBe(2));
+
+    await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+
+    // 같은 단지(현금단지)의 마커 — 두 창은 이미 같은 것을 가리키고 있다.
+    markers[0]!.listeners.click!();
+
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+  });
+
+  /**
    * 지도는 30개까지 그리는데 목록은 덩어리마다 10개씩만 그린다. 그 너머의
    * 마커를 누르면 선택은 바뀌는데 화면엔 아무 변화가 없다 — 사용자에겐
    * 마커가 죽은 것으로 보인다.

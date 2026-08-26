@@ -564,8 +564,36 @@ export function App() {
    * 상세(`selectedUnit`)는 열지 않는다. 마커는 단지 하나를 가리키고
    * 상세는 **평형** 하나에 대한 것이라, 어느 평형인지는 마커가 정할 수
    * 없다 — 그 선택은 목록 행이 한다(`handleSelectUnit`).
+   *
+   * **상세가 열려 있는데 다른 단지의 마커를 누르면 상세를 닫는다**
+   * (리뷰 수정 Important 2). 안 닫으면 두 창이 서로 다른 단지를
+   * 가리킨다: 사이드바는 A의 상세를 그린 채인데 지도는 B를 강조하고
+   * B의 InfoWindow를 연다. 게다가 A의 상세가 열려 있는 동안에는
+   * `effectiveProfile`이 **화면 전체의 계산**을 A의 전용면적으로
+   * 바꿔치기하고 있어, 상단바의 실구매 가능 가격까지 B를 보는 사람이
+   * 확인한 적 없는 전제 위에 서 있게 된다. 이 저장소가 여섯 번 낸
+   * 사고가 정확히 이 형태다.
+   *
+   * **무시하지 않고 닫는 쪽을 골랐다.** 무시하면 마커가 "눌러도 아무
+   * 일도 일어나지 않는 컨트롤"이 된다 — 팝업만 열리고 그 안의 단지는
+   * 화면 어디에도 반영되지 않으므로, 사용자에겐 지도가 고장 난 것으로
+   * 보인다(Task 3 리뷰가 잡은 죽은 가정 칩과 같은 실패). 게다가 A를
+   * 읽다가 B를 누른 사람의 의도는 "B가 궁금하다"이지 "A에 머무르고
+   * 싶다"가 아니다. 닫으면 matrix 10번("닫아도 방금 본 단지가 어디였는지
+   * 보인다")도 그대로 성립한다 — 남는 선택이 방금 누른 B다.
+   *
+   * **같은 단지의 마커면 닫지 않는다.** 그때 두 창은 이미 같은 단지를
+   * 가리키고 있어 어긋남이 없다. 읽고 있는 상세의 마커를 눌렀다고
+   * 그 상세를 걷어 가면 그쪽이 놀랍다 — 팝업만 토글된다.
    */
   function handleFocusComplex(complexKey: string) {
+    if (selectedUnit !== null && selectedUnit.complexKey !== complexKey) {
+      // `handleCloseDetail`과 같은 정리다 — `PriceCheck`·`LocationFacts`가
+      // 사라지면 그 `onAssessment`는 다시 불리지 않으므로, 여기서 비우지
+      // 않으면 방금 닫은 A의 호가·입지 판정이 "지금 보고 있는 매물"인 것처럼
+      // 진단 종합에 남는다.
+      handleCloseDetail();
+    }
     setFocusedComplexKey(complexKey);
     if (complexList === null) return;
     // 덩어리마다 같은 visibleCount로 잘리므로(ComplexList), 그 단지가
