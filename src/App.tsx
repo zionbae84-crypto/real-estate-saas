@@ -294,17 +294,54 @@ export function App() {
   ]);
 
   /**
+   * **고른 단지(평형)에 매달린 상태를 한 번에 비우는 유일한 자리다.**
+   *
+   * 세 상태는 언제나 함께 움직인다 — `selectedUnit`이 사라지면
+   * `PriceCheck`·`LocationFacts`도 함께 사라지고, 그 컴포넌트들의
+   * `onAssessment`는 다시 불리지 않으므로 두 판정은 여기서 명시적으로
+   * 비우지 않으면 "지금 보고 있는 매물"의 것인 양 진단 종합에 남는다.
+   *
+   * **함수 하나로 모은 이유**(C1 수정): 예전에는 이 세 줄을 상세를 닫는
+   * 핸들러마다 손으로 되풀이했다. 그러다 Task 3이 `RegionSelect`를
+   * `EntryScreen`으로 옮겨 "상세를 연 채 다른 지역을 조회하는" 새 경로를
+   * 열었을 때, `handleRegionSelect`만 이 세 줄을 받지 못했다 — 서초구를
+   * 조회했는데 사이드바에 강남 단지 상세가 남고, `effectiveProfile`이
+   * 화면 전체(상단바 실구매 가능 가격·안전선·인쇄 요약)를 그 단지의
+   * 전용면적으로 계속 계산했다. 이 저장소가 여섯 번 낸 사고와 같은
+   * 형태다("결정을 한 방향으로만 적용하고 나머지 상태를 추적하지
+   * 않았다"). 자리를 하나로 모으면 다음 경로가 생겨도 **빠뜨릴 세 줄이
+   * 없다** — 부를 것이 하나뿐이다.
+   *
+   * `scripts/complex-selection-reset.test.ts`가 세 setter의 `null` 호출이
+   * 이 함수 밖에 흩어지지 않았는지 소스에서 검사한다.
+   */
+  function clearComplexSelection() {
+    setSelectedUnit(null);
+    setPriceAssessment(null);
+    setLocationAssessment(null);
+  }
+
+  /**
    * 지역을 확정하면 그 지역의 실거래가를 조회한다.
    *
    * 앞 지역에서 고른 행정동과 "더 보기"로 늘려 둔 행 수를 함께 되돌린다 —
    * 남겨 두면 새 지역에는 없는 동으로 걸러 빈 목록이 되거나, 새 지역의
    * 첫 화면이 앞 지역의 스크롤 깊이를 물려받는다.
+   *
+   * **열려 있던 단지 상세도 함께 닫는다**(C1). 앞 지역 단지의 상세는 새
+   * 지역 화면에서 잔상이 아니라 **틀린 숫자**다 — 사이드바가 목록 대신
+   * 그 상세를 계속 그려 새 지역 목록이 아예 보이지 않고, 그동안
+   * `effectiveProfile`이 그 평형의 전용면적을 화면 전체에 대입해
+   * 취득 부대비용을 사용자가 보고 있지 않은 단지 기준으로 계산한다.
+   * 앞 지역에서 좁은 평형을 골랐다면 그 오차는 실구매 가능 가격을
+   * **올리는** 쪽이다(낙관 편향).
    */
   function handleRegionSelect(regionCode: string) {
     setSelectedDong(null);
     setVisibleCount(10);
     // 앞 지역에서 고른 단지는 새 지역 목록에도 지도에도 없다.
     setFocusedComplexKey(null);
+    clearComplexSelection();
     setCurrentRegionCode(regionCode);
     regionComplexes.query(regionCode);
   }
@@ -676,16 +713,23 @@ export function App() {
     // 닫는다 — 패널 폭이 바뀌거나 다른 경로에서 이 핸들러가 불리는 날,
     // "행을 눌렀는데 화면이 그대로"인 죽은 컨트롤이 되지 않게 한다.
     setBudgetPanelRequested(false);
+    /*
+     * 앞 평형에 매달려 있던 것을 **먼저 전부 비우고** 그 위에 이번
+     * 평형을 얹는다. 새 평형의 `PriceCheck`·`LocationFacts`가 다시
+     * 마운트되며 자기 `onAssessment`로 새 값을 곧바로 올려 주지만
+     * (App.tsx 상단 주석), 그 전까지 앞 평형의 판정이 잠깐이라도 새
+     * 평형에 대한 것처럼 남지 않아야 한다.
+     *
+     * 두 판정만 골라 비우지 않고 `clearComplexSelection`을 그대로
+     * 부른다 — 같은 렌더에서 아래 `setSelectedUnit(unit)`이 이긴다.
+     * 이렇게 두면 "고른 단지에 매달린 상태"를 비우는 자리가 코드 전체에
+     * 하나뿐이라, 축이 하나 늘어도 여기서 빠뜨릴 수 없다(C1).
+     */
+    clearComplexSelection();
     setSelectedUnit(unit);
     // 행을 누르면 지도도 그 단지로 옮겨 가며 마커를 강조한다
     // (design.md §4: 목록 행 ↔ 마커는 양방향으로 이어진다).
     setFocusedComplexKey(unit.complexKey);
-    // 새 평형의 PriceCheck·LocationFacts가 다시 마운트되며 자기
-    // onAssessment로 새 값을 곧바로 올려 주지만(App.tsx 상단 주석), 그
-    // 전까지 앞 평형의 판정이 잠깐이라도 새 평형에 대한 것처럼 남지
-    // 않도록 먼저 비워 둔다.
-    setPriceAssessment(null);
-    setLocationAssessment(null);
   }
 
   /**
@@ -697,9 +741,7 @@ export function App() {
    * 매물"인 것처럼 진단 종합에 남는다.
    */
   function handleCloseDetail() {
-    setSelectedUnit(null);
-    setPriceAssessment(null);
-    setLocationAssessment(null);
+    clearComplexSelection();
   }
 
   /**
@@ -740,12 +782,10 @@ export function App() {
           : "입력"
         : "결과",
     );
-    setSelectedUnit(null);
     // 상세(호가·입지)는 실거주에서 평형을 고른 동안에만 존재한다 —
     // 유형을 바꾸면 그 컴포넌트들이 사라지므로 진단 종합에 남은 값도
-    // 함께 비운다(handleCloseDetail과 같은 이유).
-    setPriceAssessment(null);
-    setLocationAssessment(null);
+    // 함께 비운다(clearComplexSelection이 세 축을 함께 비운다).
+    clearComplexSelection();
     // 구매 유형별 금융(PurchaseCheck)은 투자 경로에서만 렌더된다.
     // 실거주로 돌아가면 그 컴포넌트가 사라지므로 값도 비운다 — 다른
     // 유형(갭투자 ↔ 월세수익형) 사이의 전환은 컴포넌트가 계속

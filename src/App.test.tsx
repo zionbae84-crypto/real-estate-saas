@@ -642,6 +642,202 @@ describe("App - 행정동으로 좁히기", () => {
   });
 });
 
+/**
+ * 상세를 연 채 **다른 지역**을 다시 조회하는 경로.
+ *
+ * 기준 커밋에서는 이 상태에 도달할 수 없었다 — `RegionSelect`가
+ * `detail === null` 가지 안에 있어서 상세가 열려 있는 동안에는 지역을
+ * 다시 고를 방법 자체가 없었다. Task 3이 `RegionSelect`를
+ * `EntryScreen`으로 옮기고 "조건 다시 넣기"를 만들면서 그 경로가 열렸고,
+ * `handleRegionSelect`는 다시 검토되지 않았다.
+ *
+ * 남은 상세는 보기 흉한 잔상이 아니라 **숫자를 틀리게 한다**:
+ * `effectiveProfile`이 남은 평형의 `maxExclusiveAreaSqm`를 화면 전체
+ * (상단바 실구매 가능 가격·안전선·인쇄 요약)에 계속 대입하고 있어,
+ * 사용자가 보고 있지 않은 지역의 단지를 전제로 취득 부대비용이 계산된다.
+ * 앞 지역에서 59㎡를 골랐다면 그 오차는 실구매 가능 가격을 **올리는**
+ * 쪽 — 이 저장소가 가장 피하는 낙관 편향 방향이다.
+ */
+describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** 강남구(11680)에서 돌아오는 단지. 90㎡ — 농특세 부과 구간. */
+  const GANGNAM_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|강남동|2015|강남단지",
+    complexName: "강남단지",
+    legalDongName: "강남동",
+  };
+
+  /**
+   * 서초구(11650)에서 돌아오는 단지. **전용면적이 다르다**(59㎡) —
+   * 같으면 상세가 남았는지 여부가 화면 숫자에 드러나지 않아 아래
+   * 인쇄 요약 단언이 공허해진다.
+   */
+  const SEOCHO_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11650|서초동|2015|서초단지",
+    complexName: "서초단지",
+    regionCode: "11650",
+    legalDongName: "서초동",
+    areaBucket: 59,
+    maxExclusiveAreaSqm: 59,
+  };
+
+  async function fillProfile() {
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+  }
+
+  async function queryRegion(sigungu: string) {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), sigungu);
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  it("앞 지역 단지의 상세가 남지 않고, 새 지역의 목록이 보인다", async () => {
+    const spy = vi
+      .spyOn(regionQuery, "fetchRegionComplexes")
+      .mockResolvedValue({
+        units: [GANGNAM_UNIT],
+        isRegulatedArea: null,
+        dataAsOf: null,
+      });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [],
+      partialFailureCount: 0,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await queryRegion("강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    // 강남 단지의 상세를 연다.
+    await userEvent.click(screen.getByRole("button", { name: /강남단지/ }));
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+
+    // "조건 다시 넣기" → 서초구로 다시 조회한다.
+    spy.mockResolvedValue({
+      units: [SEOCHO_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
+    await queryRegion("서초구");
+    // 조회가 끝난 신호로 **상단바의 지역 이름**을 기다린다 — 목록이
+    // 아니라. 지금 코드에서는 사이드바가 상세를 그린 채라 목록이 아예
+    // 없고, 목록을 기다리면 실패가 "타임아웃"으로만 보여 무엇이 잘못됐는지
+    // 가려진다.
+    await screen.findByText("서울특별시 서초구");
+
+    // 상세는 닫혀 있어야 한다 — 앞 지역 단지를 가리키는 화면이다.
+    expect(
+      screen.queryByRole("region", { name: "단지 상세" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/강남단지/)).not.toBeInTheDocument();
+    // 그리고 사용자가 실제로 달라고 한 것 — 서초구 목록 — 이 보인다.
+    expect(screen.getByText("서초단지")).toBeInTheDocument();
+  });
+
+  it("화면 전체의 전용면적 전제가 앞 지역 단지에 묶여 있지 않다", async () => {
+    const spy = vi
+      .spyOn(regionQuery, "fetchRegionComplexes")
+      .mockResolvedValue({
+        units: [GANGNAM_UNIT],
+        isRegulatedArea: null,
+        dataAsOf: null,
+      });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [],
+      partialFailureCount: 0,
+    });
+
+    const { container } = render(<App />);
+    await fillProfile();
+    await queryRegion("강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    await userEvent.click(screen.getByRole("button", { name: /강남단지/ }));
+
+    // 상세를 연 동안에는 인쇄 요약이 그 평형의 면적을 "선택한 매물의
+    // 실제 면적"이라고 적는다 — 이것이 정상이다(전제).
+    expect(
+      container.querySelector(".print-summary")?.textContent,
+    ).toMatch(/90㎡\s*\(선택한 매물의 실제 면적\)/);
+
+    spy.mockResolvedValue({
+      units: [SEOCHO_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
+    await queryRegion("서초구");
+    await screen.findByText("서울특별시 서초구");
+
+    // 서초구를 보고 있는데 종이에 강남 단지의 90㎡가 "선택한 매물의 실제
+    // 면적"으로 남아 있으면 안 된다.
+    const summary = container.querySelector(".print-summary")?.textContent;
+    expect(summary).not.toMatch(/선택한 매물의 실제 면적/);
+    expect(summary).not.toMatch(/90㎡/);
+  });
+
+  it("가정 칩으로 화면 1에 돌아가 다시 조회해도 마찬가지다", async () => {
+    // handleOpenAssumption도 phase만 "입력"으로 되돌린다 — 같은 상태에
+    // 같은 경로로 닿는다.
+    const spy = vi
+      .spyOn(regionQuery, "fetchRegionComplexes")
+      .mockResolvedValue({
+        units: [GANGNAM_UNIT],
+        isRegulatedArea: null,
+        dataAsOf: null,
+      });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [],
+      partialFailureCount: 0,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await queryRegion("강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    await userEvent.click(screen.getByRole("button", { name: /강남단지/ }));
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+
+    // 상단바의 "실구매 가능 가격"을 눌러 예산 상세 패널을 열고, 그 안의
+    // 가정 칩으로 화면 1에 돌아간다.
+    await userEvent.click(
+      screen.getByRole("button", { name: /실구매 가능 가격/ }),
+    );
+    const chip = screen
+      .getAllByRole("button")
+      .find((b) => b.className.includes("assumption-item"));
+    expect(chip).toBeDefined();
+    await userEvent.click(chip!);
+
+    spy.mockResolvedValue({
+      units: [SEOCHO_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+    await queryRegion("서초구");
+    await screen.findByText("서울특별시 서초구");
+
+    expect(
+      screen.queryByRole("region", { name: "단지 상세" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("서초단지")).toBeInTheDocument();
+  });
+});
+
 describe("App - 단지 상세(화면 4)", () => {
   // useProfileForm은 localStorage에 저장·복원한다. App을 실제로
   // 렌더링하는 이 블록에서 지우지 않으면 이전 테스트가 입력한 값이
