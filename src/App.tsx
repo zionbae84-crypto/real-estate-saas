@@ -247,6 +247,28 @@ export function App() {
   }
 
   /**
+   * 가정 문구(`AssumptionLine`)의 항목을 눌렀다. 그 항목을 열고,
+   * **화면 1로 함께 되돌린다.**
+   *
+   * 되돌리지 않으면 이 버튼은 눌러도 아무 일도 일어나지 않는다:
+   * 그 항목을 여는 곳은 `ProfileForm`인데, 그 폼은 이제 `EntryScreen`
+   * 안에 있고 `EntryScreen`은 `phase === "결과"` 내내
+   * `display: none`이다 — 그리고 이 칩들이 보이는 단계가 바로 그
+   * "결과"뿐이다. 칩의 문구가 직접 "눌러서 알려주세요"라고 지시하므로,
+   * 눌러서 아무 일도 일어나지 않으면 화면이 자기 지시를 지키지
+   * 않는 것이 된다(`AssumptionLine`이 스스로 적은 원칙 — "숨긴 가정을
+   * 조용히 깔지 않고, 결과 옆에 두어 눌러서 고칠 수 있게 한다").
+   *
+   * `handleBackToEntry`와 같은 이유로 화면 단계만 바꾼다 — 프로필도
+   * 지역 조회 결과도 그대로 남으므로, 값을 고치고 "이 지역으로
+   * 조회하기"를 다시 누르면 결과로 돌아온다.
+   */
+  function handleOpenAssumption(field: AssumableField) {
+    setOpenField(field);
+    setPhase("입력");
+  }
+
+  /**
    * 지도용 좌표. 목록보다 늦게 채워진다 — 목록이 지도의 느린 응답을
    * 기다리지 않아야 한다(useComplexCoordinates 문서, 부모 스펙 §3).
    * 지역 조회가 성공하면(목록이 이미 뜬 뒤) 같은 지역으로 좌표도 조회한다.
@@ -718,7 +740,7 @@ export function App() {
               />
               <AssumptionLine
                 state={state}
-                onOpen={setOpenField}
+                onOpen={handleOpenAssumption}
                 areaOverridden={selectedUnit !== null}
               />
               <BudgetResult

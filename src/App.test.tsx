@@ -847,6 +847,62 @@ describe("App - 단지 상세(화면 4)", () => {
     });
   });
 
+  /**
+   * 리뷰 수정(Critical 2). `AssumptionLine`의 칩은 진짜 `<button>`이고,
+   * 문구가 직접 누르라고 지시한다("눌러서 알려주세요"). 그런데 그 클릭이
+   * 여는 `ProfileForm`은 이제 `EntryScreen` 안에 있고, `EntryScreen`은
+   * `phase === "결과"` 내내 `display: none`이다 — 그리고 이 칩들이 보이는
+   * 단계가 바로 그 "결과"뿐이었다. 눌러도 아무 일도 일어나지 않는 버튼이
+   * 지시문을 달고 있던 셈이다.
+   */
+  describe("리뷰 수정: 가정 칩을 누르면 입력 화면으로 돌아간다", () => {
+    it("결과 화면에서 칩을 누르면 입력 화면이 다시 보이고 그 항목이 열린다", async () => {
+      const { container } = render(<App />);
+      await fillProfile();
+
+      // 전제: 지금은 결과 단계라 입력 화면이 시각적으로 숨어 있다.
+      expect(container.querySelector(".entry-screen")).toHaveClass(
+        "entry-screen--hidden",
+      );
+      // 전제: 그 항목의 입력란은 아직 폼에 없다.
+      expect(
+        screen.queryByLabelText("매달 나가는 대출금"),
+      ).not.toBeInTheDocument();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /기존 대출 없음으로 계산했어요/ }),
+      );
+
+      expect(container.querySelector(".entry-screen")).not.toHaveClass(
+        "entry-screen--hidden",
+      );
+      expect(
+        screen.getByLabelText("매달 나가는 대출금"),
+      ).toBeInTheDocument();
+    });
+
+    it("화면 단계만 되돌린다 — 프로필도 지역 조회 결과도 그대로다", async () => {
+      render(<App />);
+      await fillProfile();
+      const priceBefore =
+        document.querySelector(".affordable-price")?.textContent;
+
+      await userEvent.click(
+        screen.getByRole("button", { name: /기존 대출 없음으로 계산했어요/ }),
+      );
+
+      // 입력값(현금)도, 그 값으로 낸 계산도 그대로다.
+      expect(screen.getByLabelText("사용가능 현금 예산")).toHaveValue("150000");
+      expect(document.querySelector(".affordable-price")?.textContent).toBe(
+        priceBefore,
+      );
+      // 조회 결과도 남아 있어, 다시 조회하지 않아도 목록이 그대로다.
+      expect(
+        screen.getByRole("region", { name: "살 수 있는 단지" }),
+      ).toBeInTheDocument();
+    });
+  });
+
   describe("리뷰 수정: 인쇄(화면 5)", () => {
     it("현금·소득을 입력하기 전에는 인쇄 버튼이 없다", () => {
       render(<App />);
