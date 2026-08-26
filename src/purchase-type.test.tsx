@@ -427,3 +427,144 @@ describe("리뷰 수정: 투자 화면에서 나가는 길", () => {
     );
   });
 });
+
+/**
+ * 재검토 수정(Critical 1): **저장된 투자 유형으로 새로 열면 아무것도
+ * 누를 수 없는 화면이 됐다.**
+ *
+ * `phase`는 무조건 "입력"으로 시작했는데(App.tsx) `purchaseType`은
+ * localStorage에서 복원된다(usePurchaseType). 그래서 월세수익형을 고른
+ * 사람이 새로고침하면:
+ *
+ * - `.entry-screen`이 불투명한 채로 화면을 덮는다(`phase !== "결과"`).
+ * - 그 안의 두 조건부 자식은 전부 `purchaseType === "실거주"` 게이트라
+ *   제목과 부제만 남는다.
+ * - 유형 라디오는 결과 화면으로 옮겨졌는데, 그 트리는
+ *   `phase === "입력"`이라 `inert`다 — 포인터·키보드·보조기술 어디로도
+ *   닿지 않고, 어차피 불투명한 오버레이 밑이다.
+ * - `setPhase`를 부를 수 있는 네 자리가 전부 없거나 `inert`다.
+ *
+ * localStorage를 지우는 것 말고 빠져나올 길이 없었다.
+ *
+ * **이 블록이 jsdom에서 뜻을 가지려면 `inert`와 `display`를 직접 봐야
+ * 한다.** jsdom은 둘 다 적용하지 않으므로 `getByRole`은 덮인 컨트롤도
+ * 그대로 찾아낸다 — 위 "새로 그려도 고른 유형이 남는다"가 정확히 이
+ * 상태를 렌더링하고도 통과한 이유다.
+ */
+describe("재검토 수정: 저장된 투자 유형으로 새로 열기", () => {
+  /**
+   * 사용자가 실제로 누를 수 있는가. 조상 중에 `inert`가 걸렸거나
+   * 시각적으로 걷힌 화면 1(`.entry-screen--hidden`)이 하나라도 있으면
+   * 아니다.
+   */
+  function reachable(element: Element | null): boolean {
+    if (element === null) return false;
+    // 변수 이름을 `cursor`로 둔다 — `no-network.test.ts`가 `src/`
+    // 전체에서 노드 내장 모듈 임포트 접두사를 문자열로 금지하는데,
+    // 타입 표기가 붙은 `node` 변수가 그 패턴에 그대로 걸린다.
+    let cursor: Element | null = element;
+    while (cursor !== null) {
+      if (cursor.hasAttribute("inert")) return false;
+      if (cursor.classList.contains("entry-screen--hidden")) return false;
+      cursor = cursor.parentElement;
+    }
+    return true;
+  }
+
+  /** 지금 화면에서 사용자가 실제로 조작할 수 있는 컨트롤들 */
+  function operableControls(container: HTMLElement): Element[] {
+    return [
+      ...container.querySelectorAll("button, input, select, textarea, a[href]"),
+    ].filter(
+      (el) =>
+        reachable(el) &&
+        !(el as HTMLInputElement | HTMLButtonElement).disabled,
+    );
+  }
+
+  it("reachable()이 실제로 무언가를 걸러낸다(전제)", async () => {
+    const { container } = render(<App />);
+    // 프로필만 채우고 지역은 조회하지 않은 상태 — 실거주 결과 트리에
+    // 인쇄 버튼이 그려지지만 phase는 아직 "입력"이라 화면 1이 그 위를
+    // 덮고 있다(리뷰 수정 Important 4가 `inert`로 끊은 바로 그 상태).
+    await fillProfile();
+    expect(container.querySelector(".entry-screen")).not.toHaveClass(
+      "entry-screen--hidden",
+    );
+    expect(container.querySelector(".results-screen")).toHaveAttribute("inert");
+
+    // 그 inert 트리 안의 컨트롤은 닿지 않는 것으로 판정돼야 한다.
+    const printButton = screen.getByRole("button", { name: "인쇄하기" });
+    expect(reachable(printButton)).toBe(false);
+    // 화면 1 안의 입력은 닿는다 — 이 헬퍼가 전부 false를 내는 것이
+    // 아님을 함께 확인한다.
+    expect(reachable(screen.getByLabelText("사용가능 현금 예산"))).toBe(true);
+  });
+
+  it.each(["실거주", "월세수익형"] as const)(
+    "%s를 저장해 둔 채로 새로 열어도 누를 수 있는 컨트롤이 하나는 있다",
+    (stored) => {
+      window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, stored);
+      const { container } = render(<App />);
+      expect(
+        operableControls(container).length,
+        "새로 연 화면에서 사용자가 조작할 수 있는 컨트롤이 하나도 " +
+          "없습니다 — localStorage를 지우는 것 말고 빠져나올 길이 없는 상태입니다.",
+      ).toBeGreaterThan(0);
+    },
+  );
+
+  it("투자 유형이 복원되면 화면 1은 걷히고 결과 화면의 inert도 풀린다", () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "월세수익형");
+    const { container } = render(<App />);
+
+    expect(container.querySelector(".entry-screen")).toHaveClass(
+      "entry-screen--hidden",
+    );
+    expect(container.querySelector(".results-screen")).not.toHaveAttribute(
+      "inert",
+    );
+  });
+
+  it("복원된 투자 화면에서 유형 라디오와 자기 입력란에 실제로 닿는다", () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "월세수익형");
+    render(<App />);
+
+    for (const type of ["실거주", "월세수익형"] as const) {
+      const radio = screen.getByRole("radio", {
+        name: new RegExp(purchaseRules.types[type].label),
+      });
+      expect(
+        reachable(radio),
+        `${type} 라디오가 inert 트리나 걷힌 화면 1 안에 있습니다.`,
+      ).toBe(true);
+    }
+    expect(reachable(screen.getByLabelText("월세"))).toBe(true);
+    expect(reachable(screen.getByRole("button", { name: "인쇄하기" }))).toBe(
+      true,
+    );
+  });
+
+  it("실거주가 복원되면 화면 1이 그대로 뜨고 그 안의 입력에 닿는다(대조군)", () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "실거주");
+    const { container } = render(<App />);
+
+    expect(container.querySelector(".entry-screen")).not.toHaveClass(
+      "entry-screen--hidden",
+    );
+    expect(container.querySelector(".results-screen")).toHaveAttribute("inert");
+    expect(reachable(screen.getByLabelText("사용가능 현금 예산"))).toBe(true);
+  });
+
+  /**
+   * 복원 실패(모르는 값·지금은 못 고르는 갭투자)는 실거주로 떨어지므로
+   * 화면 1이 떠야 한다 — 그 안내 문구를 읽을 자리가 바로 그 화면이다.
+   */
+  it("복원 실패 안내는 떠 있는 화면 1 안에서 읽을 수 있다", () => {
+    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "전세");
+    const { container } = render(<App />);
+    const notice = container.querySelector(".purchase-type-restore-notice");
+    expect(notice).not.toBeNull();
+    expect(reachable(notice)).toBe(true);
+  });
+});
