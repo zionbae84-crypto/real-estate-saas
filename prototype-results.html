@@ -1,0 +1,277 @@
+<!doctype html>
+<!--
+  결과 화면(상단바 + 사이드바) 프로토타입 — 앱 코드가 아니다.
+  http://localhost:4173/prototype-results.html
+
+  사용자가 시안 A(카드)를 골랐고, 두 가지를 요청했다:
+    ① 카드 안 글자를 지금보다 줄일 것
+    ② 전체 톤이 너무 어두우니 푸른색 계열의 밝은 톤으로
+
+  그래서 DESIGN.md의 중성 회색 계열을 **푸른 기가 도는 밝은 계열**로
+  옮겼다. 구조(24px 반경 카드 · 18px 알약 · compact 밀도 · Stat Block)는
+  DESIGN.md 그대로다.
+
+  ── 대비 실측 (직접 계산, 4.5:1 기준) ───────────────────────
+                    paper#fff  alt#f7fafc  canvas#eaf1f7
+    ink   #16303f     13.74      13.11       12.05
+    ink2  #234a63      9.41       8.98        8.26
+    gray  #547082      5.23       4.99        4.59
+    brass #8a5f14      5.63       5.37        4.94
+    blue  #1c5fa8      6.46       6.16        5.67
+
+  보조 텍스트로 흔히 쓰는 #5a7488은 캔버스 위에서 4.30:1로 **미달**이라
+  #547082로 내렸다. 글자를 줄인 만큼 대비는 더 여유 있게 잡았다.
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>결과 화면 프로토타입 — 카드</title>
+<script type="module">
+  import "pretendard/dist/web/static/pretendard.css";
+</script>
+<style>
+  :root {
+    /* 표면 — 푸른 기가 도는 밝은 계열 */
+    --canvas: #eaf1f7;
+    --alt:    #f7fafc;
+    --paper:  #ffffff;
+
+    /* 글자 */
+    --ink:    #16303f;   /* 본문·제목 */
+    --ink-2:  #234a63;   /* 채움 배지 바탕 */
+    --gray:   #547082;   /* 보조 — 캔버스 위 4.59:1 */
+
+    /* 선 */
+    --rule:      #d7e3ed;
+    --rule-soft: #e4edf4;
+
+    /* 강조 — 한 화면에 한 종류만 */
+    --brass: #8a5f14;    /* 금액. 화면 1(영상)과 이어 주는 실 */
+    --blue:  #1c5fa8;    /* 선택 상태 */
+
+    --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; font-family: var(--font); color: var(--ink);
+    background: var(--canvas); overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  .shell {
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);  /* ⚠ auto면 지도 높이가 0이 된다 */
+  }
+  .stage { display: grid; grid-template-columns: 372px minmax(0, 1fr); min-height: 0; }
+  .side { overflow-y: auto; min-height: 0; }
+  .mapwrap { position: relative; min-height: 0; }
+  /* ⚠ 네이버 SDK가 position을 인라인으로 덮어써서 inset:0이 무력화된다 */
+  #map { width: 100%; height: 100%; }
+
+  /* ── 상단바 ──────────────────────────────────────────────── */
+  .topbar {
+    height: 68px; background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 30px; padding: 0 22px;
+  }
+  .brand {
+    font-size: 13px; font-weight: 600; letter-spacing: -.012em;
+    flex: none; color: var(--ink);
+  }
+  .stats { display: flex; gap: 30px; flex: 1; min-width: 0; }
+  .stat .k {
+    display: block; font-size: 11px; color: var(--gray);
+    letter-spacing: .06em; margin-bottom: 3px; white-space: nowrap;
+  }
+  .stat .v {
+    font-size: 18px; font-weight: 600; letter-spacing: -.028em;
+    white-space: nowrap;
+  }
+  .stat .v.money { color: var(--brass); }
+  .ghost {
+    background: var(--canvas); border: 0; border-radius: 18px;
+    padding: 8px 14px; font-size: 13px; font-weight: 500; color: var(--ink);
+    cursor: pointer; flex: none;
+  }
+  .ghost:hover { background: #dfe9f2; }
+
+  /* ── 사이드바 ────────────────────────────────────────────── */
+  .side { background: var(--canvas); padding: 14px 12px 22px; }
+  .sideHead { padding: 4px 8px 12px; }
+  .sideHead h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; letter-spacing: -.025em; }
+  .sideHead p { margin: 0; font-size: 11.5px; color: var(--gray); line-height: 1.6; }
+
+  /* 카드 — DESIGN.md의 24px 반경 + 헤어라인 + 얕은 그림자 */
+  .row {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 24px;
+    box-shadow: 0 1px 2px rgba(22,48,63,.05), 0 1px 3px rgba(22,48,63,.06);
+    padding: 13px 16px 14px;
+    margin-bottom: 8px;
+    transition: border-color .14s, box-shadow .14s;
+  }
+  .row:hover { background: #fdfeff; border-color: #c6d8e6; }
+  .row[aria-current="true"] {
+    border-color: var(--blue);
+    box-shadow: 0 0 0 1px var(--blue);
+  }
+
+  /* 카드 안 활자 — 요청대로 줄였다 */
+  .nm { font-size: 13px; font-weight: 600; letter-spacing: -.012em; }
+  .nm em { font-style: normal; font-weight: 500; color: var(--gray); }
+  .pr {
+    font-size: 17px; font-weight: 600; letter-spacing: -.03em;
+    margin-top: 6px;
+  }
+  .mt { font-size: 11px; color: var(--gray); margin-top: 3px; letter-spacing: .005em; }
+  .tg {
+    display: inline-block; margin-top: 9px; border-radius: 18px;
+    padding: 2px 9px; font-size: 11px; font-weight: 500;
+    background: var(--canvas); color: var(--ink-2);
+  }
+  .tg.cash { background: var(--ink-2); color: #f7fafc; }
+
+  /* ── 지도 위 ─────────────────────────────────────────────── */
+  .legend {
+    position: absolute; left: 16px; bottom: 16px; z-index: 2;
+    background: rgba(255,255,255,.95); border: 1px solid var(--rule);
+    border-radius: 12px; padding: 8px 12px;
+    font-size: 11px; color: var(--gray); line-height: 1.95;
+    pointer-events: none;                 /* 아래 마커 클릭을 먹지 않게 */
+  }
+  .legend i {
+    display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    margin-right: 7px; vertical-align: 1px;
+  }
+  .legend .a { background: var(--ink-2); }
+  .legend .b { background: #fff; border: 1px solid var(--gray); }
+
+  .pin {
+    font-family: var(--font); font-size: 11px; font-weight: 600;
+    letter-spacing: -.02em; white-space: nowrap;
+    padding: 3px 9px; border-radius: 18px;
+    border: 1px solid var(--ink-2); background: #fff; color: var(--ink);
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 1px 4px rgba(22,48,63,.2); cursor: pointer;
+  }
+  .pin.cash { background: var(--ink-2); color: #fff; }
+  /* 선택 표시에 빨강을 쓰지 않는다 — 빨강은 위험을 뜻하는 자리로 남긴다 */
+  .pin.on { background: var(--brass); border-color: var(--brass); color: #fff; }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">내 예산으로 살 수 있는 집</div>
+    <div class="stats">
+      <div class="stat"><span class="k">가진 현금</span><span class="v tnum">3억 5,000만원</span></div>
+      <div class="stat"><span class="k">연 소득</span><span class="v tnum">7,000만원</span></div>
+      <div class="stat"><span class="k">살 수 있는 가격</span><span class="v money tnum">5억 8,800만원</span></div>
+      <div class="stat"><span class="k">지역</span><span class="v">서울 노원구</span></div>
+    </div>
+    <button class="ghost">조건 다시 넣기</button>
+  </header>
+
+  <div class="stage">
+    <aside class="side">
+      <div class="sideHead">
+        <h2>살 수 있는 단지</h2>
+        <p>최근 6개월 실거래 범위예요. 하나의 적정가를 매기지 않고 범위로만 말해요.</p>
+      </div>
+      <div id="list"></div>
+    </aside>
+
+    <div class="mapwrap">
+      <div id="map"></div>
+      <div class="legend">
+        <div><i class="a"></i>대출 없이 살 수 있어요</div>
+        <div><i class="b"></i>대출이 필요해요</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  { name:"벽산",      area:43, dong:"상계동", lo:30000, hi:38000, n:15, cash:true,  lat:37.6603, lng:127.0596 },
+  { name:"사슴3",     area:33, dong:"월계동", lo:30000, hi:37650, n:15, cash:true,  lat:37.6301, lng:127.0554 },
+  { name:"주공2",     area:39, dong:"월계동", lo:28000, hi:35000, n:15, cash:true,  lat:37.6288, lng:127.0602 },
+  { name:"청백3",     area:40, dong:"월계동", lo:31500, hi:31500, n:1,  cash:true,  lat:37.6325, lng:127.0521 },
+  { name:"초안2",     area:40, dong:"월계동", lo:25000, hi:29500, n:5,  cash:true,  lat:37.6270, lng:127.0578 },
+  { name:"상계주공7", area:59, dong:"상계동", lo:52000, hi:61000, n:22, cash:false, lat:37.6650, lng:127.0640 },
+  { name:"중계무지개", area:59, dong:"중계동", lo:58000, hi:67000, n:18, cash:false, lat:37.6452, lng:127.0762 },
+  { name:"하계장미",   area:84, dong:"하계동", lo:72000, hi:83000, n:9,  cash:false, lat:37.6386, lng:127.0698 },
+];
+
+const won = m => {
+  const eok = Math.floor(m / 10000), man = m % 10000;
+  if (eok && man) return `${eok}억 ${man.toLocaleString()}만원`;
+  if (eok) return `${eok}억원`;
+  return `${man.toLocaleString()}만원`;
+};
+const range = d => d.lo === d.hi ? won(d.lo) : `${won(d.lo)} – ${won(d.hi)}`;
+
+let current = -1, map = null, pins = [];
+
+document.getElementById("list").innerHTML = DATA.map((d, i) => `
+  <button class="row" data-i="${i}">
+    <div class="nm">${d.name} <em>${d.area}㎡ · ${d.dong}</em></div>
+    <div class="pr tnum">${range(d)}</div>
+    <div class="mt">최근 6개월 거래 ${d.n}건</div>
+    <span class="tg ${d.cash ? "cash" : ""}">${d.cash ? "대출 없이" : "대출 필요"}</span>
+  </button>`).join("");
+
+document.querySelectorAll("#list .row").forEach(r =>
+  r.addEventListener("click", () => select(+r.dataset.i, true)));
+
+function select(i, pan) {
+  current = i;
+  document.querySelectorAll("#list .row").forEach((r, k) =>
+    r.setAttribute("aria-current", String(k === i)));
+  pins.forEach((p, k) => {
+    const el = p.getElement && p.getElement();
+    el?.querySelector(".pin")?.classList.toggle("on", k === i);
+  });
+  if (pan && map) map.panTo(new naver.maps.LatLng(DATA[i].lat, DATA[i].lng));
+}
+
+const s = document.createElement("script");
+s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=%VITE_NAVER_MAP_CLIENT_ID%";
+s.onload = () => {
+  map = new naver.maps.Map("map", {
+    center: new naver.maps.LatLng(37.642, 127.062),
+    zoom: 13, scaleControl: false, mapDataControl: false,
+  });
+  pins = DATA.map((d, i) => {
+    const m = new naver.maps.Marker({
+      position: new naver.maps.LatLng(d.lat, d.lng), map,
+      icon: {
+        content: `<div class="pin ${d.cash ? "cash" : ""}">${won(d.hi)}</div>`,
+        anchor: new naver.maps.Point(34, 11),
+      },
+    });
+    naver.maps.Event.addListener(m, "click", () => {
+      select(i, false);
+      document.querySelector(`#list .row[data-i="${i}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return m;
+  });
+};
+s.onerror = () => {
+  document.getElementById("map").innerHTML =
+    '<div style="height:100%;display:grid;place-items:center;color:#547082;font-size:13px">' +
+    '지도를 불러오지 못했어요 — 등록된 주소(포트 4173)에서 열어 주세요.</div>';
+};
+document.head.appendChild(s);
+</script>
+</body>
+</html>
