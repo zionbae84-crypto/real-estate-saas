@@ -2483,25 +2483,63 @@ body.body-scroll-locked {
  * 자신은 그 칸을 꽉 채우기만 한다.
  */
 .entry-screen-scrim {
+  /*
+   * `--ink`의 채널 값. `rgb(… / <alpha>)` 문법이 채널과 불투명도를
+   * 나눠 받아야 해서 hex 토큰을 그대로 쓸 수 없다 — 두 값이 갈라지지
+   * 않게 `scripts/seed-semantic-tokens.test.ts`가 `--ink`와 같은지
+   * 검사한다.
+   */
+  --scrim-ink: 13 19 25;
+  /*
+   * **입력 패널이 덮는 범위에서 스크림이 가장 옅어지는 지점의
+   * 불투명도.** 이 한 숫자가 화면 1 본문의 대비를 정한다 —
+   * `.entry-screen-panel`은 자기 배경이 없어서, 그 안의 글자는 `--ink`가
+   * 아니라 **여기서 합성된 면** 위에 앉는다.
+   *
+   * `scripts/seed-semantic-tokens.test.ts`가 이 값을 읽어 영상 평균색
+   * (rgb 104 117 132)과 합성한 뒤 `--haze` 등 화면 1의 모든 텍스트 색과
+   * 대비를 잰다. 여기를 낮추면 그 테스트가 먼저 깨진다.
+   *
+   * 리뷰 findings I2 수정 전에는 가로 그라디언트의 둘째 정지점이 34%에
+   * 있어(그 뒤 62%에서 0.34로 급락) 패널 열(0~44%)의 오른쪽 절반이
+   * 계산상 0.58까지 옅어졌다(그 면 위에서 옛 --haze는 2.55:1) — 스크림이 "입력 패널이 놓일 자리를 읽히게
+   * 한다"고 적어 놓고 실제로는 그 자리를 다 덮지 못하고 있었다. 정지점을
+   * 52%로 밀어 패널 열 전체가 이 바닥값 위에 있게 했다(52%인 이유:
+   * 100deg 그라디언트는 기울어 있어 44% 지점이 화면 높이에 따라
+   * 그라디언트 선의 38~52% 사이에 대응한다 — 그 최댓값을 잡았다).
+   */
+  --scrim-panel-alpha: 0.88;
   position: relative;
   z-index: 1;
   height: 100%;
   display: grid;
   grid-template-columns: minmax(420px, 44%) 1fr;
   background-image:
-    linear-gradient(to top, rgba(13, 19, 25, 0.6) 0%, transparent 40%),
+    linear-gradient(to top, rgb(var(--scrim-ink) / 0.6) 0%, transparent 40%),
     linear-gradient(
       100deg,
-      rgba(13, 19, 25, 0.95) 0%,
-      rgba(13, 19, 25, 0.86) 34%,
-      rgba(13, 19, 25, 0.34) 62%,
-      rgba(13, 19, 25, 0.3) 100%
+      rgb(var(--scrim-ink) / 0.95) 0%,
+      rgb(var(--scrim-ink) / var(--scrim-panel-alpha)) 52%,
+      rgb(var(--scrim-ink) / 0.34) 72%,
+      rgb(var(--scrim-ink) / 0.3) 100%
     );
 }
 
 @media (max-width: 900px) {
   .entry-screen-scrim {
     grid-template-columns: 1fr;
+    /*
+     * 한 열이 되면 패널이 **화면 전체**를 쓴다 — 오른쪽에 영상을 드러낼
+     * 여백이 없으므로 가로 그라디언트가 할 일도 없다. 그대로 두면 글자가
+     * 화면 오른쪽에서 불투명도 0.30 구간(합성 실측 #4d5864)까지 밀려
+     * 나가 본문 대비가 무너진다. 바닥값 한 겹으로 평평하게 덮는다.
+     */
+    background-image:
+      linear-gradient(to top, rgb(var(--scrim-ink) / 0.6) 0%, transparent 40%),
+      linear-gradient(
+        rgb(var(--scrim-ink) / var(--scrim-panel-alpha)),
+        rgb(var(--scrim-ink) / var(--scrim-panel-alpha))
+      );
   }
 }
 
@@ -2606,6 +2644,21 @@ body.body-scroll-locked {
 }
 
 /*
+ * SEED가 그리는 힌트 슬롯(`MoneyInput`이 `description`으로 넘긴다).
+ * 기본값은 `--seed-color-fg-neutral-subtle` → `--on-sheet-faint`로
+ * **밝은 면 전용** 값이라, 이 어두운 패널 위에서는 거의 읽히지 않는다
+ * (#637280 on #181f26 = 3.37:1, 계산값).
+ *
+ * 같은 역할(`.hint`)과 같은 색을 쓴다 — 두 힌트가 나란히 서는 화면이라
+ * 색이 갈리면 뜻이 다른 것처럼 읽힌다. 클래스 이름은 SEED가 정하는
+ * 것이라 우리 계약이 아니지만, 어긋나도 화면이 **덜 읽히는 쪽으로만**
+ * 틀어지는 자리다(SEED 기본값으로 되돌아갈 뿐 배치는 그대로다).
+ */
+.entry-screen .seed-field__description {
+  color: var(--haze);
+}
+
+/*
  * 무엇이 모자라서 조회 버튼이 안 나오는지 말하는 한 줄(App.tsx의
  * Important 5 주석). 기본 `.prompt` 색은 밝은 면 기준이라 이 어두운
  * 패널 위에서 묻힌다 — 힌트보다 한 단계 밝은 본문 색으로 둔다.
@@ -2656,8 +2709,18 @@ body.body-scroll-locked {
   color: var(--haze);
 }
 
+/*
+ * 저장된 투자 유형을 복원했다는 알림.
+ *
+ * `--warn`(→ `--seed-color-fg-warning-contrast`, #6d4610)은 **밝은 면 위
+ * 태그**용으로 고른 진한 값이라 이 어두운 패널 위에서는 2.01:1로 거의
+ * 보이지 않았다(전수 검사가 잡은 자리 — 리뷰 findings에는 없었다).
+ * 어두운 면에서 "주의" 자리를 맡는 색은 황동 쪽이다. `.entry-screen
+ * .echo`가 이미 쓰는 `--brass-lift`를 그대로 쓴다 — 스크림 바닥 대비
+ * 7.96:1(계산값).
+ */
 .entry-screen .purchase-type-restore-notice {
-  color: var(--warn);
+  color: var(--brass-lift);
 }
 
 /* "이 지역으로 조회하기"/"다시 시도" — 이 화면의 유일한 강조 버튼. */
