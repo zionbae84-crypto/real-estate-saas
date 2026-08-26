@@ -5,6 +5,7 @@ import { App } from "./App";
 import { COMPLEX_UNITS, type ComplexUnit } from "./data/complexes";
 import * as regionQuery from "./lib/regionQuery";
 import { rules as financeRules } from "./state/useAffordability";
+import { STORAGE_KEY } from "./state/useProfileForm";
 
 /**
  * 지역 실거래가 조회를 모의한다.
@@ -434,5 +435,86 @@ describe("예산 계산기 통합", () => {
     await screen.findByText(서초단지);
 
     expect(screen.queryByText(강남단지)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * ⚠ **저장된 상태를 실제로 심고 시작하는 유일한 스위트다.**
+ *
+ * 나머지 스위트는 전부 `beforeEach`에서 localStorage를 지우고 빈
+ * 저장소로 시작한다. 그래서 "저장본이 이번 세션에 무엇을 되살리는가"는
+ * 전체 스위트 중 어느 것도 보지 않는 축이었고, 리뷰가 실제 브라우저에서
+ * 잡은 결함(저장된 규제지역 **판정**이 지역을 고르지도 않은 세션에서
+ * 사실로 다시 주장됨)이 그 틈으로 통과했다.
+ *
+ * 여기서만 `setItem`으로 저장본을 심는다. 심는 값은 리뷰가 브라우저에서
+ * 재현한 그것과 같다.
+ */
+describe("저장본에서 시작하는 세션", () => {
+  beforeEach(() => window.localStorage.clear());
+  afterEach(() => vi.restoreAllMocks());
+
+  /** 리뷰가 브라우저에서 재현한 저장본을 그대로 심는다. */
+  function seedStoredState(overrides: Record<string, unknown> = {}) {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 100_000_000,
+        isRegulatedArea: true,
+        touched: ["regulatedArea"],
+        ...overrides,
+      }),
+    );
+  }
+
+  /** 인쇄 요약(화면에서는 숨어 있고 DOM에는 있다)의 한 줄을 읽는다. */
+  function printValueOf(label: string): string | null {
+    const rows = document.querySelectorAll(".print-summary dl > div");
+    for (const row of rows) {
+      if (row.querySelector("dt")?.textContent === label) {
+        return row.querySelector("dd")?.textContent ?? null;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 마운트 시점에는 **불러온 지역이 없다**(상단바에 지역 줄조차 없다).
+   * 판정은 불러온 지역에 매인 사실이므로, 지역이 없는 세션에서 그 판정을
+   * 되살리면 화면이 이름도 대지 못하는 지역에 대해 단정하게 된다.
+   */
+  it("저장된 판정을 화면이 사실로 다시 주장하지 않는다", () => {
+    seedStoredState();
+    render(<App />);
+
+    expect(screen.queryByText(/판정했어요/)).not.toBeInTheDocument();
+    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
+  });
+
+  it("종이도 저장된 판정을 '(지역 판정)'으로 찍지 않는다", () => {
+    seedStoredState();
+    render(<App />);
+
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
+  });
+
+  /**
+   * 방향까지 잠근다. 저장된 `false`(비규제)가 살아남으면 LTV가 40%가
+   * 아니라 70%로 계산돼 헤드라인이 **부풀려진다** — 사용자가 이번 세션에
+   * 지역을 고르지도 않았고, 그 값을 볼 입력란도 없다.
+   */
+  it("저장된 비규제 판정이 헤드라인을 부풀리지 않는다", () => {
+    seedStoredState({ isRegulatedArea: false });
+    const { unmount } = render(<App />);
+    const priceFromStored = readAffordablePrice();
+    unmount();
+
+    window.localStorage.clear();
+    seedStoredState({ isRegulatedArea: true, touched: [] });
+    render(<App />);
+
+    expect(priceFromStored).toBeGreaterThan(0);
+    expect(priceFromStored).toBe(readAffordablePrice());
   });
 });

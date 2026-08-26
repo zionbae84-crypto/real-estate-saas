@@ -49,6 +49,37 @@ const ASSUMABLE_FIELD_KEY: Record<AssumableField, keyof ProfileFormState> = {
 };
 
 /**
+ * `touched`의 각 항목이 **새 세션에서도 여전히 참인가**.
+ *
+ * - `"restorable"` — 사용자가 화면에서 직접 정했고, 마운트 뒤에도 그
+ *   입력란이 화면에 남아 있어 값도 지위도 눈으로 확인·수정할 수 있다.
+ * - `"session"` — 그 지위가 **이번 세션에만 존재하는 것에 매여 있다.**
+ *   복원하면 근거가 사라진 채 결론만 살아남는다.
+ *
+ * ⚠ **`regulatedArea`가 `"session"`인 이유.** 이 값을 정하는 것은
+ * 사용자가 아니라 **지역 조회**이고(`App.tsx`의 useEffect), 조회한
+ * 지역은 저장되지 않는다 — 새로 뜬 화면에는 지역이 없다. 그런데도
+ * `touched`를 복원하면 화면과 종이가 "고른 지역은 규제지역으로
+ * 판정했어요"라고 **단정**하면서, 정작 그 지역의 이름은 대지 못한다.
+ * 확인할 체크박스도 이제 화면에 없다(그 입력란은 이번 라운드에
+ * 사라졌다). 저장된 값이 `false`(비규제)면 방향까지 나쁘다 — LTV가
+ * 40%가 아니라 70%로 잡혀 헤드라인이 부풀려진다.
+ *
+ * 복원하지 않으면 `isRegulatedArea`도 함께 기본값으로 돌아가고(아래
+ * `loadStoredState`), 화면은 "확인하지 못해 …로 보고 계산했어요"라는
+ * **가정 문구**로 시작한다. 지역을 다시 조회하는 순간 판정이 돌아온다.
+ *
+ * `Record`라 항목을 늘리면 여기에 답을 적지 않는 한 타입이 통과하지
+ * 않는다 — "이 지위가 새 세션에서도 참인가"를 빠뜨릴 자리가 없다.
+ */
+const ASSUMABLE_FIELD_SCOPE: Record<
+  AssumableField,
+  "restorable" | "session"
+> = {
+  regulatedArea: "session",
+};
+
+/**
  * 화면에서 **없앤 입력들이 계산에 넘기는 값**.
  *
  * ⚠ **이 값들은 "모른다"가 아니라 "이렇게 가정했다"이다.** 그 차이가
@@ -296,6 +327,12 @@ export function loadStoredState(
     // 무시하고 DEFAULT_FORM_STATE를 쓴다 — 그러지 않으면 옛 저장본이
     // "가정"이라는 이름표를 달고 되살아나, 사용자가 확인한 적 없는 값이
     // 계산에 쓰이면서 문구는 그 사실을 숨긴다.
+    //
+    // 지금은 `regulatedArea`가 `"session"`이라(`ASSUMABLE_FIELD_SCOPE`)
+    // 이 조건이 참이 되는 저장본이 없다. 그래도 조건을 지운 자리에
+    // 기본값을 박아 두지는 않는다 — "손대지 않은 값은 기본값"이라는
+    // 규칙은 항목의 scope와 무관하게 옳고, 규칙을 한 곳(scope 표)에만
+    // 두어야 다음 항목이 늘 때 두 자리가 어긋나지 않는다.
     isRegulatedArea: touched.includes("regulatedArea")
       ? typeof o.isRegulatedArea === "boolean"
         ? o.isRegulatedArea
@@ -307,15 +344,27 @@ export function loadStoredState(
       capitalGainsTax: amount(home.capitalGainsTax),
     },
     // 옛 저장본에는 없어진 항목(existingDebt·area)이 touched에 남아 있을
-    // 수 있다. `parseTouched`가 지금 존재하는 항목만 남기므로 조용히
-    // 걸러진다.
+    // 수 있다. `parseTouched`가 지금 존재하는 항목만, 그중에서도 새
+    // 세션에서 여전히 참인 항목만 남기므로 조용히 걸러진다
+    // (`ASSUMABLE_FIELD_SCOPE`).
     touched,
   };
 }
 
+/**
+ * 저장본의 `touched`를 이번 세션의 것으로 복원한다.
+ *
+ * ⚠ **세션에 매인 항목은 복원하지 않는다**(`ASSUMABLE_FIELD_SCOPE`).
+ * `touched`는 값이 아니라 **"이 값이 확인된 사실인가"라는 지위**를
+ * 나르고, 그 지위가 이번 세션에 존재하지 않는 것(불러온 지역)에
+ * 매여 있으면 복원하는 순간 근거 없는 단정이 된다.
+ */
 function parseTouched(value: unknown): AssumableField[] {
   if (!Array.isArray(value)) return [];
-  return ALL_ASSUMABLE_FIELDS.filter((field) => value.includes(field));
+  return ALL_ASSUMABLE_FIELDS.filter(
+    (field) =>
+      ASSUMABLE_FIELD_SCOPE[field] === "restorable" && value.includes(field),
+  );
 }
 
 /**

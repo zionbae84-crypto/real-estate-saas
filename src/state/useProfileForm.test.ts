@@ -368,10 +368,14 @@ describe("loadStoredState", () => {
       expect(restored.exclusiveAreaSqm).toBeUndefined();
     });
 
-    it("없어진 touched 항목은 걸러 내고, 남은 항목만 복원한다", () => {
-      expect(loadStoredState(storage(legacy)).touched).toEqual([
-        "regulatedArea",
-      ]);
+    /**
+     * 없어진 항목(`existingDebt`·`area`)은 지금 존재하지 않아서 걸러지고,
+     * `regulatedArea`는 존재하지만 **세션에 매인 지위**라 걸러진다
+     * (아래 "저장본은 지역 판정을 되살리지 않는다" 참고). 그래서 남는
+     * 것이 하나도 없다.
+     */
+    it("없어진 touched 항목은 걸러 낸다", () => {
+      expect(loadStoredState(storage(legacy)).touched).toEqual([]);
     });
 
     it("엔진에 넘어가는 값도 가정값이다 — 옛 답이 조용히 계산을 움직이지 않는다", () => {
@@ -445,15 +449,33 @@ describe("loadStoredState", () => {
     });
   });
 
-  describe("규제지역은 touched일 때만 저장값을 존중한다", () => {
-    it("touched에 없으면 저장된 값이 유효해도 현재 기본값(true)이 된다", () => {
+  /**
+   * ⚠ **판정은 불러온 지역에 매여 있고, 마운트 시점에는 불러온 지역이
+   * 없다.** 조회한 지역은 저장되지 않으므로(새 화면에는 지역 줄조차
+   * 없다) `touched: ["regulatedArea"]`를 복원하면 화면과 종이가 이름도
+   * 대지 못하는 지역에 대해 "규제지역으로 판정했어요"라고 단정하게
+   * 된다. 확인할 체크박스도 이제 없다.
+   *
+   * 그래서 값도 지위도 되살리지 않는다. `isRegulatedArea`는 touched가
+   * 정하므로, 판정을 버리면 값도 함께 기본값(보수적인 `true`)으로
+   * 돌아간다 — 저장된 `false`가 살아남아 LTV를 70%로 잡는 낙관 방향의
+   * 새어 나감이 구조적으로 불가능하다.
+   */
+  describe("저장본은 지역 판정을 되살리지 않는다", () => {
+    it("touched에 regulatedArea가 있어도 복원하지 않는다", () => {
       expect(
-        loadStoredState(storage(JSON.stringify({ isRegulatedArea: false })))
-          .isRegulatedArea,
-      ).toBe(true);
+        loadStoredState(
+          storage(
+            JSON.stringify({
+              isRegulatedArea: false,
+              touched: ["regulatedArea"],
+            }),
+          ),
+        ).touched,
+      ).toEqual([]);
     });
 
-    it("touched에 있으면 저장된 false를 그대로 복원한다", () => {
+    it("그래서 저장된 false도 무시하고 보수적인 기본값(true)이 된다", () => {
       expect(
         loadStoredState(
           storage(
@@ -463,20 +485,27 @@ describe("loadStoredState", () => {
             }),
           ),
         ).isRegulatedArea,
-      ).toBe(false);
+      ).toBe(true);
     });
 
-    it("boolean이 아니면 기본값으로 되돌린다", () => {
+    it("touched가 아예 없는 저장본도 같다", () => {
       expect(
-        loadStoredState(
-          storage(
-            JSON.stringify({
-              isRegulatedArea: "네",
-              touched: ["regulatedArea"],
-            }),
-          ),
-        ).isRegulatedArea,
+        loadStoredState(storage(JSON.stringify({ isRegulatedArea: false })))
+          .isRegulatedArea,
       ).toBe(true);
+    });
+
+    it("저장된 true도 '판정'이 아니라 기본값으로 돌아온 것이다", () => {
+      const restored = loadStoredState(
+        storage(
+          JSON.stringify({
+            isRegulatedArea: true,
+            touched: ["regulatedArea"],
+          }),
+        ),
+      );
+      expect(restored.isRegulatedArea).toBe(DEFAULT_FORM_STATE.isRegulatedArea);
+      expect(restored.touched).toEqual([]);
     });
   });
 
