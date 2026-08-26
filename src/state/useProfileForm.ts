@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { AREA_BANDS, type AreaBand } from "../lib/area-band";
+import {
+  AREA_BANDS,
+  includesAreaAboveThreshold,
+  type AreaBand,
+} from "../lib/area-band";
 import type { BuyerProfile, HouseholdStatus } from "../lib/finance";
 import { rules } from "./useAffordability";
 
@@ -93,24 +97,15 @@ export interface ProfileFormState {
    * "하나도 고르지 않았다"이고, 그 상태에서는 지역 조회 자체를 시작하지
    * 않는다(`src/lib/area-band.ts`의 `matchesAreaBands` 참고).
    *
-   * ⚠ **`exclusiveAreaSqm`과 다른 축이다.** 이 값은 "목록·지도에 무엇을
-   * 보여줄까"이고, `exclusiveAreaSqm`은 "헤드라인 부대비용을 어느 면적으로
-   * 계산할까"다. 한쪽에서 다른 쪽을 유도하지 않는다.
+   * ⚠ **이 값에서 유도되는 것은 면적 값이 아니라 참/거짓 하나다.**
+   * 헤드라인(실구매 가능 가격)은 고른 구간에 **85㎡ 초과가 섞였는가**만
+   * 보고 계산한다({@link assumedExclusiveAreaSqm}) — 범위에서 대표값
+   * 하나를 뽑는 규칙은 만들지 않는다. 목록의 각 줄과 상세는 지금까지처럼
+   * 그 평형의 **실제** 전용면적으로 계산한다.
    */
   areaBands: AreaBand[];
   status: HouseholdStatus;
   isRegulatedArea: boolean;
-  /**
-   * 헤드라인(실구매 가능 가격·안전선) 계산에 쓰는 **가정** 전용면적.
-   *
-   * 입력란이 사라졌으므로 언제나 아래 {@link ASSUMED_AREA_SQM}이다.
-   * 목록의 각 줄과 단지 상세는 이 값을 쓰지 않는다 — 그쪽은 지금까지처럼
-   * 그 평형의 실제 전용면적으로 계산한다(`lib/complex-list.ts`의
-   * `rowProfile`, `App.tsx`의 `effectiveProfile`). 두 계산이 서로 다른
-   * 면적 위에 서 있다는 사실은 `AssumptionLine`과 `ComplexList`의
-   * `BasisNote`가 각각 문장으로 말한다.
-   */
-  exclusiveAreaSqm: number;
   existingHome: ExistingHomeFormState;
   /**
    * 사용자가 명시적으로 정한 항목들.
@@ -123,29 +118,55 @@ export interface ProfileFormState {
 }
 
 /**
- * 전용면적 기본값. **농특세 임계값과 같다**(전용 85㎡ 이하) — 국민주택규모
- * 기준으로 가정해 달라는 제품 결정이다.
+ * 고른 평형대에 85㎡ 초과가 섞였을 때 임계값 위로 얼마나 올릴지(㎡).
  *
- * 이전에는 임계값을 **넘는**(86㎡) 쪽을 기본값으로 뒀다 — 농특세가 붙는
- * 쪽으로 가정해야 부대비용을 과소 계상하지 않고, 그래야 "살 수 있는
- * 가격"을 과대평가하지 않기 때문이다. 그 안전마진을 85㎡ 기준으로 낮춘
- * 것은 의도적인 트레이드오프다 — 사용자가 실제로 85㎡를 넘는 평형을
- * 고르면 화면에 보이는 헤드라인보다 부대비용이 더 붙는다. `ComplexList`의
- * `BasisNote`가 "각 줄은 그 평형의 실제 전용면적으로 계산했다"고 이미
- * 밝히므로 목록 자체는 여전히 정확하지만, 그 위의 헤드라인은 낙관적인
- * 가정 위에 서 있다.
+ * **값 자체에는 뜻이 없다.** 면적이 계산을 가르는 지점은 `> 임계값`
+ * 하나뿐이라(농특세 — `finance/acquisition-cost.ts`, 정책대출 면적 제한 —
+ * `finance/policy-loans.ts`) 임계값을 넘기기만 하면 어떤 값을 써도 결과가
+ * 같다. `useProfileForm.test.ts`의 "임계값 위에서는 어떤 값을 넣어도
+ * 결과가 같다"가 그 사실을 증거로 만든다 — 언젠가 면적이 계산을 가르는
+ * 지점이 하나 더 생기면 그 테스트가 먼저 깨진다.
  *
- * ⚠ **평형대 질문이 생겼다고 이 값을 거기서 유도하지 않는다.** 사용자가
- * 고른 것은 **범위**이지 한 값이 아니고, 범위에서 한 값을 뽑는 규칙을
- * 새로 만드는 순간 그 규칙이 화면 어디에도 적히지 않은 채 헤드라인을
- * 움직인다 — 한 축의 답이 다른 축의 기본값으로 흡수되는, 이 저장소가
- * 여섯 번 반복한 사고의 모양이다. 부대비용을 실제로 가르는 것은 각
- * 평형의 실제 면적이고 그 계산은 이미 그렇게 하고 있다.
- *
- * 룰셋에서 유도하는 이유는 그대로다: 숫자를 박아 두면 임계값이 바뀌었을
- * 때 방향이 조용히 어긋난다.
+ * 그래서 이 숫자는 화면에도 종이에도 나오지 않는다. `AssumptionLine`과
+ * `PrintSummary`는 "85㎡ 초과 기준"이라고 **전제**를 적는다.
  */
-const ASSUMED_AREA_SQM = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
+const ABOVE_THRESHOLD_MARGIN_SQM = 1;
+
+/**
+ * 헤드라인(실구매 가능 가격·안전선)을 계산할 전용면적을 **고른
+ * 평형대에서** 유도한다.
+ *
+ * ⚠ **범위에서 대표값 하나를 지어내지 않는다.** 넘어가는 정보는 "고른
+ * 구간에 85㎡ 초과가 섞였는가"라는 참/거짓 하나이고
+ * (`includesAreaAboveThreshold`), 그것이 면적이 계산을 실제로 가르는
+ * 유일한 지점이다. 대표값을 뽑는 규칙을 만들면 그 규칙이 화면 어디에도
+ * 적히지 않은 채 헤드라인을 움직인다 — 한 축의 답이 다른 축의 기본값으로
+ * 흡수되는, 이 저장소가 여섯 번 반복한 사고의 모양이다.
+ *
+ * - **섞였으면** 임계값 위로 잡는다: 농특세가 붙고 정책대출 면적 제한이
+ *   걸린다. **보수적인 쪽**이다(살 수 있는 가격을 과대평가하지 않는다).
+ * - **안 섞였으면** 임계값을 쓴다. 이때는 가정이 아니라 **사실**이다 —
+ *   고른 구간이 전부 임계값 이하이므로 목록의 어느 줄도 농특세가 붙지
+ *   않는다. 그래서 `AssumptionLine`도 `ComplexList`의 기준 안내도 그
+ *   경우에는 아무 말을 하지 않는다.
+ *
+ * 예전에는 이 값이 **선택과 무관한 폼 상태**였다(항상 85㎡). 그때는
+ * 85㎡ 초과만 고른 사용자에게 헤드라인이 낙관적으로 틀렸고(농특세가
+ * 빠지고 정책대출 면적 제한이 안 걸렸다), 목록 위 문구가 그 사실을
+ * 해명하고 있었다.
+ *
+ * 임계값을 인자로 받는 이유는 그대로다: 숫자를 박아 두면 룰셋이 바뀐 날
+ * 방향이 조용히 어긋난다.
+ */
+export function assumedExclusiveAreaSqm(
+  bands: readonly AreaBand[],
+  ruralTaxAreaThresholdSqm: number = rules.acquisitionTax
+    .ruralTaxAreaThresholdSqm,
+): number {
+  return includesAreaAboveThreshold(bands, ruralTaxAreaThresholdSqm)
+    ? ruralTaxAreaThresholdSqm + ABOVE_THRESHOLD_MARGIN_SQM
+    : ruralTaxAreaThresholdSqm;
+}
 
 export const DEFAULT_FORM_STATE: ProfileFormState = {
   cash: null,
@@ -160,7 +181,6 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
   // 안전하다 — 이 제품은 항상 과대평가를 피하는 쪽을 기본값으로 삼는다.
   // 지역 조회가 규제 여부를 알려주면 그 값으로 덮인다(App.tsx).
   isRegulatedArea: true,
-  exclusiveAreaSqm: ASSUMED_AREA_SQM,
   existingHome: {
     expectedSalePrice: null,
     remainingLoan: null,
@@ -191,7 +211,8 @@ export function toProfile(state: ProfileFormState): BuyerProfile | null {
     cash: state.cash,
     annualIncome: state.annualIncome,
     isRegulatedArea: state.isRegulatedArea,
-    exclusiveAreaSqm: state.exclusiveAreaSqm,
+    // 폼 상태에 면적은 없다 — 고른 평형대에서 유도한다(위 주석 참고).
+    exclusiveAreaSqm: assumedExclusiveAreaSqm(state.areaBands),
     ...ASSUMED_REMOVED_INPUTS,
   };
 
@@ -220,7 +241,8 @@ export function toProfile(state: ProfileFormState): BuyerProfile | null {
  * 형태가 어긋난 필드는 조용히 기본값으로 대체한다.
  *
  * ⚠ **없앤 입력들의 저장값은 읽지 않는다 — 통째로 버린다.**
- * `isFirstTimeBuyer`·`existingDebtAnnualPayment`·`ownedHomeCount`는 이제
+ * `isFirstTimeBuyer`·`existingDebtAnnualPayment`·`ownedHomeCount`·
+ * `exclusiveAreaSqm`은 이제
  * 화면에 입력란이 없다. 저장본에 남은 값을 되살리면 사용자가 **보지도
  * 고치지도 못하는 값**이 계산을 움직이게 되고, 그건 이 저장소가 이미
  * 겪은 결함(커밋 `c90babf` — 저장된 값 때문에 빠져나올 수 없는 화면)과
@@ -279,9 +301,6 @@ export function loadStoredState(
         ? o.isRegulatedArea
         : DEFAULT_FORM_STATE.isRegulatedArea
       : DEFAULT_FORM_STATE.isRegulatedArea,
-    // 입력란이 사라졌으므로 저장값을 읽지 않는다 — 언제나 지금 코드가
-    // 정하는 가정값이다(위 ASSUMED_AREA_SQM 주석 참고).
-    exclusiveAreaSqm: DEFAULT_FORM_STATE.exclusiveAreaSqm,
     existingHome: {
       expectedSalePrice: amount(home.expectedSalePrice),
       remainingLoan: amount(home.remainingLoan),

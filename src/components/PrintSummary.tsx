@@ -1,6 +1,6 @@
 import { formatRuleVersionLabel } from "../format/ruleVersionLabel";
 import { formatWon } from "../format/won";
-import { describeAreaBands } from "../lib/area-band";
+import { describeAreaBands, includesAreaAboveThreshold } from "../lib/area-band";
 import type { Rules } from "../lib/finance";
 import {
   ASSUMED_REMOVED_INPUTS,
@@ -25,13 +25,21 @@ import {
  */
 
 /**
- * 전용면적이 어디서 왔는지. 문구 방향을 가른다(App.tsx가 판단해 넘긴다).
+ * 지금 계산이 어느 면적 위에 서 있는지(App.tsx가 판단해 넘긴다).
+ *
+ * ⚠ **`"assumed"`에는 숫자가 없다.** 매물을 고르기 전 헤드라인은 면적
+ * 값이 아니라 "고른 평형대에 85㎡ 초과가 섞였는가"라는 전제 하나로
+ * 계산되므로(`useProfileForm`의 `assumedExclusiveAreaSqm`), 종이에 적을
+ * 대표값이 없다 — 그 전제는 `state.areaBands`에서 다시 읽는다. 숫자를
+ * 하나 만들어 넘기면 종이가 지어낸 값을 사실처럼 말하게 된다.
  *
  * `"touched"`는 사라졌다 — 전용면적을 직접 입력하는 칸이 화면에서
- * 없어졌으므로, 이 값은 언제나 가정이거나(목록 화면) 고른 매물의 실제
- * 면적이다(상세 화면).
+ * 없어졌으므로, 이 값은 언제나 평형대에서 온 전제이거나(목록 화면) 고른
+ * 매물의 실제 면적이다(상세 화면).
  */
-export type AreaSource = "assumed" | "selectedUnit";
+export type AreaBasis =
+  | { source: "assumed" }
+  | { source: "selectedUnit"; sqm: number };
 
 export interface PrintSummaryItem {
   label: string;
@@ -50,15 +58,13 @@ export function formatPrintDate(date: Date): string {
  * 전제를 라벨·값 쌍으로 만든다. 순수 함수라 `PrintSummary`(JSX)와
  * 별도로 검증할 수 있다.
  *
- * `effectiveAreaSqm`·`areaSource`를 `state.exclusiveAreaSqm`에서
- * 다시 유도하지 않고 인자로 받는다 — App.tsx의 `effectiveProfile`이
- * 단지 상세를 여는 동안 실제 평형의 면적으로 화면 계산을 바꿔치기하므로,
+ * `areaBasis`를 인자로 받는다 — App.tsx의 `effectiveProfile`이 단지
+ * 상세를 여는 동안 실제 평형의 면적으로 화면 계산을 바꿔치기하므로,
  * "지금 계산에 실제로 쓰인 면적"은 `state`만 봐서는 알 수 없다.
  */
 export function buildPrintSummaryItems(
   state: ProfileFormState,
-  effectiveAreaSqm: number,
-  areaSource: AreaSource,
+  areaBasis: AreaBasis,
   ruralTaxAreaThresholdSqm: number,
 ): PrintSummaryItem[] {
   return [
@@ -105,7 +111,7 @@ export function buildPrintSummaryItems(
     },
     {
       label: "전용면적",
-      value: `${effectiveAreaSqm}㎡${areaNoteFor(areaSource)}`,
+      value: describeAreaBasis(areaBasis, state, ruralTaxAreaThresholdSqm),
     },
   ];
 }
@@ -120,19 +126,34 @@ function describeOwnedHomeCount(count: number): string {
   return count === 0 ? "무주택" : `유주택 ${count}채`;
 }
 
-function areaNoteFor(source: AreaSource): string {
-  switch (source) {
-    case "assumed":
-      return " (가정값)";
-    case "selectedUnit":
-      return " (선택한 매물의 실제 면적)";
+/**
+ * 종이에 적을 전용면적 전제.
+ *
+ * ⚠ **매물을 고르기 전에는 숫자 하나를 적지 않는다.** 헤드라인이 쓴
+ * 것은 "85㎡ 초과가 섞였는가"라는 전제이지 면적 값이 아니다 — 대표값을
+ * 지어내 적으면 종이가 계산에 쓰이지 않은 숫자를 사실처럼 말하게 된다.
+ *
+ * **"(가정)"은 초과가 섞였을 때만 붙는다.** 안 섞였으면 고른 구간이
+ * 전부 임계값 이하라 그 전제는 가정이 아니라 **사실**이고, 그때
+ * "(가정)"을 달면 확인된 것을 못 미더워하게 만든다 — 화면(`AssumptionLine`)이
+ * 그 경우 아무 말도 하지 않는 것과 같은 판단이다.
+ */
+function describeAreaBasis(
+  basis: AreaBasis,
+  state: ProfileFormState,
+  ruralTaxAreaThresholdSqm: number,
+): string {
+  if (basis.source === "selectedUnit") {
+    return `${basis.sqm}㎡ (선택한 매물의 실제 면적)`;
   }
+  return includesAreaAboveThreshold(state.areaBands, ruralTaxAreaThresholdSqm)
+    ? `${ruralTaxAreaThresholdSqm}㎡ 초과 기준 (고른 평형대에 맞춘 가정)`
+    : `${ruralTaxAreaThresholdSqm}㎡ 이하 (고른 평형대가 전부 이 범위)`;
 }
 
 export interface PrintSummaryProps {
   state: ProfileFormState;
-  effectiveAreaSqm: number;
-  areaSource: AreaSource;
+  areaBasis: AreaBasis;
   rules: Pick<Rules, "effectiveFrom"> & {
     acquisitionTax: Pick<Rules["acquisitionTax"], "ruralTaxAreaThresholdSqm">;
   };
@@ -142,15 +163,13 @@ export interface PrintSummaryProps {
 
 export function PrintSummary({
   state,
-  effectiveAreaSqm,
-  areaSource,
+  areaBasis,
   rules,
   now = () => new Date(),
 }: PrintSummaryProps) {
   const items = buildPrintSummaryItems(
     state,
-    effectiveAreaSqm,
-    areaSource,
+    areaBasis,
     rules.acquisitionTax.ruralTaxAreaThresholdSqm,
   );
 

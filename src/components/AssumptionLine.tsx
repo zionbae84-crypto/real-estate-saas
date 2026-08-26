@@ -1,4 +1,5 @@
 import { formatWon } from "../format/won";
+import { includesAreaAboveThreshold } from "../lib/area-band";
 import { rules } from "../state/useAffordability";
 import {
   ASSUMED_REMOVED_INPUTS,
@@ -107,12 +108,15 @@ function regulatedAreaNotice(state: ProfileFormState): string {
  * import해 하드코딩하면 룰셋이 바뀌었을 때(예: 85 → 100) 가정값은
  * 따라가는데 문구만 옛 숫자를 계속 말하게 된다.
  *
- * ⚠ **전용면적 문구는 평형대 질문(④)과 다른 축을 말한다.** 사용자가
- * 고른 것은 **범위**이고, 헤드라인 하나를 계산하려면 **한 값**이 있어야
- * 한다 — 범위에서 한 값을 뽑는 규칙을 새로 만들면 그 규칙이 화면
- * 어디에도 적히지 않은 채 헤드라인을 움직인다. 그래서 헤드라인은 지금까지
- * 그랬듯 룰셋의 임계값을 가정으로 쓰고, 목록의 각 줄은 그 평형의 실제
- * 면적으로 계산하며, **이 문구가 그 둘이 다르다는 사실을 말한다.**
+ * ⚠ **전용면적 문구는 "고른 평형대에 85㎡ 초과가 섞였을 때만" 나온다.**
+ * 섞이지 않았으면 헤드라인이 쓴 전제(85㎡ 이하)는 가정이 아니라
+ * **사실**이라 해명할 것이 없다 — 그런데도 "가정한 면적 기준이라…"고
+ * 적으면 사실과 다른 겸양이고, 진짜 가정 넷을 읽어야 할 자리에 가짜
+ * 가정이 하나 섞인다.
+ *
+ * 섞였을 때 적는 것도 **값이 아니라 전제**다. 범위에서 대표값 하나를
+ * 뽑지 않았으므로(`useProfileForm`의 `assumedExclusiveAreaSqm`) 적을
+ * 숫자가 없다.
  */
 export function buildAssumptionItems(
   state: ProfileFormState,
@@ -130,13 +134,22 @@ export function buildAssumptionItems(
   // 없앤 입력 넷째. 값의 출처가 지역 조회라 문구가 갈린다.
   items.push({ text: regulatedAreaNotice(state) });
 
-  if (!areaOverridden) {
+  /*
+   * 상세를 열면 화면 전체가 그 평형의 **실제** 면적으로 계산되므로
+   * (App.tsx의 `effectiveProfile`) 평형대에서 유도한 전제를 말하면
+   * 그동안 거짓말이 된다.
+   */
+  const headlineAssumedAboveThreshold = includesAreaAboveThreshold(
+    state.areaBands,
+    ruralTaxAreaThresholdSqm,
+  );
+  if (!areaOverridden && headlineAssumedAboveThreshold) {
     items.push({
       text:
-        `위 실구매 가능 가격은 전용 ${state.exclusiveAreaSqm}㎡를 가정해 ` +
-        "부대비용을 계산한 값이에요. 목록의 각 줄은 그 평형의 실제 " +
-        `전용면적으로 계산하니, ${ruralTaxAreaThresholdSqm}㎡를 넘는 ` +
-        "평형은 농특세가 붙어 이 가격보다 부담이 커요.",
+        `고른 평형대에 ${ruralTaxAreaThresholdSqm}㎡ 초과가 있어, 위 실구매 ` +
+        "가능 가격은 농특세가 붙고 정책대출 면적 제한이 걸리는 기준으로 " +
+        "계산했어요. 목록의 각 줄은 그 평형의 실제 전용면적으로 계산하니, " +
+        `${ruralTaxAreaThresholdSqm}㎡ 이하인 줄은 부담이 이보다 적어요.`,
     });
   }
 

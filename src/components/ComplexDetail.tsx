@@ -186,8 +186,8 @@ export function ComplexDetail({
       */}
       <p className="complex-detail-basis">
         아래 숫자는 범위 위쪽인 {formatWon(unit.maxPrice)}과 이 평형의 전용{" "}
-        {unit.areaBucket}㎡ 기준이고, 이 면적은 목록으로 돌아가면 원래
-        가정한 값으로 되돌아가요.
+        {unit.areaBucket}㎡ 기준이고, 이 면적은 목록으로 돌아가면 고른
+        평형대 기준으로 되돌아가요.
       </p>
 
       {/*

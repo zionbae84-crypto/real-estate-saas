@@ -8,7 +8,7 @@ import { ComplexMap, groupWithCoords } from "./components/ComplexMap";
 import { EntryScreen } from "./components/EntryScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
-import { PrintSummary, type AreaSource } from "./components/PrintSummary";
+import { PrintSummary, type AreaBasis } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
 import { ResultShell, ResultSummaryItem } from "./components/ResultShell";
 import { RegionSelect } from "./components/RegionSelect";
@@ -18,7 +18,7 @@ import {
   AGGREGATION_WINDOW_LABEL,
   type ComplexUnit,
 } from "./data/complexes";
-import { matchesAreaBands } from "./lib/area-band";
+import { includesAreaAboveThreshold, matchesAreaBands } from "./lib/area-band";
 import { buildComplexList, burdenTierOf } from "./lib/complex-list";
 import { unitKey } from "./components/ComplexList";
 import { regionNameByCode } from "./data/regions";
@@ -721,20 +721,18 @@ export function App() {
    * 실제 면적"이라고 밝혀야 한다 — 그렇지 않으면 사용자가 실제로는
    * 값을 확정한 적 없는데 가정값이라고 오인시키게 된다.
    *
+   * ⚠ **상세를 열지 않았을 때는 숫자를 넘기지 않는다.** 그때 헤드라인은
+   * 면적 값이 아니라 "고른 평형대에 85㎡ 초과가 섞였는가"라는 전제 하나로
+   * 계산되므로(`assumedExclusiveAreaSqm`) 넘길 대표값 자체가 없다 —
+   * `PrintSummary`가 `state.areaBands`에서 그 전제를 다시 읽어 적는다.
+   *
    * 갈래가 셋에서 둘로 줄었다 — 전용면적을 직접 입력하는 칸이 화면 1에서
    * 사라졌으므로 "직접 입력"에 이르는 경로가 없다.
    */
-  const areaSource: AreaSource =
-    selectedUnit !== null ? "selectedUnit" : "assumed";
-
-  /**
-   * PrintSummary에 넘길, 지금 실제로 계산에 쓰이는 전용면적(㎡).
-   *
-   * `effectiveProfile`과 같은 값(`maxExclusiveAreaSqm`)을 써야 인쇄물의
-   * "전용면적" 문구가 실제로 계산에 쓰인 면적과 어긋나지 않는다.
-   */
-  const effectiveAreaSqm =
-    selectedUnit !== null ? selectedUnit.maxExclusiveAreaSqm : state.exclusiveAreaSqm;
+  const areaBasis: AreaBasis =
+    selectedUnit !== null
+      ? { source: "selectedUnit", sqm: selectedUnit.maxExclusiveAreaSqm }
+      : { source: "assumed" };
 
   const detail = useMemo(() => {
     if (residentialProfile === null || selectedUnit === null) return null;
@@ -1321,8 +1319,7 @@ export function App() {
                   */}
                   <PrintSummary
                     state={state}
-                    effectiveAreaSqm={effectiveAreaSqm}
-                    areaSource={areaSource}
+                    areaBasis={areaBasis}
                     rules={rules}
                   />
                   {/*
@@ -1598,6 +1595,27 @@ export function App() {
                                   값을 본다(위 `focusedComplexKey` 주석).
                                 */
                                 focusedComplexKey={focusedComplexKey}
+                                /*
+                                  헤드라인이 85㎡ 초과를 가정해 계산됐는가.
+                                  참일 때만 목록 위에 기준 안내가 붙는다 —
+                                  거짓이면 헤드라인과 각 줄이 같은 전제
+                                  위에 있어 밝힐 차이가 없다(사실과 다른
+                                  겸양은 노이즈다).
+
+                                  `selectedUnit`을 함께 보는 이유는
+                                  `AssumptionLine`의 `areaOverridden`과
+                                  같다 — 상세가 열려 있으면 헤드라인이
+                                  이미 그 평형의 **실제** 면적으로
+                                  계산되므로 가정을 말하면 거짓말이 된다.
+                                */
+                                headlineAssumedAboveThreshold={
+                                  selectedUnit === null &&
+                                  includesAreaAboveThreshold(
+                                    state.areaBands,
+                                    rules.acquisitionTax
+                                      .ruralTaxAreaThresholdSqm,
+                                  )
+                                }
                               />
                             )
                           )}

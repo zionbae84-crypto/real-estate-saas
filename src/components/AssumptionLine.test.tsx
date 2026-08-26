@@ -129,35 +129,51 @@ describe("규제지역 — 값의 출처가 둘이라 문장도 둘이다", () =
   });
 });
 
-describe("전용면적 — 헤드라인과 목록이 다른 면적 위에 서 있다는 사실", () => {
+describe("전용면적 — 고른 평형대에 85㎡ 초과가 섞였는가", () => {
   /**
-   * ⚠ 평형대 질문(④)은 **범위**를 고르는 축이고, 헤드라인은 **한 값**이
-   * 필요하다. 범위에서 한 값을 뽑는 규칙을 새로 만들면 그 규칙이 화면
-   * 어디에도 적히지 않은 채 헤드라인을 움직인다 — 그래서 헤드라인은
-   * 룰셋의 가정을 그대로 쓰고, 이 문구가 그 사실을 말한다.
+   * ⚠ **85㎡ 초과가 섞이지 않았으면 해명할 것이 없다.**
+   *
+   * 고른 구간이 전부 85㎡ 이하이므로 헤드라인이 쓴 전제는 **가정이 아니라
+   * 사실**이다 — 그런데도 "가정한 면적 기준이라…"라고 적으면 사실과 다른
+   * 겸양이고, 그건 노이즈다. 사용자는 진짜 가정 넷(주택 수·기존 대출·
+   * 생애최초·규제지역)을 읽어야 하는데 그 사이에 가짜 가정이 섞인다.
    */
-  it("헤드라인이 가정한 면적과, 각 줄이 실제 면적을 쓴다는 사실을 함께 말한다", () => {
-    const s = joined(state());
-    expect(s).toMatch(new RegExp(`전용 ${DEFAULT_FORM_STATE.exclusiveAreaSqm}㎡`));
-    expect(s).toMatch(/각 줄은 그 평형의 실제/);
-    expect(s).toMatch(new RegExp(`${THRESHOLD}㎡를 넘는`));
+  it("85㎡ 초과가 안 섞였으면 면적 문구를 아예 내지 않는다", () => {
+    const s = joined(state({ areaBands: ["소형", "중소형"] }));
+    expect(s).not.toMatch(/전용/);
+    expect(s).not.toMatch(/농특세/);
+    // 진짜 가정 넷은 그대로 남는다.
+    expect(s).toMatch(/무주택/);
+    expect(s).toMatch(/규제지역/);
+  });
+
+  /**
+   * 섞였으면 **보수적인 쪽**(농특세가 붙고 정책대출 면적 제한이 걸리는
+   * 쪽)으로 계산했다는 사실을 말한다. 값이 아니라 전제를 말한다 — 범위에서
+   * 대표값 하나를 뽑지 않았으므로 적을 숫자가 없다.
+   */
+  it("85㎡ 초과가 섞였으면 농특세가 붙는 기준으로 계산했다고 말한다", () => {
+    const s = joined(state({ areaBands: ["중대형"] }));
+    expect(s).toMatch(new RegExp(`${THRESHOLD}㎡ 초과`));
+    expect(s).toMatch(/농특세/);
   });
 
   it("임계값은 인자로 받는다 — 룰셋이 바뀌면 문구도 따라간다", () => {
-    const s = buildAssumptionItems(state(), 100)
+    const s = buildAssumptionItems(state({ areaBands: ["중대형"] }), 100)
       .map((i) => i.text)
       .join("\n");
-    expect(s).toMatch(/100㎡를 넘는/);
+    expect(s).toMatch(/100㎡ 초과/);
+    expect(s).not.toMatch(/85㎡ 초과/);
   });
 
   /**
    * 단지 상세를 열면 화면 전체가 그 평형의 실제 면적으로 계산된다
-   * (App.tsx의 `effectiveProfile`). 그동안 "85㎡로 가정했다"는 문구는
-   * 거짓말이 된다.
+   * (App.tsx의 `effectiveProfile`). 그동안 평형대에서 유도한 전제를
+   * 말하면 거짓말이 된다.
    */
   it("상세를 열어 실제 면적으로 계산 중이면 이 문구를 빼고, 나머지는 남긴다", () => {
-    const s = joined(state(), true);
-    expect(s).not.toMatch(/가정해/);
+    const s = joined(state({ areaBands: ["중대형"] }), true);
+    expect(s).not.toMatch(/농특세/);
     expect(s).toMatch(/무주택/);
     expect(s).toMatch(/규제지역/);
   });

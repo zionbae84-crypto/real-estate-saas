@@ -240,7 +240,10 @@ describe("ComplexDetail", () => {
     );
     const basis = container.querySelector(".complex-detail-basis")?.textContent ?? "";
     expect(basis).toMatch(/59㎡/);
-    expect(basis).toMatch(/원래 가정한 값/);
+    // 목록으로 돌아가면 헤드라인은 다시 **고른 평형대**가 정하는 전제로
+    // 돌아간다 — 예전 문구("원래 가정한 값")는 룰셋 가정 면적을 가리켰고,
+    // 그 값은 이제 없다.
+    expect(basis).toMatch(/고른 평형대/);
   });
 
   describe("리뷰 수정: 상세 화면의 배지·마크업·포커스", () => {

@@ -10,6 +10,7 @@ import {
   buildPrintSummaryItems,
   formatPrintDate,
   PrintSummary,
+  type AreaBasis,
 } from "./PrintSummary";
 
 const THRESHOLD = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
@@ -24,9 +25,8 @@ const FIXED_STATE: ProfileFormState = {
 
 const items = (
   state: ProfileFormState = FIXED_STATE,
-  area = THRESHOLD,
-  source: "assumed" | "selectedUnit" = "assumed",
-) => buildPrintSummaryItems(state, area, source, THRESHOLD);
+  basis: AreaBasis = { source: "assumed" },
+) => buildPrintSummaryItems(state, basis, THRESHOLD);
 
 const valueOf = (label: string, ...args: Parameters<typeof items>) =>
   items(...args).find((i) => i.label === label)?.value;
@@ -110,15 +110,39 @@ describe("buildPrintSummaryItems", () => {
     });
   });
 
-  describe("전용면적 표시는 areaSource에 따라 갈린다", () => {
-    it("assumed면 가정값이라고 밝힌다", () => {
-      const area = valueOf("전용면적", FIXED_STATE, 85, "assumed");
-      expect(area).toContain("85");
+  describe("전용면적은 고른 평형대가 정한다 — 숫자를 지어내지 않는다", () => {
+    /**
+     * ⚠ **종이에 대표값 하나를 적지 않는다.** 헤드라인이 쓴 것은 면적
+     * 값이 아니라 "85㎡ 초과가 섞였는가"라는 전제 하나이고, 종이도 그
+     * 전제를 적어야 화면과 두 말을 하지 않는다.
+     */
+    it("85㎡ 초과가 섞였으면 '초과 기준 (가정)'이라고 적는다", () => {
+      const area = valueOf("전용면적", {
+        ...FIXED_STATE,
+        areaBands: ["중대형"],
+      });
+      expect(area).toMatch(new RegExp(`${THRESHOLD}㎡ 초과`));
       expect(area).toMatch(/가정/);
     });
 
-    it("selectedUnit이면 매물 기준이라고 밝히고, 가정이라 하지 않는다", () => {
-      const area = valueOf("전용면적", FIXED_STATE, 72, "selectedUnit");
+    /**
+     * 고른 구간이 전부 85㎡ 이하이면 그건 가정이 아니라 **사실**이다 —
+     * 종이에 "(가정)"을 달면 읽는 사람이 확인된 것을 못 미더워하게 된다.
+     */
+    it("85㎡ 초과가 안 섞였으면 '이하'라고 적고 가정이라 하지 않는다", () => {
+      const area = valueOf("전용면적", {
+        ...FIXED_STATE,
+        areaBands: ["소형", "중소형"],
+      });
+      expect(area).toMatch(new RegExp(`${THRESHOLD}㎡ 이하`));
+      expect(area).not.toMatch(/가정/);
+    });
+
+    it("매물을 골랐으면 그 평형의 실제 면적을 적고, 가정이라 하지 않는다", () => {
+      const area = valueOf("전용면적", FIXED_STATE, {
+        source: "selectedUnit",
+        sqm: 72,
+      });
       expect(area).toContain("72");
       expect(area).toMatch(/매물/);
       expect(area).not.toMatch(/가정/);
@@ -131,8 +155,7 @@ describe("PrintSummary", () => {
     render(
       <PrintSummary
         state={FIXED_STATE}
-        effectiveAreaSqm={THRESHOLD}
-        areaSource="assumed"
+        areaBasis={{ source: "assumed" }}
         rules={rules}
         now={() => new Date(2026, 7, 23)}
       />,

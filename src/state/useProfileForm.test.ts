@@ -1,10 +1,12 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
 import { AREA_BANDS } from "../lib/area-band";
+import { calcAcquisitionCosts, calcAffordablePrice } from "../lib/finance";
 import { rules } from "./useAffordability";
 import {
   ASSUMED_REMOVED_INPUTS,
   DEFAULT_FORM_STATE,
+  assumedExclusiveAreaSqm,
   loadStoredState,
   STORAGE_KEY,
   toProfile,
@@ -17,6 +19,8 @@ function state(overrides: Partial<ProfileFormState> = {}): ProfileFormState {
 }
 
 const storage = (value: string | null) => ({ getItem: () => value });
+
+const THRESHOLD = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
 
 describe("DEFAULT_FORM_STATE", () => {
   it("필수값(현금·연 소득)은 비어 있다", () => {
@@ -36,10 +40,14 @@ describe("DEFAULT_FORM_STATE", () => {
     expect(DEFAULT_FORM_STATE.isRegulatedArea).toBe(true);
   });
 
-  it("전용면적 가정값은 농특세 임계값과 같다 — 숫자를 박지 않고 룰셋에서 유도한다", () => {
-    expect(DEFAULT_FORM_STATE.exclusiveAreaSqm).toBe(
-      rules.acquisitionTax.ruralTaxAreaThresholdSqm,
-    );
+  /**
+   * ⚠ **전용면적은 이제 폼 상태에 없다.** 헤드라인이 쓰는 면적은 고른
+   * 평형대에서 유도한다(`assumedExclusiveAreaSqm`) — 상태에 한 벌 더
+   * 두면 그 값과 선택이 어긋나는 날이 오고, 어긋난 쪽이 조용히 계산을
+   * 움직인다.
+   */
+  it("전용면적은 폼 상태에 없다 — 고른 평형대에서 유도한다", () => {
+    expect(Object.keys(DEFAULT_FORM_STATE)).not.toContain("exclusiveAreaSqm");
   });
 
   it("touched는 처음엔 비어 있다 — 규제지역이 아직 가정 중이라는 뜻이다", () => {
@@ -70,6 +78,66 @@ describe("ASSUMED_REMOVED_INPUTS — 없앤 입력이 계산에 넘기는 값", 
       existingDebtAnnualPayment: 0,
       ownedHomeCount: 0,
     });
+  });
+});
+
+/**
+ * ⚠ **헤드라인(실구매 가능 가격)이 평형대 선택에서 가져가는 것은 면적
+ * 값이 아니라 "85㎡ 초과가 섞였는가"라는 참/거짓 하나다.**
+ *
+ * 범위에서 대표값 하나를 지어내지 않는다 — 그런 규칙을 만들면 그 규칙이
+ * 화면 어디에도 적히지 않은 채 헤드라인을 움직인다. 면적이 계산을
+ * 가르는 지점은 85㎡ 하나뿐이라(농특세·정책대출 면적 제한) 참/거짓이면
+ * 충분하다.
+ */
+describe("assumedExclusiveAreaSqm — 고른 평형대가 헤드라인에 넘기는 것", () => {
+  it("85㎡ 초과가 안 섞였으면 임계값이다 — 이건 가정이 아니라 사실이다", () => {
+    expect(assumedExclusiveAreaSqm(["소형"])).toBe(THRESHOLD);
+    expect(assumedExclusiveAreaSqm(["소형", "중소형"])).toBe(THRESHOLD);
+  });
+
+  it("85㎡ 초과가 섞이면 임계값을 넘는 값이다 — 농특세가 붙는 쪽(보수적)이다", () => {
+    expect(assumedExclusiveAreaSqm(["중대형"])).toBeGreaterThan(THRESHOLD);
+    expect(assumedExclusiveAreaSqm([...AREA_BANDS])).toBeGreaterThan(THRESHOLD);
+  });
+
+  /**
+   * 임계값을 넘기기만 하면 **어떤 값이든 결과가 같다.** 그래서 위에서
+   * 고른 값(임계값 + 1)에는 뜻이 없고, 화면·종이도 그 숫자를 내지 않는다.
+   * 이 테스트가 그 "뜻 없음"을 증거로 만든다 — 언젠가 면적이 계산을
+   * 가르는 지점이 하나 더 생기면 여기가 먼저 깨진다.
+   */
+  it("임계값 위에서는 어떤 값을 넣어도 결과가 같다", () => {
+    const base = toProfile(
+      state({ cash: 300_000_000, annualIncome: 80_000_000 }),
+    )!;
+    const prices = [THRESHOLD + 0.01, THRESHOLD + 1, 120, 200, 1000].map(
+      (sqm) => calcAffordablePrice({ ...base, exclusiveAreaSqm: sqm }, rules),
+    );
+    for (const p of prices) expect(p).toEqual(prices[0]);
+
+    const costs = [THRESHOLD + 0.01, THRESHOLD + 1, 200].map((sqm) =>
+      calcAcquisitionCosts(
+        500_000_000,
+        { ...base, exclusiveAreaSqm: sqm },
+        rules,
+      ),
+    );
+    for (const c of costs) expect(c).toEqual(costs[0]);
+  });
+
+  it("임계값은 룰셋에서 온다 — 인자로 받아 바뀌면 따라간다", () => {
+    // 임계값이 100이면 "중소형"(60~100)은 더 이상 초과를 품지 않는다.
+    expect(assumedExclusiveAreaSqm(["중소형"], 100)).toBe(100);
+    expect(assumedExclusiveAreaSqm(["중대형"], 100)).toBeGreaterThan(100);
+  });
+
+  /**
+   * 빈 선택은 결과 화면에 이르지 못한다(화면 1이 막는다). 그래도 값을
+   * 지어내지 않고, "초과가 섞였다고 말할 근거가 없다"는 쪽을 따른다.
+   */
+  it("빈 선택에서는 임계값을 쓴다", () => {
+    expect(assumedExclusiveAreaSqm([])).toBe(THRESHOLD);
   });
 });
 
@@ -104,7 +172,9 @@ describe("toProfile", () => {
       cash: 100_000_000,
       annualIncome: 50_000_000,
       isRegulatedArea: true,
-      exclusiveAreaSqm: rules.acquisitionTax.ruralTaxAreaThresholdSqm,
+      // 기본값은 전체 선택이라 85㎡ 초과가 섞여 있다 — 농특세가 붙는
+      // 쪽(보수적)으로 계산한다.
+      exclusiveAreaSqm: THRESHOLD + 1,
       ...ASSUMED_REMOVED_INPUTS,
     });
   });
@@ -124,6 +194,22 @@ describe("toProfile", () => {
     expect(profile.existingDebtAnnualPayment).toBe(
       ASSUMED_REMOVED_INPUTS.existingDebtAnnualPayment,
     );
+  });
+
+  /**
+   * 폼 상태에는 면적이 없다 — 엔진에 넘어가는 값은 고른 평형대에서
+   * 유도한 것이어야 한다. 두 축을 잇는 유일한 지점이라 여기서 잠근다.
+   */
+  it("엔진에 넘기는 전용면적은 고른 평형대에서 유도한다", () => {
+    const narrow = toProfile(
+      state({ cash: 1, annualIncome: 1, areaBands: ["소형", "중소형"] }),
+    )!;
+    expect(narrow.exclusiveAreaSqm).toBe(THRESHOLD);
+
+    const wide = toProfile(
+      state({ cash: 1, annualIncome: 1, areaBands: ["중대형"] }),
+    )!;
+    expect(wide.exclusiveAreaSqm).toBeGreaterThan(THRESHOLD);
   });
 
   it("규제지역을 그대로 전달한다", () => {
@@ -274,10 +360,12 @@ describe("loadStoredState", () => {
       expect(restored.existingDebtAnnualPayment).toBeUndefined();
     });
 
-    it("전용면적도 저장값이 아니라 지금 코드의 가정값이 된다", () => {
-      expect(loadStoredState(storage(legacy)).exclusiveAreaSqm).toBe(
-        DEFAULT_FORM_STATE.exclusiveAreaSqm,
-      );
+    it("전용면적 키는 폼 상태에 아예 들어오지 않는다", () => {
+      const restored = loadStoredState(storage(legacy)) as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(restored.exclusiveAreaSqm).toBeUndefined();
     });
 
     it("없어진 touched 항목은 걸러 내고, 남은 항목만 복원한다", () => {

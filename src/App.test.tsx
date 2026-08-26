@@ -49,11 +49,10 @@ const DETAIL_TEST_UNIT: ComplexUnit = {
   regionCode: "11680",
   legalDongName: "테스트동",
   builtYear: 2015,
-  // 85㎡ 초과로 둔다 — 가정 전용면적 기본값(85㎡, 농특세 미부과)과
-  // 다른 세율 구간이어야 상세를 열었을 때 실구매 가능 가격이 실제로
-  // 달라진다(아래 "상세가 열린 동안에는..." 테스트 참고). 85㎡
-  // 이하였다면 둘 다 농특세 미부과 구간이라 같은 값이 나와 그 테스트가
-  // 아무것도 증명하지 못한다.
+  // 85㎡ 초과다(중대형). 기본 선택은 전체이므로 헤드라인도 85㎡ 초과를
+  // 가정하고, 그래서 이 평형의 상세를 열어도 **부대비용이 달라지지
+  // 않는다** — 그 차이를 보는 테스트는 아래 NARROW_DETAIL_UNIT(전용
+  // 59㎡)을 쓴다.
   areaBucket: 90,
   maxExclusiveAreaSqm: 90,
   landLeasehold: "N",
@@ -67,16 +66,17 @@ const DETAIL_TEST_UNIT: ComplexUnit = {
 };
 
 /**
- * 지역을 고르고 그 결과로 {@link DETAIL_TEST_UNIT} 하나를 받는다.
+ * 지역을 고르고 그 결과로 단지 목록을 받는다(기본값은
+ * {@link DETAIL_TEST_UNIT} 하나).
  *
  * `isRegulatedArea`는 `null`("모르는 지역")로 둔다. 불리언을 주면 App이
  * 그 값을 폼에 반영하면서 규제지역이 **가정에서 확정으로** 바뀌는데,
  * 아래 테스트들은 전용면적 가정·상세 화면·인쇄 요약을 보는 것이라 그
  * 축과 무관하다 — 예전 흐름에서도 규제지역은 가정인 채였다.
  */
-async function selectTestRegion() {
+async function selectTestRegion(units: ComplexUnit[] = [DETAIL_TEST_UNIT]) {
   vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
-    units: [DETAIL_TEST_UNIT],
+    units,
     isRegulatedArea: null,
     dataAsOf: null,
   });
@@ -993,13 +993,30 @@ describe("App - 단지 상세(화면 4)", () => {
    * 화면·전용면적 가정·인쇄 요약)은 그대로이고, 거기 도달하는 경로에
    * 한 단계가 늘었을 뿐이다.
    */
-  async function fillProfile() {
+  async function fillProfile(units?: ComplexUnit[]) {
     // "150000"·"15000"은 단위 없이 쓴 만원 표기다(MoneyInput 기본
     // 해석) — 각각 15억, 1억 5천만원.
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
-    await selectTestRegion();
+    await selectTestRegion(units);
   }
+
+  /**
+   * 전용 59㎡ — **임계값 이하**다.
+   *
+   * 헤드라인은 기본 선택(전체)에서 85㎡ 초과를 가정하므로, 이 평형의
+   * 상세를 열면 계산이 농특세 미부과 구간으로 넘어가 숫자가 실제로
+   * 달라진다. 90㎡짜리 기본 픽스처로는 그 차이가 나지 않는다 — 둘 다
+   * 85㎡ 초과 구간이라 같은 값이 나오고, 그러면 그 테스트가 아무것도
+   * 증명하지 못한다.
+   */
+  const NARROW_DETAIL_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|테스트동|2015|좁은단지",
+    complexName: "좁은단지",
+    areaBucket: 59,
+    maxExclusiveAreaSqm: 59,
+  };
 
   it("단지 목록의 행을 누르면 그 평형의 상세가 열린다", async () => {
     render(<App />);
@@ -1032,31 +1049,40 @@ describe("App - 단지 상세(화면 4)", () => {
   });
 
   it("평형을 고르면 그 평형의 전용면적이 화면 계산에 반영돼 가정 문구에서 빠진다", async () => {
-    render(<App />);
+    const { container } = render(<App />);
     await fillProfile();
 
-    // 아직 고르기 전에는 전용면적이 가정 중이라는 문구가 있다.
-    expect(screen.getByText(/전용 85㎡를 가정해/)).toBeInTheDocument();
+    // 가정 문구만 본다 — "농특세"는 상세 화면의 취득세 항목 라벨에도
+    // 나오므로 화면 전체에서 찾으면 다른 것을 잡는다.
+    const assumptions = () =>
+      container.querySelector(".assumption-line")?.textContent ?? "";
+
+    // 아직 고르기 전에는 고른 평형대에서 유도한 전제를 말한다(기본
+    // 선택은 전체라 85㎡ 초과가 섞여 있다).
+    expect(assumptions()).toMatch(/85㎡ 초과가 있어/);
 
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
-    // 이 평형(전용 90㎡)을 반영했으므로 가정 문구 자체가 더 이상
-    // 화면에 없다 — 상세가 열려 있는 동안 areaOverridden이 참이 되어
-    // AssumptionLine이 전용면적 항목을 빼기 때문이다.
-    expect(screen.queryByText(/전용 85㎡를 가정해/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/전용 \d+㎡를 가정해/)).not.toBeInTheDocument();
+    // 이 평형(전용 90㎡)의 실제 면적을 반영했으므로 그 문구 자체가 더
+    // 이상 화면에 없다 — 상세가 열려 있는 동안 areaOverridden이 참이
+    // 되어 AssumptionLine이 전용면적 항목을 빼기 때문이다.
+    expect(assumptions()).not.toMatch(/85㎡ 초과가 있어/);
+    expect(assumptions()).not.toMatch(/농특세/);
+    // 진짜 가정 넷은 그대로 남는다.
+    expect(assumptions()).toMatch(/무주택/);
   });
 
   it("상세가 열린 동안에는 실구매 가능 가격이 그 평형 기준으로 바뀌고, 목록으로 돌아가면 원래 값으로 되돌아간다", async () => {
     const { container } = render(<App />);
-    await fillProfile();
+    await fillProfile([NARROW_DETAIL_UNIT]);
 
     const priceBefore = container.querySelector(".affordable-price")?.textContent;
 
-    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+    await userEvent.click(screen.getByRole("button", { name: /좁은단지/ }));
     const priceWhileOpen = container.querySelector(".affordable-price")?.textContent;
-    // 상세가 열려 있는 동안에는 이 평형(전용 90㎡)의 실제 면적 기준으로
-    // 다시 계산되므로 원래 가정(85㎡) 기준 가격과 달라야 한다.
+    // 상세가 열려 있는 동안에는 이 평형(전용 59㎡)의 실제 면적 기준으로
+    // 다시 계산된다 — 헤드라인은 고른 평형대(전체)에 85㎡ 초과가 있어
+    // 농특세가 붙는 기준이었으므로 값이 달라야 한다.
     expect(priceWhileOpen).not.toBe(priceBefore);
 
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
@@ -1073,21 +1099,24 @@ describe("App - 단지 상세(화면 4)", () => {
     render(<App />);
     await fillProfile();
 
+    const assumptions = () =>
+      document.querySelector(".assumption-line")?.textContent ?? "";
+
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-    expect(screen.queryByText(/전용 \d+㎡를 가정해/)).not.toBeInTheDocument();
+    expect(assumptions()).not.toMatch(/농특세/);
 
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
 
-    // 목록으로 돌아오면 다시 가정이므로 문구도 다시 나타나야 한다 —
-    // 원래 가정 면적(85㎡) 그대로다.
-    expect(screen.getByText(/전용 85㎡를 가정해/)).toBeInTheDocument();
+    // 목록으로 돌아오면 다시 고른 평형대가 전제를 정하므로 문구도 다시
+    // 나타나야 한다.
+    expect(assumptions()).toMatch(/85㎡ 초과가 있어/);
 
     // 프로필(및 localStorage)에는 상세에서 본 90㎡가 전혀 쓰이지
-    // 않았어야 한다 — touched에도 "area"가 없고, 저장된 exclusiveAreaSqm도
-    // 원래 가정값(85)이다.
+    // 않았어야 한다 — touched에도 "area"가 없고, 전용면적은 아예 폼
+    // 상태가 아니라 저장 대상 자체가 아니다.
     const stored = JSON.parse(window.localStorage.getItem("budget-profile-v1") ?? "{}");
     expect(stored.touched ?? []).not.toContain("area");
-    expect(stored.exclusiveAreaSqm).not.toBe(90);
+    expect(stored.exclusiveAreaSqm).toBeUndefined();
   });
 
   describe("리뷰 수정: 상세 화면의 배지 라벨·전용면적 입력·포커스", () => {
@@ -1121,22 +1150,24 @@ describe("App - 단지 상세(화면 4)", () => {
     /**
      * 전용면적 입력란은 화면 1이 네 질문으로 줄면서 사라졌다. 남은 것은
      * **문구**다: 상세가 열려 있는 동안에는 화면 계산이 그 평형의 실제
-     * 면적을 쓰므로 "85㎡를 가정해 계산했다"는 문구가 거짓말이 된다.
+     * 면적을 쓰므로 "85㎡ 초과 기준으로 계산했다"는 문구가 거짓말이 된다.
      */
     it("상세가 열려 있는 동안에는 전용면적 가정 문구를 내보내지 않는다", async () => {
-      render(<App />);
+      const { container } = render(<App />);
       await fillProfile();
+      const assumptions = () =>
+        container.querySelector(".assumption-line")?.textContent ?? "";
 
       // 어떤 상태에서도 입력란은 없다.
       expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
-      expect(screen.getByText(/전용 85㎡를 가정해/)).toBeInTheDocument();
+      expect(assumptions()).toMatch(/85㎡ 초과가 있어/);
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-      expect(screen.queryByText(/전용 85㎡를 가정해/)).not.toBeInTheDocument();
+      expect(assumptions()).not.toMatch(/85㎡ 초과가 있어/);
 
-      // 상세를 닫으면 다시 가정이므로 문구도 돌아온다.
+      // 상세를 닫으면 다시 고른 평형대가 전제를 정하므로 문구도 돌아온다.
       await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-      expect(screen.getByText(/전용 85㎡를 가정해/)).toBeInTheDocument();
+      expect(assumptions()).toMatch(/85㎡ 초과가 있어/);
     });
 
     it("상세를 열면 포커스가 상세로 옮겨간다", async () => {
@@ -1536,12 +1567,15 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(subtitle?.textContent).not.toContain("수도권");
     });
 
-    it("목록 화면에서는 전용면적이 가정값이라고 밝히고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
+    it("목록 화면에서는 고른 평형대가 정한 전제를 적고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
       const { container } = render(<App />);
       await fillProfile();
 
+      // 종이에도 대표값 하나를 지어내 적지 않는다 — 헤드라인이 쓴 것은
+      // "85㎡ 초과가 섞였는가"라는 전제다.
       const summaryBefore = container.querySelector(".print-summary");
-      expect(summaryBefore?.textContent).toMatch(/85㎡\s*\(가정값\)/);
+      expect(summaryBefore?.textContent).toMatch(/85㎡ 초과 기준/);
+      expect(summaryBefore?.textContent).toMatch(/가정/);
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 

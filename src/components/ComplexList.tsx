@@ -63,6 +63,15 @@ export interface ComplexListProps {
    * 관리하면 어긋난다(task-4-brief Step 4).
    */
   focusedComplexKey?: string | null;
+  /**
+   * 위 헤드라인(실구매 가능 가격·안전선)이 **85㎡ 초과를 가정해** 계산됐는가.
+   *
+   * 고른 평형대에 85㎡ 초과가 섞였을 때만 참이다
+   * (`useProfileForm`의 `assumedExclusiveAreaSqm`). 참일 때만 기준 안내를
+   * 낸다 — 거짓이면 헤드라인과 각 줄이 **같은 전제** 위에 있어서 밝힐
+   * 차이가 없다(아래 {@link BasisNote} 주석 참고).
+   */
+  headlineAssumedAboveThreshold?: boolean;
 }
 
 /**
@@ -96,6 +105,7 @@ export function ComplexList({
   onShowMore,
   onSelect,
   focusedComplexKey = null,
+  headlineAssumedAboveThreshold = false,
 }: ComplexListProps) {
   const sectionRef = useRef<HTMLElement>(null);
 
@@ -148,7 +158,7 @@ export function ComplexList({
   return (
     <section className="complex-list" aria-label="살 수 있는 단지" ref={sectionRef}>
       <h2>살 수 있는 단지</h2>
-      <BasisNote />
+      {headlineAssumedAboveThreshold && <BasisNote />}
 
       {safeShown.length > 0 && (
         <>
@@ -383,22 +393,31 @@ function EmptyMessage({
 }
 
 /**
- * 이 목록의 숫자가 어느 면적 기준인지 밝힌다.
+ * 이 목록의 숫자가 어느 면적 기준인지 밝힌다 — **밝힐 차이가 있을 때만.**
  *
- * 헤드라인(실구매 가능 가격·안전선)은 아직 매물을 고르기 전이라
- * **가정한 전용면적**으로 계산되고, 목록의 각 행은 **그 평형의 실제
- * 면적**으로 계산된다. 행 쪽이 정확하지만, 둘이 다르면 85㎡ 이하
- * 행은 헤드라인보다 비싼 가격까지 통과한다(농특세가 붙지 않아
- * 부대비용이 적기 때문이다). 그런 행을 보고 사용자가 화면이 서로
- * 모순된다고 읽지 않게, 기준을 먼저 말한다. `ComplexDetail`에는 이미
- * 같은 안내가 있지만 목록 화면에는 없었다.
+ * 헤드라인(실구매 가능 가격·안전선)은 아직 매물을 고르기 전이라 고른
+ * 평형대에서 유도한 전제로 계산되고, 목록의 각 행은 **그 평형의 실제
+ * 면적**으로 계산된다.
+ *
+ * 고른 평형대에 85㎡ 초과가 섞여 있으면 헤드라인은 농특세가 붙는
+ * 쪽(보수적)으로 계산되고, 그러면 85㎡ 이하 행은 헤드라인보다 비싼
+ * 가격까지 통과한다(농특세가 붙지 않아 부대비용이 적기 때문이다). 그런
+ * 행을 보고 사용자가 화면이 서로 모순된다고 읽지 않게, 기준을 먼저
+ * 말한다.
+ *
+ * ⚠ **섞이지 않았으면 이 문구를 아예 내지 않는다**
+ * (`headlineAssumedAboveThreshold`가 거짓일 때). 그때 헤드라인의 전제는
+ * 가정이 아니라 **사실**이고(고른 구간이 전부 85㎡ 이하라 어느 줄에도
+ * 농특세가 붙지 않는다), "가정한 면적 기준이라 그보다 비싼 집이 보일 수
+ * 있어요"는 참이 아니다. 사실과 다른 겸양은 노이즈다.
  */
 function BasisNote() {
   return (
     <p className="complex-list-note">
-      각 줄은 그 평형의 실제 전용면적으로 계산했어요. 위에 보이는
-      실구매 가능 가격과 안전선은 가정한 면적 기준이라, 그보다 비싼 집이
-      여기 보일 수 있어요. 이 목록 쪽이 더 정확해요.
+      각 줄은 그 평형의 실제 전용면적으로 계산했어요. 위에 보이는 실구매
+      가능 가격과 안전선은 고른 평형대에 85㎡ 초과가 있어 농특세가 붙는
+      기준으로 가정해 계산했으니, 그보다 비싼 집이 여기 보일 수 있어요.
+      이 목록 쪽이 더 정확해요.
     </p>
   );
 }
