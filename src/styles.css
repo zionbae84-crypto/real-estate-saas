@@ -999,6 +999,15 @@ h2 {
   left: 1rem;
   bottom: 1rem;
   z-index: 2;
+  /*
+   * **클릭을 통과시킨다**(리뷰 findings m2). 불투명한 배경에 z-index 2를
+   * 얹은 상자라, 이 상자 아래에 그려진 마커는 지도를 움직이기 전까지
+   * 누를 수 없었다 — 사용자에게는 그 마커가 고장 난 것으로 보인다.
+   * 범례에는 누를 것이 하나도 없으므로 잃는 것이 없다.
+   * `scripts/map-overlay-guard.test.ts`가 지도 위 절대 배치 오버레이
+   * 전부에 이 선언을 요구한다.
+   */
+  pointer-events: none;
   margin: 0;
   padding: 0.5rem 0.75rem;
   list-style: none;
