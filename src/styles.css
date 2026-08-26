@@ -77,7 +77,19 @@ h2 {
   padding: 1.5rem 1rem 4rem;
 }
 
-.app > :not(.region-results-grid) {
+/*
+ * `.results-screen`은 화면 2 전체를 감싸는 **레이아웃 없는** 래퍼다 —
+ * `phase === "입력"` 동안 이 트리 전체를 `inert`로 만들기 위한 자리
+ * 하나가 필요했을 뿐이라(App.tsx의 해당 주석), `display: contents`로
+ * 자기 상자를 없애 아래 폭 규칙과 세로 흐름을 그대로 둔다. 대신 폭
+ * 규칙의 `>`가 한 단계 깊어지므로 같은 규칙을 이 래퍼 아래에도 건다.
+ */
+.results-screen {
+  display: contents;
+}
+
+.app > :not(.region-results-grid),
+.results-screen > :not(.region-results-grid) {
   max-width: 42rem;
   margin-inline: auto;
 }

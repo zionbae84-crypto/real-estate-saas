@@ -855,6 +855,50 @@ describe("App - 단지 상세(화면 4)", () => {
    * 단계가 바로 그 "결과"뿐이었다. 눌러도 아무 일도 일어나지 않는 버튼이
    * 지시문을 달고 있던 셈이다.
    */
+  /**
+   * 리뷰 수정(Important 4). `phase === "입력"`일 때 결과 트리는 언마운트되지
+   * 않고 불투명한 오버레이 **밑에** 그대로 깔려 있다 — `inert`로 포커스와
+   * 접근성 트리 노출을 함께 끊는다. `display: none`이 아니어야 하는 이유는
+   * 인쇄다(그 단계에서 인쇄해도 종이에는 나와야 한다).
+   */
+  describe("리뷰 수정: 오버레이 뒤의 결과 트리는 조작할 수 없다", () => {
+    it("입력 단계에서는 결과 화면 전체가 inert다", async () => {
+      const { container } = render(<App />);
+      const results = container.querySelector(".results-screen");
+      expect(results).not.toBeNull();
+      expect(results).toHaveAttribute("inert");
+
+      // 결과 단계로 넘어가면 풀린다.
+      await fillProfile();
+      expect(container.querySelector(".results-screen")).not.toHaveAttribute(
+        "inert",
+      );
+    });
+
+    it("결과에서 화면 1로 돌아가면 다시 inert가 된다", async () => {
+      const { container } = render(<App />);
+      await fillProfile();
+      await userEvent.click(
+        screen.getByRole("button", { name: "조건 다시 넣기" }),
+      );
+      expect(container.querySelector(".results-screen")).toHaveAttribute(
+        "inert",
+      );
+    });
+
+    it("인쇄 버튼도 그 안에 있다 — 오버레이 뒤에서 키보드로 눌리지 않는다", async () => {
+      const { container } = render(<App />);
+      await fillProfile();
+      await userEvent.click(
+        screen.getByRole("button", { name: "조건 다시 넣기" }),
+      );
+      const results = container.querySelector(".results-screen");
+      expect(
+        results?.contains(screen.getByRole("button", { name: "인쇄하기" })),
+      ).toBe(true);
+    });
+  });
+
   describe("리뷰 수정: 가정 칩을 누르면 입력 화면으로 돌아간다", () => {
     it("결과 화면에서 칩을 누르면 입력 화면이 다시 보이고 그 항목이 열린다", async () => {
       const { container } = render(<App />);

@@ -718,6 +718,28 @@ export function App() {
       </EntryScreen>
 
       {/*
+        화면 2 — 결과. `phase === "입력"`인 동안에는 이 안 전체가
+        `inert`다.
+
+        리뷰 수정(Important 4): `.entry-screen`이 `visibility: hidden`
+        대신 `display: none`을 쓰는 이유("숨은 컨트롤이 포커스를 받으면
+        안 된다")는 정확한데, 그 논리가 한 방향으로만 적용돼 있었다.
+        `phase === "입력"`일 때 이 결과 트리는 **여전히 전부 렌더링된
+        채로** 불투명한 `z-index: 40` 오버레이 **밑에** 깔려 있다 —
+        인쇄 버튼·가격 슬라이더·단지 행·"더 보기"·가정 칩·상세 닫기
+        버튼까지. 키보드 사용자는 보이지 않는 컨트롤로 탭이 빨려 들어가고,
+        스크린 리더는 화면에 없는 결과 페이지를 읽는다.
+
+        `inert` 하나로 **포커스와 접근성 트리 노출을 동시에** 끊는다
+        (`aria-hidden`은 포커스를 막지 못하고, `tabindex="-1"`은 AT
+        노출을 막지 못한다 — 둘을 따로 관리하면 언젠가 한쪽만 고쳐진다).
+        `display: none`이 아닌 이유는 인쇄다: `phase`가 "입력"인 채로
+        인쇄해도 이 트리는 종이에 나와야 한다(`inert`는 렌더링·인쇄에
+        영향을 주지 않는다). 리액트 19는 `inert`를 불리언 prop으로
+        그대로 넘긴다.
+      */}
+      <div className="results-screen" inert={phase === "입력"}>
+      {/*
         화면에서는 숨고 인쇄에서만 나오는 한 줄(styles.css의
         `.purchase-type-print`). 예전에는 `PurchaseTypeSelect` 안에
         있었는데, 그 컴포넌트가 실거주 경로에서 `EntryScreen` 안에 놓이고
@@ -1241,6 +1263,7 @@ export function App() {
           </>
         )}
       </footer>
+      </div>
     </main>
   );
 }
