@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 
 export interface EntryScreenProps {
   /**
@@ -66,6 +66,29 @@ export function EntryScreen({ phase, children }: EntryScreenProps) {
       : false,
   );
 
+  /*
+   * 리뷰 수정(Minor 10): 이 화면이 떠 있는 동안 문서 스크롤을 잠근다.
+   *
+   * 이 레이어는 `position: fixed; inset: 0`이라 자기 자신은 문서 높이에
+   * 기여하지 않지만, 그 **뒤에** 깔린 결과 트리(`.results-screen`)는
+   * 언마운트되지 않고 그대로 높이를 만든다 — 그래서 아무것도 움직이지
+   * 않는 페이지 스크롤바가 생긴다. 스크롤해도 화면은 그대로고(오버레이가
+   * 고정이다) 스크롤바만 움직인다.
+   *
+   * design.md §4가 결과 화면에 요구한 `body { overflow: hidden }`과 같은
+   * 처리를, 지금 실제로 전체화면인 이 화면에 건다. 원래 값을 기억했다가
+   * 되돌린다 — 화면이 걷히면(또는 이 컴포넌트가 사라지면) 결과 화면은
+   * 다시 세로로 흐르는 문서라 스크롤이 필요하다.
+   */
+  useEffect(() => {
+    if (phase !== "입력") return;
+    const previous = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = previous;
+    };
+  }, [phase]);
+
   return (
     <section
       className={
@@ -73,7 +96,13 @@ export function EntryScreen({ phase, children }: EntryScreenProps) {
       }
       aria-hidden={phase === "결과"}
     >
+      {/*
+        장식이다 — 이 영상은 정보를 담지 않는다. 리뷰 수정(Minor 9):
+        `aria-hidden`이 없으면 스크린 리더가 이 자리에 미디어 요소가
+        있다고 읽어, 아무 뜻도 없는 항목 하나를 입력 화면 앞에 세운다.
+      */}
       <video
+        aria-hidden="true"
         className="entry-screen-video"
         autoPlay={!prefersReducedMotion}
         muted

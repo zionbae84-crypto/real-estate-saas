@@ -2046,15 +2046,6 @@ h2 {
   }
 }
 
-.entry-eyebrow {
-  margin: 0;
-  font-size: 0.75rem;
-  font-weight: 600;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-  color: var(--haze-lift);
-}
-
 /*
  * h1은 전역 규칙(`h1, h2 { font-family: var(--font-serif) }`)을 그대로
  * 물려받는다 — 여기서는 이 화면 전용 크기·색·여백만 준다.
@@ -2101,12 +2092,24 @@ h2 {
   color: var(--haze);
 }
 
+/*
+ * 포커스 표시. design.md §3이 요구한 "포커스 시 밑줄이 황동색"을
+ * 지키되, 리뷰 수정(Minor 8)으로 **두께도 함께** 바꾼다 — 색만 바꾼
+ * 1px 밑줄은 WCAG 2.4.11(포커스 표시의 최소 크기·대비) 기준으로 너무
+ * 얇고, 색 대비만으로 상태 변화를 알리는 셈이 된다. `outline: none`을
+ * 쓰는 자리라 이 밑줄이 유일한 표시다.
+ *
+ * 늘어난 1px만큼 아래 여백에서 덜어내, 포커스가 옮겨 다닐 때 줄이
+ * 흔들리지 않게 한다(입력들의 기본 padding은 `0.5rem 0.125rem`이다).
+ */
 .entry-screen .money-input input:focus-visible,
 .entry-screen .field input[type="number"]:focus-visible,
 .entry-screen .field select:focus-visible,
 .entry-screen .region-select select:focus-visible {
   outline: none;
   border-bottom-color: var(--brass-lift);
+  border-bottom-width: 2px;
+  padding-bottom: calc(0.5rem - 1px);
 }
 
 /* 입력 아래 즉시 환산값("20000" → "2억원") — 황동색으로 강조한다. */
