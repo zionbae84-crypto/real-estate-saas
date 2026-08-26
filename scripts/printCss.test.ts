@@ -729,4 +729,176 @@ describe("인쇄 CSS", () => {
       expect(overflowFor("", LOCK)).toBeUndefined();
     });
   });
+
+  /**
+   * Task 5 — **접히는 예산 상세 패널 × 인쇄.**
+   *
+   * 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES` 열 개가 들어 있다
+   * (`no-budget`, `binding-explainer`, `cost-breakdown`, `policy-loan-list`,
+   * `slider-price`, `slider-warning`, `safe-line`, `assumption-line`,
+   * `assumption-item`, `assumption-notice`). 패널이 **닫힌 채로** Cmd+P를
+   * 누르는 것은 정상 경로다(패널은 기본이 닫힘이고, Cmd+P는 어느 단계에서든
+   * 눌린다) — 그때 이 열 개가 종이에서 통째로 사라지면 안 된다.
+   *
+   * **기존 가드가 잡아 주지 못하는 형태다.** 위 "숨김 목록 동기화"는
+   * `@media print` 블록 안만 파싱하므로, 블록 **밖**에 있는
+   * `.budget-panel--closed { display: none }`은 조용히 통과한다 —
+   * 그런데 미디어 조건이 없는 규칙은 인쇄에도 그대로 적용된다.
+   *
+   * **고른 해법:** 패널의 화면 전용 규칙(닫힘 숨김 + 오버레이 배치 +
+   * 스크롤)을 전부 `@media screen` 블록 안에 둔다. `screen`은 인쇄 미디어와
+   * 절대 매치되지 않으므로 그 규칙들이 종이에 닿을 방법 자체가 없다 —
+   * "선언하고 인쇄에서 다시 푼다"보다 한 단계 강한 보장이다. 그 위에
+   * `@media print`의 해제 규칙을 안전망으로 함께 둔다(둘 중 하나가
+   * 무너져도 종이는 살아 있다).
+   *
+   * 아래 두 describe가 그 둘을 각각 잠근다.
+   */
+  describe("예산 상세 패널의 화면 전용 제약이 인쇄에 닿지 않는다", () => {
+    const SCREEN_MEDIA_START = /@media\s+screen\s*/;
+
+    /** `@media …{ … }` 블록이 원문에서 차지하는 [시작, 끝) 구간 */
+    function blockRange(css: string, startRegex: RegExp): [number, number] | null {
+      const match = startRegex.exec(css);
+      if (!match) return null;
+      const braceStart = css.indexOf("{", match.index);
+      if (braceStart === -1) return null;
+      let depth = 0;
+      for (let i = braceStart; i < css.length; i++) {
+        if (css[i] === "{") depth++;
+        else if (css[i] === "}") {
+          depth--;
+          if (depth === 0) return [match.index, i + 1];
+        }
+      }
+      return null;
+    }
+
+    /**
+     * 이 문자열을 겨누면서 요소를 **숨기거나 상자 안에 가두는** 선언을
+     * 가진 규칙들의 원문 위치. `display: none`뿐 아니라 인쇄에서 같은
+     * 결과(내용이 종이에서 사라짐)를 내는 형태를 함께 본다 —
+     * design.md §6이 "인쇄에서 반드시 푼다"고 정한 그 목록이다.
+     */
+    function confiningRuleIndexes(css: string, needle: string): number[] {
+      const out: number[] = [];
+      const re = /([^{}]+)\{([^{}]*)\}/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(css)) !== null) {
+        const selector = m[1] ?? "";
+        const body = m[2] ?? "";
+        if (!selector.includes(needle)) continue;
+        if (
+          /display\s*:\s*none\b/i.test(body) ||
+          /visibility\s*:\s*hidden\b/i.test(body) ||
+          /content-visibility\s*:\s*hidden\b/i.test(body) ||
+          /max-height\s*:\s*0\b/i.test(body) ||
+          /position\s*:\s*(fixed|absolute)\b/i.test(body) ||
+          /overflow(-[xy])?\s*:\s*(auto|hidden|scroll)\b/i.test(body)
+        ) {
+          out.push(m.index);
+        }
+      }
+      return out;
+    }
+
+    const screenRange = blockRange(DECLARATIONS, SCREEN_MEDIA_START);
+
+    it("@media screen 블록이 실제로 존재한다(전제)", () => {
+      expect(
+        screenRange,
+        "@media screen 블록이 없습니다 — 아래 검사들이 공허하게 통과합니다.",
+      ).not.toBeNull();
+    });
+
+    it("닫힌 패널을 숨기는 규칙이 그 블록 안에 있다", () => {
+      const [start, end] = screenRange ?? [0, 0];
+      const screenBody = DECLARATIONS.slice(start, end);
+      expect(hiddenSelectorsIn(screenBody)).toContain(".budget-panel--closed");
+    });
+
+    it("패널을 숨기거나 가두는 규칙이 @media screen 밖에는 하나도 없다", () => {
+      const [start, end] = screenRange ?? [0, 0];
+      const offenders = confiningRuleIndexes(DECLARATIONS, ".budget-panel")
+        .filter((index) => index < start || index >= end)
+        // `@media print` 안의 **해제** 규칙은 위 필터에 걸리지 않는다
+        // (position: static / overflow: visible은 가두는 값이 아니다).
+        .map((index) => DECLARATIONS.slice(index, index + 120));
+      expect(
+        offenders,
+        "`.budget-panel`을 숨기거나(display:none 등) 상자에 가두는" +
+          "(position:fixed/absolute, overflow:auto 등) 규칙이 @media screen " +
+          "밖에 있습니다 — 그 제약은 인쇄에도 그대로 적용돼, 패널을 닫은 채 " +
+          "인쇄한 종이에서 보호 대상 열 개가 통째로 사라집니다.",
+      ).toEqual([]);
+    });
+
+    // 변이 검사: 이 가드가 실제로 뭔가를 잡아내는지, 정확히 dispatch가
+    // 경고한 형태(미디어 조건 없이 닫힌 패널을 숨기는 규칙)로 확인한다.
+    it("미디어 조건 없는 숨김 규칙을 심으면 잡아낸다(변이 검사)", () => {
+      const poisoned = `
+        .budget-panel--closed { display: none; }
+        @media screen { .budget-panel { position: absolute; } }
+      `;
+      const range = blockRange(poisoned, SCREEN_MEDIA_START)!;
+      const outside = confiningRuleIndexes(poisoned, ".budget-panel").filter(
+        (index) => index < range[0] || index >= range[1],
+      );
+      expect(outside).toHaveLength(1);
+    });
+
+    it("@media screen 안에만 있으면 통과한다(오탐 방지 확인)", () => {
+      const fine = `
+        @media screen {
+          .budget-panel { position: absolute; overflow-y: auto; }
+          .budget-panel--closed { display: none; }
+        }
+      `;
+      const range = blockRange(fine, SCREEN_MEDIA_START)!;
+      const outside = confiningRuleIndexes(fine, ".budget-panel").filter(
+        (index) => index < range[0] || index >= range[1],
+      );
+      expect(outside).toEqual([]);
+    });
+  });
+
+  describe("예산 상세 패널의 인쇄 해제(안전망)", () => {
+    /** 위 describe의 lastDeclaredValue와 같은 접근 — 선택자 단위 마지막 값 */
+    function lastValue(
+      block: string,
+      selector: string,
+      property: string,
+    ): string | undefined {
+      let found: string | undefined;
+      const propRe = new RegExp(`${property}\\s*:\\s*([^;\\n]+)`, "gi");
+      for (const rule of parseRules(block)) {
+        if (!rule.selectors.includes(selector)) continue;
+        propRe.lastIndex = 0;
+        let m: RegExpExecArray | null;
+        while ((m = propRe.exec(rule.body)) !== null) {
+          found = (m[1] ?? "").trim().toLowerCase();
+        }
+      }
+      return found;
+    }
+
+    it("인쇄 블록이 패널의 배치·스크롤·높이를 모두 푼다", () => {
+      const block = printBlock ?? "";
+      expect(lastValue(block, ".budget-panel", "position")).toBe("static");
+      expect(lastValue(block, ".budget-panel", "overflow")).toBe("visible");
+      expect(lastValue(block, ".budget-panel", "max-height")).toBe("none");
+      expect(
+        lastValue(block, ".budget-panel", "display"),
+        ".budget-panel이 인쇄에서 display: block으로 되살아나지 않습니다 — " +
+          "닫힘 숨김 규칙이 언젠가 @media screen 밖으로 나가면 이 한 줄이 " +
+          "마지막 안전망입니다.",
+      ).toBe("block");
+    });
+
+    it("해제가 없는 블록은 잡아낸다(변이 검사)", () => {
+      const screenOnly = `.budget-panel { position: absolute; overflow-y: auto; }`;
+      expect(lastValue(screenOnly, ".budget-panel", "position")).toBe("absolute");
+      expect(lastValue(screenOnly, ".budget-panel", "overflow")).toBeUndefined();
+    });
+  });
 });

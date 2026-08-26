@@ -1,4 +1,4 @@
-import { useEffect, type ReactNode } from "react";
+import { useEffect, type ReactNode, type Ref } from "react";
 import { lockBodyScroll } from "../print/bodyScrollLock";
 
 export interface ResultShellProps {
@@ -6,10 +6,24 @@ export interface ResultShellProps {
   summary: ReactNode;
   /** 상단바 오른쪽 버튼들(인쇄·조건 다시 넣기) */
   actions: ReactNode;
-  /** 왼쪽 열 — 예산·목록·상세가 세로로 흐르는 스크롤 영역 */
+  /** 왼쪽 열 — 목록 ↔ 단지 상세가 전환되는 스크롤 영역 */
   sidebar: ReactNode;
   /** 오른쪽 열 — 지도 */
   map: ReactNode;
+  /**
+   * 예산 상세 패널({@link "./BudgetPanel"}). 사이드바 열 위에 덮이는
+   * 오버레이라 **무대(`.region-results-grid`) 안**에 둔다 — 상단바는
+   * `overflow-x: auto`라 그 안의 절대 배치 자식이 상단바 높이에서
+   * 잘리고, 셸 바로 아래에 두면 상단바 높이를 알 수 없어 위치를 잡을 수
+   * 없다.
+   *
+   * 절대 배치라 그리드 칸을 차지하지 않는다(두 열은 그대로 사이드바와
+   * 지도가 쓴다). **DOM 순서를 사이드바보다 앞에 두는 것이 인쇄 순서를
+   * 정한다** — 종이에서는 배치가 풀려(`@media print`) 상단바 요약 →
+   * 예산 상세 → 목록/상세 → 면책 순으로 흐른다. Task 4까지 사이드바가
+   * 세로로 쌓아 보여주던 것과 같은 순서다.
+   */
+  panel?: ReactNode;
 }
 
 /**
@@ -18,8 +32,9 @@ export interface ResultShellProps {
  * ```
  * ┌ .result-shell (fixed, inset 0, grid-template-rows: auto minmax(0,1fr)) ┐
  * │ .result-topbar   이름 · 요약 · [인쇄][다시]                             │
- * ├ .region-results-grid  (= 스펙의 .stage)                                │
+ * ├ .region-results-grid  (= 스펙의 .stage, position: relative)            │
  * │ .region-results-sidebar (스크롤)  │ .region-results-map (지도)          │
+ * │  └ 그 위에 .budget-panel (절대 배치, 사이드바 열만 덮는다)              │
  * └────────────────────────────────────────────────────────────────────────┘
  * ```
  *
@@ -59,7 +74,13 @@ export interface ResultShellProps {
  * 실제 버그다). 그래서 클래스를 직접 만지지 않고 `lockBodyScroll()`이
  * 잠글 이유의 개수를 센다.
  */
-export function ResultShell({ summary, actions, sidebar, map }: ResultShellProps) {
+export function ResultShell({
+  summary,
+  actions,
+  sidebar,
+  map,
+  panel,
+}: ResultShellProps) {
   useEffect(() => lockBodyScroll(), []);
 
   return (
@@ -78,6 +99,7 @@ export function ResultShell({ summary, actions, sidebar, map }: ResultShellProps
       </header>
 
       <div className="region-results-grid">
+        {panel}
         <div className="region-results-sidebar">{sidebar}</div>
         <div className="region-results-map">{map}</div>
       </div>
@@ -101,6 +123,17 @@ export interface ResultSummaryItemProps {
    * (`.result-topbar-item`의 `nowrap`을 값 쪽에서 되돌린다).
    */
   notice?: boolean;
+  /**
+   * 이 칸을 **누르는 자리**로 만든다(예산 상세 패널을 여닫는다).
+   * 넘기지 않으면 지금까지처럼 값만 보여주는 `<div>`다.
+   */
+  onToggle?: () => void;
+  /** {@link onToggle}이 있을 때, 그 패널이 지금 펼쳐져 있는가 */
+  expanded?: boolean;
+  /** {@link onToggle}이 있을 때, `aria-controls`로 가리킬 패널의 id */
+  controls?: string;
+  /** 패널을 닫을 때 포커스를 되돌릴 자리(BudgetPanel이 이 ref를 쓴다) */
+  buttonRef?: Ref<HTMLButtonElement>;
 }
 
 /**
@@ -110,17 +143,29 @@ export interface ResultSummaryItemProps {
  * 자리와 같은 출처에서 뽑아 문자열로 넘긴다 — 상단바가 자기 계산을
  * 새로 하면 아래 결과와 다른 숫자를 말할 수 있다.
  *
- * **누르는 자리가 아니다.** design.md §5는 "한도"를 누르면 예산 상세
- * 패널이 열리는 그림이지만, 그 패널은 다음 작업(Task 5)에서 만든다.
- * 지금 버튼처럼 그려 두면 눌러도 아무 일도 일어나지 않는 죽은 컨트롤이
- * 된다 — Task 3이 리뷰에서 잡힌 실패 중 하나가 정확히 그것이었다
- * (누르라고 적어 놓고 아무 일도 하지 않던 가정 칩).
+ * **한 칸만 누르는 자리다**(Task 5, design.md §5): "실구매 가능 가격".
+ * 누르면 예산 상세 패널이 펼쳐진다. 나머지(현금·소득·지역)는 값만
+ * 보여주는 칸이라 `onToggle`을 넘기지 않는다.
+ *
+ * 그 칸은 **`affordablePrice === 0`일 때도 버튼이다.** 그때가 사용자가
+ * "왜 0원인가"를 가장 알고 싶은 순간이고, 그 답(`ZeroBudgetMessage`·
+ * `BindingExplainer`·`AssumptionLine`)이 바로 패널 안에 있다. 0원일
+ * 때만 죽은 버튼으로 두면 Task 3이 리뷰에서 잡힌 실패(누르라고 적어
+ * 놓고 아무 일도 안 하던 가정 칩)를 그대로 재현한다.
+ *
+ * 펼침 힌트("자세히"/"닫기")는 `.fold-more-hint`로 감싼다 — 종이 위에서는
+ * 누를 것이 없어 죽은 지시문이 되므로 인쇄에서 지운다
+ * (`src/print/hiddenInPrint.ts`). 값과 라벨은 그대로 남는다.
  */
 export function ResultSummaryItem({
   label,
   value,
   emphasis = false,
   notice = false,
+  onToggle,
+  expanded = false,
+  controls,
+  buttonRef,
 }: ResultSummaryItemProps) {
   const valueClass = notice
     ? "result-topbar-item-value result-topbar-item-value--notice"
@@ -128,10 +173,28 @@ export function ResultSummaryItem({
       ? "result-topbar-item-value result-topbar-item-value--money"
       : "result-topbar-item-value";
 
-  return (
-    <div className="result-topbar-item">
+  const body = (
+    <>
       <span className="result-topbar-item-label">{label}</span>
       <span className={valueClass}>{value}</span>
-    </div>
+    </>
+  );
+
+  if (onToggle === undefined) {
+    return <div className="result-topbar-item">{body}</div>;
+  }
+
+  return (
+    <button
+      type="button"
+      ref={buttonRef}
+      className="result-topbar-item result-topbar-item--button"
+      aria-expanded={expanded}
+      aria-controls={controls}
+      onClick={onToggle}
+    >
+      {body}
+      <span className="fold-more-hint">{expanded ? "닫기" : "자세히"}</span>
+    </button>
   );
 }

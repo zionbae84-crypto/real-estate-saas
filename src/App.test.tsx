@@ -1110,6 +1110,32 @@ describe("App - 단지 상세(화면 4)", () => {
       }
       check("지역 조회 결과가 뜬 전체화면 셸");
 
+      /*
+       * Task 5: 예산 상세 패널이 **열린** 상태도 지난다. 이 패널 안에는
+       * 보호 대상 클래스가 열 개 들어 있고(no-budget·binding-explainer·
+       * cost-breakdown·policy-loan-list·slider-price·slider-warning·
+       * safe-line·assumption-line·assumption-item·assumption-notice),
+       * 그 위에 새 조상(`.budget-panel`)과 새 숨김 대상
+       * (`.budget-detail-close`)이 함께 생겼다 — 이 검사가 정확히 겨누는
+       * 배치다.
+       */
+      await userEvent.click(
+        screen.getByRole("button", { name: /실구매 가능 가격/ }),
+      );
+      for (const selector of [".budget-panel", ".budget-detail-close"]) {
+        expect(
+          container.querySelector(selector),
+          `${selector}가 열린 패널에 없습니다 — 이 검사의 전제가 깨졌습니다.`,
+        ).not.toBeNull();
+      }
+      check("예산 상세 패널이 열린 전체화면 셸");
+
+      // 닫아도 내용은 DOM에 그대로 남는다(인쇄 계약) — 그 상태도 지난다.
+      await userEvent.click(
+        screen.getByRole("button", { name: /실구매 가능 가격/ }),
+      );
+      check("예산 상세 패널이 닫힌 전체화면 셸");
+
       // 사이드바가 목록에서 단지 상세로 바뀐 상태. 상세 안에는 보호 대상
       // 클래스가 몰려 있다(호가·입지·등급 근거).
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
@@ -1850,22 +1876,36 @@ describe("전체화면 결과 셸", () => {
     const { container } = await renderResults();
     const shell = container.querySelector(".result-shell");
 
-    const diagnosis = container.querySelector(".diagnosis-summary");
     const disclaimer = container.querySelector(".disclaimer");
-    expect(diagnosis).not.toBeNull();
     expect(disclaimer).not.toBeNull();
-    expect(shell?.contains(diagnosis!)).toBe(true);
     expect(shell?.contains(disclaimer!)).toBe(true);
     // 화면에 한 벌만 있다 — 두 자리에 각각 적으면 갈라진다.
     expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+
+    /*
+     * Task 5: 진단 종합은 이제 **단지 상세 안**에 있다(design.md §5) —
+     * 목록 상태에서는 네 축이 전부 `null`이라 "아무것도 못 봤다"만
+     * 그리던 자리였다. 상세를 열면 같은 셸 안에서 나타난다.
+     */
+    expect(container.querySelector(".diagnosis-summary")).toBeNull();
+    await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+    const diagnosis = container.querySelector(".diagnosis-summary");
+    expect(diagnosis).not.toBeNull();
+    expect(shell?.contains(diagnosis!)).toBe(true);
     expect(container.querySelectorAll(".diagnosis-summary")).toHaveLength(1);
   });
 
-  it("프로필이 아직 안 끝났으면 셸을 세우지 않지만, 진단 종합과 면책은 그대로 남는다", () => {
+  /**
+   * Task 5: 진단 종합이 상세 안으로 들어가면서 이 상태에서는 사라진다 —
+   * 네 축이 전부 `null`이라 "아무것도 못 봤다"만 그리던 자리이므로 종이가
+   * 잃는 사실이 없다. **면책은 그대로 남는다**(`disclaimer`는
+   * MUST_SURVIVE_PRINT_CLASSES라 이 상태의 종이에서도 사라지면 안 된다).
+   */
+  it("프로필이 아직 안 끝났으면 셸을 세우지 않지만, 면책은 그대로 남는다", () => {
     const { container } = render(<App />);
     expect(container.querySelector(".result-shell")).toBeNull();
-    expect(container.querySelector(".diagnosis-summary")).not.toBeNull();
     expect(container.querySelector(".disclaimer")).not.toBeNull();
+    expect(container.querySelector(".diagnosis-summary")).toBeNull();
   });
 
   it("상단바가 전제와 결과를 요약하고, 인쇄·조건 다시 넣기가 그 안에 선다", async () => {
@@ -2110,5 +2150,312 @@ describe("전체화면 결과 셸", () => {
     });
     const focused = container.querySelector(".complex-row--focused");
     expect(focused?.textContent).toContain("현금단지11");
+  });
+
+  /**
+   * Task 5 — 예산 상세 패널(design.md §5).
+   *
+   * 상단바의 "실구매 가능 가격"을 누르면 예산 블록(가정 문구·BudgetResult·
+   * 슬라이더·안전선)이 사이드바 위에 오버레이로 펼쳐진다.
+   */
+  describe("예산 상세 패널", () => {
+    /** 트리거(상단바의 "실구매 가능 가격" 항목) */
+    function trigger() {
+      return screen.getByRole("button", { name: /실구매 가능 가격/ });
+    }
+
+    function panel(container: HTMLElement) {
+      return container.querySelector(".budget-panel");
+    }
+
+    it("상단바의 '실구매 가능 가격'이 버튼이고, 누르면 예산 상세가 펼쳐진다", async () => {
+      const { container } = await renderResults();
+
+      const button = trigger();
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+
+      await userEvent.click(button);
+
+      expect(trigger()).toHaveAttribute("aria-expanded", "true");
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      // 브리프가 지정한 내용물이 그 안에 들어 있다 — 컴포넌트도 prop도
+      // 그대로이고 자리만 옮겼다.
+      const open = panel(container)!;
+      expect(open.querySelector(".budget-result")).not.toBeNull();
+      expect(open.querySelector(".assumption-line")).not.toBeNull();
+      expect(open.querySelector(".price-slider")).not.toBeNull();
+      expect(open.querySelector(".safe-line")).not.toBeNull();
+    });
+
+    it("다시 누르면 닫힌다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+      await userEvent.click(trigger());
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+    });
+
+    it("Esc로 닫힌다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+      // 포커스는 열었던 자리로 돌아온다 — 안 그러면 키보드 사용자는
+      // 사라진 요소 자리에 남아 문서 맨 앞으로 튕긴다.
+      expect(trigger()).toHaveFocus();
+    });
+
+    it("닫기 버튼으로도 닫힌다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+
+      await userEvent.click(screen.getByRole("button", { name: "닫기" }));
+
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+    });
+
+    /**
+     * dispatch A — **0원일 때도 열린다.**
+     *
+     * 그때가 사용자가 "왜 0원인가"를 가장 알고 싶은 순간이고, 그 답
+     * (`ZeroBudgetMessage`·`BindingExplainer`·`AssumptionLine`)이 바로
+     * 이 패널 안에 있다. 0원일 때만 죽은 버튼으로 두면 Task 3이 리뷰에서
+     * 잡힌 실패(누르라고 적어 놓고 아무 일도 안 하던 가정 칩)를 그대로
+     * 재현한다.
+     */
+    it("실구매 가능 가격이 0원이어도 버튼이고, 열면 그 원인이 들어 있다", async () => {
+      const { container } = await renderResults([CASH_UNIT, LOAN_UNIT], {
+        cash: "100",
+      });
+
+      // 전제: 실제로 0원 상태다.
+      expect(container.querySelector(".no-budget")).not.toBeNull();
+
+      const button = trigger();
+      expect(button.textContent).toContain(ZERO_BUDGET_HEADLINE);
+
+      await userEvent.click(button);
+
+      const open = panel(container)!;
+      expect(open).not.toHaveClass("budget-panel--closed");
+      // 0원 분기에서 `BudgetResult`가 그리는 것은 `ZeroBudgetMessage`다 —
+      // 원인 갈래(현금 부족 / 상환능력 0)까지 여기서 갈린다.
+      // (`binding-explainer`는 `affordablePrice > 0` 분기에만 있다.
+      // `BudgetResult`의 구조는 이 태스크에서 손대지 않는다.)
+      expect(open.querySelector(".no-budget")).not.toBeNull();
+      // 그리고 그 원인을 고칠 수 있는 자리(가정 칩)가 같은 패널 안에 있다.
+      expect(open.querySelector(".assumption-line")).not.toBeNull();
+      expect(open.querySelector(".warning-list")).not.toBeNull();
+    });
+
+    /**
+     * dispatch 1 — `phase === "입력"`(화면 1이 덮고 있을 때) 결과 트리는
+     * 통째로 `inert`다. 그때 패널의 `Esc` 핸들러가 살아 있으면 안 된다 —
+     * 화면 1에서 Esc를 눌렀는데 보이지도 않는 뒤쪽 패널이 닫히는 것은
+     * 유령 동작이다. `inert`는 document 레벨 키 리스너를 막지 못하므로
+     * 상태 쪽에서 막아야 한다.
+     *
+     * dispatch 2 — 그리고 돌아오면 어떤 상태인가: 열어 둔 그대로다.
+     * "조건 다시 넣기"는 화면 전환일 뿐 리셋이 아니라는 기존 계약과
+     * 같은 방향이다.
+     */
+    it("화면 1로 돌아가면 패널이 닫히고, 결과로 돌아오면 다시 열려 있다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "조건 다시 넣기" }),
+      );
+
+      // 화면 1이 덮은 동안에는 닫힌 것으로 그린다.
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+      expect(trigger()).toHaveAttribute("aria-expanded", "false");
+
+      // 그리고 Esc는 아무 일도 하지 않는다 — 핸들러가 아예 붙어 있지 않다.
+      await userEvent.keyboard("{Escape}");
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      );
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+    });
+
+    /**
+     * dispatch 4 — 패널은 지도를 덮지 않으므로 마커는 계속 눌린다. 그런데
+     * 마커가 바꾸는 것(목록의 선택 행)은 패널 **뒤**에 있다 — 닫지 않으면
+     * 누른 사람에게는 아무 일도 일어나지 않은 것으로 보인다.
+     */
+    it("패널이 열린 채 지도 마커를 누르면 패널이 물러나고 그 행이 드러난다", async () => {
+      const { container, markers } = await renderResults();
+      await vi.waitFor(() => expect(markers.length).toBe(2));
+
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      markers[1]!.listeners.click!();
+
+      await vi.waitFor(() => {
+        expect(panel(container)).toHaveClass("budget-panel--closed");
+        const focused = container.querySelector(".complex-row--focused");
+        expect(focused?.textContent).toContain("대출단지");
+      });
+    });
+
+    /**
+     * dispatch 3 — 패널이 무엇을 덮는가. jsdom은 레이아웃을 계산하지
+     * 않으므로 "덮는다"를 픽셀로 물을 수 없다 — 대신 **어느 칸에 붙어
+     * 있는가**를 구조로 확인한다. 지도 칸(`.region-results-map`) 밖에
+     * 있어야 지도 조작을 막지 않는다(실제 픽셀은 보고서 §6의 브라우저
+     * 실측).
+     */
+    it("패널은 결과 그리드 안, 지도 칸 밖에 붙는다", async () => {
+      const { container } = await renderResults();
+      const el = panel(container)!;
+
+      expect(container.querySelector(".region-results-grid")!.contains(el)).toBe(
+        true,
+      );
+      expect(container.querySelector(".region-results-map")!.contains(el)).toBe(
+        false,
+      );
+      expect(
+        container.querySelector(".region-results-sidebar")!.contains(el),
+      ).toBe(false);
+    });
+
+    /**
+     * dispatch C — **이 태스크에서 가장 위험한 자리.**
+     *
+     * 패널 안에 든 것들은 `MUST_SURVIVE_PRINT_CLASSES`가 지키는 값·문구다.
+     * 닫혀 있을 때 **언마운트하거나** 인쇄에도 닿는 `display: none`으로
+     * 두면, 패널을 닫은 채 Cmd+P를 누른 사람의 종이에서 그것들이 통째로
+     * 사라진다. Cmd+P는 어느 단계에서든 눌린다.
+     *
+     * 여기서는 리액트 쪽 절반(언마운트하지 않는다)을 잡는다 — CSS 쪽
+     * 절반(그 숨김이 `@media print`에 닿지 않는다)은
+     * `scripts/printCss.test.ts`가 구조로 잠근다.
+     *
+     * 목록을 열거하지 않고 **열었을 때 실제로 있던 것과 대조**한다 —
+     * 프로필에 따라 조건부로 나타나는 클래스가 섞여 있어, 손으로 적으면
+     * 그 목록이 화면과 조용히 어긋난다.
+     */
+    const PANEL_PRINT_CLASSES = [
+      "no-budget",
+      "binding-explainer",
+      "cost-breakdown",
+      "policy-loan-list",
+      "slider-price",
+      "slider-warning",
+      "safe-line",
+      "assumption-line",
+      "assumption-item",
+      "assumption-notice",
+    ];
+
+    function protectedPresent(container: HTMLElement): string[] {
+      return PANEL_PRINT_CLASSES.filter(
+        (cls) => container.querySelector(`.${cls}`) !== null,
+      );
+    }
+
+    it("패널을 닫아도 보호 대상 클래스가 DOM에서 하나도 사라지지 않는다(양수 예산)", async () => {
+      const { container } = await renderResults();
+
+      await userEvent.click(trigger());
+      const whileOpen = protectedPresent(container);
+      // 전제: 실제로 여러 개가 있었다. 없으면 아래 대조가 공허하다.
+      expect(whileOpen.length).toBeGreaterThanOrEqual(6);
+
+      await userEvent.click(trigger());
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+      expect(protectedPresent(container)).toEqual(whileOpen);
+    });
+
+    it("0원 프로필에서도, 단지 상세를 연 채로도 마찬가지다", async () => {
+      const zero = await renderResults([CASH_UNIT, LOAN_UNIT], { cash: "100" });
+      await userEvent.click(trigger());
+      const zeroOpen = protectedPresent(zero.container);
+      expect(zeroOpen).toContain("no-budget");
+      await userEvent.click(trigger());
+      expect(protectedPresent(zero.container)).toEqual(zeroOpen);
+      zero.unmount();
+
+      const { container } = await renderResults();
+      await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+      expect(
+        screen.getByRole("region", { name: "단지 상세" }),
+      ).toBeInTheDocument();
+
+      await userEvent.click(trigger());
+      const whileOpen = protectedPresent(container);
+      await userEvent.click(trigger());
+      expect(protectedPresent(container)).toEqual(whileOpen);
+      // 상세도 여전히 그 자리에 있다 — 패널은 덮을 뿐 걷어 가지 않는다.
+      expect(
+        screen.getByRole("region", { name: "단지 상세" }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * Task 5 Step 2·3 — 사이드바가 목록 ↔ 상세로 전환되고, 진단 종합은
+   * 상세 안(뒤)으로 들어간다.
+   */
+  describe("사이드바 전환과 진단 종합의 자리", () => {
+    it("목록 화면에는 진단 종합이 없고, 상세를 열면 상세 뒤에 붙는다", async () => {
+      const { container } = await renderResults();
+      const sidebar = container.querySelector(".region-results-sidebar")!;
+
+      // 목록 상태에서는 네 축이 전부 null이라 "아무것도 못 봤다"만 그리는
+      // 자리였다 — 그 자리를 상세 안으로 옮겼다(design.md §5).
+      expect(container.querySelector(".diagnosis-summary")).toBeNull();
+      // 면책은 그 자리에 그대로다.
+      expect(sidebar.querySelector(".disclaimer")).not.toBeNull();
+
+      await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+
+      const diagnosis = container.querySelector(".diagnosis-summary");
+      expect(diagnosis).not.toBeNull();
+      expect(sidebar.contains(diagnosis!)).toBe(true);
+      // 상세 **뒤**에 온다 — 사이드바의 같은 열이라 시각적으로 이어 붙는다.
+      const detail = container.querySelector(".complex-detail")!;
+      expect(
+        detail.compareDocumentPosition(diagnosis!) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(container.querySelectorAll(".diagnosis-summary")).toHaveLength(1);
+    });
+
+    it("목록으로 돌아가면 진단 종합은 사라지고 면책은 남는다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+      expect(container.querySelector(".diagnosis-summary")).not.toBeNull();
+
+      await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
+
+      expect(container.querySelector(".diagnosis-summary")).toBeNull();
+      expect(container.querySelector(".disclaimer")).not.toBeNull();
+      expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+    });
+
+    /**
+     * dispatch B — **투자 경로의 `DiagnosisSummary`는 건드리지 않는다.**
+     * 거기엔 실제 `purchase` 판정이 있고 `ComplexDetail`이 아예 없다.
+     */
+    it("투자 경로의 진단 종합과 면책은 그대로다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(
+        screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
+      );
+
+      expect(container.querySelector(".diagnosis-summary")).not.toBeNull();
+      expect(container.querySelector(".disclaimer")).not.toBeNull();
+    });
   });
 });

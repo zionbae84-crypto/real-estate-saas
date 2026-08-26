@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AssumptionLine } from "./components/AssumptionLine";
+import { BudgetPanel, BUDGET_PANEL_ID } from "./components/BudgetPanel";
 import { BudgetResult, ZERO_BUDGET_HEADLINE } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
@@ -143,6 +144,44 @@ export function App() {
    * 그 단지 전체다.
    */
   const [focusedComplexKey, setFocusedComplexKey] = useState<string | null>(null);
+
+  /**
+   * 사용자가 예산 상세 패널을 **열어 달라고 했는가**(상단바의 "실구매
+   * 가능 가격"을 눌렀는가).
+   *
+   * **"열려 있는가"가 아니다.** 실제 열림은 아래 {@link budgetPanelOpen}
+   * 에서 `phase`와 함께 파생시킨다 — 이 요청만 들고 화면 단계를 함께
+   * 보지 않으면, 화면 1이 덮고 있는 동안에도 패널이 "열린" 상태로 남아
+   * 그 `Esc` 핸들러가 살아 있게 된다. 그러면 화면 1에서 Esc를 눌렀는데
+   * 보이지도 않는 뒤쪽 패널이 닫히고 포커스가 보이지 않는 버튼으로
+   * 옮겨 간다 — 결과 트리는 `inert`지만 `inert`는 `document`에 직접
+   * 붙은 키 리스너를 막지 못한다.
+   *
+   * **핸들러마다 `setBudgetPanelRequested(false)`를 기억하는 방식을
+   * 고르지 않았다.** 이 저장소가 여섯 번 반복한 실패가 정확히 그
+   * 모양이다("결정을 한 방향으로만 적용하고 나머지 상태를 추적하지
+   * 않았다"). `phase`를 "입력"으로 되돌리는 자리는 지금 셋인데
+   * (`handleBackToEntry`·`handleOpenAssumption`·`handlePurchaseTypeChange`),
+   * 넷째가 생기는 날 그 하나만 빠뜨리면 유령 동작이 돌아온다. 파생값은
+   * 빠뜨릴 자리가 없다.
+   */
+  const [budgetPanelRequested, setBudgetPanelRequested] = useState(false);
+  /**
+   * 예산 상세 패널이 실제로 펼쳐져 있는가. 위 요청 × `phase === "결과"`.
+   *
+   * 화면 1로 갔다가 돌아오면 **열어 둔 그대로 돌아온다** — 요청은
+   * 지우지 않기 때문이다. "조건 다시 넣기"가 프로필도 조회 결과도
+   * 건드리지 않는 화면 전환일 뿐이라는 기존 계약과 같은 방향이고,
+   * 가정 칩(`AssumptionLine`)이 이제 이 패널 안에 있어서 그 칩을 눌러
+   * 값을 고치고 돌아온 사람이 방금 있던 자리로 되돌아오게 한다.
+   */
+  const budgetPanelOpen = budgetPanelRequested && phase === "결과";
+  /**
+   * 패널을 닫을 때 포커스를 되돌릴 자리(상단바의 트리거 버튼).
+   * 닫히면 패널은 화면에서 `display: none`이 되므로, 그 안에 남은
+   * 포커스는 `<body>`로 떨어진다(BudgetPanel.tsx 참고).
+   */
+  const budgetTriggerRef = useRef<HTMLButtonElement>(null);
 
   /**
    * 진단 종합(`DiagnosisSummary`)이 읽는 네 축의 최신 판정.
@@ -587,6 +626,17 @@ export function App() {
    * 그 상세를 걷어 가면 그쪽이 놀랍다 — 팝업만 토글된다.
    */
   function handleFocusComplex(complexKey: string) {
+    /*
+     * 예산 상세 패널을 닫는다(Task 5).
+     *
+     * 패널은 지도를 덮지 않으므로 열려 있어도 마커는 그대로 눌린다 —
+     * 그런데 마커가 바꾸는 것(목록의 선택 행, 그리고 아래에서 닫는 상세)은
+     * 전부 패널 **뒤**에 있는 사이드바 안이다. 닫지 않으면 마커를 누른
+     * 사람에게는 아무 일도 일어나지 않은 것으로 보인다 — 이 저장소가
+     * 이미 두 번 낸 "눌러도 아무 반응이 없는 컨트롤" 실패다(Task 3의
+     * 죽은 가정 칩, 그리고 상세가 열린 채 무시되던 마커).
+     */
+    setBudgetPanelRequested(false);
     if (selectedUnit !== null && selectedUnit.complexKey !== complexKey) {
       // `handleCloseDetail`과 같은 정리다 — `PriceCheck`·`LocationFacts`가
       // 사라지면 그 `onAssessment`는 다시 불리지 않으므로, 여기서 비우지
@@ -621,6 +671,11 @@ export function App() {
    * 한정돼, 상세를 닫으면 원래 프로필로 되돌아간다.
    */
   function handleSelectUnit(unit: ComplexUnit) {
+    // 행을 눌렀다는 것은 사이드바를 보고 있었다는 뜻이라, 지금 구조에서는
+    // 패널이 이미 닫혀 있다(패널이 사이드바를 덮는다). 그래도 여기서
+    // 닫는다 — 패널 폭이 바뀌거나 다른 경로에서 이 핸들러가 불리는 날,
+    // "행을 눌렀는데 화면이 그대로"인 죽은 컨트롤이 되지 않게 한다.
+    setBudgetPanelRequested(false);
     setSelectedUnit(unit);
     // 행을 누르면 지도도 그 단지로 옮겨 가며 마커를 강조한다
     // (design.md §4: 목록 행 ↔ 마커는 양방향으로 이어진다).
@@ -757,67 +812,59 @@ export function App() {
   }, [residentialProfile, selectedUnit]);
 
   /**
-   * 화면 맨 끝의 두 조각 — 진단 종합과 면책 문구.
+   * 진단 종합. **한 번만 적고, 서로 배타적인 두 자리에 그린다.**
    *
-   * **한 번만 적고 두 자리에 그린다.** 실거주 경로에서는 전체화면 셸
-   * (`ResultShell`) **안**의 사이드바 끝에, 투자 경로에서는 지금까지처럼
-   * 문서 흐름 끝에 온다. 셸은 `position: fixed; inset: 0`이라 그 **밖에**
-   * 남겨 두면 화면을 덮은 셸 뒤에 깔려 보이지도 눌리지도 않는다 —
-   * `phase === "입력"`일 때 결과 트리가 오버레이 뒤에 깔려 있던 것과
-   * 똑같은 실패다(Task 3 리뷰 Important 4·5).
+   * - 실거주: 사이드바의 **단지 상세 안**(상세 바로 뒤). 스펙 §5가 정한
+   *   자리다. Task 4까지는 화면 맨 끝에 있었는데, 그때 옮기지 않은
+   *   이유("목록 화면과 투자 경로에서도 떠야 한다")를 Task 5가 다시
+   *   따져 뒤집었다: 실거주 **목록** 상태에서는 네 축이 전부 `null`이라
+   *   이 화면이 그리는 것이 "아무것도 못 봤다" 네 줄뿐이다 — 사실을
+   *   하나도 담지 않은 자리라 사라져도 종이가 잃는 것이 없다. 반대로
+   *   상세 안에서는 호가·입지 두 축이 실제로 채워져 있어, 그 매물에
+   *   대해 "무엇을 봤고 무엇을 못 봤는지"를 말하는 마무리가 된다.
+   * - 투자(`PurchaseCheck`): **건드리지 않는다.** 거기엔 실제 `purchase`
+   *   판정이 있고 `ComplexDetail`이 아예 없다.
    *
-   * 두 자리에 각각 적지 않는 이유는 그쪽이 갈라지기 때문이다. 이 두
-   * 조각은 "못 본 축을 숨기지 않는다"와 면책이라 한쪽만 고쳐지면
-   * 곧바로 사고가 된다.
+   * `rights`는 계속 `null`이다 — 등기부 문진이 이 앱에서 제거돼 영구히
+   * 값이 없다(`DiagnosisSummary`의 `rights` prop 문서 참고). 못 본 축은
+   * 값을 지어내지 않고 그대로 넘긴다.
    *
-   * **면책은 `ErrorBoundary` 안에 둔다**(리뷰 Minor: 예전에는 밖이었다).
-   * 밖으로 되돌리면 이 `<footer>`는 `.results-screen`의 직계 자식이
-   * 되는데, 실거주 경로에서 그 자리는 `position: fixed; inset: 0`인
-   * 셸 **뒤**다 — 화면에서 보이지도 읽히지도 않는다. 위에서 이 두
-   * 조각을 셸 안으로 들여온 이유가 바로 그것이라, "경계 밖"과 "셸 안"은
-   * 동시에 만족할 수 없다. 경계가 터진 화면에는 면책할 추정치 자체가
-   * 없으므로(폴백에는 숫자가 하나도 없다) 안쪽에 두는 쪽의 손해가 없다.
-   *
-   * **스펙 §5는 진단 종합을 "단지 상세 안"에 그린다** — 여기서는 상세
-   * **뒤**에 온다(사이드바의 같은 열이라 시각적으로는 이어 붙는다).
-   * 지금 옮기지 않는 이유는 진단 종합이 상세가 닫힌 목록 화면과 투자
-   * 경로에도 떠야 하기 때문이다: `ComplexDetail` 안으로 넣으면 그 두
-   * 상태에서 통째로 사라져, 이 화면의 존재 이유("못 본 축을 숨기지
-   * 않는다")를 정면으로 깬다. §5가 그리는 배치는 예산 상세가 상단바
-   * 패널로 올라가 사이드바가 재편되는 Task 5에서 함께 본다 — 그 전에
-   * 옮기면 두 번 옮기게 된다. Task 5 이월 목록에 적어 뒀다.
+   * `<details>`로 접지 않는다 — 이 화면의 존재 이유가 "못 본 축을 숨기지
+   * 않는 것"인데, 화면 전체를 접어 두면 클릭하지 않은 사람에게는 그 못
+   * 본 축조차 보이지 않는다.
    */
-  const resultTail = (
-    <>
-    {/*
-      진단 종합은 화면의 맨 끝(면책 문구 바로 위)에 둔다 —
-      "지금까지 본 것 전부를 한자리에 모으는 마무리"로 두는 이유는
-      `DiagnosisSummary.tsx` 문서에 적었다.
-
-      네 축이 동시에 다 채워지는 일은 없다(권리분석은 이 앱에서
-      제거돼 항상 `null`이고, 구매 유형별 금융은 투자 경로에서만,
-      호가·입지는 실거주에서 평형을 고른 동안만 존재한다) — 그래서
-      못 본 축은 값을 지어내지 않고 그대로 `null`을 넘긴다.
-      `DiagnosisSummary`가 그 `null`을 "못 봤다"로 그린다.
-
-      `<details>`로 접지 않는다 — 이 화면의 존재 이유가 "못 본
-      축을 숨기지 않는 것"인데, 화면 전체를 접어 두면 클릭하지
-      않은 사람에게는 그 못 본 축조차 보이지 않는다.
-    */}
+  const diagnosisSummary = (
     <DiagnosisSummary
       rights={null}
       purchase={purchaseAssessment}
       price={priceAssessment}
       location={locationAssessment}
     />
-    {/*
-      면책 문구도 유형에 따라 갈린다.
+  );
 
-      "추정치이며 실제 대출한도는 …"은 이 화면이 대출한도 추정치를 낸다는
-      것을 전제한 문장이다. 투자 경로에서는 바로 위에서 "이 유형의 대출
-      한도는 우리가 계산하지 않아요"라고 말한 뒤라, 그 문장이 그대로
-      남으면 어딘가에 한도 추정치가 있는 것처럼 읽힌다.
-    */}
+  /**
+   * 면책 문구. **진단 종합과 함께 움직이지 않는다**(Task 5에서 갈랐다).
+   *
+   * `disclaimer`는 `MUST_SURVIVE_PRINT_CLASSES`다. 진단 종합을 단지 상세
+   * 안으로 옮기면서 이 `<footer>`까지 함께 데려가면, 목록 화면과 투자
+   * 경로와 프로필 미완 상태 **전부에서 면책이 사라진다** — 종이를
+   * 건네받은 사람이 추정치를 확정 사실로 읽게 되는, 이 저장소가 가장
+   * 경계하는 종류의 사고다. 그래서 지금까지 있던 **세 자리에 그대로**
+   * 둔다(사이드바 끝 / 프로필 미완 폴백 / 투자 경로).
+   *
+   * 실거주 경로에서 이 자리는 셸(`position: fixed; inset: 0`) **안**의
+   * 사이드바 끝이다. 밖에 남기면 셸 뒤에 깔려 보이지도 읽히지도 않는다
+   * (Task 3 리뷰 Important 4·5와 같은 실패). 같은 이유로 `ErrorBoundary`
+   * **안**에 둔다 — 경계가 터진 화면에는 면책할 추정치 자체가 없으므로
+   * 안쪽에 두는 쪽의 손해가 없다.
+   *
+   * 문구도 유형에 따라 갈린다. "추정치이며 실제 대출한도는 …"은 이
+   * 화면이 대출한도 추정치를 낸다는 것을 전제한 문장이다. 투자 경로에서는
+   * 바로 위에서 "이 유형의 대출 한도는 우리가 계산하지 않아요"라고 말한
+   * 뒤라, 그 문장이 그대로 남으면 어딘가에 한도 추정치가 있는 것처럼
+   * 읽힌다.
+   */
+  const disclaimer = (
     <footer className="disclaimer">
       {purchaseType === "실거주" ? (
         <>
@@ -832,7 +879,6 @@ export function App() {
         </>
       )}
     </footer>
-    </>
   );
 
   return (
@@ -1093,17 +1139,40 @@ export function App() {
                       `ZeroBudgetMessage`가 쓰는 것과 **같은 상수**다
                       (`ZERO_BUDGET_HEADLINE`) — 여기서 새로 짓지 않는다.
                     */}
+                    {/*
+                      **이 칸이 예산 상세 패널의 트리거다**(Task 5,
+                      design.md §5). 스펙의 그림은 이 자리를 "한도"라
+                      부르지만 여기 이름은 "실구매 가능 가격"이다(위
+                      라벨 주석) — 누르는 자리를 옮긴 것이지 새 항목을
+                      만든 것이 아니다.
+
+                      **0원일 때도 버튼이다.** 그때가 사용자가 "왜
+                      0원인가"를 가장 알고 싶은 순간이고, 그 답
+                      (`ZeroBudgetMessage`·`BindingExplainer`·
+                      `AssumptionLine`)이 전부 이 패널 안에 있다. 0원일
+                      때만 죽은 버튼으로 두면 Task 3이 리뷰에서 잡힌
+                      실패(누르라고 적어 놓고 아무 일도 안 하던 가정
+                      칩)를 그대로 재현한다.
+                    */}
                     {affordability.result.affordablePrice > 0 ? (
                       <ResultSummaryItem
                         label="실구매 가능 가격"
                         value={formatWon(affordability.result.affordablePrice)}
                         emphasis
+                        onToggle={() => setBudgetPanelRequested((v) => !v)}
+                        expanded={budgetPanelOpen}
+                        controls={BUDGET_PANEL_ID}
+                        buttonRef={budgetTriggerRef}
                       />
                     ) : (
                       <ResultSummaryItem
                         label="실구매 가능 가격"
                         value={ZERO_BUDGET_HEADLINE}
                         notice
+                        onToggle={() => setBudgetPanelRequested((v) => !v)}
+                        expanded={budgetPanelOpen}
+                        controls={BUDGET_PANEL_ID}
+                        buttonRef={budgetTriggerRef}
                       />
                     )}
                     {/*
@@ -1322,80 +1391,128 @@ export function App() {
                     )}
                   </>
                 }
+                panel={
+                  /*
+                    예산 상세 패널(design.md §5, Task 5). Task 4까지
+                    사이드바 맨 위에 세로로 쌓여 있던 예산 블록이 통째로
+                    여기로 옮겨 왔다 — **컴포넌트도 prop도 조건도 그대로**
+                    이고 자리만 바뀌었다.
+
+                    닫혀 있어도 언마운트하지 않는다. 이 안에는 보호 대상
+                    클래스가 열 개 들어 있고, 패널의 기본 상태는 닫힘이며,
+                    Cmd+P는 어느 단계에서든 눌린다(BudgetPanel.tsx 참고).
+                  */
+                  <BudgetPanel
+                    open={budgetPanelOpen}
+                    onClose={() => setBudgetPanelRequested(false)}
+                    returnFocusRef={budgetTriggerRef}
+                  >
+                    {/*
+                      화면에서는 숨고 인쇄에서만 나온다(styles.css의
+                      .print-summary). 지금 화면 그대로 인쇄되는 이 리포트가
+                      배우자·부모님처럼 화면을 보지 않은 사람에게 건네지므로,
+                      계산의 전제(사용가능 현금 예산·연 소득·생애최초 여부·
+                      기존 대출·규제지역 여부·전용면적)와 룰셋 기준·인쇄일을
+                      종이에도 남긴다.
+
+                      사이드바가 아니라 **이 패널 안**에 둔다. 화면에서는
+                      어차피 `display: none`이라 어디 있든 같고, 종이에서는
+                      이 순서가 곧 지면 순서다 — 전제(이 요약) → 가정 →
+                      예산 → 목록/상세 → 면책이라는 Task 4까지의 지면
+                      순서를 그대로 유지한다.
+                    */}
+                    <PrintSummary
+                      state={state}
+                      effectiveAreaSqm={effectiveAreaSqm}
+                      areaSource={areaSource}
+                      rules={rules}
+                    />
+                    <AssumptionLine
+                      state={state}
+                      onOpen={handleOpenAssumption}
+                      areaOverridden={selectedUnit !== null}
+                    />
+                    <BudgetResult
+                      result={affordability.result}
+                      safePrice={affordability.safePrice}
+                      householdCountNote={householdCountNoteFor(
+                        residentialProfile,
+                        rules,
+                      )}
+                    />
+                    {affordability.result.affordablePrice > 0 && (
+                      <>
+                        <PriceSlider
+                          price={affordability.price}
+                          max={affordability.result.affordablePrice}
+                          safePrice={affordability.safePrice}
+                          onChange={affordability.setPrice}
+                        />
+                        <SafetyBadge
+                          safety={affordability.safety}
+                          // 상세가 열려 있을 때만 라벨을 붙인다. 그때만 화면에
+                          // 배지가 둘(여기 + ComplexDetail 안)이고, 마크업이
+                          // 같아서 어느 쪽이 "이 집을 사면"의 답인지 알 수 없다 —
+                          // 하필 더 낙관적인 쪽이 매물 옆에 붙는다. 목록 화면에서는
+                          // 배지가 하나뿐이라 라벨이 잡음이 된다.
+                          //
+                          // 패널로 옮긴 뒤에도 조건은 그대로다: 화면에서는
+                          // 패널을 열어야 둘이 함께 보이고, **종이에서는
+                          // 언제나 둘이 함께 나온다**(패널은 닫혀 있어도
+                          // 인쇄된다) — 라벨이 필요한 쪽은 후자다.
+                          label={
+                            selectedUnit !== null
+                              ? "위 가격에서 최대로 빌렸을 때예요"
+                              : undefined
+                          }
+                          // 평형을 고른 동안에는 이 배지도 그 평형을 전제로
+                          // 계산된다(면적·가격 범위 모두). 상세 배지는
+                          // 등급을 붙드는데 이 배지만 "안전"이라고 말하면 한
+                          // 화면이 스스로 모순되고, 하필 먼저 읽히는 쪽이
+                          // 낙관적이다. 고른 평형이 없으면 넘기지 않는다 —
+                          // 그때 이 배지는 어떤 집도 가리키지 않는다.
+                          landLeasehold={selectedUnit?.landLeasehold}
+                          // 등급이 왜 멈췄는지는 상세 배지가 말한다.
+                          // 두 배지가 같은 문장을 말하면 한 화면에 똑같은
+                          // 경고가 두 번 뜨고 둘 다 잡음으로 읽힌다. 등급
+                          // 글자는 여기에도 그대로 남는다.
+                          explainGrade={false}
+                        />
+                      </>
+                    )}
+                  </BudgetPanel>
+                }
                 sidebar={
                   <>
                 {/*
-                  화면에서는 숨고 인쇄에서만 나온다(styles.css의 .print-summary).
-                  지금 화면 그대로 인쇄되는 이 리포트가 배우자·부모님처럼 화면을
-                  보지 않은 사람에게 건네지므로, 계산의 전제(사용가능 현금 예산·연
-                  소득·생애최초 여부·기존 대출·규제지역 여부·전용면적)와
-                  룰셋 기준·인쇄일을 종이에도 남긴다.
+                  사이드바는 이제 **목록 ↔ 단지 상세** 두 화면만 오간다
+                  (design.md §5). 조건식(`detail !== null`)은 Task 4에서
+                  쓰던 것 그대로다 — 브리프가 "조건식 자체는 바꾸지
+                  않는다"고 못 박은 자리다.
                 */}
-                <PrintSummary
-                  state={state}
-                  effectiveAreaSqm={effectiveAreaSqm}
-                  areaSource={areaSource}
-                  rules={rules}
-                />
-                <AssumptionLine
-                  state={state}
-                  onOpen={handleOpenAssumption}
-                  areaOverridden={selectedUnit !== null}
-                />
-                <BudgetResult
-                  result={affordability.result}
-                  safePrice={affordability.safePrice}
-                  householdCountNote={householdCountNoteFor(
-                    residentialProfile,
-                    rules,
-                  )}
-                />
-                {affordability.result.affordablePrice > 0 && (
-                  <>
-                    <PriceSlider
-                      price={affordability.price}
-                      max={affordability.result.affordablePrice}
-                      safePrice={affordability.safePrice}
-                      onChange={affordability.setPrice}
-                    />
-                    <SafetyBadge
-                      safety={affordability.safety}
-                      // 상세가 열려 있을 때만 라벨을 붙인다. 그때만 화면에
-                      // 배지가 둘(여기 + ComplexDetail 안)이고, 마크업이
-                      // 같아서 어느 쪽이 "이 집을 사면"의 답인지 알 수 없다 —
-                      // 하필 더 낙관적인 쪽이 매물 옆에 붙는다. 목록 화면에서는
-                      // 배지가 하나뿐이라 라벨이 잡음이 된다.
-                      label={
-                        selectedUnit !== null
-                          ? "위 가격에서 최대로 빌렸을 때예요"
-                          : undefined
-                      }
-                      // 평형을 고른 동안에는 이 배지도 그 평형을 전제로
-                      // 계산된다(면적·가격 범위 모두). 아래 상세 배지는
-                      // 등급을 붙드는데 위 배지만 "안전"이라고 말하면 한
-                      // 화면이 스스로 모순되고, 하필 먼저 읽히는 쪽이
-                      // 낙관적이다. 고른 평형이 없으면 넘기지 않는다 —
-                      // 그때 이 배지는 어떤 집도 가리키지 않는다.
-                      landLeasehold={selectedUnit?.landLeasehold}
-                      // 등급이 왜 멈췄는지는 아래 상세 배지가 말한다.
-                      // 두 배지가 같은 문장을 말하면 한 화면에 똑같은
-                      // 경고가 두 번 뜨고 둘 다 잡음으로 읽힌다. 등급
-                      // 글자는 여기에도 그대로 남는다.
-                      explainGrade={false}
-                    />
-                  </>
-                )}
                 {detail !== null ? (
-                  <ComplexDetail
-                    unit={detail.unit}
-                    burden={detail.burden}
-                    costs={detail.costs}
-                    householdCountNote={detail.householdCountNote}
-                    priceBudget={detail.priceBudget}
-                    onClose={handleCloseDetail}
-                    onPriceAssessment={setPriceAssessment}
-                    onLocationAssessment={setLocationAssessment}
-                  />
+                  <>
+                    <ComplexDetail
+                      unit={detail.unit}
+                      burden={detail.burden}
+                      costs={detail.costs}
+                      householdCountNote={detail.householdCountNote}
+                      priceBudget={detail.priceBudget}
+                      onClose={handleCloseDetail}
+                      onPriceAssessment={setPriceAssessment}
+                      onLocationAssessment={setLocationAssessment}
+                    />
+                    {/*
+                      진단 종합은 **상세 안**이다(스펙 §5). `ComplexDetail`
+                      의 prop을 바꾸지 않기 위해 그 `<section>` 안이 아니라
+                      바로 뒤에 둔다 — 사이드바의 같은 열이라 화면에서도
+                      종이에서도 이어 붙는다. 여기서만 호가·입지 두 축이
+                      실제로 채워져 있고, 이 화면이 "지금까지 본 것 전부를
+                      모으는 마무리"라는 자기 문서(DiagnosisSummary.tsx)와도
+                      맞는 자리다.
+                    */}
+                    {diagnosisSummary}
+                  </>
                 ) : (
                   <>
                     {/*
@@ -1533,7 +1650,13 @@ export function App() {
                   </>
                 )}
 
-                    {resultTail}
+                    {/*
+                      면책은 **목록·상세 어느 쪽에서도** 사이드바 끝에
+                      남는다(dispatch B). 진단 종합만 상세 안으로 옮겼다 —
+                      둘을 함께 옮기면 목록 화면에서 면책이 통째로
+                      사라진다.
+                    */}
+                    {disclaimer}
                   </>
                 }
               />
@@ -1541,14 +1664,17 @@ export function App() {
               /*
                 프로필이 아직 안 끝났다 — 셸을 세우지 않는다(그 안에 담을
                 숫자가 하나도 없다. 무엇이 모자란지는 화면 1이 말한다).
-                그래도 **진단 종합과 면책은 남긴다**: 셸이 없는 이 상태에서
-                두 조각까지 함께 사라지면, 이 단계에서 인쇄한 종이(화면 1의
-                인쇄 버튼은 `inert`라 Cmd+P가 유일한 경로다)에는 구매 유형
-                한 줄만 남는다. 지금까지 이 두 조각은 프로필 완성 여부와
-                무관하게 늘 그려졌고, 그 계약을 셸 도입이 조용히 바꾸지
-                않게 한다.
+                그래도 **면책은 남긴다**: 이 상태에서 인쇄한 종이(화면 1의
+                인쇄 버튼은 `inert`라 Cmd+P가 유일한 경로다)에 구매 유형
+                한 줄만 남지 않게 한다.
+
+                Task 5에서 진단 종합은 여기서 빠졌다 — 이 상태에서는 네
+                축이 전부 `null`이라 "아무것도 못 봤다" 네 줄만 그리던
+                자리였다. 사실을 하나도 담지 않은 자리라 종이가 잃는 것이
+                없고, 그 자리는 이제 실거주 경로의 단지 상세 안이다
+                (`diagnosisSummary` 정의의 주석).
               */
-              resultTail
+              disclaimer
             )}
             </>
           ) : (
@@ -1591,7 +1717,14 @@ export function App() {
                 데려가는 화면은 유형 라디오 하나뿐인 막다른 길이었다(위
                 주석). 통로를 없애는 대신 목적지를 이 화면으로 끌어왔다.
               */}
-              {resultTail}
+              {/*
+                투자 경로의 진단 종합은 **그대로 둔다**(dispatch B). 여기엔
+                실제 `purchase` 판정이 있고 `ComplexDetail`이 아예 없다 —
+                실거주 쪽에서 이 요약이 상세 안으로 들어간 것은 그 경로에
+                상세가 있기 때문이다.
+              */}
+              {diagnosisSummary}
+              {disclaimer}
             </>
           )}
 
