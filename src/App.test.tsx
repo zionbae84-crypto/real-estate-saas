@@ -885,36 +885,6 @@ describe("App - 단지 상세(화면 4)", () => {
     expect(screen.queryByText("살 수 있는 단지")).not.toBeInTheDocument();
   });
 
-  /**
-   * 권리분석 축은 이 앱에서 **영구히** 값이 없다.
-   *
-   * 등기부 문진이 제거됐고 별도 도구로 다시 만들 예정이라, `App.tsx`는
-   * `DiagnosisSummary`에 `rights={null}`만 넘긴다("아직 값이 없을 수도
-   * 있다"가 아니라 "영구히 없다" — `src/lib/summary/types.ts` 참고).
-   * 그 불변식을 붙잡아 두는 것이 아무것도 없어서, 언젠가 이 자리에
-   * 다른 값이 흘러 들어가도 아무도 모른다. 여기서 그 자리를 못박는다:
-   * **다른 축이 실제로 채워진 상태에서도** 권리 축만은 "확인 안 함"이다.
-   */
-  it("권리분석 축은 언제나 '확인 안 함'이다 — App은 rights={null}만 넘긴다", async () => {
-    render(<App />);
-    await fillProfile();
-    // 평형을 골라 호가·입지 축이 실제로 채워진 상태로 만든다 — 그래야
-    // "아무 축도 안 채워져서 통과한" 것이 아님이 드러난다.
-    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-
-    const rightsLine = document.querySelector(
-      '.diagnosis-summary-axis[data-axis="rights"]',
-    );
-    expect(rightsLine).not.toBeNull();
-    expect(rightsLine?.getAttribute("data-status")).toBe("notLooked");
-
-    const otherStatuses = [...document.querySelectorAll(".diagnosis-summary-axis")]
-      .filter((el) => el.getAttribute("data-axis") !== "rights")
-      .map((el) => el.getAttribute("data-status"));
-    expect(otherStatuses).toHaveLength(3);
-    expect(otherStatuses.some((status) => status !== "notLooked")).toBe(true);
-  });
-
   it("목록으로 버튼을 누르면 다시 목록이 보인다", async () => {
     render(<App />);
     await fillProfile();
@@ -2068,7 +2038,7 @@ describe("전체화면 결과 셸", () => {
    * 계산하지 않으므로 "보이는가"를 물을 수 없다 — 대신 **셸 안에
    * 들어 있는가**를 구조로 확인한다.
    */
-  it("진단 종합과 면책 문구가 셸 **안**에 있다 — 고정 레이어 뒤에 깔리지 않는다", async () => {
+  it("면책 문구가 셸 **안**에 있다 — 고정 레이어 뒤에 깔리지 않는다", async () => {
     const { container } = await renderResults();
     const shell = container.querySelector(".result-shell");
 
@@ -2078,30 +2048,20 @@ describe("전체화면 결과 셸", () => {
     // 화면에 한 벌만 있다 — 두 자리에 각각 적으면 갈라진다.
     expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
 
-    /*
-     * Task 5: 진단 종합은 이제 **단지 상세 안**에 있다(design.md §5) —
-     * 목록 상태에서는 네 축이 전부 `null`이라 "아무것도 못 봤다"만
-     * 그리던 자리였다. 상세를 열면 같은 셸 안에서 나타난다.
-     */
-    expect(container.querySelector(".diagnosis-summary")).toBeNull();
+    // 상세를 열어도 같은 자리에 그대로 한 벌이다.
     await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
-    const diagnosis = container.querySelector(".diagnosis-summary");
-    expect(diagnosis).not.toBeNull();
-    expect(shell?.contains(diagnosis!)).toBe(true);
-    expect(container.querySelectorAll(".diagnosis-summary")).toHaveLength(1);
+    expect(shell?.contains(container.querySelector(".disclaimer")!)).toBe(true);
+    expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
   });
 
   /**
-   * Task 5: 진단 종합이 상세 안으로 들어가면서 이 상태에서는 사라진다 —
-   * 네 축이 전부 `null`이라 "아무것도 못 봤다"만 그리던 자리이므로 종이가
-   * 잃는 사실이 없다. **면책은 그대로 남는다**(`disclaimer`는
-   * MUST_SURVIVE_PRINT_CLASSES라 이 상태의 종이에서도 사라지면 안 된다).
+   * **면책은 그대로 남는다**(`disclaimer`는 MUST_SURVIVE_PRINT_CLASSES라
+   * 이 상태의 종이에서도 사라지면 안 된다).
    */
   it("프로필이 아직 안 끝났으면 셸을 세우지 않지만, 면책은 그대로 남는다", () => {
     const { container } = render(<App />);
     expect(container.querySelector(".result-shell")).toBeNull();
     expect(container.querySelector(".disclaimer")).not.toBeNull();
-    expect(container.querySelector(".diagnosis-summary")).toBeNull();
   });
 
   it("상단바가 전제와 결과를 요약하고, 인쇄·조건 다시 넣기가 그 안에 선다", async () => {
@@ -2832,57 +2792,39 @@ describe("전체화면 결과 셸", () => {
   });
 
   /**
-   * Task 5 Step 2·3 — 사이드바가 목록 ↔ 상세로 전환되고, 진단 종합은
-   * 상세 안(뒤)으로 들어간다.
+   * 사이드바가 목록 ↔ 상세로 전환되는 동안 면책이 어디에 서는가.
+   *
+   * 진단 종합이 제거되기 전에는 이 describe가 그 자리(상세 안)까지 함께
+   * 잠갔다. 남은 것은 면책이고, 그쪽이 원래 더 무거운 계약이다 —
+   * `disclaimer`는 MUST_SURVIVE_PRINT_CLASSES라 어느 화면에서 인쇄해도
+   * 정확히 한 벌이 종이에 남아야 한다.
    */
-  describe("사이드바 전환과 진단 종합의 자리", () => {
-    it("목록 화면에는 진단 종합이 없고, 상세를 열면 상세 뒤에 붙는다", async () => {
+  describe("사이드바 전환과 면책의 자리", () => {
+    it("목록 화면에서도 면책은 사이드바 끝에 있다", async () => {
       const { container } = await renderResults();
       const sidebar = container.querySelector(".region-results-sidebar")!;
 
-      // 목록 상태에서는 네 축이 전부 null이라 "아무것도 못 봤다"만 그리는
-      // 자리였다 — 그 자리를 상세 안으로 옮겼다(design.md §5).
-      expect(container.querySelector(".diagnosis-summary")).toBeNull();
-      // 면책은 그 자리에 그대로다.
       expect(sidebar.querySelector(".disclaimer")).not.toBeNull();
-
-      await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
-
-      const diagnosis = container.querySelector(".diagnosis-summary");
-      expect(diagnosis).not.toBeNull();
-      expect(sidebar.contains(diagnosis!)).toBe(true);
-      // 상세 **뒤**에 온다 — 사이드바의 같은 열이라 시각적으로 이어 붙는다.
-      const detail = container.querySelector(".complex-detail")!;
-      expect(
-        detail.compareDocumentPosition(diagnosis!) &
-          Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-      expect(container.querySelectorAll(".diagnosis-summary")).toHaveLength(1);
+      expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
     });
 
-    it("목록으로 돌아가면 진단 종합은 사라지고 면책은 남는다", async () => {
+    it("상세를 열고 목록으로 돌아가도 면책은 한 벌 그대로다", async () => {
       const { container } = await renderResults();
       await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
-      expect(container.querySelector(".diagnosis-summary")).not.toBeNull();
+      expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
 
       await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
 
-      expect(container.querySelector(".diagnosis-summary")).toBeNull();
       expect(container.querySelector(".disclaimer")).not.toBeNull();
       expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
     });
 
-    /**
-     * dispatch B — **투자 경로의 `DiagnosisSummary`는 건드리지 않는다.**
-     * 거기엔 실제 `purchase` 판정이 있고 `ComplexDetail`이 아예 없다.
-     */
-    it("투자 경로의 진단 종합과 면책은 그대로다", async () => {
+    it("투자 경로의 면책은 그대로다", async () => {
       const { container } = await renderResults();
       await userEvent.click(
         screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
       );
 
-      expect(container.querySelector(".diagnosis-summary")).not.toBeNull();
       expect(container.querySelector(".disclaimer")).not.toBeNull();
     });
   });

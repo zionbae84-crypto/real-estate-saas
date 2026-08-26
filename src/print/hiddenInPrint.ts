@@ -266,18 +266,4 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "location-distance", // 거리 값과 그 옆의 "직선거리" 라벨
   "location-disclosure", // 직선거리·학구도·소음 등 미반영·등급 아님
   "location-disclaimer", // 입지 평가가 아니라는 것과 반경이 법정 기준이 아니라는 것
-  // 진단 종합. 조작 장치가 하나도 없어 숨길 것이 없고, 종이에서 특히
-  // 값어치가 크다(배우자·부모님에게 건네는 문서에서 "무엇을 봤고 무엇을
-  // 못 봤는지"를 한자리에서 말하는 자리이기 때문이다). 못 본 축 줄이
-  // 사라지면 안 본 축이 "문제없음"으로 읽힌다.
-  "diagnosis-summary", // 영역 전체
-  "diagnosis-summary-headline", // 헤드라인 글자(사면 안 되는 신호가 있어요 / …)
-  "diagnosis-summary-headline-note", // 헤드라인 설명(expert 부기 포함)
-  "diagnosis-summary-axis", // 축별 줄(권리·구매·호가·입지 — notLooked 포함 언제나 네 줄)
-  "diagnosis-summary-axis-status", // 그 줄의 상태 글자
-  // 이 종합이 다루지 않는 축(권리분석)이 있다는 것과, 호가·입지는
-  // 목록에서 고른 매물에 대한 것이라는 고지. 종이에서 사라지면 네 축을
-  // 나란히 본 문서가 권리분석까지 확인한 것처럼 읽힌다.
-  "diagnosis-summary-target-mismatch",
-  "diagnosis-summary-disclaimer", // 새 판정이 아니라는 것과 점수로 뭉치지 않는다는 것
 ];

@@ -2610,15 +2610,45 @@ body.body-scroll-locked {
  * 그리는 네이티브 `<input>`(`.money-input input`)과 이 화면의 커스텀
  * `<select>`만 밑줄 모양으로 다시 칠한다.
  */
+/*
+ * **SEED 클래스 이름을 직접 적는다**(`.seed-field-label__root`·
+ * `.seed-checkbox__label`). 요소 이름(`label`)에만 기대면 두 가지로
+ * 진다:
+ *
+ * 1. SEED의 `Checkbox`는 바깥 `<label>` 안에 라벨 텍스트를 **`<span>`**
+ *    으로 그리고, 그 span에 `.seed-checkbox__label { color:
+ *    var(--seed-color-fg-neutral) }`(all.css)을 다시 못박는다. `label`에
+ *    건 우리 색은 바깥 요소에만 닿아 안쪽 span에서 졌다 — 라벨 두 개가
+ *    실측 대비 **1.13:1**로 사실상 보이지 않은 채 나갔다.
+ * 2. SEED가 태그를 바꾸면(예: `<label>` → `<span>`) 요소 이름에 건
+ *    규칙은 아무 말 없이 사라진다.
+ *
+ * `scripts/seed-vendor-colors.test.ts`가 벤더 CSS를 훑어 이 짝을
+ * 양방향으로 잠근다.
+ */
 .entry-screen .money-input label,
 .entry-screen .field label,
+.entry-screen .seed-field-label__root,
+.entry-screen .seed-checkbox__label,
 .entry-screen .purchase-type-question,
 .entry-screen .owned-home-field legend {
   color: var(--haze-lift);
   font-family: inherit;
 }
 
+/*
+ * SEED가 그리는 오류 문구(`MoneyInput`이 `errorMessage`로 넘긴다).
+ * 기본값 `--seed-color-fg-critical`은 이 저장소가 덮지 않은 SEED
+ * 기본값(#fa342c)이라 이 어두운 패널 위에서 3.59:1이다 — 어두운 면의
+ * 위험색(`--risk-lift`, 5.05:1)으로 되돌린다. 값을 고른 근거는
+ * `src/seed-brand.css`의 `--risk-lift` 주석에 적었다.
+ */
+.entry-screen .seed-field__errorMessage {
+  color: var(--risk-lift);
+}
+
 .entry-screen .money-input input,
+.entry-screen .seed-text-input__value,
 .entry-screen .field input[type="number"],
 .entry-screen .field select,
 .entry-screen .region-select select {
@@ -2630,7 +2660,8 @@ body.body-scroll-locked {
   padding: 0.5rem 0.125rem;
 }
 
-.entry-screen .money-input input::placeholder {
+.entry-screen .money-input input::placeholder,
+.entry-screen .seed-text-input__value::placeholder {
   color: var(--haze);
 }
 

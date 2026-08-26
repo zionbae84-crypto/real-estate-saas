@@ -5,7 +5,6 @@ import { BudgetResult, ZERO_BUDGET_HEADLINE } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
 import { ComplexMap, groupWithCoords } from "./components/ComplexMap";
-import { DiagnosisSummary } from "./components/DiagnosisSummary";
 import { EntryScreen } from "./components/EntryScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
@@ -31,9 +30,7 @@ import {
   calcBurdenAt,
   householdCountNoteFor,
 } from "./lib/finance";
-import type { LocationAssessment } from "./lib/location";
-import type { PriceAssessment } from "./lib/price";
-import type { PurchaseAssessment, PurchaseType } from "./lib/purchase";
+import type { PurchaseType } from "./lib/purchase";
 import { rules, useAffordability } from "./state/useAffordability";
 import { useComplexCoordinates } from "./state/useComplexCoordinates";
 import { useRegionComplexes } from "./state/useRegionComplexes";
@@ -185,26 +182,6 @@ export function App() {
   const budgetTriggerRef = useRef<HTMLButtonElement>(null);
 
   /**
-   * 진단 종합(`DiagnosisSummary`)이 읽는 네 축의 최신 판정.
-   *
-   * **여기서 계산하지 않는다.** `PurchaseCheck`·
-   * `PriceCheck`·`LocationFacts`가 각자 이미 계산한 값을
-   * `onAssessment` 콜백으로 올려 줄 뿐이다 — 복제해서 다시 계산하면
-   * 이 상태와 그 컴포넌트들이 언젠가 어긋난다.
-   *
-   * `null`은 "이 진단이 이 축을 아직 보지 않았다"다. 구매 유형별
-   * 금융은 `PurchaseCheck`가 투자 경로에서만 렌더되고, 호가·입지는
-   * `PriceCheck`·`LocationFacts`가 실거주에서 평형을 고른 동안에만
-   * 렌더된다 — 그 컴포넌트가 렌더되지 않는 동안에는 콜백이 불리지
-   * 않으므로, 아래 핸들러들이 그 전환 시점에 명시적으로 `null`로
-   * 되돌린다(그러지 않으면 다른 평형·다른 유형의 판정이 남아 있는
-   * 축으로 오인된다).
-   */
-  const [purchaseAssessment, setPurchaseAssessment] = useState<PurchaseAssessment | null>(null);
-  const [priceAssessment, setPriceAssessment] = useState<PriceAssessment | null>(null);
-  const [locationAssessment, setLocationAssessment] = useState<LocationAssessment | null>(null);
-
-  /**
    * 상세가 열려 있는 동안 화면 전체(위 실구매 가능 가격·안전선·상세의
    * 모든 수치)가 고른 평형의 실제 전용면적을 반영해야 한다.
    *
@@ -297,29 +274,27 @@ export function App() {
   /**
    * **고른 단지(평형)에 매달린 상태를 한 번에 비우는 유일한 자리다.**
    *
-   * 세 상태는 언제나 함께 움직인다 — `selectedUnit`이 사라지면
-   * `PriceCheck`·`LocationFacts`도 함께 사라지고, 그 컴포넌트들의
-   * `onAssessment`는 다시 불리지 않으므로 두 판정은 여기서 명시적으로
-   * 비우지 않으면 "지금 보고 있는 매물"의 것인 양 진단 종합에 남는다.
-   *
-   * **함수 하나로 모은 이유**(C1 수정): 예전에는 이 세 줄을 상세를 닫는
-   * 핸들러마다 손으로 되풀이했다. 그러다 Task 3이 `RegionSelect`를
+   * **함수 하나로 모은 이유**(C1 수정): 예전에는 상세를 닫는 핸들러마다
+   * 이 리셋을 손으로 되풀이했다. 그러다 Task 3이 `RegionSelect`를
    * `EntryScreen`으로 옮겨 "상세를 연 채 다른 지역을 조회하는" 새 경로를
-   * 열었을 때, `handleRegionSelect`만 이 세 줄을 받지 못했다 — 서초구를
+   * 열었을 때, `handleRegionSelect`만 그것을 받지 못했다 — 서초구를
    * 조회했는데 사이드바에 강남 단지 상세가 남고, `effectiveProfile`이
    * 화면 전체(상단바 실구매 가능 가격·안전선·인쇄 요약)를 그 단지의
    * 전용면적으로 계속 계산했다. 이 저장소가 여섯 번 낸 사고와 같은
    * 형태다("결정을 한 방향으로만 적용하고 나머지 상태를 추적하지
-   * 않았다"). 자리를 하나로 모으면 다음 경로가 생겨도 **빠뜨릴 세 줄이
+   * 않았다"). 자리를 하나로 모으면 다음 경로가 생겨도 **빠뜨릴 줄이
    * 없다** — 부를 것이 하나뿐이다.
    *
-   * `scripts/complex-selection-reset.test.ts`가 세 setter의 `null` 호출이
+   * 진단 종합이 제거되기 전에는 이 함수가 호가·입지 판정 두 상태도 함께
+   * 비웠다. 그 두 상태는 진단 종합 말고 읽는 곳이 없어 함께 사라졌고,
+   * 남은 것은 `selectedUnit` 하나다 — 그래도 자리는 그대로 하나로
+   * 유지한다(축이 다시 늘어도 빠뜨릴 곳이 없어야 한다).
+   *
+   * `scripts/complex-selection-reset.test.ts`가 그 setter의 `null` 호출이
    * 이 함수 밖에 흩어지지 않았는지 소스에서 검사한다.
    */
   function clearComplexSelection() {
     setSelectedUnit(null);
-    setPriceAssessment(null);
-    setLocationAssessment(null);
   }
 
   /**
@@ -676,10 +651,8 @@ export function App() {
      */
     setBudgetPanelRequested(false);
     if (selectedUnit !== null && selectedUnit.complexKey !== complexKey) {
-      // `handleCloseDetail`과 같은 정리다 — `PriceCheck`·`LocationFacts`가
-      // 사라지면 그 `onAssessment`는 다시 불리지 않으므로, 여기서 비우지
-      // 않으면 방금 닫은 A의 호가·입지 판정이 "지금 보고 있는 매물"인 것처럼
-      // 진단 종합에 남는다.
+      // `handleCloseDetail`과 같은 정리다 — 두 창이 서로 다른 단지를
+      // 가리키지 않게 A의 상세를 닫는다.
       handleCloseDetail();
     }
     setFocusedComplexKey(complexKey);
@@ -716,15 +689,10 @@ export function App() {
     setBudgetPanelRequested(false);
     /*
      * 앞 평형에 매달려 있던 것을 **먼저 전부 비우고** 그 위에 이번
-     * 평형을 얹는다. 새 평형의 `PriceCheck`·`LocationFacts`가 다시
-     * 마운트되며 자기 `onAssessment`로 새 값을 곧바로 올려 주지만
-     * (App.tsx 상단 주석), 그 전까지 앞 평형의 판정이 잠깐이라도 새
-     * 평형에 대한 것처럼 남지 않아야 한다.
-     *
-     * 두 판정만 골라 비우지 않고 `clearComplexSelection`을 그대로
-     * 부른다 — 같은 렌더에서 아래 `setSelectedUnit(unit)`이 이긴다.
-     * 이렇게 두면 "고른 단지에 매달린 상태"를 비우는 자리가 코드 전체에
-     * 하나뿐이라, 축이 하나 늘어도 여기서 빠뜨릴 수 없다(C1).
+     * 평형을 얹는다. `clearComplexSelection`을 그대로 부른다 — 같은
+     * 렌더에서 아래 `setSelectedUnit(unit)`이 이긴다. 이렇게 두면
+     * "고른 단지에 매달린 상태"를 비우는 자리가 코드 전체에 하나뿐이라,
+     * 축이 하나 늘어도 여기서 빠뜨릴 수 없다(C1).
      */
     clearComplexSelection();
     setSelectedUnit(unit);
@@ -736,10 +704,10 @@ export function App() {
   /**
    * 단지 상세를 닫는다.
    *
-   * 호가·입지 판정을 함께 비우는 이유는 {@link clearComplexSelection}에
-   * 적었다. 이 핸들러가 그 함수를 감싸기만 하는 얇은 껍데기인 것은
-   * 의도다 — `ComplexDetail`의 `onClose`가 받는 이름을 그대로 두면서도
-   * 리셋 지점은 하나로 남는다.
+   * 리셋을 {@link clearComplexSelection}에 맡기는 이유는 그쪽에 적었다.
+   * 이 핸들러가 그 함수를 감싸기만 하는 얇은 껍데기인 것은 의도다 —
+   * `ComplexDetail`의 `onClose`가 받는 이름을 그대로 두면서도 리셋
+   * 지점은 하나로 남는다.
    */
   function handleCloseDetail() {
     clearComplexSelection();
@@ -783,15 +751,9 @@ export function App() {
           : "입력"
         : "결과",
     );
-    // 상세(호가·입지)는 실거주에서 평형을 고른 동안에만 존재한다 —
-    // 유형을 바꾸면 그 컴포넌트들이 사라지므로 진단 종합에 남은 값도
-    // 함께 비운다(clearComplexSelection이 세 축을 함께 비운다).
+    // 상세는 실거주에서 평형을 고른 동안에만 존재한다 — 유형을 바꾸면
+    // 그 화면이 사라지므로 고른 평형도 함께 비운다.
     clearComplexSelection();
-    // 구매 유형별 금융(PurchaseCheck)은 투자 경로에서만 렌더된다.
-    // 실거주로 돌아가면 그 컴포넌트가 사라지므로 값도 비운다 — 다른
-    // 유형(갭투자 ↔ 월세수익형) 사이의 전환은 컴포넌트가 계속
-    // 렌더되며 onAssessment가 새 값으로 갱신하므로 그대로 둔다.
-    if (next === "실거주") setPurchaseAssessment(null);
   }
 
   /**
@@ -853,45 +815,14 @@ export function App() {
   }, [residentialProfile, selectedUnit]);
 
   /**
-   * 진단 종합. **한 번만 적고, 서로 배타적인 두 자리에 그린다.**
+   * 면책 문구.
    *
-   * - 실거주: 사이드바의 **단지 상세 안**(상세 바로 뒤). 스펙 §5가 정한
-   *   자리다. Task 4까지는 화면 맨 끝에 있었는데, 그때 옮기지 않은
-   *   이유("목록 화면과 투자 경로에서도 떠야 한다")를 Task 5가 다시
-   *   따져 뒤집었다: 실거주 **목록** 상태에서는 네 축이 전부 `null`이라
-   *   이 화면이 그리는 것이 "아무것도 못 봤다" 네 줄뿐이다 — 사실을
-   *   하나도 담지 않은 자리라 사라져도 종이가 잃는 것이 없다. 반대로
-   *   상세 안에서는 호가·입지 두 축이 실제로 채워져 있어, 그 매물에
-   *   대해 "무엇을 봤고 무엇을 못 봤는지"를 말하는 마무리가 된다.
-   * - 투자(`PurchaseCheck`): **건드리지 않는다.** 거기엔 실제 `purchase`
-   *   판정이 있고 `ComplexDetail`이 아예 없다.
-   *
-   * `rights`는 계속 `null`이다 — 등기부 문진이 이 앱에서 제거돼 영구히
-   * 값이 없다(`DiagnosisSummary`의 `rights` prop 문서 참고). 못 본 축은
-   * 값을 지어내지 않고 그대로 넘긴다.
-   *
-   * `<details>`로 접지 않는다 — 이 화면의 존재 이유가 "못 본 축을 숨기지
-   * 않는 것"인데, 화면 전체를 접어 두면 클릭하지 않은 사람에게는 그 못
-   * 본 축조차 보이지 않는다.
-   */
-  const diagnosisSummary = (
-    <DiagnosisSummary
-      rights={null}
-      purchase={purchaseAssessment}
-      price={priceAssessment}
-      location={locationAssessment}
-    />
-  );
-
-  /**
-   * 면책 문구. **진단 종합과 함께 움직이지 않는다**(Task 5에서 갈랐다).
-   *
-   * `disclaimer`는 `MUST_SURVIVE_PRINT_CLASSES`다. 진단 종합을 단지 상세
-   * 안으로 옮기면서 이 `<footer>`까지 함께 데려가면, 목록 화면과 투자
-   * 경로와 프로필 미완 상태 **전부에서 면책이 사라진다** — 종이를
-   * 건네받은 사람이 추정치를 확정 사실로 읽게 되는, 이 저장소가 가장
-   * 경계하는 종류의 사고다. 그래서 지금까지 있던 **세 자리에 그대로**
-   * 둔다(사이드바 끝 / 프로필 미완 폴백 / 투자 경로).
+   * `disclaimer`는 `MUST_SURVIVE_PRINT_CLASSES`다. 이 `<footer>`가 어느
+   * 한 화면에서라도 빠지면 그 화면에서 인쇄한 종이에서 면책이
+   * 사라진다 — 종이를 건네받은 사람이 추정치를 확정 사실로 읽게 되는,
+   * 이 저장소가 가장 경계하는 종류의 사고다. 그래서 **세 자리에 그대로**
+   * 둔다(사이드바 끝 / 프로필 미완 폴백 / 투자 경로). 진단 종합을
+   * 지우면서도 이 셋은 손대지 않았다.
    *
    * 실거주 경로에서 이 자리는 셸(`position: fixed; inset: 0`) **안**의
    * 사이드바 끝이다. 밖에 남기면 셸 뒤에 깔려 보이지도 읽히지도 않는다
@@ -1586,19 +1517,7 @@ export function App() {
                       householdCountNote={detail.householdCountNote}
                       priceBudget={detail.priceBudget}
                       onClose={handleCloseDetail}
-                      onPriceAssessment={setPriceAssessment}
-                      onLocationAssessment={setLocationAssessment}
                     />
-                    {/*
-                      진단 종합은 **상세 안**이다(스펙 §5). `ComplexDetail`
-                      의 prop을 바꾸지 않기 위해 그 `<section>` 안이 아니라
-                      바로 뒤에 둔다 — 사이드바의 같은 열이라 화면에서도
-                      종이에서도 이어 붙는다. 여기서만 호가·입지 두 축이
-                      실제로 채워져 있고, 이 화면이 "지금까지 본 것 전부를
-                      모으는 마무리"라는 자기 문서(DiagnosisSummary.tsx)와도
-                      맞는 자리다.
-                    */}
-                    {diagnosisSummary}
                   </>
                 ) : (
                   <>
@@ -1739,9 +1658,9 @@ export function App() {
 
                     {/*
                       면책은 **목록·상세 어느 쪽에서도** 사이드바 끝에
-                      남는다(dispatch B). 진단 종합만 상세 안으로 옮겼다 —
-                      둘을 함께 옮기면 목록 화면에서 면책이 통째로
-                      사라진다.
+                      남는다(dispatch B). `disclaimer`는
+                      MUST_SURVIVE_PRINT_CLASSES라 어느 화면에서 인쇄해도
+                      종이에 남아야 한다.
                     */}
                     {disclaimer}
                   </>
@@ -1754,12 +1673,6 @@ export function App() {
                 그래도 **면책은 남긴다**: 이 상태에서 인쇄한 종이(화면 1의
                 인쇄 버튼은 `inert`라 Cmd+P가 유일한 경로다)에 구매 유형
                 한 줄만 남지 않게 한다.
-
-                Task 5에서 진단 종합은 여기서 빠졌다 — 이 상태에서는 네
-                축이 전부 `null`이라 "아무것도 못 봤다" 네 줄만 그리던
-                자리였다. 사실을 하나도 담지 않은 자리라 종이가 잃는 것이
-                없고, 그 자리는 이제 실거주 경로의 단지 상세 안이다
-                (`diagnosisSummary` 정의의 주석).
               */
               disclaimer
             )}
@@ -1778,7 +1691,7 @@ export function App() {
                 restoreFailed={restoreFailed}
               />
 
-              <PurchaseCheck type={purchaseType} onAssessment={setPurchaseAssessment} />
+              <PurchaseCheck type={purchaseType} />
 
               {/*
                 지금 보고 있는 화면 상태 그대로 인쇄한다 — 실거주 경로와
@@ -1804,13 +1717,6 @@ export function App() {
                 데려가는 화면은 유형 라디오 하나뿐인 막다른 길이었다(위
                 주석). 통로를 없애는 대신 목적지를 이 화면으로 끌어왔다.
               */}
-              {/*
-                투자 경로의 진단 종합은 **그대로 둔다**(dispatch B). 여기엔
-                실제 `purchase` 판정이 있고 `ComplexDetail`이 아예 없다 —
-                실거주 쪽에서 이 요약이 상세 안으로 들어간 것은 그 경로에
-                상세가 있기 때문이다.
-              */}
-              {diagnosisSummary}
               {disclaimer}
             </>
           )}

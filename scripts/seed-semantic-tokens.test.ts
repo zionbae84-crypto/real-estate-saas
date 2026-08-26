@@ -1,5 +1,15 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
+import {
+  BRAND_CSS as overrideCss,
+  SCRIM_FLOOR,
+  STYLES_CSS,
+  contrastRatio,
+  rawToken,
+  resolveColor,
+  stripComments,
+  toHex,
+} from "./colorSurfaces";
 
 /**
  * seed-brand.css가 Seline 의미 계층 토큰을 실제로 덮고 있는지, 그리고
@@ -16,8 +26,6 @@ import { describe, expect, it } from "vitest";
  * 2026-08-26-영상히어로-전체화면지도-design.md §1). 아래 테스트의 hex는
  * 그 교체 이후 값이고, 계산값은 이 파일이 직접 검증한다.
  */
-
-const overrideCss = readFileSync("src/seed-brand.css", "utf8");
 
 const EXTENDED_TOKENS = [
   "--seed-color-bg-layer-default",
@@ -42,135 +50,18 @@ describe("SEED 의미 계층 토큰 확장", () => {
   });
 });
 
-/** WCAG 상대 휘도 → 대비율 계산. 순수 함수라 이 파일 안에 직접 둔다. */
-function hexToRgb(hex: string): [number, number, number] {
-  const n = Number.parseInt(hex.replace("#", ""), 16);
-  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
-}
-
-function relativeLuminance([r, g, b]: [number, number, number]): number {
-  const f = (c: number) => {
-    const v = c / 255;
-    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
-  };
-  return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
-}
-
-function contrastRatio(hexA: string, hexB: string): number {
-  const lA = relativeLuminance(hexToRgb(hexA));
-  const lB = relativeLuminance(hexToRgb(hexB));
-  const [lighter, darker] = lA > lB ? [lA, lB] : [lB, lA];
-  return (lighter + 0.05) / (darker + 0.05);
-}
-
-function toHex([r, g, b]: [number, number, number]): string {
-  return `#${[r, g, b].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("")}`;
-}
-
-/** `fg`를 불투명도 `alpha`로 `bg` 위에 얹었을 때의 합성색 */
-function composite(fg: string, alpha: number, bg: string): string {
-  const f = hexToRgb(fg);
-  const b = hexToRgb(bg);
-  return toHex([
-    alpha * f[0] + (1 - alpha) * b[0],
-    alpha * f[1] + (1 - alpha) * b[1],
-    alpha * f[2] + (1 - alpha) * b[2],
-  ] as [number, number, number]);
-}
-
 /*
  * ══════════════════════════════════════════════════════════════════
- * 색 토큰 해석기 — 소스에서 값을 읽는다
+ * 색 계산·면(surface)은 `scripts/colorSurfaces.ts`에서 가져온다
  * ══════════════════════════════════════════════════════════════════
  *
- * 아래 "텍스트 색 사용처 전수 검사"가 쓴다. hex를 이 파일에 다시 적지
- * 않고 `src/seed-brand.css`·`src/styles.css`에서 그대로 읽어 `var()`
- * 사슬을 끝까지 푼다 — 값을 옮겨 적으면 그 사본이 조용히 낡는다(이
- * 파일이 예전 팔레트 교체 때 실제로 겪은 일이다).
+ * 대비 공식(WCAG 상대 휘도), `var()` 사슬 해석기, 그리고 화면 1의 글자가
+ * 실제로 앉는 면(`SCRIM_FLOOR` — 영상의 가장 밝은 픽셀 위에 스크림
+ * 바닥을 합성한 값)이 예전에는 이 파일 안에만 있었다.
+ * `scripts/seed-vendor-colors.test.ts`가 **같은 면** 위에서 SEED 벤더
+ * CSS를 검사하게 되면서 한 곳으로 옮겼다 — 두 검사가 서로 다른 면을
+ * 재기 시작하면 한쪽이 통과하는데 화면은 깨지는 상태가 생긴다.
  */
-
-const STYLES_CSS = readFileSync("src/styles.css", "utf8");
-
-/** 주석을 걷어낸 소스. 주석 안의 예시 값이 정의로 잡히지 않게 한다. */
-const stripComments = (css: string) => css.replace(/\/\*[\s\S]*?\*\//g, "");
-
-const CUSTOM_PROPERTIES: Record<string, string> = (() => {
-  const defs: Record<string, string> = {
-    /*
-     * SEED가 자기 base.css에서 주는 값이라 우리 소스에는 정의가 없다.
-     * `.print-button`의 흰 글자가 이것을 쓴다 — 여기 적어 두지 않으면
-     * 그 규칙이 "풀 수 없는 값"으로 남아 검사에서 조용히 빠진다.
-     */
-    "--seed-color-palette-static-white": "#ffffff",
-  };
-  for (const css of [stripComments(overrideCss), stripComments(STYLES_CSS)]) {
-    for (const m of css.matchAll(/(--[a-z0-9-]+):\s*([^;]+);/g)) {
-      // 먼저 정의된 쪽이 이긴다 — seed-brand.css가 팔레트의 출처다.
-      if (defs[m[1]!] === undefined) defs[m[1]!] = m[2]!.trim();
-    }
-  }
-  return defs;
-})();
-
-/** `var(--a)` → `var(--b)` → `#rrggbb` 사슬을 끝까지 푼다. 못 풀면 null. */
-function resolveColor(value: string, depth = 0): string | null {
-  if (depth > 10) return null;
-  const v = value.trim();
-  const varMatch = v.match(/^var\((--[a-z0-9-]+)\)$/);
-  if (varMatch !== null) {
-    const next = CUSTOM_PROPERTIES[varMatch[1]!];
-    return next === undefined ? null : resolveColor(next, depth + 1);
-  }
-  if (/^#[0-9a-f]{6}$/i.test(v)) return v.toLowerCase();
-  return null;
-}
-
-/** 팔레트 토큰의 hex. 못 풀면 던진다 — 조용히 빠지면 검사가 공허해진다. */
-function rawToken(name: string): string {
-  const hex = resolveColor(`var(${name})`);
-  if (hex === null) throw new Error(`${name}을 hex로 풀 수 없다`);
-  return hex;
-}
-
-/**
- * 스크림 아래에 깔리는 영상에서 **가장 밝은 픽셀**.
- *
- * `src/seed-brand.css` 머리주석은 영상의 평균색을 rgb(104, 117, 132)로
- * 적어 두었지만, 여기서는 평균을 쓰지 않는다. 브라우저에서 실제로 재
- * 봤더니(dev 서버 4173, `<video>`를 캔버스에 그려 픽셀 읽기, t = 0·3·
- * 6·9·12·15초) **입력 패널이 덮는 왼쪽 열의 평균은 rgb(123~135,
- * 139~150, 153~162)로 전체 평균보다 밝았고, 그 안에 순백(255,255,255)
- * 픽셀이 매 프레임 있었다.** 평균으로 계산했다면 실제 최악의 자리보다
- * 낙관적인 숫자를 못박게 된다.
- *
- * 그래서 기준을 **가장 밝은 픽셀**로 잡는다 — 이 기준을 통과하면 영상의
- * 어느 프레임, 어느 픽셀 위에서도 통과한다.
- */
-const VIDEO_BRIGHTEST = "#ffffff";
-
-/**
- * 입력 패널(화면 1)이 실제로 앉는 면.
- *
- * `.entry-screen-panel`은 자기 배경이 없다 — 그 글자들은 `--ink`가
- * 아니라 **영상 위에 깔린 스크림 그라디언트** 위에 앉는다. 패널이 덮는
- * 범위에서 스크림이 가장 옅어지는 지점의 불투명도를 `styles.css`가
- * `--scrim-panel-alpha`로 선언하고, 여기서 그 값을 읽어 합성한다.
- *
- * **CSS에서 읽는 것이 핵심이다.** 이 숫자를 테스트에 베껴 적으면,
- * 누가 그라디언트를 옅게 바꾸는 날 화면만 조용히 나빠지고 검사는 옛
- * 숫자로 계속 통과한다.
- */
-const SCRIM_PANEL_ALPHA = (() => {
-  const m = stripComments(STYLES_CSS).match(/--scrim-panel-alpha:\s*([0-9.]+)\s*;/);
-  if (m === null) {
-    throw new Error(
-      "styles.css에 --scrim-panel-alpha가 없다 — 입력 패널이 앉는 면의 불투명도는 CSS가 선언하고 이 테스트가 읽는다",
-    );
-  }
-  return Number.parseFloat(m[1]!);
-})();
-
-const SCRIM_FLOOR = composite(rawToken("--ink"), SCRIM_PANEL_ALPHA, VIDEO_BRIGHTEST);
 
 /**
  * 등급색(--safe/--warn/--risk, src/styles.css :root)이 실제로 가리키는
