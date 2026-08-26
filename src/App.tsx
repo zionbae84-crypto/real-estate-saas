@@ -16,6 +16,7 @@ import { PurchaseCheck } from "./components/PurchaseCheck";
 import { PurchaseTypeSelect } from "./components/PurchaseTypeSelect";
 import { RegionSelect } from "./components/RegionSelect";
 import { SafetyBadge } from "./components/SafetyBadge";
+import { WarningList } from "./components/WarningList";
 import {
   AGGREGATION_WINDOW_LABEL,
   type ComplexUnit,
@@ -1531,6 +1532,45 @@ export function App() {
                 }
                 sidebar={
                   <>
+                {/*
+                  엔진이 낸 경고. **사이드바 맨 위, 접히는 것 바깥이다** —
+                  상단바(트리거) 아래, 목록/상세보다 위.
+
+                  `BudgetResult` 안에 있던 것을 여기로 들어냈다. 그
+                  컴포넌트가 자기 문서에 적어 뒀던 이유가 그대로 이 자리의
+                  이유다: **접으면 안 되는 종류의 정보다.** Task 5가 예산
+                  블록을 접힌 채로 시작하는 상세 패널 안으로 옮기면서
+                  경고까지 함께 접혔고, 결과 화면에는 굵은 "실구매 가능
+                  가격"만 뜨고 그 숫자를 **한정하는** 문장("기존 주택
+                  정보가 없어 매도 대금이 반영되지 않았어요" 같은,
+                  `src/lib/finance/available-cash.ts`의 줄)은 "자세히"를
+                  눌러야 보이는 상태가 됐다. 상단바의 헤드라인 숫자가 어떤
+                  조건 위에 서 있는지를 말하는 문장이라, 그 숫자와 같은
+                  화면에 함께 있어야 한다.
+
+                  **`BudgetResult`에 "경고를 숨기는 prop"을 더하는 대신
+                  들어냈다** — 두면 출처가 둘이 되고, 언젠가 두 자리가
+                  서로 다른 경고 집합을 말한다. 이 자리가 유일한 출처다.
+
+                  경고가 0건이면 `WarningList`가 `null`을 돌려주므로 사이드바
+                  맨 위에 빈 상자도 빈 여백도 생기지 않는다.
+
+                  **패널이 열린 동안에는 가려진다**(패널이 이 열을 덮고
+                  `inert`로 잠근다). 그대로 둔 판단이다 — 패널이 담는 것이
+                  바로 그 숫자의 근거(`ZeroBudgetMessage`·`BindingExplainer`·
+                  `CostBreakdown`)라, 패널이 열린 순간은 사용자가 한정
+                  조건을 **읽고 있는** 상태다. 고쳐야 했던 것은 기본
+                  상태(닫힘)에서 숫자만 보이던 것이고, 그 상태는
+                  App.test.tsx의 "엔진 경고의 자리"가 잠근다.
+
+                  인쇄에서는 패널이 흐름에 합류하므로 종이 순서가
+                  전제(PrintSummary) → 가정 → 예산 → **경고** → 목록/상세 →
+                  면책이 된다. 경고가 예산 블록 **뒤**로 밀렸지만 같은
+                  종이에 정확히 한 번 나온다(`warning-list`는
+                  `MUST_SURVIVE_PRINT_CLASSES`다).
+                */}
+                <WarningList warnings={affordability.result.warnings} />
+
                 {/*
                   사이드바는 이제 **목록 ↔ 단지 상세** 두 화면만 오간다
                   (design.md §5). 조건식(`detail !== null`)은 Task 4에서

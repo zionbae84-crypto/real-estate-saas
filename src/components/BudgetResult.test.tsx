@@ -54,7 +54,7 @@ function renderResult(overrides: RenderResultOverrides = {}) {
   // null은 유효한 실제 값이다). "제공 안 됨"만 undefined로 구분한다.
   const safePrice =
     overrides.safePrice === undefined ? r.affordablePrice : overrides.safePrice;
-  render(
+  return render(
     <BudgetResult
       result={r}
       safePrice={safePrice}
@@ -171,17 +171,28 @@ describe("BudgetResult", () => {
     });
   });
 
-  it("경고가 있으면 결과 위에 보여준다", () => {
-    renderResult({ result: result({ warnings: ["양도세가 반영되지 않았어요."] }) });
+  /**
+   * 예전에는 여기 두 검사가 있었다 — "경고가 있으면 결과 위에
+   * 보여준다"와 "경고는 details 밖에 있다 — 접히지 않는다". 둘 다 지운
+   * 것이 아니라 **호출부로 옮겼다**: `src/App.test.tsx`의
+   * "엔진 경고의 자리"가 같은 두 사실을 새 자리에서 검사한다(사이드바
+   * 맨 위에 보인다 / 접히는 패널·`<details>` 밖이다).
+   *
+   * 이 컴포넌트가 통째로 접히는 예산 상세 패널 안으로 들어가면서
+   * (Task 5) 여기서 그리는 경고는 자동으로 함께 접혔다 — "접지 않는다"를
+   * 이 컴포넌트가 더는 지킬 수 없다. 그래서 경고를 들어냈고, 여기 남는
+   * 검사는 **다시 들어오지 않는지**를 잠그는 것이다. `warnings`를 주고도
+   * 아무것도 그리지 않아야 한다 — 그리면 화면과 종이에 같은 문장이 두 번
+   * 나온다(호출부가 이미 그린다).
+   */
+  it("경고를 그리지 않는다 — 접히는 패널 밖에서 호출부가 그린다", () => {
+    const { container } = renderResult({
+      result: result({ warnings: ["양도세가 반영되지 않았어요."] }),
+    });
     expect(
-      screen.getByText("양도세가 반영되지 않았어요."),
-    ).toBeInTheDocument();
-  });
-
-  it("경고는 details 밖에 있다 — 접히지 않는다", () => {
-    renderResult({ result: result({ warnings: ["양도세가 반영되지 않았어요."] }) });
-    const warning = screen.getByText("양도세가 반영되지 않았어요.");
-    expect(warning.closest("details")).toBeNull();
+      screen.queryByText("양도세가 반영되지 않았어요."),
+    ).not.toBeInTheDocument();
+    expect(container.querySelector(".warning-list")).toBeNull();
   });
 
   describe("안전선", () => {

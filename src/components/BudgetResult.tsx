@@ -5,7 +5,6 @@ import { BindingExplainer, getBindingTitle } from "./BindingExplainer";
 import { CostBreakdown } from "./CostBreakdown";
 import { PolicyLoanList } from "./PolicyLoanList";
 import { SafeLine } from "./SafeLine";
-import { WarningList } from "./WarningList";
 
 /**
  * `affordablePrice === 0`일 때 이 앱이 숫자 대신 내는 **한 문장**.
@@ -42,8 +41,13 @@ export interface BudgetResultProps {
  * 3. 안전선 — 최대 가격 옆에 나란히
  * 4. 접힌 채로 — 부대비용 내역·정책대출 목록·상세 설명
  *
- * 경고(`WarningList`)는 이 계단 바깥, 맨 위에 두고 접지 않는다 — 접으면
- * 안 되는 종류의 정보다.
+ * **경고(`WarningList`)는 이 컴포넌트가 그리지 않는다.** 이 계단 전체가
+ * 접히는 예산 상세 패널 안으로 들어갔기 때문이다(Task 5) — 여기서 그리면
+ * 경고까지 함께 접힌다. 지금은 호출부(`App.tsx`)가 패널 **밖**, 사이드바
+ * 맨 위에서 직접 그린다. 그 자리에 이유를 적어 뒀다.
+ *
+ * 여기에 "경고를 숨기는 prop"을 두지 않는다 — 출처가 둘이 되고, 언젠가
+ * 두 자리가 서로 다른 경고 집합을 말한다.
  */
 export function BudgetResult({
   result,
@@ -52,8 +56,6 @@ export function BudgetResult({
 }: BudgetResultProps) {
   return (
     <section className="budget-result">
-      <WarningList warnings={result.warnings} />
-
       {result.affordablePrice === 0 ? (
         <ZeroBudgetMessage result={result} />
       ) : (

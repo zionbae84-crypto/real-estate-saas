@@ -2521,7 +2521,18 @@ describe("전체화면 결과 셸", () => {
       expect(open.querySelector(".no-budget")).not.toBeNull();
       // 그리고 그 원인을 고칠 수 있는 자리(가정 칩)가 같은 패널 안에 있다.
       expect(open.querySelector(".assumption-line")).not.toBeNull();
-      expect(open.querySelector(".warning-list")).not.toBeNull();
+      /*
+       * **경고는 이제 이 패널 안이 아니다**(followup-warnings-out).
+       * 접히는 자리에 두면 상단바의 헤드라인 숫자만 보이고 그 숫자를
+       * 한정하는 문장은 눌러야 보인다 — 이 검사는 지운 것이 아니라
+       * 아래 "엔진 경고의 자리"로 **옮겼다**. 여기서는 옮겨 간 뒤에도
+       * 이 프로필에 경고가 실제로 있다는 것과, 그 한 벌이 패널 밖에
+       * 있다는 것만 확인한다.
+       */
+      expect(open.querySelector(".warning-list")).toBeNull();
+      const warning = container.querySelector(".warning-list");
+      expect(warning).not.toBeNull();
+      expect(open.contains(warning!)).toBe(false);
     });
 
     /**
@@ -2674,6 +2685,149 @@ describe("전체화면 결과 셸", () => {
       expect(
         screen.getByRole("region", { name: "단지 상세" }),
       ).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 후속 수정 — **엔진 경고는 접히는 패널 밖에 산다**
+   * (`.superpowers/sdd/followup-warnings-out.md`, 전체 리뷰 I3).
+   *
+   * Task 5가 `BudgetResult`를 예산 상세 패널 안으로 옮기면서, 그 안에
+   * 있던 `WarningList`도 함께 접혔다. 결과 화면에는 굵은 "실구매 가능
+   * 가격"만 뜨고 그 숫자를 **한정하는** 문장은 "자세히"를 눌러야
+   * 보였다 — `BudgetResult.tsx`가 스스로 적어 둔 원칙("접으면 안 되는
+   * 종류의 정보다")이 조용히 무력화된 상태다.
+   *
+   * `BudgetResult`에 "경고를 숨기는 prop"을 더하지 않는다 — 출처가
+   * 둘이 된다. 컴포넌트에서 들어내고 호출부(`App.tsx`)가 그린다.
+   *
+   * **이 앱에서 화면으로 도달할 수 있는 경고는 0원 프로필의
+   * "고정 부대비용…" 하나다.** 나머지 경고(양도세·기존 주택 매도 대금)는
+   * `status === "갈아타기"`에서만 나는데 `ProfileForm`에 그 입력 화면이
+   * 없다(ProfileForm.tsx의 주석 — 죽은 배선이라 화면을 지웠다). 그래서
+   * 이 검사는 0원 프로필을 쓴다. 하필 그 상태가 경고가 가장 필요한
+   * 자리이기도 하다.
+   */
+  describe("엔진 경고의 자리", () => {
+    function trigger() {
+      return screen.getByRole("button", { name: /실구매 가능 가격/ });
+    }
+
+    function budgetPanel(container: HTMLElement) {
+      return container.querySelector(".budget-panel")!;
+    }
+
+    /** 경고가 실제로 나는 유일한 화면 경로 — 0원 프로필 */
+    function renderWithWarning() {
+      return renderResults([CASH_UNIT, LOAN_UNIT], { cash: "100" });
+    }
+
+    it("패널이 닫힌 채로도 경고가 사이드바 맨 위에 보인다", async () => {
+      const { container } = await renderWithWarning();
+
+      // 전제: 패널의 기본 상태는 닫힘이다. 결과 화면을 처음 만나는
+      // 사람이 보는 화면이 이 상태다.
+      expect(budgetPanel(container)).toHaveClass("budget-panel--closed");
+
+      const warning = container.querySelector(".warning-list");
+      expect(warning).not.toBeNull();
+      expect(warning!.textContent).toContain(
+        "고정 부대비용(법무비·이사비)만으로도 사용가능 현금 예산을 넘어요.",
+      );
+
+      // 접히는 자리 어디에도 들어 있지 않다 — 패널도, <details>도.
+      expect(budgetPanel(container).contains(warning!)).toBe(false);
+      expect(warning!.closest("details")).toBeNull();
+
+      // 사이드바 **맨 위**다: 상단바(트리거) 아래, 목록/상세보다 위.
+      const sidebar = container.querySelector(".region-results-sidebar")!;
+      expect(sidebar.contains(warning!)).toBe(true);
+      expect(sidebar.firstElementChild).toBe(warning);
+
+      // 출처가 하나다. `BudgetResult`에도 남겨 두면 같은 문장이 화면과
+      // 종이에 두 번 뜬다 — 인쇄에서는 패널이 닫혀 있어도 그대로 나온다.
+      expect(container.querySelectorAll(".warning-list")).toHaveLength(1);
+
+      /*
+       * 그리고 그 한 벌이 **종이에서 사라지지도** 않는다.
+       * `warning-list`는 `MUST_SURVIVE_PRINT_CLASSES`인데, 옮긴 자리가
+       * 인쇄에서 지워지는 조상 밑이면 개수만 맞고 종이에서는 0번이 된다.
+       * 위 개수 단언과 이 순회가 함께 "종이에 정확히 한 번"을 만든다.
+       */
+      expect(MUST_SURVIVE_PRINT_CLASSES).toContain("warning-list");
+      for (const selector of PRINT_HIDDEN_SELECTORS) {
+        for (const hidden of container.querySelectorAll(selector)) {
+          expect(
+            hidden.contains(warning!),
+            `경고가 인쇄에서 지워지는 ${selector} 안에 있습니다.`,
+          ).toBe(false);
+        }
+      }
+    });
+
+    it("패널을 열어도 경고는 한 벌뿐이고, 닫으면 다시 드러난다", async () => {
+      const { container } = await renderWithWarning();
+
+      await userEvent.click(trigger());
+      expect(budgetPanel(container)).not.toHaveClass("budget-panel--closed");
+      /*
+       * 패널이 열려 있는 동안 사이드바는 그 뒤에 가려지고 `inert`다
+       * (리뷰 findings M2) — 경고도 함께 가려진다. **그래도 사이드바에
+       * 둔다**: 패널이 담는 것이 바로 그 숫자의 근거
+       * (`ZeroBudgetMessage`·`BindingExplainer`·`CostBreakdown`)라,
+       * 패널이 열린 순간은 사용자가 한정 조건을 **읽고 있는** 상태다.
+       * 고쳐야 할 것은 기본 상태(닫힘)에서 숫자만 보이던 것이었고, 그
+       * 상태는 위 테스트가 잠근다. 패널을 경고 **아래**에서 시작하게
+       * 하려면 경고 높이를 런타임에 재야 하는데(패널은
+       * `.region-results-grid` 기준 `top: 0` 절대 배치다), 그 기계장치가
+       * 얻는 것보다 크다.
+       *
+       * 여기서 잠그는 것은 **개수**다 — 옮기면서 패널 안에 한 벌을 남겨
+       * 두면 종이에 같은 경고가 두 번 나온다.
+       */
+      expect(container.querySelectorAll(".warning-list")).toHaveLength(1);
+      expect(budgetPanel(container).querySelector(".warning-list")).toBeNull();
+
+      await userEvent.click(trigger());
+      expect(budgetPanel(container)).toHaveClass("budget-panel--closed");
+      expect(container.querySelectorAll(".warning-list")).toHaveLength(1);
+    });
+
+    /**
+     * 경고가 0건이면 사이드바 맨 위에 **아무것도** 생기지 않는다 —
+     * 빈 상자도, 빈 여백도. `WarningList`가 빈 배열에서 `null`을
+     * 돌려주는 것에 기대는 자리라, 그 계약이 깨지면 여기서 잡힌다.
+     */
+    it("경고가 0건이면 사이드바 맨 위에 빈 자리를 만들지 않는다", async () => {
+      const { container } = await renderResults();
+
+      expect(container.querySelector(".warning-list")).toBeNull();
+      const sidebar = container.querySelector(".region-results-sidebar")!;
+      // 맨 위는 옮기기 전과 같은 요소다(목록 쪽 첫 요소).
+      expect(sidebar.firstElementChild).not.toBeNull();
+      expect(sidebar.firstElementChild!.className).not.toContain("warning");
+    });
+
+    /**
+     * 옮긴 뒤에도 경고가 나오는 **경로 집합이 그대로**여야 한다 — 늘어도
+     * 줄어도 안 된다. `BudgetResult`는 실거주 경로에서만 렌더됐고, 새
+     * 자리(사이드바)도 같은 게이트(`purchaseType === "실거주"` +
+     * `affordability !== null && residentialProfile !== null`) 안이다.
+     */
+    it("투자 경로에는 경고가 없다 — 옮기기 전과 같은 경로 집합이다", async () => {
+      const { container } = await renderWithWarning();
+      expect(container.querySelector(".warning-list")).not.toBeNull();
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "조건 다시 넣기" }),
+      );
+      await userEvent.click(
+        screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
+      );
+
+      // 전제: 실제로 투자 화면이다(빈 화면을 보고 공허하게 통과하지 않는다).
+      expect(container.querySelector(".purchase-verdict")).not.toBeNull();
+      expect(container.querySelector(".warning-list")).toBeNull();
     });
   });
 
