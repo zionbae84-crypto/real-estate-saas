@@ -16,6 +16,15 @@ export interface ComplexMapProps {
    * 지도가 자기 계산을 새로 하면 두 창이 같은 단지를 두고 다른 말을
    * 하게 된다 — 이 저장소가 여섯 번 겪은 버그 형태다. 그래서 이 값은
    * 계산이 아니라 **배선**이다.
+   *
+   * ⚠ **참조가 안정적이어야 한다** — 호출부에서 메모이즈해 넘긴다
+   * (App.tsx의 `burdenByUnit`은 `useMemo`다). 이 값은 아래 그리기
+   * effect의 의존성이라, 렌더할 때마다 `new Map()`을 인라인으로 만들어
+   * 넘기면 매 렌더마다 지도를 destroy → 재생성한다: 타일이 다시
+   * 깜빡이고, 사용자가 맞춰 둔 줌·중심이 날아가고, InfoWindow가 닫힌다.
+   * `onFocusComplex`·`focusedComplexKey`는 같은 이유로 ref에 담아
+   * 의존성에서 뺐지만(아래 `onFocusRef` 참고), 이 값은 실제로 마커를
+   * 다시 그려야 하는 입력이라 뺄 수 없다.
    */
   burdenByUnit: ReadonlyMap<string, BurdenTier>;
   /** 지금 고른 단지(complexKey). 그 마커를 강조하고 지도를 그리로 옮긴다 */
@@ -288,6 +297,17 @@ export function ComplexMap({
   const [noneLocated, setNoneLocated] = useState(false);
   /** {@link MARKER_LIMIT}에 걸려 지도에 그리지 못한 단지 수 */
   const [hiddenCount, setHiddenCount] = useState(0);
+  /**
+   * 마커를 실제로 하나라도 그렸는가. 범례를 낼지를 이 값 하나로 정한다.
+   *
+   * 리뷰 수정(Minor): 예전 조건은 `!loadFailed && !noneLocated`였는데,
+   * 그 둘은 **실패한 뒤에야** 켜지는 값이라 SDK를 불러오는 동안에는
+   * 둘 다 false다 — 아직 마커가 하나도 없는 빈 액자 위에 색 안내만
+   * 잠깐 떠 있었다. 가리킬 대상이 없는 고아 문구를 막자는 규칙이
+   * 정작 로딩 구간만 비껴간 셈이다. "무엇이 실패하지 않았는가"가
+   * 아니라 "무엇을 그렸는가"를 보게 바꾼다.
+   */
+  const [markersDrawn, setMarkersDrawn] = useState(false);
 
   /**
    * 고른 단지의 마커에 강조 클래스를 붙이고 나머지에서 뗀다.
@@ -338,6 +358,7 @@ export function ComplexMap({
     setLoadFailed(false);
     setNoneLocated(false);
     setHiddenCount(0);
+    setMarkersDrawn(false);
 
     loadNaverMaps(naverMapClientId)
       .then((naverGlobal) => {
@@ -455,6 +476,9 @@ export function ComplexMap({
          * effect는 선택이 **바뀔 때만** 돈다).
          */
         applyFocus(focusedRef.current);
+        // 여기까지 왔으면 마커가 실제로 지도에 붙었다 — 범례가 가리킬
+        // 대상이 생겼다.
+        setMarkersDrawn(true);
       })
       .catch(() => {
         if (!cancelled) setLoadFailed(true);
@@ -468,10 +492,12 @@ export function ComplexMap({
 
   /*
    * 지도가 실제로 마커를 그린 상태에서만 범례를 낸다. 로드 실패·좌표
-   * 없음일 때 색 안내만 남으면 가리킬 대상이 없는 고아 문구가 된다
-   * (`.complex-map-status`를 인쇄에서 지우는 것과 같은 이유).
+   * 없음일 때는 물론 **SDK를 아직 불러오는 동안에도** 색 안내만 뜨면
+   * 가리킬 대상이 없는 고아 문구가 된다(`.complex-map-status`를 인쇄에서
+   * 지우는 것과 같은 이유). `markersDrawn`은 그 세 경우를 한 값으로
+   * 덮는다 — 위 선언의 주석 참고.
    */
-  const showLegend = !loadFailed && !noneLocated;
+  const showLegend = markersDrawn;
 
   return (
     <>

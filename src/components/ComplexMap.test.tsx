@@ -584,6 +584,43 @@ describe("ComplexMap", () => {
     expect(legend.textContent).toContain("대출이 필요해요");
   });
 
+  /**
+   * 리뷰 수정(Minor): 예전 조건(`!loadFailed && !noneLocated`)은 실패한
+   * 뒤에야 켜지는 두 값을 봤다 — SDK를 불러오는 동안에는 둘 다 false라,
+   * 마커가 하나도 없는 빈 액자 위에 색 안내만 잠깐 떠 있었다.
+   */
+  it("SDK를 불러오는 동안에는 범례를 내지 않는다 — 아직 마커가 없다", async () => {
+    const { naverGlobal, markers } = fakeNaverMaps();
+    let resolveLoad: (v: typeof naver) => void = () => {};
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockReturnValue(
+      new Promise<typeof naver>((resolve) => {
+        resolveLoad = resolve;
+      }),
+    );
+    const units = [unit({ complexKey: "a" })];
+
+    render(
+      <ComplexMap
+        units={units}
+        coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={burdenMap(units, "no-loan")}
+        naverMapClientId="test-id"
+      />,
+    );
+
+    // 로드 전: 실패한 것도 아니고 좌표가 없는 것도 아니지만 마커도 없다.
+    expect(markers).toHaveLength(0);
+    expect(
+      screen.queryByRole("list", { name: "마커 색 안내" }),
+    ).not.toBeInTheDocument();
+
+    resolveLoad(naverGlobal as unknown as typeof naver);
+
+    // 마커가 실제로 붙은 뒤에야 범례가 나온다(대조군).
+    await screen.findByRole("list", { name: "마커 색 안내" });
+    expect(markers.length).toBeGreaterThan(0);
+  });
+
   it("지도를 못 불러왔으면 범례를 내지 않는다 — 가리킬 마커가 없다", async () => {
     vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockRejectedValue(new Error("boom"));
     render(
