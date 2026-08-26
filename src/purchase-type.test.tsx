@@ -1,7 +1,9 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import type { ComplexUnit } from "./data/complexes";
+import * as regionQuery from "./lib/regionQuery";
 import { formatWon } from "./format/won";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { calcAffordablePrice, type BuyerProfile } from "./lib/finance";
@@ -313,5 +315,115 @@ describe("유형을 오갈 때의 입력 보존", () => {
     await choose("월세수익형");
     await choose("실거주");
     expect(document.querySelector(".affordable-price")?.textContent).toBe(before);
+  });
+});
+
+/**
+ * 리뷰 수정(Important 3·Minor 6): 투자 경로에서 화면 1(`EntryScreen`)은
+ * 항상 숨어 있다 — `handlePurchaseTypeChange`가 유형을 고르는 순간
+ * phase를 "결과"로 넘기기 때문이다. 유형 라디오가 그 숨은 화면에만
+ * 있으면 투자 결과 화면에서는 유형을 바꿀 자리가 화면 어디에도 없고,
+ * 유일한 통로였던 "조건 다시 넣기"는 라디오 하나뿐인 막다른 길로
+ * 데려갔다(고를 수 있는 투자 유형이 하나뿐이라, 이미 선택된 라디오를
+ * 다시 눌러도 `onChange`가 불리지 않는다 — 실질적인 탈출구는 입력값을
+ * 지우는 실거주뿐이었다).
+ */
+describe("리뷰 수정: 투자 화면에서 나가는 길", () => {
+  /** 조회 성공 하나. 값은 이 파일의 프로필(현금 15억)로 충분히 살 수 있다. */
+  const UNIT: ComplexUnit = {
+    complexKey: "11680|테스트동|2015|테스트단지",
+    complexName: "테스트단지",
+    regionCode: "11680",
+    legalDongName: "테스트동",
+    builtYear: 2015,
+    areaBucket: 84,
+    maxExclusiveAreaSqm: 84,
+    landLeasehold: "N",
+    tradeCount: 3,
+    minPrice: 190_000_000,
+    maxPrice: 210_000_000,
+    minFloor: 3,
+    maxFloor: 18,
+    unknownFloorCount: 0,
+    lowConfidence: false,
+  };
+
+  async function selectRegion() {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+  }
+
+  afterEach(() => vi.restoreAllMocks());
+
+  it("투자 화면에서도 유형을 바꿀 수 있다 — 라디오가 숨은 화면 1 밖에 있다", async () => {
+    const { container } = render(<App />);
+    await choose("월세수익형");
+
+    const entry = container.querySelector(".entry-screen");
+    // 전제: 투자 유형을 고른 순간 화면 1은 시각적으로 사라진다.
+    expect(entry).toHaveClass("entry-screen--hidden");
+
+    const radio = screen.getByRole("radio", {
+      name: new RegExp(purchaseRules.types.실거주.label),
+    });
+    expect(entry?.contains(radio)).toBe(false);
+  });
+
+  it("투자 화면에는 '조건 다시 넣기'가 없다 — 되돌릴 조건이 화면 1에 없다", async () => {
+    render(<App />);
+    await choose("월세수익형");
+    expect(
+      screen.queryByRole("button", { name: "조건 다시 넣기" }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("실거주 결과 화면에는 그대로 있다(대조군) — 거기엔 되돌릴 입력이 있다", async () => {
+    render(<App />);
+    await fillProfile();
+    await selectRegion();
+    expect(
+      screen.getByRole("button", { name: "조건 다시 넣기" }),
+    ).toBeInTheDocument();
+  });
+
+  it("이미 조회한 결과가 있으면 실거주로 돌아올 때 다시 조회하지 않아도 보인다", async () => {
+    const { container } = render(<App />);
+    await fillProfile();
+    await selectRegion();
+    const price = document.querySelector(".affordable-price")?.textContent;
+
+    await choose("월세수익형");
+    await choose("실거주");
+
+    // 조회 결과도, 그 위의 예산 계산도 곧바로 다시 보인다 —
+    // 데이터는 내내 `regionComplexes`에 있었고 화면 게이트만 막고 있었다.
+    expect(container.querySelector(".entry-screen")).toHaveClass(
+      "entry-screen--hidden",
+    );
+    expect(
+      screen.getByRole("region", { name: "살 수 있는 단지" }),
+    ).toBeInTheDocument();
+    expect(document.querySelector(".affordable-price")?.textContent).toBe(price);
+  });
+
+  it("조회한 적이 없으면 실거주로 돌아올 때 화면 1로 간다(대조군)", async () => {
+    const { container } = render(<App />);
+    await fillProfile();
+
+    await choose("월세수익형");
+    await choose("실거주");
+
+    expect(container.querySelector(".entry-screen")).not.toHaveClass(
+      "entry-screen--hidden",
+    );
   });
 });

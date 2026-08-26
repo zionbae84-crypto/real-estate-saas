@@ -507,7 +507,22 @@ export function App() {
      * 사실상 항상 이미 참인 값이지만, 유형을 오가며 값을 명시적으로
      * 맞춰 둔다).
      */
-    setPhase(next === "실거주" ? "입력" : "결과");
+    /*
+     * 리뷰 수정(Minor 6): 실거주로 돌아올 때 무조건 "입력"으로 되돌리면,
+     * 이미 성공한 지역 조회 결과가 그대로 남아 있는데도 화면이 다시
+     * 조회를 요구한다 — 데이터는 `regionComplexes`에 그대로 있고 화면
+     * 게이트만 막고 있는 상태다. 볼 것이 이미 있으면 결과로 보낸다
+     * (거기서 "조건 다시 넣기"로 언제든 화면 1로 갈 수 있다). 아직
+     * 조회한 적이 없으면(idle/loading/error) 화면 1이 맞다 — 그쪽이
+     * 조회 로딩·실패 문구를 그리는 자리다.
+     */
+    setPhase(
+      next === "실거주"
+        ? regionComplexes.status === "success"
+          ? "결과"
+          : "입력"
+        : "결과",
+    );
     setSelectedUnit(null);
     // 상세(호가·입지)는 실거주에서 평형을 고른 동안에만 존재한다 —
     // 유형을 바꾸면 그 컴포넌트들이 사라지므로 진단 종합에 남은 값도
@@ -628,12 +643,36 @@ export function App() {
           </span>
         </p>
 
-        <PurchaseTypeSelect
-          rules={purchaseRules}
-          value={purchaseType}
-          onChange={handlePurchaseTypeChange}
-          restoreFailed={restoreFailed}
-        />
+        {/*
+          리뷰 수정(Important 3): 유형 선택을 **실거주에서만** 여기 둔다.
+
+          투자 경로(월세수익형·갭투자)에서는 이 라디오가 아래 결과 화면,
+          자기 입력(`PurchaseCheck`) 바로 위에 선다. 투자 경로는
+          `handlePurchaseTypeChange`가 유형을 고르는 순간 phase를 "결과"로
+          넘기는데, 그 순간 이 화면(`.entry-screen`)은 `display: none`이
+          된다 — 유형 선택이 여기에만 있으면 투자 결과 화면에서는 유형을
+          **바꿀 방법이 아예 없었다.** 그래서 "조건 다시 넣기"가 유일한
+          탈출구였고, 그 버튼이 데려오는 이 화면에는 (실거주가 아니므로
+          `ProfileForm`·`RegionSelect`도 없이) 유형 라디오 하나만 남아
+          막다른 길이 됐다. 게다가 고를 수 있는 투자 유형은 월세수익형
+          하나뿐이라(`SELECTABLE_PURCHASE_TYPES`), 이미 선택된 라디오를
+          다시 눌러도 `onChange`가 불리지 않아 결과로 돌아갈 수도 없었다 —
+          유일한 실질 선택지인 실거주는 `PurchaseCheck`를 언마운트하며
+          `usePurchaseCheck`의 입력값을 지운다("돌아가도 입력값은
+          남는다"는 제약 위반).
+
+          유형 선택이 결과 화면에 함께 서면 그 막다른 길이 사라진다 —
+          그리고 그 화면의 "조건 다시 넣기"는 되돌릴 조건이 없는 채로
+          남으므로 아래 투자 분기에서 뺐다.
+        */}
+        {purchaseType === "실거주" && (
+          <PurchaseTypeSelect
+            rules={purchaseRules}
+            value={purchaseType}
+            onChange={handlePurchaseTypeChange}
+            restoreFailed={restoreFailed}
+          />
+        )}
 
         {/*
           프로필 입력·지역 선택은 실거주에서만 뜻이 있다 — 갭투자·월세
@@ -1116,6 +1155,18 @@ export function App() {
           </>
         ) : (
           <>
+            {/*
+              투자 경로의 유형 선택은 이 화면에 선다(위 `EntryScreen`의
+              같은 주석 참고) — 이 경로에서 화면 1은 항상 숨어 있으므로,
+              여기 없으면 유형을 바꿀 자리가 화면 어디에도 없다.
+            */}
+            <PurchaseTypeSelect
+              rules={purchaseRules}
+              value={purchaseType}
+              onChange={handlePurchaseTypeChange}
+              restoreFailed={restoreFailed}
+            />
+
             <PurchaseCheck type={purchaseType} onAssessment={setPurchaseAssessment} />
 
             {/*
@@ -1130,20 +1181,18 @@ export function App() {
               인쇄하기
             </button>
             {/*
-              투자 경로는 `handlePurchaseTypeChange`가 유형을 고르는 순간
-              phase를 "결과"로 강제하므로(App.tsx 상단 주석 참고) 이
-              분기에 들어왔다는 것 자체가 이미 phase === "결과"라는
-              뜻이다 — 그래도 위 실거주 쪽과 조건을 맞춰 둔다.
+              리뷰 수정(Important 3): 이 경로에는 "조건 다시 넣기"를 두지
+              않는다. 되돌릴 조건이 화면 1에 없기 때문이다 —
+              `ProfileForm`·`RegionSelect`는 실거주 전용이라 투자 경로에서
+              화면 1이 담는 것은 제목과 유형 라디오뿐이고, 그 라디오는
+              이제 바로 위에 있다. 이 경로의 입력은 전부
+              `PurchaseCheck`(이 화면) 안에 있으므로 "조건을 다시 넣는"
+              자리도 이 화면이다.
+
+              예전에는 이 버튼이 유형을 바꿀 유일한 통로였는데, 그 통로가
+              데려가는 화면은 유형 라디오 하나뿐인 막다른 길이었다(위
+              주석). 통로를 없애는 대신 목적지를 이 화면으로 끌어왔다.
             */}
-            {phase === "결과" && (
-              <button
-                type="button"
-                className="back-to-entry-button"
-                onClick={handleBackToEntry}
-              >
-                조건 다시 넣기
-              </button>
-            )}
           </>
         )}
 

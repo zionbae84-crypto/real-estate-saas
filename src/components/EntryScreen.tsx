@@ -5,8 +5,8 @@ export interface EntryScreenProps {
    * App.tsx의 화면 단계. `"결과"`일 때 이 화면은 시각적으로 숨는다
    * (styles.css의 `.entry-screen--hidden`).
    *
-   * **여기서 자식(`PurchaseTypeSelect`·`ProfileForm`·`RegionSelect`)을
-   * 조건부로 마운트/언마운트하지 않는다.** `App.tsx`의 `phase` 주석에
+   * **`phase`를 보고 자식(`ProfileForm`·`RegionSelect`)을 조건부로
+   * 마운트/언마운트하지 않는다.** `App.tsx`의 `phase` 주석에
    * 이유를 자세히 적었다 — 요약하면, `AssumptionLine`이 여는
    * `ProfileForm`의 전용면적 입력란이 지역 조회 성공 **이후**(즉
    * `phase === "결과"`가 된 뒤)에도 계속 도달 가능해야 하는 기존 계약이
@@ -35,10 +35,16 @@ export interface EntryScreenProps {
  * 1. 위 `phase` prop 문서가 적은 것처럼, `ProfileForm`의 일부(전용면적
  *    입력란)는 결과 화면에서도 `AssumptionLine`을 통해 도달 가능해야
  *    한다는 기존 테스트 계약이 있다.
- * 2. `PurchaseTypeSelect`를 여러 번 연달아 눌러 유형을 오가는 기존
- *    테스트(`purchase-type.test.tsx`)가 다수 있다 — 그 라디오가 화면
- *    전환 때마다 언마운트되면 리액트가 매번 새 인스턴스를 만들면서
- *    엣지케이스가 늘어난다.
+ * 2. `ProfileForm`이 들고 있는 SEED 입력 컴포넌트들은 화면 전환마다
+ *    언마운트되면 리액트가 매번 새 인스턴스를 만들어, 유형·단계를
+ *    오가는 기존 테스트(`purchase-type.test.tsx`)가 보는 엣지케이스가
+ *    늘어난다.
+ *
+ *    (`PurchaseTypeSelect`는 예외다 — 리뷰 수정 Important 3으로, 투자
+ *    유형에서는 이 화면이 아니라 결과 화면 쪽에 선다. 그 라디오는
+ *    `value`/`onChange`만 받는 완전한 controlled 컴포넌트라 자기 상태가
+ *    없어서, 자리를 옮겨도 잃을 것이 없다. 자리를 옮긴 이유는 `App.tsx`
+ *    의 해당 주석에 적었다.)
  * 3. `RegionSelect`의 내부 상태(광역단체·자치구 선택)가 "조건 다시
  *    넣기"로 돌아왔을 때 그대로 남아 있어야 재조회가 자연스럽다 —
  *    언마운트하면 이 상태가 초기화된다.
