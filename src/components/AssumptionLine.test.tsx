@@ -90,7 +90,7 @@ describe("없앤 입력 넷은 조용한 기본값이 아니라 문장으로 남
       state(),
       state({ touched: ["regulatedArea"] }),
       state({ cash: 300_000_000, annualIncome: 70_000_000 }),
-      state({ areaBands: ["대형"] }),
+      state({ areaBands: ["중대형"] }),
     ]) {
       const all = joined(s);
       expect(all).toMatch(/생애최초/);

@@ -111,7 +111,7 @@ describe("ProfileForm — 화면 1이 묻는 것", () => {
   it("평형대 경계는 룰셋의 농특세 임계값을 그대로 쓴다", () => {
     renderForm();
     expect(screen.getByText("60~85㎡")).toBeInTheDocument();
-    expect(screen.getByText("85~102㎡")).toBeInTheDocument();
+    expect(screen.getByText("85㎡ 초과")).toBeInTheDocument();
   });
 
   it("인쇄에서 통째로 지워지는 자리에 있다 — .profile-form", () => {

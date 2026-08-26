@@ -326,8 +326,8 @@ describe("App - 평형대로 좁히기", () => {
     vi.restoreAllMocks();
   });
 
-  /** 전용 90㎡ — 중형이다(85㎡ 초과 102㎡ 이하) */
-  const MEDIUM_UNIT = DETAIL_TEST_UNIT;
+  /** 전용 90㎡ — 중대형이다(85㎡ 초과) */
+  const LARGE_UNIT = DETAIL_TEST_UNIT;
   /** 전용 45㎡ — 소형이다 */
   const SMALL_UNIT: ComplexUnit = {
     ...DETAIL_TEST_UNIT,
@@ -361,7 +361,7 @@ describe("App - 평형대로 좁히기", () => {
 
   it("고른 평형대의 매물만 목록에 남는다", async () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
-      units: [SMALL_UNIT, MEDIUM_UNIT],
+      units: [SMALL_UNIT, LARGE_UNIT],
       isRegulatedArea: null,
       dataAsOf: null,
     });
@@ -382,7 +382,7 @@ describe("App - 평형대로 좁히기", () => {
    */
   it("고른 평형대에 매물이 없으면 평형대 탓이라고 말한다", async () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
-      units: [MEDIUM_UNIT],
+      units: [LARGE_UNIT],
       isRegulatedArea: null,
       dataAsOf: null,
     });
@@ -429,7 +429,7 @@ describe("App - 평형대로 좁히기", () => {
    */
   it("평형대로 0건이면 동 좁히기를 내지 않는다", async () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
-      units: [MEDIUM_UNIT],
+      units: [LARGE_UNIT],
       isRegulatedArea: null,
       dataAsOf: null,
     });

@@ -234,7 +234,7 @@ describe("loadStoredState", () => {
           JSON.stringify({
             cash: 300_000_000,
             annualIncome: 80_000_000,
-            areaBands: ["중소형", "중형"],
+            areaBands: ["중소형", "중대형"],
           }),
         ),
       ),
@@ -242,7 +242,7 @@ describe("loadStoredState", () => {
       state({
         cash: 300_000_000,
         annualIncome: 80_000_000,
-        areaBands: ["중소형", "중형"],
+        areaBands: ["중소형", "중대형"],
       }),
     );
   });
@@ -308,12 +308,32 @@ describe("loadStoredState", () => {
       ).toEqual([...AREA_BANDS]);
     });
 
-    it("모르는 값이 섞여 있으면 걸러낸다", () => {
+    /**
+     * ⚠ **모르는 값을 걸러내고 나머지를 살리지 않는다 — 통째로 버린다.**
+     *
+     * 구간이 넷에서 셋으로 바뀌면서 옛 이름("중형"·"대형")이 저장본에
+     * 남은 사용자가 있다. 아는 값만 남기면 그 사용자의 선택은 "중형·대형"
+     * (= 85㎡ 초과 전부)에서 빈 선택이나 엉뚱한 일부로 조용히 바뀌고,
+     * 화면은 그 사실을 말하지 않는다 — 저장된 값이 사용자가 고른 적 없는
+     * 조건을 만드는, 커밋 `c90babf`와 같은 모양이다.
+     *
+     * 전체 선택으로 되돌리는 쪽은 **결과를 좁히지 않는** 방향이고, 그
+     * 상태는 화면 1의 칩에 그대로 보인다.
+     */
+    it("모르는 값이 섞여 있으면 통째로 버리고 전체 선택으로 간다", () => {
       expect(
         loadStoredState(
           storage(JSON.stringify({ areaBands: ["소형", "초대형", 7] })),
         ).areaBands,
-      ).toEqual(["소형"]);
+      ).toEqual([...AREA_BANDS]);
+    });
+
+    it("옛 네 구간 이름이 남은 저장본도 전체 선택으로 되돌린다", () => {
+      expect(
+        loadStoredState(
+          storage(JSON.stringify({ areaBands: ["중형", "대형"] })),
+        ).areaBands,
+      ).toEqual([...AREA_BANDS]);
     });
 
     /**
@@ -331,9 +351,9 @@ describe("loadStoredState", () => {
     it("순서는 저장 순서가 아니라 좁은 쪽부터다", () => {
       expect(
         loadStoredState(
-          storage(JSON.stringify({ areaBands: ["대형", "소형"] })),
+          storage(JSON.stringify({ areaBands: ["중대형", "소형"] })),
         ).areaBands,
-      ).toEqual(["소형", "대형"]);
+      ).toEqual(["소형", "중대형"]);
     });
   });
 
@@ -436,9 +456,9 @@ describe("useProfileForm — setField가 touched를 기록한다", () => {
 
   it("평형대 선택이 저장된다", () => {
     const { result } = renderHook(() => useProfileForm());
-    act(() => result.current.setField("areaBands", ["중형", "대형"]));
+    act(() => result.current.setField("areaBands", ["중소형", "중대형"]));
     const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY)!);
-    expect(saved.areaBands).toEqual(["중형", "대형"]);
+    expect(saved.areaBands).toEqual(["중소형", "중대형"]);
   });
 });
 

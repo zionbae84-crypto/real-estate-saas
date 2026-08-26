@@ -44,12 +44,12 @@ describe("평형대 입력", () => {
     ).toBeInTheDocument();
   });
 
-  it("네 구간을 좁은 쪽부터 낸다", () => {
+  it("세 구간을 좁은 쪽부터 낸다", () => {
     renderStatic([...AREA_BANDS]);
     const names = screen
       .getAllByRole("checkbox")
       .map((el) => el.getAttribute("value"));
-    expect(names).toEqual(["소형", "중소형", "중형", "대형"]);
+    expect(names).toEqual(["소형", "중소형", "중대형"]);
   });
 
   /**
@@ -70,30 +70,28 @@ describe("평형대 입력", () => {
 
   it("범위 라벨은 ㎡가 주(主)이고 룰셋의 임계값을 그대로 쓴다", () => {
     renderStatic([...AREA_BANDS]);
-    expect(screen.getByText("~60㎡")).toBeInTheDocument();
+    expect(screen.getByText("60㎡ 이하")).toBeInTheDocument();
     expect(screen.getByText(`60~${THRESHOLD}㎡`)).toBeInTheDocument();
-    expect(screen.getByText(`${THRESHOLD}~102㎡`)).toBeInTheDocument();
-    expect(screen.getByText("102㎡~")).toBeInTheDocument();
+    expect(screen.getByText(`${THRESHOLD}㎡ 초과`)).toBeInTheDocument();
   });
 
   it("고른 구간만 체크돼 있다", () => {
-    renderStatic(["소형", "중형"]);
+    renderStatic(["소형", "중대형"]);
     expect(chip("소형")).toBeChecked();
     expect(chip("중소형")).not.toBeChecked();
-    expect(chip("중형")).toBeChecked();
-    expect(chip("대형")).not.toBeChecked();
+    expect(chip("중대형")).toBeChecked();
   });
 
   it("복수 선택이다 — 하나를 켜도 나머지가 꺼지지 않는다", async () => {
     render(<Harness initial={["소형"]} />);
-    await userEvent.click(chip("대형"));
-    expect(screen.getByTestId("value")).toHaveTextContent("소형,대형");
+    await userEvent.click(chip("중대형"));
+    expect(screen.getByTestId("value")).toHaveTextContent("소형,중대형");
   });
 
   it("이미 켜진 칩을 누르면 꺼진다", async () => {
-    render(<Harness initial={["소형", "대형"]} />);
+    render(<Harness initial={["소형", "중대형"]} />);
     await userEvent.click(chip("소형"));
-    expect(screen.getByTestId("value")).toHaveTextContent("대형");
+    expect(screen.getByTestId("value")).toHaveTextContent("중대형");
   });
 
   /**
@@ -102,10 +100,10 @@ describe("평형대 입력", () => {
    * 화면 1이 "평형대를 하나 이상 골라 주세요"라고 말한다(App.tsx).
    */
   it("마지막 하나도 끌 수 있다 — 누르면 실제로 꺼진다", async () => {
-    render(<Harness initial={["중형"]} />);
-    await userEvent.click(chip("중형"));
+    render(<Harness initial={["중대형"]} />);
+    await userEvent.click(chip("중대형"));
     expect(screen.getByTestId("value")).toHaveTextContent("");
-    expect(chip("중형")).not.toBeChecked();
+    expect(chip("중대형")).not.toBeChecked();
   });
 
   /**
@@ -114,10 +112,10 @@ describe("평형대 입력", () => {
    */
   it("고른 순서와 무관하게 좁은 쪽부터 정렬해 돌려준다", async () => {
     render(<Harness initial={[]} />);
-    await userEvent.click(chip("대형"));
+    await userEvent.click(chip("중대형"));
     await userEvent.click(chip("소형"));
-    await userEvent.click(chip("중형"));
-    expect(screen.getByTestId("value")).toHaveTextContent("소형,중형,대형");
+    await userEvent.click(chip("중소형"));
+    expect(screen.getByTestId("value")).toHaveTextContent("소형,중소형,중대형");
   });
 
   it("키보드로 조작할 수 있다 — 탭으로 닿고 스페이스로 켠다", async () => {
@@ -139,6 +137,6 @@ describe("평형대 입력", () => {
       />,
     );
     expect(screen.getByText("60~100㎡")).toBeInTheDocument();
-    expect(screen.getByText("100~102㎡")).toBeInTheDocument();
+    expect(screen.getByText("100㎡ 초과")).toBeInTheDocument();
   });
 });
