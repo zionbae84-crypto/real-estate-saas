@@ -32,6 +32,21 @@ async function selectRegion(sido: string, sigungu: string) {
   );
 }
 
+/**
+ * 화면 1(입력)로 돌아간다.
+ *
+ * Task 3에서 화면이 갈리며 `RegionSelect`는 "입력" 화면 전용이 됐다 —
+ * 지역 조회가 한 번 성공하면 화면은 "결과"로 넘어가고 "입력" 화면은
+ * 시각적으로 숨는다(`EntryScreen`). 이미 지역을 한 번 조회한 뒤 **다른
+ * 지역을 다시 조회**하려면 먼저 이 버튼으로 "입력" 화면에 돌아와야
+ * `selectRegion`이 다시 그 select들을 찾을 수 있다.
+ */
+async function backToEntry() {
+  await userEvent.click(
+    screen.getByRole("button", { name: "조건 다시 넣기" }),
+  );
+}
+
 /** 그 지역에서 가장 싼 평형 몇 개 — 2억 예산으로도 목록에 뜨는 것들 */
 function cheapestIn(regionCode: string, count: number): ComplexUnit[] {
   return COMPLEX_UNITS.filter((u) => u.regionCode === regionCode)
@@ -353,6 +368,7 @@ describe("예산 계산기 통합", () => {
       isRegulatedArea: null,
       dataAsOf: null,
     });
+    await backToEntry();
     await selectRegion("서울특별시", "서초구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
@@ -387,6 +403,7 @@ describe("예산 계산기 통합", () => {
 
     // 다음 지역 조회는 실패한다 — 이 지역에 대해 아무것도 알아내지 못했다.
     spy.mockRejectedValueOnce(new Error("네트워크 오류"));
+    await backToEntry();
     await selectRegion("서울특별시", "서초구");
     await screen.findByText(/불러오지 못했어요/);
 
@@ -431,6 +448,7 @@ describe("예산 계산기 통합", () => {
     // 빠진 이유가 예산이 아니라 "그 지역 조회 결과가 아니어서"임을
     // 못박는다.
     spy.mockResolvedValue({ units: [...서초], isRegulatedArea: true, dataAsOf: null });
+    await backToEntry();
     await selectRegion("서울특별시", "서초구");
     await screen.findByText(서초단지);
 

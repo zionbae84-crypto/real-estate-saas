@@ -607,11 +607,21 @@ describe("App - 행정동으로 좁히기", () => {
 
     // 같은 지역을 다시 조회한다(예: 다시 시도하거나 재확정하는 상황과
     // 같은 배선 — handleRegionSelect가 selectedDong을 되돌린다).
+    //
+    // 화면이 갈리면서(Task 3) `RegionSelect`는 이제 "입력" 화면
+    // 전용이다 — 지역 조회가 한 번 성공하면 화면은 "결과"로 넘어가고
+    // "입력" 화면은 시각적으로 숨는다(`EntryScreen`). 그래서 다시
+    // 지역을 고르려면 먼저 "조건 다시 넣기"로 "입력" 화면으로 돌아가야
+    // 한다 — 이 재조회 자체가 검사하는 사실(동 좁히기가 전체로
+    // 되돌아간다)은 그대로이고, 거기 도달하는 경로만 한 단계 늘었다.
     spy.mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
       dataAsOf: null,
     });
+    await userEvent.click(
+      screen.getByRole("button", { name: "조건 다시 넣기" }),
+    );
     await chooseRegion();
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 

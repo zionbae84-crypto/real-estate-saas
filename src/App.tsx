@@ -5,6 +5,7 @@ import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
 import { ComplexMap, groupWithCoords } from "./components/ComplexMap";
 import { DiagnosisSummary } from "./components/DiagnosisSummary";
+import { EntryScreen } from "./components/EntryScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaSource } from "./components/PrintSummary";
@@ -50,6 +51,27 @@ export function App() {
    * 보여준다.
    */
   const { purchaseType, setPurchaseType, restoreFailed } = usePurchaseType();
+  /**
+   * 화면 단계 — "입력"(영상 위 입력 화면, 화면 1)과 "결과"(전체화면
+   * 결과, 화면 2). `EntryScreen`이 이 값을 읽어 자기 자신을 시각적으로
+   * 숨긴다(언마운트하지 않는다 — 이유는 `EntryScreen`의 `phase` prop
+   * 문서 참고).
+   *
+   * **"입력"에서 시작한다.** 새로 들어온 사용자는 아직 아무것도
+   * 확정하지 않았다.
+   *
+   * **전환은 지역 조회 성공 하나뿐이다**(아래 effect). 지역 선택
+   * 버튼을 누른 그 순간(`handleRegionSelect`)이 아니라 **조회가 실제로
+   * 성공했을 때**를 본다 — 조회 중이거나 실패한 동안 화면이 아직 아무
+   * 결과도 없이 "결과" 단계로 넘어가면, 이 축이 다른 축("이 지역엔
+   * 데이터가 없다"/"조회 실패")의 빈 상태를 조용히 삼키는 여섯 번째
+   * 반복이 된다(`App.tsx`가 이미 겪은 그 버그 형태).
+   *
+   * **"조건 다시 넣기"(아래 `handleBackToEntry`)는 이 값만 되돌린다.**
+   * 프로필·지역 조회 결과·구매 유형 등 나머지 상태는 전혀 건드리지
+   * 않는다 — 화면 전환일 뿐 리셋이 아니다.
+   */
+  const [phase, setPhase] = useState<"입력" | "결과">("입력");
   /**
    * 고른 지역의 실거래가 조회 상태. 번들에 실린 3개 구 정적 데이터
    * (`COMPLEX_UNITS`)를 대신한다 — 이 앱이 전국으로 넓어지면서 목록의
@@ -188,6 +210,40 @@ export function App() {
     setVisibleCount(10);
     setCurrentRegionCode(regionCode);
     regionComplexes.query(regionCode);
+  }
+
+  /**
+   * 지역 조회가 **성공**하면 화면 단계를 "결과"로 넘긴다.
+   *
+   * `regionComplexes.status`가 "success"로 바뀌는 순간에만 반응한다 —
+   * "loading"·"error"는 이 조건에 걸리지 않으므로 화면은 계속 "입력"에
+   * 머문다(그 두 상태는 `EntryScreen` 안에서 그 자체로 보여준다). 성공
+   * 여부와 무관하게(예: `units.length === 0`이어도) 조회 자체가 성공하면
+   * 넘어간다 — "이 지역엔 데이터가 없어요"도 이미 확인된 사실이므로
+   * "결과" 화면이 보여줄 몫이지, 입력 화면이 계속 붙들고 있을 이유가
+   * 아니다.
+   *
+   * 의존 배열이 `regionComplexes.status`만 본다는 것이 중요하다 —
+   * `phase`를 넣지 않는다. 넣으면 "조건 다시 넣기"로 "입력"에 돌아간
+   * 직후에도 status가 여전히 "success"이므로 이 effect가 다시 돌아
+   * 곧바로 "결과"로 되튕긴다. 지금 형태는 status가 실제로
+   * **바뀔 때만** 반응하므로, 같은 지역을 다시 조회하지 않는 한
+   * "조건 다시 넣기"가 붙든 "입력" 상태가 유지된다.
+   */
+  useEffect(() => {
+    if (regionComplexes.status === "success") setPhase("결과");
+  }, [regionComplexes.status]);
+
+  /**
+   * "조건 다시 넣기". 화면 단계만 "입력"으로 되돌린다.
+   *
+   * 프로필(`useProfileForm`)·지역 조회 결과(`regionComplexes`)·구매
+   * 유형 등 나머지 상태는 전혀 건드리지 않는다 — 새로 조회하지 않고
+   * 화면만 되돌아가는 것이므로, 이미 입력한 값도 기존 조회 결과도 그대로
+   * 남는다(task-3-brief.md의 요구사항).
+   */
+  function handleBackToEntry() {
+    setPhase("입력");
   }
 
   /**
@@ -417,6 +473,19 @@ export function App() {
    */
   function handlePurchaseTypeChange(next: PurchaseType) {
     setPurchaseType(next);
+    /*
+     * 투자 목적 유형(갭투자·월세수익형)은 지역 조회를 거치지 않는다 —
+     * `PurchaseCheck`가 입력과 결과를 한 화면에서 즉시 보여주는
+     * 컴포넌트라, "지역 조회 성공"이라는 이 앱의 유일한 "결과로
+     * 넘어가는" 신호가 그 경로에는 아예 없다. 그 신호를 기다리기만
+     * 하면 `EntryScreen`(영상)이 영영 걷히지 않아 `PurchaseCheck`가
+     * 화면 뒤에 가려진 채로 남는다 — 그래서 여기서 직접 "결과"로
+     * 넘긴다. 반대로 실거주를 고르면 "입력"으로 되돌린다(이 핸들러가
+     * 불릴 수 있는 시점은 `PurchaseTypeSelect`가 보이는 "입력" 단계뿐이라
+     * 사실상 항상 이미 참인 값이지만, 유형을 오가며 값을 명시적으로
+     * 맞춰 둔다).
+     */
+    setPhase(next === "실거주" ? "입력" : "결과");
     setSelectedUnit(null);
     // 상세(호가·입지)는 실거주에서 평형을 고른 동안에만 존재한다 —
     // 유형을 바꾸면 그 컴포넌트들이 사라지므로 진단 종합에 남은 값도
@@ -490,38 +559,53 @@ export function App() {
 
   return (
     <main className="app">
-      <h1>내 예산으로 살 수 있는 집</h1>
-      <p className="subtitle">
+      {/*
+        화면 1 — 영상 위 입력 화면. `EntryScreen`은 `phase`가 "결과"가
+        되면 이 전체를 시각적으로 숨긴다(언마운트는 하지 않는다 —
+        `EntryScreen`의 doc comment 참고). 서비스 제목·부제·구매 유형·
+        프로필 입력·지역 선택까지, "입력"이라는 이름이 뜻하는 모든 것을
+        여기 한 번에 담는다 — 아래 `ErrorBoundary` 안쪽(화면 2에 해당하는
+        내용)에는 더 이상 이 세 컴포넌트가 나오지 않는다.
+      */}
+      <EntryScreen phase={phase}>
         {/*
-          리뷰 수정(인쇄 함께 볼 것): "이 브라우저를 벗어나지 않아요"는
-          "이 브라우저"라는 지시 대상이 종이 위에는 없어 뜻이 서지 않는다
-          — 인쇄에서만 지운다(hiddenInPrint.ts의 .subtitle-privacy-note).
-          뒤에 붙는 "고른 지역 코드만 서버로 전송돼요"도 같은 약속의
-          단서라 같은 span 안에 둔다. 앞의 룰셋 기준은 종이에서도 뜻이
-          있어 남긴다.
-
-          "· 수도권"은 지웠다. 지역이 전국으로 넓어져 더 이상 사실이
-          아니다 — 범위를 실제보다 좁게 말하는 쪽이라도, 화면이 확인한
-          적 없는 것을 말하는 것은 마찬가지다.
+          design.md §3의 "작은 라벨". 새 마케팅 카피를 짓지 않는다
+          (task-3-brief.md 범위 밖, design.md §7 "카피 축소·톤 변경은
+          별도 프로젝트") — 이 화면이 하는 일을 사실 그대로 짧게 적을
+          뿐이다.
         */}
-        {/*
-          어느 룰셋 기준인지는 유형에 따라 다르다. `rules/2026-08.json`의
-          LTV·DSR·절대상한은 실거주 매수를 전제한 값이고, 투자 경로는 바로
-          그 기준으로 한도를 계산하지 않는다고 말한다 — 그 화면 위에
-          "2026년 8월 규제 기준"이 남아 있으면 종이에서 뜻이 어긋난다.
-          투자 경로에서는 이 화면이 실제로 쓴 구매 유형 룰셋을 적는다.
-        */}
-        {purchaseType === "실거주"
-          ? formatRuleVersionLabel(rules)
-          : `구매 유형 기준 ${purchaseRules.version}`}
-        <span className="subtitle-privacy-note">
-          {" "}
-          · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는
-          고른 지역 코드만 서버로 전송돼요.
-        </span>
-      </p>
+        <p className="entry-eyebrow">예산 계산</p>
+        <h1>내 예산으로 살 수 있는 집</h1>
+        <p className="subtitle">
+          {/*
+            리뷰 수정(인쇄 함께 볼 것): "이 브라우저를 벗어나지 않아요"는
+            "이 브라우저"라는 지시 대상이 종이 위에는 없어 뜻이 서지 않는다
+            — 인쇄에서만 지운다(hiddenInPrint.ts의 .subtitle-privacy-note).
+            뒤에 붙는 "고른 지역 코드만 서버로 전송돼요"도 같은 약속의
+            단서라 같은 span 안에 둔다. 앞의 룰셋 기준은 종이에서도 뜻이
+            있어 남긴다.
 
-      <ErrorBoundary onReset={reset}>
+            "· 수도권"은 지웠다. 지역이 전국으로 넓어져 더 이상 사실이
+            아니다 — 범위를 실제보다 좁게 말하는 쪽이라도, 화면이 확인한
+            적 없는 것을 말하는 것은 마찬가지다.
+          */}
+          {/*
+            어느 룰셋 기준인지는 유형에 따라 다르다. `rules/2026-08.json`의
+            LTV·DSR·절대상한은 실거주 매수를 전제한 값이고, 투자 경로는 바로
+            그 기준으로 한도를 계산하지 않는다고 말한다 — 그 화면 위에
+            "2026년 8월 규제 기준"이 남아 있으면 종이에서 뜻이 어긋난다.
+            투자 경로에서는 이 화면이 실제로 쓴 구매 유형 룰셋을 적는다.
+          */}
+          {purchaseType === "실거주"
+            ? formatRuleVersionLabel(rules)
+            : `구매 유형 기준 ${purchaseRules.version}`}
+          <span className="subtitle-privacy-note">
+            {" "}
+            · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는
+            고른 지역 코드만 서버로 전송돼요.
+          </span>
+        </p>
+
         <PurchaseTypeSelect
           rules={purchaseRules}
           value={purchaseType}
@@ -529,6 +613,50 @@ export function App() {
           restoreFailed={restoreFailed}
         />
 
+        {/*
+          프로필 입력·지역 선택은 실거주에서만 뜻이 있다 — 갭투자·월세
+          수익형은 `PurchaseCheck`가 자기 입력을 따로 받는다(아래
+          `ErrorBoundary` 안, App.tsx 하단 주석 참고).
+        */}
+        {purchaseType === "실거주" && (
+          <>
+            <ProfileForm
+              state={state}
+              setField={setField}
+              openField={openField}
+              areaOverridden={selectedUnit !== null}
+            />
+
+            {/*
+              프로필이 아직 안 끝났으면(주택 수 미답 포함) 지역 선택을
+              보여주지 않는다 — 예산을 모르는 채로 지역부터 확정하게
+              두지 않는다. 아래 `ErrorBoundary` 안의 같은 조건(affordability
+              === null)과 짝이다 — 프로필 미완성일 때 그쪽은 "현금·연소득
+              ·주택 수를 알려주면…" 안내를 보여준다.
+            */}
+            {affordability !== null && residentialProfile !== null && (
+              <>
+                <RegionSelect onSelect={handleRegionSelect} />
+
+                {regionComplexes.status === "loading" && (
+                  <p>지역 실거래가를 조회하고 있어요…</p>
+                )}
+
+                {regionComplexes.status === "error" && (
+                  <div className="region-query-error">
+                    <p>지금 실거래가를 불러오지 못했어요.</p>
+                    <button type="button" onClick={regionComplexes.retry}>
+                      다시 시도
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </>
+        )}
+      </EntryScreen>
+
+      <ErrorBoundary onReset={reset}>
         {/*
           유형을 고르면 그 유형에 맞는 화면만 나온다.
 
@@ -542,13 +670,6 @@ export function App() {
         */}
         {purchaseType === "실거주" ? (
           <>
-          <ProfileForm
-            state={state}
-            setField={setField}
-            openField={openField}
-            areaOverridden={selectedUnit !== null}
-          />
-
           {/*
             주택 수도 필수 답이 됐다 — 미입력을 무주택으로 대신 채우면
             정책대출 자격이 넓어져 한도가 커지는데, 그건 사용자가 확인한
@@ -640,22 +761,13 @@ export function App() {
                 />
               ) : (
                 <>
-                  <RegionSelect onSelect={handleRegionSelect} />
-
-                  {regionComplexes.status === "loading" && (
-                    <p>지역 실거래가를 조회하고 있어요…</p>
-                  )}
-
-                  {regionComplexes.status === "error" && (
-                    <div className="region-query-error">
-                      <p>지금 실거래가를 불러오지 못했어요.</p>
-                      <button type="button" onClick={regionComplexes.retry}>
-                        다시 시도
-                      </button>
-                    </div>
-                  )}
-
                   {/*
+                    `RegionSelect`와 조회 로딩/실패 문구는 이제
+                    `EntryScreen`(화면 1) 안에만 있다 — 여기(화면 2에
+                    해당하는 내용)는 조회가 이미 **성공**했을 때만
+                    렌더되므로(phase가 "결과"가 되는 유일한 조건과 같다),
+                    그 두 상태를 다시 그릴 필요가 없다.
+
                     **"이 지역엔 실거래가가 0건"은 여기서 직접 가른다** —
                     `ComplexList`의 `emptyBecauseOfFilter`에 맡기지 않는다.
 
@@ -943,6 +1055,24 @@ export function App() {
               >
                 인쇄하기
               </button>
+              {/*
+                화면 1(영상 위 입력)로 돌아간다. 프로필·지역 조회 결과는
+                그대로 남는다(handleBackToEntry 문서 참고) — 이 버튼은
+                화면 전환일 뿐 리셋이 아니다.
+
+                `phase === "결과"`일 때만 보인다 — 프로필은 채웠지만 아직
+                지역을 조회하지 않았을 때(phase가 여전히 "입력")는 이미
+                `EntryScreen`이 화면을 덮고 있어 이 버튼이 뜻이 없다.
+              */}
+              {phase === "결과" && (
+                <button
+                  type="button"
+                  className="back-to-entry-button"
+                  onClick={handleBackToEntry}
+                >
+                  조건 다시 넣기
+                </button>
+              )}
             </>
           )}
           </>
@@ -961,6 +1091,21 @@ export function App() {
             >
               인쇄하기
             </button>
+            {/*
+              투자 경로는 `handlePurchaseTypeChange`가 유형을 고르는 순간
+              phase를 "결과"로 강제하므로(App.tsx 상단 주석 참고) 이
+              분기에 들어왔다는 것 자체가 이미 phase === "결과"라는
+              뜻이다 — 그래도 위 실거주 쪽과 조건을 맞춰 둔다.
+            */}
+            {phase === "결과" && (
+              <button
+                type="button"
+                className="back-to-entry-button"
+                onClick={handleBackToEntry}
+              >
+                조건 다시 넣기
+              </button>
+            )}
           </>
         )}
 

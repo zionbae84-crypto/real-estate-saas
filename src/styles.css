@@ -1932,3 +1932,242 @@ h2 {
     overflow: visible;
   }
 }
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 화면 1 — 영상 위 입력 화면 (EntryScreen.tsx)
+ * design.md §3을 그대로 따른다.
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+/*
+ * 전체 화면을 덮는 고정 레이어. `phase === "결과"`가 되면
+ * `.entry-screen--hidden`이 붙어 시각적으로만 사라진다 —
+ * `PurchaseTypeSelect`·`ProfileForm`·`RegionSelect`는 리액트 트리에서
+ * 언마운트되지 않는다(EntryScreen.tsx의 `phase` prop 문서 참고). 그래서
+ * 여기서 `display: none`을 쓴다 — `visibility: hidden`이나
+ * `opacity: 0`은 자식(입력란·버튼)이 여전히 포커스·클릭을 받을 수 있어
+ * "화면 2를 보는 동안 화면 1이 뒤에서 조작된다"는 사고가 난다.
+ */
+.entry-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--paper);
+}
+
+.entry-screen--hidden {
+  display: none;
+}
+
+.entry-screen-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/*
+ * 스크림 두 겹(design.md §3) — 왼쪽에서 오른쪽으로 어두움→투명(입력
+ * 패널이 놓일 자리를 읽히게 하고), 아래에서 위로 한 번 더 어둡게(패널
+ * 하단의 글자 대비를 보강한다). CSS 다중 배경은 먼저 적은 레이어가
+ * 위에 그려지므로 순서를 지킨다.
+ *
+ * 이 그리드가 패널 폭(`minmax(420px, 44%)`)을 정한다 — `.entry-screen-panel`
+ * 자신은 그 칸을 꽉 채우기만 한다.
+ */
+.entry-screen-scrim {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(420px, 44%) 1fr;
+  background-image:
+    linear-gradient(to top, rgba(13, 19, 25, 0.6) 0%, transparent 40%),
+    linear-gradient(
+      100deg,
+      rgba(13, 19, 25, 0.95) 0%,
+      rgba(13, 19, 25, 0.86) 34%,
+      rgba(13, 19, 25, 0.34) 62%,
+      rgba(13, 19, 25, 0.3) 100%
+    );
+}
+
+@media (max-width: 900px) {
+  .entry-screen-scrim {
+    grid-template-columns: 1fr;
+  }
+}
+
+/*
+ * 입력 패널. 여기서 세로로 넘치는 문제를 프로토타입에서 실제로 겪었다
+ * (design.md §3 경고) — `overflow-y: auto`로 칸 자체가 스크롤하게 하고,
+ * `justify-content: safe center`로 중앙 정렬을 시도하되 내용이 칸보다
+ * 커지면 안전하게 위쪽 정렬로 물러나 상단이 잘리지 않게 한다(`center`
+ * 단독은 넘칠 때 위쪽이 화면 밖으로 잘린다 — MDN "safe" 키워드 문서
+ * 참고).
+ */
+.entry-screen-panel {
+  height: 100%;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  justify-content: safe center;
+  gap: 0.875rem;
+  padding: 3rem 2.5rem;
+  box-sizing: border-box;
+}
+
+@media (max-width: 900px) {
+  .entry-screen-panel {
+    padding: 2.5rem 1.5rem;
+  }
+}
+
+.entry-eyebrow {
+  margin: 0;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--haze-lift);
+}
+
+/*
+ * h1은 전역 규칙(`h1, h2 { font-family: var(--font-serif) }`)을 그대로
+ * 물려받는다 — 여기서는 이 화면 전용 크기·색·여백만 준다.
+ */
+.entry-screen h1 {
+  margin: 0;
+  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
+  line-height: 1.25;
+  color: var(--paper);
+}
+
+.entry-screen .subtitle {
+  margin: 0 0 0.5rem;
+  color: var(--paper-dim);
+}
+
+/*
+ * design.md §3: "입력은 상자가 아니라 밑줄이다." SEED `TextField`를
+ * 재구현하지 않는다(design.md Global Constraints) — 그 컴포넌트가 실제로
+ * 그리는 네이티브 `<input>`(`.money-input input`)과 이 화면의 커스텀
+ * `<select>`만 밑줄 모양으로 다시 칠한다.
+ */
+.entry-screen .money-input label,
+.entry-screen .field label,
+.entry-screen .purchase-type-question,
+.entry-screen .owned-home-field legend {
+  color: var(--haze-lift);
+  font-family: inherit;
+}
+
+.entry-screen .money-input input,
+.entry-screen .field input[type="number"],
+.entry-screen .field select,
+.entry-screen .region-select select {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--rule);
+  border-radius: 0;
+  color: var(--paper);
+  padding: 0.5rem 0.125rem;
+}
+
+.entry-screen .money-input input::placeholder {
+  color: var(--haze);
+}
+
+.entry-screen .money-input input:focus-visible,
+.entry-screen .field input[type="number"]:focus-visible,
+.entry-screen .field select:focus-visible,
+.entry-screen .region-select select:focus-visible {
+  outline: none;
+  border-bottom-color: var(--brass-lift);
+}
+
+/* 입력 아래 즉시 환산값("20000" → "2억원") — 황동색으로 강조한다. */
+.entry-screen .echo {
+  color: var(--brass-lift);
+}
+
+.entry-screen .hint {
+  color: var(--haze);
+}
+
+/*
+ * 주택 보유 — 세그먼트 두 개(design.md §3). 라디오 자체는 남기되(접근성·
+ * 로직 불변), 시각적으로는 테두리를 공유하는 두 칸으로 보이게 한다.
+ * 선택된 쪽만 밝은 바탕(--paper)에 어두운 글자(--ink)다.
+ */
+.entry-screen .owned-home-options {
+  display: flex;
+  border: 1px solid var(--rule);
+  gap: 0;
+}
+
+.entry-screen .owned-home-option {
+  flex: 1;
+  justify-content: center;
+  padding: 0.5rem 0.75rem;
+  color: var(--paper-dim);
+}
+
+.entry-screen .owned-home-option:first-child {
+  border-right: 1px solid var(--rule);
+}
+
+.entry-screen .owned-home-option:has(input:checked) {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.entry-screen .owned-home-field {
+  border: none;
+  padding: 0;
+}
+
+/* 구매 유형 라디오 목록 — 밑줄 계열 팔레트로 다시 칠한다. */
+.entry-screen .purchase-type-summary {
+  color: var(--haze);
+}
+
+.entry-screen .purchase-type-why {
+  color: var(--haze);
+}
+
+.entry-screen .purchase-type-restore-notice {
+  color: var(--warn);
+}
+
+/* "이 지역으로 조회하기"/"다시 시도" — 이 화면의 유일한 강조 버튼. */
+.entry-screen button[type="button"] {
+  background: var(--brass);
+  color: var(--ink);
+  border: none;
+  border-radius: 0;
+  padding: 0.625rem 1.25rem;
+  font-weight: 600;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.entry-screen button[type="button"]:disabled {
+  background: var(--rule);
+  color: var(--haze);
+  cursor: not-allowed;
+}
+
+.entry-screen button[type="button"]:focus-visible {
+  outline: 2px solid var(--brass-lift);
+  outline-offset: 2px;
+}
+
+.entry-screen .region-query-error p {
+  color: var(--paper-dim);
+  margin: 0 0 0.5rem;
+}
