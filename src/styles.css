@@ -26,6 +26,23 @@
   --risk: var(--seed-color-fg-critical-contrast);
   --border: var(--seed-color-stroke-neutral-weak);
   color-scheme: light;
+
+  /*
+   * 제목용 한글 명조(design.md §2). 부동산·건축 프레젠테이션의 문법이지
+   * SaaS 랜딩 문법이 아니라는 것이 이 선택의 근거 — 본문·숫자는 아래
+   * body의 Pretendard를 그대로 쓴다.
+   *
+   * @fontsource/nanum-myeongjo(로컬 번들, main.tsx에서 korean-700.css만
+   * 들여온다 — 이 앱의 제목은 전부 브라우저 기본 굵기인 700으로 렌더링돼
+   * 다른 굵기 파일은 실제로 쓰이지 않는다) 우선, 폰트 로딩 전이나 실패 시
+   * 각 OS의 한글 명조 스택(macOS "Apple Myungjo", Windows "Batang")으로
+   * 떨어진다. 후보 중 noto-serif-kr(unpacked 84MB, 9 굵기 × 여러 서브셋)은
+   * 이 앱이 굵기 하나만 쓰는 데 비해 과했고, gowun-batang(700 파일
+   * 440KB)은 실제로 더 가볍지만 "명조"라는 이름 자체가 스펙 문구와
+   * 정확히 대응하는 nanum-myeongjo를 우선했다 — korean-700.css 하나의
+   * 실제 전송 용량은 564KB(woff2)로 차이가 크지 않다.
+   */
+  --font-serif: "Nanum Myeongjo", "Apple Myungjo", Batang, serif;
 }
 
 body {
@@ -34,6 +51,17 @@ body {
   line-height: 1.6;
   background: var(--seed-color-bg-layer-default);
   color: var(--seed-color-fg-neutral);
+}
+
+/*
+ * 제목류만 명조(design.md §2 "제목: 명조체. 부동산·건축 쪽 문법"). 서비스
+ * 이름(App.tsx의 <h1>)도 h1이라 이 규칙에 자연히 포함된다. 본문·숫자·라벨은
+ * 이 규칙 밖이라 body의 Pretendard를 그대로 쓴다 — h3 이하(카드 소제목 등)도
+ * 의도적으로 제외했다(task-2-brief.md가 h1·h2·서비스 이름까지만 지정).
+ */
+h1,
+h2 {
+  font-family: var(--font-serif);
 }
 
 /*
