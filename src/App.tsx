@@ -656,6 +656,22 @@ export function App() {
         )}
       </EntryScreen>
 
+      {/*
+        화면에서는 숨고 인쇄에서만 나오는 한 줄(styles.css의
+        `.purchase-type-print`). 예전에는 `PurchaseTypeSelect` 안에
+        있었는데, 그 컴포넌트가 실거주 경로에서 `EntryScreen` 안에 놓이고
+        그 레이어는 인쇄에서 통째로 지워지므로(hiddenInPrint.ts의
+        `.entry-screen`) 보호 대상 클래스(`purchase-type-print`,
+        MUST_SURVIVE_PRINT_CLASSES)가 조상과 함께 사라졌다 —
+        `printCss.test.ts`는 선택자 문자열만 보므로 그 형태는 잡지 못한다.
+        그래서 이 레이어 밖에서 그린다. 이 종이가 어떤 구매 유형을
+        전제하는지 말하는 줄이라, 없으면 종이를 건네받은 사람은 아래
+        숫자들이 무엇 위에 서 있는지 알 수 없다.
+      */}
+      <p className="purchase-type-print">
+        구매 유형 — {purchaseRules.types[purchaseType].label}
+      </p>
+
       <ErrorBoundary onReset={reset}>
         {/*
           유형을 고르면 그 유형에 맞는 화면만 나온다.

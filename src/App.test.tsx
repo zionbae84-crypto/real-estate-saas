@@ -6,6 +6,10 @@ import type { ComplexUnit } from "./data/complexes";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import * as loadNaverMaps from "./lib/loadNaverMaps";
 import * as regionQuery from "./lib/regionQuery";
+import {
+  MUST_SURVIVE_PRINT_CLASSES,
+  PRINT_HIDDEN_SELECTORS,
+} from "./print/hiddenInPrint";
 import { rules } from "./state/useAffordability";
 import type * as UseAffordabilityModule from "./state/useAffordability";
 
@@ -849,6 +853,36 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(
         screen.queryByRole("button", { name: "인쇄하기" }),
       ).not.toBeInTheDocument();
+    });
+
+    /**
+     * 리뷰 수정(Critical 1). 화면 1(`.entry-screen`)은 불투명한 전체화면
+     * 고정 레이어라 인쇄에서 통째로 지운다 — 그러면 그 **안에** 있던
+     * 보호 대상 클래스도 조상과 함께 조용히 사라진다. 실제로
+     * `.purchase-type-print`("구매 유형 — …")가 그 형태로 사라졌고,
+     * `printCss.test.ts`는 선택자 **문자열**만 비교하므로 조상 관계를
+     * 보지 못해 잡아내지 못했다. 그래서 렌더된 DOM에서 직접 확인한다.
+     */
+    it("인쇄에서 지우는 요소 안에 보호 대상 클래스가 들어 있지 않다", async () => {
+      const { container } = render(<App />);
+
+      function check(phase: string) {
+        for (const selector of PRINT_HIDDEN_SELECTORS) {
+          for (const hidden of container.querySelectorAll(selector)) {
+            for (const cls of MUST_SURVIVE_PRINT_CLASSES) {
+              expect(
+                hidden.querySelector(`.${cls}`),
+                `${phase} 단계에서 ${selector} 안에 .${cls}가 있습니다 — ` +
+                  "조상이 인쇄에서 지워지면 이 보호 대상도 함께 사라집니다.",
+              ).toBeNull();
+            }
+          }
+        }
+      }
+
+      check("입력");
+      await fillProfile();
+      check("결과");
     });
 
     it("계산이 나오면 인쇄 버튼이 나타나고, 누르면 브라우저 인쇄 대화상자를 연다", async () => {

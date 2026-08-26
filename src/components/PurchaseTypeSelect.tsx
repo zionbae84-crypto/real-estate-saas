@@ -47,6 +47,14 @@ export interface PurchaseTypeSelectProps {
  * 고를 수 없다 — 대신 고른 유형이 평문 한 줄로 남는다. 그 줄이 없으면
  * 종이를 건네받은 사람은 아래 숫자들이 어떤 전제 위에 서 있는지 알 수
  * 없다.
+ *
+ * **그 평문 한 줄(`.purchase-type-print`)은 이 컴포넌트가 그리지 않는다.**
+ * 이 라디오는 실거주 경로에서 `EntryScreen`(화면 1) 안에 놓이는데, 그
+ * 레이어는 인쇄에서 통째로 지워진다(`src/print/hiddenInPrint.ts`의
+ * `.entry-screen`) — 여기에 두면 보호 대상 클래스가 조상과 함께 조용히
+ * 사라진다. `printCss.test.ts`는 선택자 문자열만 보므로 그 형태를 잡지
+ * 못한다. 그래서 `App.tsx`가 그 줄을 이 레이어 밖에서 그린다. 문자열이
+ * 두 벌이 되지 않도록 여기서는 아예 그리지 않는다.
  */
 export function PurchaseTypeSelect({
   rules,
@@ -99,15 +107,6 @@ export function PurchaseTypeSelect({
           </div>
         </fieldset>
       </form>
-
-      {/*
-        화면에서는 숨고 인쇄에서만 나온다(styles.css의 .purchase-type-print).
-        PrintSummary와 같은 패턴이다 — 조작 장치는 종이에서 지우고, 그
-        장치가 담고 있던 사실은 평문으로 남긴다.
-      */}
-      <p className="purchase-type-print">
-        구매 유형 — {rules.types[value].label}
-      </p>
     </section>
   );
 }

@@ -14,6 +14,28 @@
  * 지킨다.
  */
 export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
+  // 화면 1(영상 위 입력) 전체. `position: fixed; inset: 0; overflow: hidden`에
+  // 불투명한 `--ink` 바탕을 깐 레이어라, 인쇄에서 풀지 않으면 `phase`가
+  // "입력"인 채로 인쇄할 때(Cmd+P는 어느 단계에서든 눌린다) 첫 장을 통째로
+  // 덮어 `PrintSummary`·`BudgetResult`·경고·면책이 종이에 나오지 않는다.
+  // design.md §6의 규칙("overflow/max-height 제약을 건 요소는 반드시
+  // @media print에서 푼다")이 그대로 걸리는 자리다.
+  //
+  // **푸는 대신 통째로 지우는 이유**: 이 레이어가 담은 것 중 종이에
+  // 남아야 하는 것이 없다. 입력 장치(`.profile-form`·`.region-select`·
+  // `.purchase-type-form`)는 이미 각각 이 목록에 있고, 부제의 룰셋 기준은
+  // `PrintSummary`가 같은 `formatRuleVersionLabel(rules)`로 다시 적으며,
+  // 개인정보 문구는 `.subtitle-privacy-note`로 이미 지운다. 조회 로딩·실패
+  // 문구는 종이에서 근거를 잃는 고아 문구다(`.complex-map-status`와 같은
+  // 이유). 남은 것은 제목과 눈썹 라벨뿐이다.
+  //
+  // 단 하나 예외가 있었다: `.purchase-type-print`("구매 유형 — …")는
+  // MUST_SURVIVE_PRINT_CLASSES에 오른 보호 대상인데 `PurchaseTypeSelect`
+  // 안에 있어 이 레이어와 함께 사라졌다. 이 목록은 선택자 문자열만
+  // 검사하므로(조상 관계는 보지 못한다) `printCss.test.ts`가 잡아 주지
+  // 못하는 형태다 — 그래서 그 한 줄을 `App.tsx`가 이 레이어 **밖**에서
+  // 그리도록 옮겼다(PurchaseTypeSelect.tsx 참고).
+  ".entry-screen",
   // 프로필 입력 폼 전체(현금·소득·생애최초·기존부채·규제지역·전용면적
   // 입력란). 값 자체는 지우지 않는다 — `PrintSummary`가 같은 값을 종이에
   // 맞는 평문으로 별도로 인쇄한다(App.tsx 참고). 입력란만 골라 숨기는

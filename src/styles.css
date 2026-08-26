@@ -1770,6 +1770,13 @@ h2 {
  *    잠근다.
  */
 @media print {
+  /*
+   * `.entry-screen`은 화면 1의 전체화면 고정 레이어다 — 인쇄에서 풀지
+   * 않으면 불투명한 어두운 상자가 첫 장을 덮는다(src/print/hiddenInPrint.ts의
+   * `.entry-screen` 항목에 이유를 자세히 적었다). 이 배열과 아래 선택자
+   * 목록은 반드시 함께 움직인다(printCss.test.ts).
+   */
+  .entry-screen,
   .profile-form,
   .price-slider-control,
   .region-select,
