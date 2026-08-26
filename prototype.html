@@ -15,7 +15,6 @@
 <title>프로토타입 — 내 예산으로 살 수 있는 집</title>
 <script type="module">
   import "pretendard/dist/web/static/pretendard.css";
-  import "@fontsource/nanum-myeongjo/korean-700.css";
 </script>
 <style>
   /* ── 팔레트: 배경 영상에서 뽑은 값 ─────────────────────────── */
@@ -34,8 +33,13 @@
     --on-sheet:   #141d25;
     --on-sheet-2: #5f6d79;
 
-    --serif: "Nanum Myeongjo", "AppleMyungjo", Georgia, serif;
-    --sans:  "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+    /*
+      전부 Pretendard 한 벌이다. 명조를 뺐으므로 위계는 **굵기와 자간**이
+      만든다 — 큰 글자일수록 굵게, 그리고 자간을 좁힌다. 크기만 키우고
+      자간을 그대로 두면 큰 글자가 흩어져 보여 밋밋해진다.
+    */
+    --display: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+    --sans:    "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
   }
 
   * { box-sizing: border-box; }
@@ -59,6 +63,17 @@
   }
 
   .tnum { font-variant-numeric: tabular-nums; }
+
+  /*
+    한 벌뿐인 활자로 위계를 만드는 규칙:
+    큰 글자일수록 **굵게 + 자간을 좁게**. 크기만 키우면 큰 글자가 흩어져
+    보이고, 화면 전체가 "기본값 그대로"처럼 밋밋해진다.
+      14px 이하  → 500, 자간 0 ~ +.14em(라벨은 넓게)
+      17~19px    → 600, 자간 -.01 ~ -.02em
+      26px 이상  → 700, 자간 -.035em
+    각 규칙에 직접 적어 두었다. 헬퍼 클래스를 만들지 않은 이유는 자리마다
+    크기가 달라 어차피 값을 따로 써야 하기 때문이다.
+  */
 
   /* ══ 화면 1 — 영상 위 입력 ═══════════════════════════════════ */
 
@@ -110,9 +125,9 @@
   /* 흐름 안에 둔다. absolute로 띄우면 제목과 겹친다(실제로 겹쳤다) */
   .wordmark {
     flex: none;
-    font-family: var(--serif);
-    font-size: 14px;
-    letter-spacing: .04em;
+    font-family: var(--display);
+    font-size: 13px; font-weight: 600;
+    letter-spacing: .02em;
     color: var(--paper);
     opacity: .85;
     margin-bottom: clamp(16px, 4vh, 40px);
@@ -126,11 +141,11 @@
   }
 
   h1 {
-    font-family: var(--serif);
+    font-family: var(--display);
     font-weight: 700;
     font-size: clamp(28px, 3.4vw, 44px);
-    line-height: 1.2;
-    letter-spacing: -.015em;
+    line-height: 1.22;
+    letter-spacing: -.035em;
     margin: 0 0 12px;
   }
   .sub {
@@ -164,8 +179,9 @@
     flex: 1; min-width: 0;
     background: none; border: 0; outline: none;
     color: var(--paper);
-    font-family: var(--serif);
+    font-family: var(--display);
     font-size: clamp(26px, 3vw, 34px);
+    font-weight: 600; letter-spacing: -.03em;
     font-variant-numeric: tabular-nums;
     padding: 0;
   }
@@ -209,7 +225,8 @@
     display: inline-flex; align-items: center; gap: 12px;
     background: none; border: 0; padding: 0;
     color: var(--brass);
-    font-family: var(--serif); font-size: 17px;
+    font-family: var(--display); font-size: 16px;
+    font-weight: 600; letter-spacing: -.015em;
     cursor: pointer;
   }
   .go:disabled { color: var(--haze-dim); cursor: default; }
@@ -239,13 +256,15 @@
     border-bottom: 1px solid var(--rule);
   }
   .topbar .mark {
-    font-family: var(--serif); font-size: 14px;
+    font-family: var(--display); font-size: 13px;
+    font-weight: 600; letter-spacing: -.01em;
     color: var(--on-sheet); flex: none;
   }
   .topbar .stats { display: flex; gap: clamp(16px, 2.6vw, 40px); flex: 1; min-width: 0; }
   .stat .label { color: var(--on-sheet-2); display: block; margin-bottom: 3px; }
   .stat .v {
-    font-family: var(--serif); font-size: 17px;
+    font-family: var(--display); font-size: 17px;
+    font-weight: 600; letter-spacing: -.018em;
     font-variant-numeric: tabular-nums; white-space: nowrap;
   }
   .stat .v.money { color: var(--brass-deep); }
@@ -265,7 +284,8 @@
   }
   .side-head { padding: 20px 22px 14px; }
   .side-head h2 {
-    font-family: var(--serif); font-size: 18px; margin: 0 0 5px; font-weight: 700;
+    font-family: var(--display); font-size: 17px; margin: 0 0 5px;
+    font-weight: 700; letter-spacing: -.028em;
   }
   .side-head p { margin: 0; font-size: 12px; color: var(--on-sheet-2); line-height: 1.6; }
 
@@ -289,7 +309,8 @@
   .row .name { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
   .row .name em { font-style: normal; color: var(--on-sheet-2); font-weight: 500; }
   .row .price {
-    font-family: var(--serif); font-size: 19px;
+    font-family: var(--display); font-size: 19px;
+    font-weight: 600; letter-spacing: -.028em;
     margin-top: 7px; font-variant-numeric: tabular-nums;
   }
   .row .meta {
