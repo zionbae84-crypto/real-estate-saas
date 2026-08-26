@@ -83,12 +83,19 @@ function residentialLoanCallsIn(source: string): string[] {
   );
 }
 
-/** 투자 유형에서 대출 한도 계산에 닿을 수 있는 파일들 */
+/**
+ * 투자 유형에서 대출 한도 계산에 닿을 수 있는 파일들.
+ *
+ * 구매 유형 선택이 제거되면서 이 파일들은 App 어디에서도 렌더되지
+ * 않는다(도달 불가능하다). 그래도 검사는 그대로 둔다 — 사용자가
+ * 수익형을 다시 붙일 때 되살아날 코드이고, 그때 이 약속이 이미
+ * 잠겨 있어야 한다. `PurchaseTypeSelect.tsx`는 라디오 UI가 통째로
+ * 지워져 파일 자체가 없어졌으므로 목록에서 뺐다.
+ */
 const INVESTMENT_SOURCES = [
   ...sourceFiles("src/lib/purchase"),
   "src/components/PurchaseCheck.tsx",
   "src/components/PurchaseVerdict.tsx",
-  "src/components/PurchaseTypeSelect.tsx",
   "src/state/usePurchaseCheck.ts",
 ];
 

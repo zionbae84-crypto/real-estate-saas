@@ -22,19 +22,19 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // @media print에서 푼다")이 그대로 걸리는 자리다.
   //
   // **푸는 대신 통째로 지우는 이유**: 이 레이어가 담은 것 중 종이에
-  // 남아야 하는 것이 없다. 입력 장치(`.profile-form`·`.region-select`·
-  // `.purchase-type-form`)는 이미 각각 이 목록에 있고, 부제의 룰셋 기준은
-  // `PrintSummary`가 같은 `formatRuleVersionLabel(rules)`로 다시 적으며,
-  // 개인정보 문구는 `.subtitle-privacy-note`로 이미 지운다. 조회 로딩·실패
-  // 문구는 종이에서 근거를 잃는 고아 문구다(`.complex-map-status`와 같은
+  // 남아야 하는 것이 없다. 입력 장치(`.profile-form`·`.region-select`)는
+  // 이미 각각 이 목록에 있고, 부제의 룰셋 기준은 `PrintSummary`가 같은
+  // `formatRuleVersionLabel(rules)`로 다시 적으며, 개인정보 문구는
+  // `.subtitle-privacy-note`로 이미 지운다. 조회 로딩·실패 문구는
+  // 종이에서 근거를 잃는 고아 문구다(`.complex-map-status`와 같은
   // 이유). 남은 것은 제목과 눈썹 라벨뿐이다.
   //
-  // 단 하나 예외가 있었다: `.purchase-type-print`("구매 유형 — …")는
-  // MUST_SURVIVE_PRINT_CLASSES에 오른 보호 대상인데 `PurchaseTypeSelect`
-  // 안에 있어 이 레이어와 함께 사라졌다. 이 목록은 선택자 문자열만
+  // 단 하나 예외가 있었다: `.purchase-type-print`("구매 유형 — 실거주")는
+  // MUST_SURVIVE_PRINT_CLASSES에 오른 보호 대상인데 유형 라디오 안에
+  // 있어 이 레이어와 함께 사라졌다. 이 목록은 선택자 문자열만
   // 검사하므로(조상 관계는 보지 못한다) `printCss.test.ts`가 잡아 주지
   // 못하는 형태다 — 그래서 그 한 줄을 `App.tsx`가 이 레이어 **밖**에서
-  // 그리도록 옮겼다(PurchaseTypeSelect.tsx 참고).
+  // 그리도록 옮겼다. 라디오는 이제 없지만 그 줄은 그대로 밖에 남는다.
   ".entry-screen",
   // 프로필 입력 폼 전체(현금·소득·생애최초·기존부채·규제지역·전용면적
   // 입력란). 값 자체는 지우지 않는다 — `PrintSummary`가 같은 값을 종이에
@@ -119,11 +119,6 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 시키는 죽은 지시문이 된다. 라벨("실구매 가능 가격")과 값 자체는
   // 그 버튼 안에 그대로 남는다 — 종이의 첫 줄이다.
   ".fold-more-hint",
-  // 구매 유형 라디오. 종이에서는 고를 수 없다 — 대신 고른 유형이
-  // `.purchase-type-print` 한 줄로 남는다(PurchaseTypeSelect 참고).
-  // 그 줄이 없으면 종이를 건네받은 사람은 아래 숫자들이 어떤 전제 위에
-  // 서 있는지 알 수 없다.
-  ".purchase-type-form",
   // 호가 입력란. 종이에서는 채울 수 없다. 무엇을 넣었고 무엇이
   // 나왔는지는 `PriceCheck`의 결과가 호가와 근거(거래 건수·실거래
   // 범위·평형)를 다시 적으므로 종이에서 잃는 정보가 없다 —
@@ -229,7 +224,17 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   // 구매 유형별 재무 지표. 이 화면에서 가장 무거운 말은 "이 유형의
   // 대출 한도는 우리가 계산하지 않아요"다 — 종이에서 그것이 사라지면
   // 남은 지표들만 보고 한도가 문제되지 않는 것으로 읽는다.
-  "purchase-type-print", // 이 종이가 어떤 구매 유형을 전제하는가
+  // 이 종이가 어떤 구매 유형을 전제하는가.
+  //
+  // **유형이 실거주 하나뿐이 된 뒤에도 남긴다.** 고를 수 없게 됐다고
+  // 해서 전제가 사라진 것이 아니다 — 이 종이의 LTV·DSR·정책대출은
+  // 전부 "내가 들어가 사는 집"을 전제로 고시된 값이고, 그 전제는
+  // 종이 어디에도 다시 적히지 않는다. 이 줄을 빼면 그 전제가 다시
+  // 말없이 깔린 상태로 돌아간다(구매 유형을 맨 앞에서 물었던 이유가
+  // 정확히 "숨어 있던 전제를 밖으로 꺼내는 것"이었다). 화면에서는
+  // 여전히 `display: none`이라 유형 하나짜리 라벨이 화면을 어지럽히지
+  // 않는다.
+  "purchase-type-print",
   "purchase-print-summary", // 입력값·인쇄일·어느 구매 유형 룰셋 기준인가
   "purchase-loan-note", // 한도를 계산하지 않는다는 사실과 그 이유
   "purchase-verdict", // 결과 영역 전체

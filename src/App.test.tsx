@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -13,8 +13,6 @@ import {
   PRINT_HIDDEN_SELECTORS,
 } from "./print/hiddenInPrint";
 import { rules } from "./state/useAffordability";
-import { purchaseRules } from "./state/usePurchaseCheck";
-import { PURCHASE_TYPE_STORAGE_KEY } from "./state/usePurchaseType";
 import type * as UseAffordabilityModule from "./state/useAffordability";
 
 // 룰셋의 effectiveFrom을 실제 값과 다르게 모의한다. App.tsx가 여전히
@@ -1307,36 +1305,17 @@ describe("App - 단지 상세(화면 4)", () => {
       check("단지 상세가 열린 전체화면 셸");
 
       /*
-       * 재검토 수정(Important 3): 투자 경로도 반드시 지난다.
+       * 예전에는 여기서 투자 경로(월세수익형)도 지났다 — 거기엔
+       * `PurchaseCheck`(`.purchase-form`, 인쇄에서 숨김)와 그 바로
+       * 옆의 보호 대상(`purchase-loan-note`·`purchase-verdict`·
+       * `purchase-print-summary`)이라는, 이 검사가 정확히 겨누는
+       * 조상-후손 배치가 있었기 때문이다. 구매 유형 선택이 제거되면서
+       * 이 화면에서 그 경로에 도달할 방법이 없어졌다(컴포넌트 자체는
+       * 남아 있다 — App.tsx의 결과 트리 주석 참고).
        *
-       * 이 검사는 형태로는 완전한 교차곱인데 실제로 방문한 상태는 둘 다
-       * 실거주였다. 투자 경로에는 `PurchaseTypeSelect`
-       * (`.purchase-type-form`, 인쇄에서 숨김)와 `PurchaseCheck`
-       * (`.purchase-form`, 숨김 / `purchase-loan-note`·`purchase-verdict`·
-       * `purchase-print-summary`가 그 바로 옆에 보호 대상으로) 라는,
-       * 이 검사가 정확히 겨누는 조상-후손 배치가 있다 — 그리고 지난
-       * 수정 물결이 재배치한 것이 바로 그 배치다.
+       * 그 배치의 교차곱 검사는 그래서 여기서 빠졌다. 다시 붙이는
+       * 날에는 이 자리에 그 상태를 되살려야 한다.
        */
-      await userEvent.click(
-        screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
-      );
-
-      // 전제: 이 상태가 실제로 그 배치를 화면에 그렸다. 이게 없으면
-      // 아래 check()가 아무것도 순회하지 않고 공허하게 통과할 수 있다.
-      for (const selector of [
-        ".purchase-type-form",
-        ".purchase-form",
-        ".purchase-loan-note",
-        ".purchase-verdict",
-        ".purchase-print-summary",
-      ]) {
-        expect(
-          container.querySelector(selector),
-          `${selector}가 투자 화면에 없습니다 — 이 검사의 전제가 깨졌습니다.`,
-        ).not.toBeNull();
-      }
-
-      check("월세수익형 투자 화면");
     });
 
     it("입력한 전제(현금·소득·주택 수·룰셋 기준)가 인쇄 전용 요약에 나온다", async () => {
@@ -1813,26 +1792,14 @@ describe("재검토 수정: 화면 1의 문서 스크롤 잠금", () => {
     expect(document.body.style.overflow).toBe("auto");
   });
 
-  it("화면 1이 걷히면 잠금이 떨어진다", async () => {
-    const { container } = render(<App />);
-    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
-
-    // 투자 유형을 고르면 화면 1이 걷히고 결과 화면이 선다.
-    await userEvent.click(
-      screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
-    );
-
-    expect(container.querySelector(".entry-screen")).toHaveClass(
-      "entry-screen--hidden",
-    );
-    expect(document.body).not.toHaveClass(BODY_SCROLL_LOCK_CLASS);
-  });
-
-  it("저장된 투자 유형으로 새로 열면 처음부터 잠기지 않는다", () => {
-    window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "월세수익형");
-    render(<App />);
-    expect(document.body).not.toHaveClass(BODY_SCROLL_LOCK_CLASS);
-  });
+  /*
+   * 예전에는 여기에 두 가지가 더 있었다 — "투자 유형을 고르면 화면 1이
+   * 걷히고 잠금이 떨어진다"와 "저장된 투자 유형으로 새로 열면 처음부터
+   * 잠기지 않는다". 구매 유형 선택이 제거되면서 화면 1이 걷히는 경로가
+   * 지역 조회 성공 하나로 줄었고, 그 경로의 잠금·해제는 아래 전체화면
+   * 셸 블록의 "셸이 서 있는 동안 문서 스크롤이 잠기고, 셸이 사라지면
+   * 풀린다"가 그대로 잠근다.
+   */
 });
 
 /**
@@ -2090,10 +2057,8 @@ describe("전체화면 결과 셸", () => {
     );
     expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
 
-    // 투자 유형으로 가면 셸이 사라진다(그 화면은 세로로 흐르는 문서다).
-    await userEvent.click(
-      screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
-    );
+    // 셸이 언마운트되면 잠금도 함께 풀린다.
+    cleanup();
     expect(document.body).not.toHaveClass(BODY_SCROLL_LOCK_CLASS);
   });
 
@@ -2750,23 +2715,17 @@ describe("전체화면 결과 셸", () => {
 
     /**
      * 옮긴 뒤에도 경고가 나오는 **경로 집합이 그대로**여야 한다 — 늘어도
-     * 줄어도 안 된다. `BudgetResult`는 실거주 경로에서만 렌더됐고, 새
-     * 자리(사이드바)도 같은 게이트(`purchaseType === "실거주"` +
-     * `affordability !== null && residentialProfile !== null`) 안이다.
+     * 줄어도 안 된다. 그 자리는 여전히
+     * `affordability !== null && residentialProfile !== null` 게이트
+     * 안이므로, 프로필이 아직 안 끝났으면 경고도 없다.
+     *
+     * (예전에는 이 자리에서 투자 경로로 넘어가 경고가 사라지는지도
+     * 확인했다. 구매 유형 선택이 제거되면서 그 경로에 도달할 방법이
+     * 없어졌다.)
      */
-    it("투자 경로에는 경고가 없다 — 옮기기 전과 같은 경로 집합이다", async () => {
-      const { container } = await renderWithWarning();
-      expect(container.querySelector(".warning-list")).not.toBeNull();
-
-      await userEvent.click(
-        screen.getByRole("button", { name: "조건 다시 넣기" }),
-      );
-      await userEvent.click(
-        screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
-      );
-
-      // 전제: 실제로 투자 화면이다(빈 화면을 보고 공허하게 통과하지 않는다).
-      expect(container.querySelector(".purchase-verdict")).not.toBeNull();
+    it("프로필이 안 끝났으면 경고도 없다 — 옮기기 전과 같은 게이트다", () => {
+      const { container } = render(<App />);
+      expect(container.querySelector(".result-shell")).toBeNull();
       expect(container.querySelector(".warning-list")).toBeNull();
     });
   });
@@ -2799,13 +2758,10 @@ describe("전체화면 결과 셸", () => {
       expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
     });
 
-    it("투자 경로의 면책은 그대로다", async () => {
-      const { container } = await renderResults();
-      await userEvent.click(
-        screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
-      );
-
-      expect(container.querySelector(".disclaimer")).not.toBeNull();
+    it("프로필이 안 끝난 폴백에도 면책은 그대로다", () => {
+      const { container } = render(<App />);
+      expect(container.querySelector(".result-shell")).toBeNull();
+      expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
     });
   });
 });

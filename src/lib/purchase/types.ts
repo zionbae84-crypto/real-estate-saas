@@ -50,9 +50,13 @@ export const PURCHASE_TYPES: readonly PurchaseType[] = [
  * 환경이 아니다. **엔진은 그대로 둔다**: `assessPurchase`·룰셋 검증은
  * 여전히 갭투자를 다룬다(위 `PURCHASE_TYPES`도 안 줄인다) — 규제가
  * 풀리면 이 목록에만 다시 넣으면 되고, 지표 로직을 다시 만들 필요가
- * 없다. `PurchaseTypeSelect`(선택 화면)와 `usePurchaseType`(저장된 값
- * 복원)이 이 목록을 함께 쓴다 — 하나만 고치면 예전에 갭투자를 저장해
- * 둔 사용자가 고를 수 없는 유형이 선택된 채로 화면에 남는다.
+ * 없다.
+ *
+ * **지금 이 목록을 읽는 코드는 없다.** 구매 유형 선택 자체가 사용자
+ * 지시로 제거돼 이 앱은 실거주 전용이 됐다(`usePurchaseType` 참고).
+ * 목록을 남겨 두는 이유는 엔진과 같다 — 유형을 다시 붙일 때 "화면에서
+ * 고를 수 있는 것"과 "엔진이 다룰 수 있는 것"의 구분이 여기 이미
+ * 서 있어야 한다.
  */
 export const SELECTABLE_PURCHASE_TYPES: readonly PurchaseType[] =
   PURCHASE_TYPES.filter((type) => type !== "갭투자");

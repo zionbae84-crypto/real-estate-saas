@@ -25,7 +25,7 @@ export interface EntryScreenProps {
  * §3을 그대로 따른다: 전체화면 영상(`object-fit: cover`, 무음 루프) 위에
  * 좌측 스크림과 입력 패널을 얹는다.
  *
- * **자식을 감싸기만 한다.** `PurchaseTypeSelect`·`ProfileForm`·
+ * **자식을 감싸기만 한다.** `ProfileForm`·
  * `RegionSelect`(와 지역 조회 로딩/실패 문구)는 `App.tsx`가 그대로
  * 조립해 `children`으로 넘긴다 — 이 컴포넌트는 그 내용이 무엇인지 모르고,
  * prop 배선도 만지지 않는다(브리프의 "로직·prop은 바꾸지 않는다").
@@ -37,15 +37,8 @@ export interface EntryScreenProps {
  *    입력란)는 결과 화면에서도 `AssumptionLine`을 통해 도달 가능해야
  *    한다는 기존 테스트 계약이 있다.
  * 2. `ProfileForm`이 들고 있는 SEED 입력 컴포넌트들은 화면 전환마다
- *    언마운트되면 리액트가 매번 새 인스턴스를 만들어, 유형·단계를
- *    오가는 기존 테스트(`purchase-type.test.tsx`)가 보는 엣지케이스가
- *    늘어난다.
- *
- *    (`PurchaseTypeSelect`는 예외다 — 리뷰 수정 Important 3으로, 투자
- *    유형에서는 이 화면이 아니라 결과 화면 쪽에 선다. 그 라디오는
- *    `value`/`onChange`만 받는 완전한 controlled 컴포넌트라 자기 상태가
- *    없어서, 자리를 옮겨도 잃을 것이 없다. 자리를 옮긴 이유는 `App.tsx`
- *    의 해당 주석에 적었다.)
+ *    언마운트되면 리액트가 매번 새 인스턴스를 만들어, 단계를 오가는
+ *    기존 테스트가 보는 엣지케이스가 늘어난다.
  * 3. `RegionSelect`의 내부 상태(광역단체·자치구 선택)가 "조건 다시
  *    넣기"로 돌아왔을 때 그대로 남아 있어야 재조회가 자연스럽다 —
  *    언마운트하면 이 상태가 초기화된다.

@@ -11,8 +11,6 @@ import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaSource } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
 import { ResultShell, ResultSummaryItem } from "./components/ResultShell";
-import { PurchaseCheck } from "./components/PurchaseCheck";
-import { PurchaseTypeSelect } from "./components/PurchaseTypeSelect";
 import { RegionSelect } from "./components/RegionSelect";
 import { SafetyBadge } from "./components/SafetyBadge";
 import { WarningList } from "./components/WarningList";
@@ -30,7 +28,6 @@ import {
   calcBurdenAt,
   householdCountNoteFor,
 } from "./lib/finance";
-import type { PurchaseType } from "./lib/purchase";
 import { rules, useAffordability } from "./state/useAffordability";
 import { useComplexCoordinates } from "./state/useComplexCoordinates";
 import { useRegionComplexes } from "./state/useRegionComplexes";
@@ -47,52 +44,33 @@ export function App() {
   // 없다(둘 다 그 자체로는 완결돼 있지만 이어 주는 배선이 없었다).
   const [openField, setOpenField] = useState<AssumableField | null>(null);
   /**
-   * 구매 유형. 지금까지 이 화면이 말없이 전제하던 값이라 실거주에서
-   * 시작하고, 한 번 고르면 기억한다(usePurchaseType 문서 참고) —
-   * 나머지 프로필이 전부 저장되는데 유형만 저장되지 않으면, 새로고침한
-   * 뒤 화면이 실거주로 되돌아가 자기 매수에 해당하지 않는 한도를 다시
-   * 보여준다.
+   * 구매 유형. **언제나 실거주다** — 유형 선택은 사용자 지시로
+   * 제거됐고, 이 앱은 실거주 전용이 됐다(usePurchaseType 문서 참고).
+   *
+   * 상수를 그대로 쓰지 않고 훅으로 받는 이유는 두 가지다. (1) 저장소에
+   * 남은 옛 유형("월세수익형")을 그 훅이 실거주로 덮는다. (2) 아래
+   * 실거주 한도 게이트(`residentialProfile`·`buildComplexList` 조건)가
+   * 이 값을 읽는데, 훅이 넓은 `PurchaseType`을 돌려주므로 그 비교가
+   * 타입 수준에서 자명해지지 않는다 — 유형이 다시 늘어나도 그 게이트가
+   * 그대로 서 있다.
    */
-  const { purchaseType, setPurchaseType, restoreFailed } = usePurchaseType();
+  const purchaseType = usePurchaseType();
   /**
    * 화면 단계 — "입력"(영상 위 입력 화면, 화면 1)과 "결과"(전체화면
    * 결과, 화면 2). `EntryScreen`이 이 값을 읽어 자기 자신을 시각적으로
    * 숨긴다(언마운트하지 않는다 — 이유는 `EntryScreen`의 `phase` prop
    * 문서 참고).
    *
-   * **처음 값은 복원된 구매 유형이 정한다.** 새로 들어온 사용자는 아직
-   * 아무것도 확정하지 않았으므로 "입력"에서 시작한다 — 하지만
-   * `purchaseType`은 localStorage에서 복원되므로(usePurchaseType),
-   * 무조건 "입력"으로 시작하면 투자 유형을 저장해 둔 사람이 새로고침
-   * 했을 때 **빠져나올 수 없는 화면**이 된다(재검토 수정 Critical 1):
+   * **언제나 "입력"에서 시작한다.** 새로 들어온 사용자는 아직 아무것도
+   * 확정하지 않았고, 이제 화면 1이 담는 것(프로필 입력·지역 선택)은
+   * 유형과 무관하게 언제나 그려진다.
    *
-   * - `.entry-screen`은 불투명한 전체화면 레이어라 화면을 덮는데,
-   * - 그 안의 내용(`PurchaseTypeSelect`·`ProfileForm`·`RegionSelect`)은
-   *   전부 `purchaseType === "실거주"` 게이트라 제목과 부제만 남고,
-   * - 유형 라디오가 서 있는 결과 트리는 `phase === "입력"`이라 `inert`다.
-   *
-   * 그래서 `setPhase`를 부를 수 있는 네 자리(아래 지역 조회 성공 effect,
-   * `handleBackToEntry`, `handleOpenAssumption`, `handlePurchaseTypeChange`)
-   * 가 전부 없거나 닿지 않는 상태가 됐다 — localStorage를 지우는 것
-   * 말고 나갈 길이 없었다.
-   *
-   * **고른 해법은 "유형을 화면 1에도 항상 그리기"가 아니라 이 값의
-   * 시드다.** 그쪽은 화면 1을 "제목 + 부제 + 라디오 하나"짜리 화면으로
-   * 남기는데, 고를 수 있는 투자 유형이 월세수익형 하나뿐이라(이미
-   * 선택된 라디오는 `onChange`를 부르지 않는다) 자기 유형을 유지한 채
-   * 결과로 돌아가는 길이 여전히 없다 — 실거주를 한 번 거쳐 오는 우회로만
-   * 남는다. 시드는 그 대신 **복원 직후 상태를 "방금 그 유형을 고른
-   * 직후"와 똑같이** 만든다(`handlePurchaseTypeChange`가 투자 유형에서
-   * phase를 "결과"로 넘기는 것과 같은 규칙이다).
-   *
-   * 그 결과 이 앱의 불변식 하나가 선다: **`phase === "입력"`인 동안
-   * `purchaseType`은 항상 실거주다.** 위 네 자리 중 "입력"으로 되돌리는
-   * 셋은 전부 실거주 전용 화면에만 있고, 넷째(`handlePurchaseTypeChange`)
-   * 는 실거주를 고를 때만 "입력"을 준다. 화면 1이 자기 내용을 실거주에만
-   * 거는 지금 구조가 이 불변식 위에서만 성립한다 —
-   * `purchase-type.test.tsx`의 "저장된 투자 유형으로 새로 열기"가
-   * 그 불변식을 (jsdom이 적용하지 않는 `inert`·`display`를 직접 보며)
-   * 잠근다.
+   * 예전에는 이 값을 복원된 구매 유형이 정했다 — 투자 유형을 저장해 둔
+   * 사람이 새로고침하면 화면 1에 제목과 부제만 남고 결과 트리는
+   * `inert`라, localStorage를 지우는 것 말고 나갈 길이 없었기 때문이다
+   * (재검토 수정 Critical 1). 유형 선택이 사라지면서 그 상태에 이르는
+   * 경로 자체가 없어졌고, 저장소에 남은 옛 유형도 `usePurchaseType`이
+   * 실거주로 덮는다.
    *
    * **전환은 지역 조회 성공 하나뿐이다**(아래 effect). 지역 선택
    * 버튼을 누른 그 순간(`handleRegionSelect`)이 아니라 **조회가 실제로
@@ -102,12 +80,10 @@ export function App() {
    * 반복이 된다(`App.tsx`가 이미 겪은 그 버그 형태).
    *
    * **"조건 다시 넣기"(아래 `handleBackToEntry`)는 이 값만 되돌린다.**
-   * 프로필·지역 조회 결과·구매 유형 등 나머지 상태는 전혀 건드리지
-   * 않는다 — 화면 전환일 뿐 리셋이 아니다.
+   * 프로필·지역 조회 결과 등 나머지 상태는 전혀 건드리지 않는다 —
+   * 화면 전환일 뿐 리셋이 아니다.
    */
-  const [phase, setPhase] = useState<"입력" | "결과">(() =>
-    purchaseType === "실거주" ? "입력" : "결과",
-  );
+  const [phase, setPhase] = useState<"입력" | "결과">("입력");
   /**
    * 고른 지역의 실거래가 조회 상태. 번들에 실린 3개 구 정적 데이터
    * (`COMPLEX_UNITS`)를 대신한다 — 이 앱이 전국으로 넓어지면서 목록의
@@ -158,10 +134,9 @@ export function App() {
    * **핸들러마다 `setBudgetPanelRequested(false)`를 기억하는 방식을
    * 고르지 않았다.** 이 저장소가 여섯 번 반복한 실패가 정확히 그
    * 모양이다("결정을 한 방향으로만 적용하고 나머지 상태를 추적하지
-   * 않았다"). `phase`를 "입력"으로 되돌리는 자리는 지금 셋인데
-   * (`handleBackToEntry`·`handleOpenAssumption`·`handlePurchaseTypeChange`),
-   * 넷째가 생기는 날 그 하나만 빠뜨리면 유령 동작이 돌아온다. 파생값은
-   * 빠뜨릴 자리가 없다.
+   * 않았다"). `phase`를 "입력"으로 되돌리는 자리는 지금 둘인데
+   * (`handleBackToEntry`·`handleOpenAssumption`), 셋째가 생기는 날 그
+   * 하나만 빠뜨리면 유령 동작이 돌아온다. 파생값은 빠뜨릴 자리가 없다.
    */
   const [budgetPanelRequested, setBudgetPanelRequested] = useState(false);
   /**
@@ -714,49 +689,6 @@ export function App() {
   }
 
   /**
-   * 유형을 바꾸면 열려 있던 단지 상세를 닫는다.
-   *
-   * 상세는 실거주 예산 계산 위에서만 뜻이 있는 화면이다. 남겨 두면
-   * 갭투자로 갔다가 돌아왔을 때 예전 평형이 화면 전체의 전용면적을
-   * 계속 바꿔치기하고 있는 상태가 된다(effectiveProfile 참고).
-   */
-  function handlePurchaseTypeChange(next: PurchaseType) {
-    setPurchaseType(next);
-    /*
-     * 투자 목적 유형(갭투자·월세수익형)은 지역 조회를 거치지 않는다 —
-     * `PurchaseCheck`가 입력과 결과를 한 화면에서 즉시 보여주는
-     * 컴포넌트라, "지역 조회 성공"이라는 이 앱의 유일한 "결과로
-     * 넘어가는" 신호가 그 경로에는 아예 없다. 그 신호를 기다리기만
-     * 하면 `EntryScreen`(영상)이 영영 걷히지 않아 `PurchaseCheck`가
-     * 화면 뒤에 가려진 채로 남는다 — 그래서 여기서 직접 "결과"로
-     * 넘긴다. 반대로 실거주를 고르면 아래 규칙대로 되돌린다.
-     *
-     * (이 핸들러는 두 자리에서 불린다 — 실거주 경로의 화면 1 안에 선
-     * 라디오와, 투자 경로의 결과 화면에 선 라디오다. 그래서 "입력"
-     * 단계에서만 불린다고 전제할 수 없다.)
-     */
-    /*
-     * 리뷰 수정(Minor 6): 실거주로 돌아올 때 무조건 "입력"으로 되돌리면,
-     * 이미 성공한 지역 조회 결과가 그대로 남아 있는데도 화면이 다시
-     * 조회를 요구한다 — 데이터는 `regionComplexes`에 그대로 있고 화면
-     * 게이트만 막고 있는 상태다. 볼 것이 이미 있으면 결과로 보낸다
-     * (거기서 "조건 다시 넣기"로 언제든 화면 1로 갈 수 있다). 아직
-     * 조회한 적이 없으면(idle/loading/error) 화면 1이 맞다 — 그쪽이
-     * 조회 로딩·실패 문구를 그리는 자리다.
-     */
-    setPhase(
-      next === "실거주"
-        ? regionComplexes.status === "success"
-          ? "결과"
-          : "입력"
-        : "결과",
-    );
-    // 상세는 실거주에서 평형을 고른 동안에만 존재한다 — 유형을 바꾸면
-    // 그 화면이 사라지므로 고른 평형도 함께 비운다.
-    clearComplexSelection();
-  }
-
-  /**
    * 인쇄물의 "전용면적" 전제가 어디서 왔는지(PrintSummary가 문구 방향을
    * 가르는 데 쓴다).
    *
@@ -820,9 +752,10 @@ export function App() {
    * `disclaimer`는 `MUST_SURVIVE_PRINT_CLASSES`다. 이 `<footer>`가 어느
    * 한 화면에서라도 빠지면 그 화면에서 인쇄한 종이에서 면책이
    * 사라진다 — 종이를 건네받은 사람이 추정치를 확정 사실로 읽게 되는,
-   * 이 저장소가 가장 경계하는 종류의 사고다. 그래서 **세 자리에 그대로**
-   * 둔다(사이드바 끝 / 프로필 미완 폴백 / 투자 경로). 진단 종합을
-   * 지우면서도 이 셋은 손대지 않았다.
+   * 이 저장소가 가장 경계하는 종류의 사고다. 그래서 **두 자리에 그대로**
+   * 둔다(사이드바 끝 / 프로필 미완 폴백). 세 번째였던 투자 경로는 구매
+   * 유형 선택과 함께 사라졌다 — 그 화면 자체가 없어진 것이라 면책이
+   * 빠질 종이도 없다.
    *
    * 실거주 경로에서 이 자리는 셸(`position: fixed; inset: 0`) **안**의
    * 사이드바 끝이다. 밖에 남기면 셸 뒤에 깔려 보이지도 읽히지도 않는다
@@ -830,26 +763,16 @@ export function App() {
    * **안**에 둔다 — 경계가 터진 화면에는 면책할 추정치 자체가 없으므로
    * 안쪽에 두는 쪽의 손해가 없다.
    *
-   * 문구도 유형에 따라 갈린다. "추정치이며 실제 대출한도는 …"은 이
-   * 화면이 대출한도 추정치를 낸다는 것을 전제한 문장이다. 투자 경로에서는
-   * 바로 위에서 "이 유형의 대출 한도는 우리가 계산하지 않아요"라고 말한
-   * 뒤라, 그 문장이 그대로 남으면 어딘가에 한도 추정치가 있는 것처럼
-   * 읽힌다.
+   * 예전에는 문구가 유형에 따라 갈렸다 — 투자 경로에서는 바로 위에서
+   * "이 유형의 대출 한도는 우리가 계산하지 않아요"라고 말한 뒤라
+   * "추정치이며 실제 대출한도는 …"이 그대로 남으면 어딘가에 한도
+   * 추정치가 있는 것처럼 읽혔기 때문이다. 그 화면이 사라져 갈래도
+   * 하나로 줄었다.
    */
   const disclaimer = (
     <footer className="disclaimer">
-      {purchaseType === "실거주" ? (
-        <>
-          추정치이며 실제 대출한도는 금융기관 심사 결과에 따릅니다.
-          시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
-        </>
-      ) : (
-        <>
-          이 화면은 대출한도를 계산하지 않아요. 여기 있는 숫자는 적어 주신
-          값으로 낸 비율이에요.
-          시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
-        </>
-      )}
+      추정치이며 실제 대출한도는 금융기관 심사 결과에 따릅니다.
+      시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
     </footer>
   );
 
@@ -858,10 +781,10 @@ export function App() {
       {/*
         화면 1 — 영상 위 입력 화면. `EntryScreen`은 `phase`가 "결과"가
         되면 이 전체를 시각적으로 숨긴다(언마운트는 하지 않는다 —
-        `EntryScreen`의 doc comment 참고). 서비스 제목·부제·구매 유형·
-        프로필 입력·지역 선택까지, "입력"이라는 이름이 뜻하는 모든 것을
+        `EntryScreen`의 doc comment 참고). 서비스 제목·부제·프로필
+        입력·지역 선택까지, "입력"이라는 이름이 뜻하는 모든 것을
         여기 한 번에 담는다 — 아래 `ErrorBoundary` 안쪽(화면 2에 해당하는
-        내용)에는 더 이상 이 세 컴포넌트가 나오지 않는다.
+        내용)에는 더 이상 이 컴포넌트들이 나오지 않는다.
       */}
       <EntryScreen phase={phase}>
         {/*
@@ -889,15 +812,11 @@ export function App() {
             적 없는 것을 말하는 것은 마찬가지다.
           */}
           {/*
-            어느 룰셋 기준인지는 유형에 따라 다르다. `rules/2026-08.json`의
-            LTV·DSR·절대상한은 실거주 매수를 전제한 값이고, 투자 경로는 바로
-            그 기준으로 한도를 계산하지 않는다고 말한다 — 그 화면 위에
-            "2026년 8월 규제 기준"이 남아 있으면 종이에서 뜻이 어긋난다.
-            투자 경로에서는 이 화면이 실제로 쓴 구매 유형 룰셋을 적는다.
+            어느 룰셋 기준으로 계산했는지. `rules/2026-08.json`의
+            LTV·DSR·절대상한은 실거주 매수를 전제한 값이고, 이 앱은
+            실거주 전용이 됐으므로 적을 기준도 하나다.
           */}
-          {purchaseType === "실거주"
-            ? formatRuleVersionLabel(rules)
-            : `구매 유형 기준 ${purchaseRules.version}`}
+          {formatRuleVersionLabel(rules)}
           <span className="subtitle-privacy-note">
             {" "}
             · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는
@@ -906,95 +825,61 @@ export function App() {
         </p>
 
         {/*
-          리뷰 수정(Important 3): 유형 선택을 **실거주에서만** 여기 둔다.
-
-          투자 경로(월세수익형·갭투자)에서는 이 라디오가 아래 결과 화면,
-          자기 입력(`PurchaseCheck`) 바로 위에 선다. 투자 경로는
-          `handlePurchaseTypeChange`가 유형을 고르는 순간 phase를 "결과"로
-          넘기는데, 그 순간 이 화면(`.entry-screen`)은 `display: none`이
-          된다 — 유형 선택이 여기에만 있으면 투자 결과 화면에서는 유형을
-          **바꿀 방법이 아예 없었다.** 그래서 "조건 다시 넣기"가 유일한
-          탈출구였고, 그 버튼이 데려오는 이 화면에는 (실거주가 아니므로
-          `ProfileForm`·`RegionSelect`도 없이) 유형 라디오 하나만 남아
-          막다른 길이 됐다. 게다가 고를 수 있는 투자 유형은 월세수익형
-          하나뿐이라(`SELECTABLE_PURCHASE_TYPES`), 이미 선택된 라디오를
-          다시 눌러도 `onChange`가 불리지 않아 결과로 돌아갈 수도 없었다 —
-          유일한 실질 선택지인 실거주는 `PurchaseCheck`를 언마운트하며
-          `usePurchaseCheck`의 입력값을 지운다("돌아가도 입력값은
-          남는다"는 제약 위반).
-
-          유형 선택이 결과 화면에 함께 서면 그 막다른 길이 사라진다 —
-          그리고 그 화면의 "조건 다시 넣기"는 되돌릴 조건이 없는 채로
-          남으므로 아래 투자 분기에서 뺐다.
+          프로필 입력·지역 선택. 예전에는 실거주에서만 그렸다 —
+          갭투자·월세수익형에서는 `PurchaseCheck`가 자기 입력을 따로
+          받았기 때문이다. 유형 선택이 사라지면서 이 앱은 실거주
+          전용이 됐고, 이 화면은 언제나 그려진다.
         */}
-        {purchaseType === "실거주" && (
-          <PurchaseTypeSelect
-            rules={purchaseRules}
-            value={purchaseType}
-            onChange={handlePurchaseTypeChange}
-            restoreFailed={restoreFailed}
-          />
-        )}
+        <ProfileForm
+          state={state}
+          setField={setField}
+          openField={openField}
+          areaOverridden={selectedUnit !== null}
+        />
 
         {/*
-          프로필 입력·지역 선택은 실거주에서만 뜻이 있다 — 갭투자·월세
-          수익형은 `PurchaseCheck`가 자기 입력을 따로 받는다(아래
-          `ErrorBoundary` 안, App.tsx 하단 주석 참고).
+          프로필이 아직 안 끝났으면(주택 수 미답 포함) 지역 선택을
+          보여주지 않는다 — 예산을 모르는 채로 지역부터 확정하게
+          두지 않는다. 대신 무엇이 모자란지를 바로 아래 else 가지가
+          같은 조건에서 말한다(리뷰 수정 Important 5).
         */}
-        {purchaseType === "실거주" && (
+        {affordability === null || residentialProfile === null ? (
+          /*
+            리뷰 수정(Important 5): 무엇이 비어서 조회 버튼이 안
+            나오는지 이 화면에서 말한다.
+
+            예전에는 이 문구가 결과 트리 쪽(아래 `ErrorBoundary` 안)
+            에만 있었다. 그런데 그 조건(`affordability === null ||
+            residentialProfile === null`)은 실거주 경로에서 사실상
+            `phase === "입력"`을 뜻하고, 그 동안 결과 트리는 이
+            불투명한 오버레이 **밑에** 깔려 있다 — 존재 이유인 모든
+            상태에서 100% 보이지 않는 문구였다. 현금·소득만 넣고
+            주택 수를 답하지 않은 사람은 "이 지역으로 조회하기"가
+            그냥 나타나지 않는 것을 보고, 화면 어디에서도 무엇이
+            모자란지 듣지 못했다.
+
+            `App.tsx`가 여섯 번 반복한 버그 형태(어떤 상태가 자기
+            원인을 말하지 않는 것)의 뒤집힌 판이다 — 문구는 있었지만
+            사용자가 아니라 테스트 하네스만 볼 수 있는 자리에 있었다.
+          */
+          <p className="prompt">
+            현금·연소득·주택 수를 알려주면 살 수 있는 가격을 계산해요.
+          </p>
+        ) : (
           <>
-            <ProfileForm
-              state={state}
-              setField={setField}
-              openField={openField}
-              areaOverridden={selectedUnit !== null}
-            />
+            <RegionSelect onSelect={handleRegionSelect} />
 
-            {/*
-              프로필이 아직 안 끝났으면(주택 수 미답 포함) 지역 선택을
-              보여주지 않는다 — 예산을 모르는 채로 지역부터 확정하게
-              두지 않는다. 대신 무엇이 모자란지를 바로 아래 else 가지가
-              같은 조건에서 말한다(리뷰 수정 Important 5).
-            */}
-            {affordability === null || residentialProfile === null ? (
-              /*
-                리뷰 수정(Important 5): 무엇이 비어서 조회 버튼이 안
-                나오는지 이 화면에서 말한다.
+            {regionComplexes.status === "loading" && (
+              <p>지역 실거래가를 조회하고 있어요…</p>
+            )}
 
-                예전에는 이 문구가 결과 트리 쪽(아래 `ErrorBoundary` 안)
-                에만 있었다. 그런데 그 조건(`affordability === null ||
-                residentialProfile === null`)은 실거주 경로에서 사실상
-                `phase === "입력"`을 뜻하고, 그 동안 결과 트리는 이
-                불투명한 오버레이 **밑에** 깔려 있다 — 존재 이유인 모든
-                상태에서 100% 보이지 않는 문구였다. 현금·소득만 넣고
-                주택 수를 답하지 않은 사람은 "이 지역으로 조회하기"가
-                그냥 나타나지 않는 것을 보고, 화면 어디에서도 무엇이
-                모자란지 듣지 못했다.
-
-                `App.tsx`가 여섯 번 반복한 버그 형태(어떤 상태가 자기
-                원인을 말하지 않는 것)의 뒤집힌 판이다 — 문구는 있었지만
-                사용자가 아니라 테스트 하네스만 볼 수 있는 자리에 있었다.
-              */
-              <p className="prompt">
-                현금·연소득·주택 수를 알려주면 살 수 있는 가격을 계산해요.
-              </p>
-            ) : (
-              <>
-                <RegionSelect onSelect={handleRegionSelect} />
-
-                {regionComplexes.status === "loading" && (
-                  <p>지역 실거래가를 조회하고 있어요…</p>
-                )}
-
-                {regionComplexes.status === "error" && (
-                  <div className="region-query-error">
-                    <p>지금 실거래가를 불러오지 못했어요.</p>
-                    <button type="button" onClick={regionComplexes.retry}>
-                      다시 시도
-                    </button>
-                  </div>
-                )}
-              </>
+            {regionComplexes.status === "error" && (
+              <div className="region-query-error">
+                <p>지금 실거래가를 불러오지 못했어요.</p>
+                <button type="button" onClick={regionComplexes.retry}>
+                  다시 시도
+                </button>
+              </div>
             )}
           </>
         )}
@@ -1009,7 +894,8 @@ export function App() {
         안 된다")는 정확한데, 그 논리가 한 방향으로만 적용돼 있었다.
         `phase === "입력"`일 때 이 결과 트리는 **여전히 전부 렌더링된
         채로** 불투명한 `z-index: 40` 오버레이 **밑에** 깔려 있다 —
-        가격 슬라이더·단지 행·"더 보기"·가정 칩·상세 닫기 버튼까지. 키보드 사용자는 보이지 않는 컨트롤로 탭이 빨려 들어가고,
+        가격 슬라이더·단지 행·"더 보기"·가정 칩·상세 닫기 버튼까지.
+        키보드 사용자는 보이지 않는 컨트롤로 탭이 빨려 들어가고,
         스크린 리더는 화면에 없는 결과 페이지를 읽는다.
 
         `inert` 하나로 **포커스와 접근성 트리 노출을 동시에** 끊는다
@@ -1023,15 +909,17 @@ export function App() {
       <div className="results-screen" inert={phase === "입력"}>
         {/*
           화면에서는 숨고 인쇄에서만 나오는 한 줄(styles.css의
-          `.purchase-type-print`). 예전에는 `PurchaseTypeSelect` 안에
-          있었는데, 그 컴포넌트가 실거주 경로에서 `EntryScreen` 안에 놓이고
-          그 레이어는 인쇄에서 통째로 지워지므로(hiddenInPrint.ts의
-          `.entry-screen`) 보호 대상 클래스(`purchase-type-print`,
-          MUST_SURVIVE_PRINT_CLASSES)가 조상과 함께 사라졌다 —
-          `printCss.test.ts`는 선택자 문자열만 보므로 그 형태는 잡지 못한다.
-          그래서 이 레이어 밖에서 그린다. 이 종이가 어떤 구매 유형을
-          전제하는지 말하는 줄이라, 없으면 종이를 건네받은 사람은 아래
-          숫자들이 무엇 위에 서 있는지 알 수 없다.
+          `.purchase-type-print`). 예전에는 유형 라디오 안에 있었는데, 그
+          라디오가 `EntryScreen` 안에 놓이고 그 레이어는 인쇄에서 통째로
+          지워지므로(hiddenInPrint.ts의 `.entry-screen`) 보호 대상
+          클래스(`purchase-type-print`, MUST_SURVIVE_PRINT_CLASSES)가
+          조상과 함께 사라졌다 — `printCss.test.ts`는 선택자 문자열만
+          보므로 그 형태는 잡지 못한다. 그래서 이 레이어 밖에서 그린다.
+
+          **라디오가 사라진 뒤에도 이 줄은 남긴다.** 고를 수 없게 됐다고
+          전제가 사라진 것이 아니다 — 아래 숫자들은 전부 "내가 들어가
+          사는 집"을 전제로 계산됐고, 종이에 그 사실을 적는 자리가
+          여기뿐이다(hiddenInPrint.ts의 `purchase-type-print` 주석).
         */}
         <p className="purchase-type-print">
           구매 유형 — {purchaseRules.types[purchaseType].label}
@@ -1039,667 +927,640 @@ export function App() {
 
         <ErrorBoundary onReset={reset}>
           {/*
-            유형을 고르면 그 유형에 맞는 화면만 나온다.
+            실거주 예산 계산. 예전에는 이 자리가 구매 유형에 따라
+            갈렸고, 갭투자·월세수익형에서는 통째로 유형별 지표
+            (`PurchaseCheck`)로 바뀌었다. 유형 선택이 사용자 지시로
+            제거되면서 그 분기도 함께 사라졌다 — 이 앱은 실거주
+            전용이다.
 
-            실거주에서는 지금까지와 **똑같은** 예산 계산이 그대로 나오고,
-            갭투자·월세 수익형에서는 그 자리가 통째로 유형별 지표로 바뀐다.
-            두 화면을 나란히 두지 않는 이유는 화면 정리가 아니라 계산이다 —
-            실거주 예산 계산은 실거주 대출 한도 위에 서 있어서, 투자 목적
-            매수 옆에 두면 그 한도를 이 매수에 쓸 수 있는 것처럼 읽힌다.
-            `residentialProfile`이 그 계산 자체를 막고, 이 분기가 화면을
-            막는다.
+            **`PurchaseCheck`·`PurchaseVerdict`·`PurchasePrintSummary`와
+            그 아래 엔진(`src/lib/purchase`)은 지우지 않고 그대로 뒀다.**
+            사용자가 오피스텔·수익형을 나중에 다시 붙일 계획을 말했고,
+            그때 되살릴 것이 화면 분기 하나로 남는 편이 낫다. 지금은
+            App 어디에서도 렌더되지 않는 도달 불가능한 코드다.
+
+            `residentialProfile`이 실거주가 아닐 때 계산 자체를 막는
+            게이트는 **그대로 남긴다** — 유형이 다시 늘어나는 날
+            실거주 대출 한도가 투자 목적 매수로 새어 나가지 않게 하는
+            자리이고, `scripts/purchase-structure.test.ts`가 그 배선을
+            소스에서 잠근다.
           */}
-          {purchaseType === "실거주" ? (
-            <>
-            {/*
-              주택 수도 필수 답이 됐다 — 미입력을 무주택으로 대신 채우면
-              정책대출 자격이 넓어져 한도가 커지는데, 그건 사용자가 확인한
-              적 없는 값으로 낙관적인 답을 내는 것이다(useProfileForm.ts의
-              `ownedHomeCount` 주석 참고). 그래서 `toProfile`이 null이면
-              이 트리는 아무 숫자도 그리지 않는다. **무엇이 모자란지를
-              말하는 안내는 화면 1(`EntryScreen`) 쪽에 있다** — 이 조건이
-              참인 동안 이 트리는 그 불투명한 오버레이 밑에 깔려 있어,
-              여기 적으면 아무도 읽을 수 없다(리뷰 수정 Important 5).
+          {/*
+            주택 수도 필수 답이 됐다 — 미입력을 무주택으로 대신 채우면
+            정책대출 자격이 넓어져 한도가 커지는데, 그건 사용자가 확인한
+            적 없는 값으로 낙관적인 답을 내는 것이다(useProfileForm.ts의
+            `ownedHomeCount` 주석 참고). 그래서 `toProfile`이 null이면
+            이 트리는 아무 숫자도 그리지 않는다. **무엇이 모자란지를
+            말하는 안내는 화면 1(`EntryScreen`) 쪽에 있다** — 이 조건이
+            참인 동안 이 트리는 그 불투명한 오버레이 밑에 깔려 있어,
+            여기 적으면 아무도 읽을 수 없다(리뷰 수정 Important 5).
 
-              `residentialProfile`을 함께 보는 이유는 타입 좁히기다 —
-              아래에서 이 프로필로 취득세 고지를 골라야 하는데, 두 값이
-              같은 조건에서 생기고 사라지므로 조건도 함께 둔다.
-            */}
-            {affordability !== null && residentialProfile !== null ? (
+            `residentialProfile`을 함께 보는 이유는 타입 좁히기다 —
+            아래에서 이 프로필로 취득세 고지를 골라야 하는데, 두 값이
+            같은 조건에서 생기고 사라지므로 조건도 함께 둔다.
+          */}
+          {affordability !== null && residentialProfile !== null ? (
+            /*
+              화면 2 — 전체화면 셸(design.md §4). 상단바 + 사이드바 +
+              지도. 안에 담기는 것은 지금까지와 **같은 컴포넌트들이고
+              조건도 그대로**다 — 바뀐 것은 어디에 그리는가뿐이다.
+            */
+            <ResultShell
               /*
-                화면 2 — 전체화면 셸(design.md §4). 상단바 + 사이드바 +
-                지도. 안에 담기는 것은 지금까지와 **같은 컴포넌트들이고
-                조건도 그대로**다 — 바뀐 것은 어디에 그리는가뿐이다.
+                패널이 사이드바 열을 완전히 덮는 동안 그 열을 `inert`로
+                잠근다(ResultShell의 `panelOpen` 문서 참고). `open`과
+                **같은 파생값**을 넘긴다 — 따로 계산하면 언젠가 둘이
+                어긋나 "보이지 않는데 조작되는" 상태가 돌아온다.
               */
-              <ResultShell
-                /*
-                  패널이 사이드바 열을 완전히 덮는 동안 그 열을 `inert`로
-                  잠근다(ResultShell의 `panelOpen` 문서 참고). `open`과
-                  **같은 파생값**을 넘긴다 — 따로 계산하면 언젠가 둘이
-                  어긋나 "보이지 않는데 조작되는" 상태가 돌아온다.
-                */
-                panelOpen={budgetPanelOpen}
-                summary={
-                  <>
-                    {state.cash !== null && (
-                      <ResultSummaryItem
-                        label="사용가능 현금 예산"
-                        value={formatWon(state.cash)}
-                      />
-                    )}
-                    {state.annualIncome !== null && (
-                      <ResultSummaryItem
-                        label="연 소득(세전)"
-                        value={formatWon(state.annualIncome)}
-                      />
-                    )}
-                    {/*
-                      라벨은 `BudgetResult`의 제목("실구매 가능 가격")을
-                      그대로 쓴다. design.md §4의 그림은 이 자리를 "한도"라
-                      부르지만, 이 숫자는 대출 한도가 아니라 부대비용까지
-                      뺀 매매가다 — 화면의 다른 자리와 다른 이름으로
-                      부르면 종이와 화면이 같은 숫자를 두고 두 말을 한다.
-                    */}
-                    {/*
-                      **0원이면 숫자를 내지 않는다**(리뷰 수정 Important 1).
-
-                      `affordability`는 프로필만 완성되면 `null`이 아니라,
-                      DSR이 0이거나 현금이 고정 부대비용에도 못 미치는
-                      사람도 이 셸에 도달한다. 그때 이 자리는 화면에서
-                      가장 큰 글씨이자 종이의 첫 줄인데, 예전에는 거기에
-                      황동으로 "실구매 가능 가격 / 0원"만 찍혔다 — 이
-                      저장소가 `no-budget`을 `MUST_SURVIVE_PRINT_CLASSES`에
-                      넣어 둔 바로 그 이유(맨숫자 0은 답의 모양을 한
-                      거짓말이다)에 정면으로 어긋난다.
-
-                      그래서 다른 모든 자리와 같은 규칙을 따른다: 숫자를
-                      숨기고 원인을 말한다. 문구는 사이드바의
-                      `ZeroBudgetMessage`가 쓰는 것과 **같은 상수**다
-                      (`ZERO_BUDGET_HEADLINE`) — 여기서 새로 짓지 않는다.
-                    */}
-                    {/*
-                      **이 칸이 예산 상세 패널의 트리거다**(Task 5,
-                      design.md §5). 스펙의 그림은 이 자리를 "한도"라
-                      부르지만 여기 이름은 "실구매 가능 가격"이다(위
-                      라벨 주석) — 누르는 자리를 옮긴 것이지 새 항목을
-                      만든 것이 아니다.
-
-                      **0원일 때도 버튼이다.** 그때가 사용자가 "왜
-                      0원인가"를 가장 알고 싶은 순간이고, 그 답
-                      (`ZeroBudgetMessage`·`BindingExplainer`·
-                      `AssumptionLine`)이 전부 이 패널 안에 있다. 0원일
-                      때만 죽은 버튼으로 두면 Task 3이 리뷰에서 잡힌
-                      실패(누르라고 적어 놓고 아무 일도 안 하던 가정
-                      칩)를 그대로 재현한다.
-                    */}
-                    {affordability.result.affordablePrice > 0 ? (
-                      <ResultSummaryItem
-                        label="실구매 가능 가격"
-                        value={formatWon(affordability.result.affordablePrice)}
-                        emphasis
-                        onToggle={() => setBudgetPanelRequested((v) => !v)}
-                        expanded={budgetPanelOpen}
-                        controls={BUDGET_PANEL_ID}
-                        buttonRef={budgetTriggerRef}
-                      />
-                    ) : (
-                      <ResultSummaryItem
-                        label="실구매 가능 가격"
-                        value={ZERO_BUDGET_HEADLINE}
-                        notice
-                        onToggle={() => setBudgetPanelRequested((v) => !v)}
-                        expanded={budgetPanelOpen}
-                        controls={BUDGET_PANEL_ID}
-                        buttonRef={budgetTriggerRef}
-                      />
-                    )}
-                    {/*
-                      지역 이름은 코드가 아니라 이름으로 적는다(위
-                      `currentRegionName` 주석 참고).
-                    */}
-                    {currentRegionName !== null && (
-                      <ResultSummaryItem label="지역" value={currentRegionName} />
-                    )}
-                  </>
-                }
-                actions={
-                  <>
-                    {/*
-                      인쇄 버튼은 사용자 지시로 없앴다. 인쇄 자체는 그대로
-                      살아 있다 — 브라우저의 Cmd+P가 그대로 `@media print`
-                      규칙을 타므로, 없앤 것은 버튼 하나뿐이다.
-                    */}
-                    {/*
-                      화면 1(영상 위 입력)로 돌아간다. 프로필·지역 조회 결과는
-                      그대로 남는다(handleBackToEntry 문서 참고) — 이 버튼은
-                      화면 전환일 뿐 리셋이 아니다.
-
-                      `phase === "결과"`일 때만 보인다 — 프로필은 채웠지만 아직
-                      지역을 조회하지 않았을 때(phase가 여전히 "입력")는 이미
-                      `EntryScreen`이 화면을 덮고 있어 이 버튼이 뜻이 없다.
-                    */}
-                    {phase === "결과" && (
-                      <button
-                        type="button"
-                        className="back-to-entry-button"
-                        onClick={handleBackToEntry}
-                      >
-                        조건 다시 넣기
-                      </button>
-                    )}
-                  </>
-                }
-                map={
-                  /*
-                    지도 칸의 내용. 칸(`.region-results-map`) 자체는
-                    `ResultShell`이 만든다 — 조건부 렌더링은 예전 그대로다.
-                  */
-                  <>
+              panelOpen={budgetPanelOpen}
+              summary={
+                <>
+                  {state.cash !== null && (
+                    <ResultSummaryItem
+                      label="사용가능 현금 예산"
+                      value={formatWon(state.cash)}
+                    />
+                  )}
+                  {state.annualIncome !== null && (
+                    <ResultSummaryItem
+                      label="연 소득(세전)"
+                      value={formatWon(state.annualIncome)}
+                    />
+                  )}
                   {/*
-                    이 안쪽 조건의 `status === "success"`는 바깥
-                    `region-results-grid` 조건이 이미 보장한다 — 이
-                    블록에 들어왔다는 것 자체가 참이라는 뜻이라
-                    여기서는 redundant하다. 그래도 diff 리뷰에서
-                    "왜 지워졌는지"를 되짚게 만들지 않으려 그대로
-                    남긴다. 실제로 걸러내는 건 `complexList !== null`과
-                    아래 `hasMappedUnits` 분기다.
-
-                    예전에 있던 `!dongFilteredEmpty`는 뺐다 — 동으로
-                    좁혀 0건이면 `mappedUnits`도 반드시 0이라 아래
-                    분기가 이미 같은 경우를 잡는다. 두 조건을 함께
-                    두면 "동 때문에 0건"일 때만 지도 칸이 통째로
-                    비고(아무 문구도 없이), "예산 때문에 0건"일 때는
-                    문구가 뜨는, 같은 사실을 두 가지로 보여주는
-                    어긋남이 생긴다.
+                    라벨은 `BudgetResult`의 제목("실구매 가능 가격")을
+                    그대로 쓴다. design.md §4의 그림은 이 자리를 "한도"라
+                    부르지만, 이 숫자는 대출 한도가 아니라 부대비용까지
+                    뺀 매매가다 — 화면의 다른 자리와 다른 이름으로
+                    부르면 종이와 화면이 같은 숫자를 두고 두 말을 한다.
                   */}
-                  {regionComplexes.status === "success" &&
-                    complexList !== null &&
-                    !hasMappedUnits && (
-                      /*
-                        지도에 그릴 단지가 없다. **원인을 여기서
-                        단정하지 않는다** — 원인은 왼쪽(모바일에선
-                        아래) 목록 칸이 이미 자기 문구로 말한다:
-                        동으로 좁혀서면 `.dong-empty`, 예산 때문이면
-                        `ComplexList`의 예산/상환능력 문구. 여기서
-                        "예산이 부족해요"라고 적으면 동 때문에 빈
-                        경우에 틀린 원인을 말하게 되고, 그건 이
-                        화면이 이미 한 번 겪은 오귀속이다.
+                  {/*
+                    **0원이면 숫자를 내지 않는다**(리뷰 수정 Important 1).
 
-                        그래서 이 문구는 지도 칸이 아는 사실 하나만
-                        말한다: 그릴 것이 없다. "지도를 표시하지
-                        못했어요"(SDK 실패)·"단지 위치를 불러오지
-                        못했어요"(좌표 조회 실패)와 절대 같은 말을
-                        쓰지 않는다 — 여기는 아무것도 실패하지
-                        않았다.
-                      */
-                      <p className="complex-map-empty">
-                        조건에 맞는 단지가 없어 지도에 표시할 단지가
-                        없어요.
-                      </p>
-                    )}
-                  {regionComplexes.status === "success" &&
-                    complexList !== null &&
-                    hasMappedUnits && (
-                      <>
-                        {/*
-                          좌표 조회(complexCoordinates)는 목록 조회와 별개로
-                          도는 상태 기계다 — idle/loading/error/success를
-                          그대로 구분해 보여준다. "조회 실패"와 "조회했더니
-                          단지가 하나도 없더라"를 같은 빈 지도로 보여주면,
-                          이 앱이 가장 경계하는 오류(모르는 것과 확인한
-                          것을 같은 문구로 보여주는 것)를 지도에서도
-                          반복하게 된다.
+                    `affordability`는 프로필만 완성되면 `null`이 아니라,
+                    DSR이 0이거나 현금이 고정 부대비용에도 못 미치는
+                    사람도 이 셸에 도달한다. 그때 이 자리는 화면에서
+                    가장 큰 글씨이자 종이의 첫 줄인데, 예전에는 거기에
+                    황동으로 "실구매 가능 가격 / 0원"만 찍혔다 — 이
+                    저장소가 `no-budget`을 `MUST_SURVIVE_PRINT_CLASSES`에
+                    넣어 둔 바로 그 이유(맨숫자 0은 답의 모양을 한
+                    거짓말이다)에 정면으로 어긋난다.
 
-                          idle은 이 렌더 경로에선 사실상 스치는 순간뿐이다
-                          — 위 useEffect가 regionComplexes.status가
-                          "success"로 바뀌자마자(바로 이 조건 블록이
-                          그려지는 시점과 같은 렌더) query()를 호출해
-                          "loading"으로 넘어간다. 그래도 그 찰나에 아무것도
-                          안 그리면 화면이 깜빡이므로 로딩과 같은 문구를
-                          보여준다.
-                        */}
-                        {/*
-                          로딩·실패 문구를 `.complex-map-status`로 함께
-                          감싼다 — 인쇄에서는 아래 지도 자신
-                          (`.complex-map`)이 지워지므로, 이 문구들을 종이에
-                          남기면 근거를 잃은 "불러오고 있어요…"나 눌러도
-                          반응 없는 "다시 시도" 버튼만 남는 고아 문구가
-                          된다(src/print/hiddenInPrint.ts 참고).
-                        */}
-                        {(complexCoordinates.status === "idle" ||
-                          complexCoordinates.status === "loading" ||
-                          complexCoordinates.status === "error") && (
-                          <div className="complex-map-status">
-                            {(complexCoordinates.status === "idle" ||
-                              complexCoordinates.status === "loading") && (
-                              <p>지도를 불러오고 있어요…</p>
-                            )}
+                    그래서 다른 모든 자리와 같은 규칙을 따른다: 숫자를
+                    숨기고 원인을 말한다. 문구는 사이드바의
+                    `ZeroBudgetMessage`가 쓰는 것과 **같은 상수**다
+                    (`ZERO_BUDGET_HEADLINE`) — 여기서 새로 짓지 않는다.
+                  */}
+                  {/*
+                    **이 칸이 예산 상세 패널의 트리거다**(Task 5,
+                    design.md §5). 스펙의 그림은 이 자리를 "한도"라
+                    부르지만 여기 이름은 "실구매 가능 가격"이다(위
+                    라벨 주석) — 누르는 자리를 옮긴 것이지 새 항목을
+                    만든 것이 아니다.
 
-                            {complexCoordinates.status === "error" && (
-                              <div className="region-query-error">
-                                {/*
-                                  세 실패 문구는 원인이 다르므로 서로 다르게
-                                  말한다: 목록 조회 실패("지금 실거래가를…"),
-                                  좌표 조회 실패(여기), 네이버지도 SDK 로드
-                                  실패("지도를 표시하지 못했어요" —
-                                  ComplexMap.tsx). 같은 문구로 뭉치면 사용자도
-                                  테스트도 무엇이 실패했는지 구분하지 못한다.
-                                */}
-                                <p>단지 위치를 불러오지 못했어요.</p>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (currentRegionCode !== null) {
-                                      complexCoordinates.query(currentRegionCode, null);
-                                    }
-                                  }}
-                                >
-                                  다시 시도
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
-
-                        {complexCoordinates.status === "success" && (
-                          <>
-                            <ComplexMap
-                              /*
-                                목록과 **정확히 같은 집합**을 넘긴다
-                                (`mappedUnits` 정의의 주석 참고).
-                                `dongFilteredUnits`(예산 필터 전)를
-                                넘기면 두 창이 다른 단지를 말한다.
-                              */
-                              units={mappedUnits}
-                              coordinates={complexCoordinates.coordinates}
-                              /*
-                                마커 색이 뜻하는 부담 수준. 목록 항목에서
-                                뽑아 온 값을 그대로 넘긴다 — 지도가 자기
-                                계산을 새로 하지 않게 하는 자리다
-                                (`burdenByUnit` 정의의 주석 참고).
-                              */
-                              burdenByUnit={burdenByUnit}
-                              /*
-                                선택은 App이 한 벌만 든다 — 목록 행 표시와
-                                이 마커 강조가 같은 값을 본다.
-                              */
-                              focusedComplexKey={focusedComplexKey}
-                              onFocusComplex={handleFocusComplex}
-                              naverMapClientId={
-                                import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
-                              }
-                            />
-                            {/*
-                              지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
-                              오류) — 주소가 진짜로 없어서가 아니다
-                              (api/_lib/handleGeocode.ts의 partialFailureCount
-                              참고). 새 로딩/에러/성공 3분기를 또 만들지
-                              않고, 이미 뜬 지도 옆에 한 줄만 덧붙인다 —
-                              성공적으로 찾은 단지는 그대로 지도에 남아
-                              있으니 "지도가 비어 있다"와 다르게 말해야
-                              한다.
-
-                              리뷰 수정(Minor 4): 위 조건만으로는 ComplexMap이
-                              이미 "주소로는 위치를 찾을 수 없었어요"(noneLocated)를
-                              보여주고 있을 때도 이 줄이 함께 뜰 수 있었다 —
-                              "**일부** 단지의 위치를…"이 안엔 "하나도"라고
-                              말하는 문구와 부딪힌다. `groupWithCoords`로
-                              ComplexMap 내부와 같은 계산(좌표를 아는 단지가
-                              하나라도 있는가)을 여기서도 돌려, 하나도 없을
-                              땐 이 줄을 접는다 — 있을 땐 그대로 뜬다.
-                            */}
-                            {complexCoordinates.hasPartialFailures &&
-                              groupWithCoords(mappedUnits, complexCoordinates.coordinates)
-                                .length > 0 && (
-                                <p className="complex-map-caveat">
-                                  일부 단지의 위치를 확인하지 못했어요. 지도에
-                                  안 보이는 단지가 있을 수 있어요.
-                                </p>
-                              )}
-                          </>
-                        )}
-                      </>
-                    )}
-                  </>
-                }
-                panel={
-                  /*
-                    예산 상세 패널(design.md §5, Task 5). Task 4까지
-                    사이드바 맨 위에 세로로 쌓여 있던 예산 블록이 통째로
-                    여기로 옮겨 왔다 — **컴포넌트도 prop도 조건도 그대로**
-                    이고 자리만 바뀌었다.
-
-                    닫혀 있어도 언마운트하지 않는다. 이 안에는 보호 대상
-                    클래스가 열 개 들어 있고, 패널의 기본 상태는 닫힘이며,
-                    Cmd+P는 어느 단계에서든 눌린다(BudgetPanel.tsx 참고).
-                  */
-                  <BudgetPanel
-                    open={budgetPanelOpen}
-                    onClose={() => setBudgetPanelRequested(false)}
-                    returnFocusRef={budgetTriggerRef}
-                  >
-                    {/*
-                      화면에서는 숨고 인쇄에서만 나온다(styles.css의
-                      .print-summary). 지금 화면 그대로 인쇄되는 이 리포트가
-                      배우자·부모님처럼 화면을 보지 않은 사람에게 건네지므로,
-                      계산의 전제(사용가능 현금 예산·연 소득·생애최초 여부·
-                      기존 대출·규제지역 여부·전용면적)와 룰셋 기준·인쇄일을
-                      종이에도 남긴다.
-
-                      사이드바가 아니라 **이 패널 안**에 둔다. 화면에서는
-                      어차피 `display: none`이라 어디 있든 같고, 종이에서는
-                      이 순서가 곧 지면 순서다 — 전제(이 요약) → 가정 →
-                      예산 → 목록/상세 → 면책이라는 Task 4까지의 지면
-                      순서를 그대로 유지한다.
-                    */}
-                    <PrintSummary
-                      state={state}
-                      effectiveAreaSqm={effectiveAreaSqm}
-                      areaSource={areaSource}
-                      rules={rules}
+                    **0원일 때도 버튼이다.** 그때가 사용자가 "왜
+                    0원인가"를 가장 알고 싶은 순간이고, 그 답
+                    (`ZeroBudgetMessage`·`BindingExplainer`·
+                    `AssumptionLine`)이 전부 이 패널 안에 있다. 0원일
+                    때만 죽은 버튼으로 두면 Task 3이 리뷰에서 잡힌
+                    실패(누르라고 적어 놓고 아무 일도 안 하던 가정
+                    칩)를 그대로 재현한다.
+                  */}
+                  {affordability.result.affordablePrice > 0 ? (
+                    <ResultSummaryItem
+                      label="실구매 가능 가격"
+                      value={formatWon(affordability.result.affordablePrice)}
+                      emphasis
+                      onToggle={() => setBudgetPanelRequested((v) => !v)}
+                      expanded={budgetPanelOpen}
+                      controls={BUDGET_PANEL_ID}
+                      buttonRef={budgetTriggerRef}
                     />
-                    <AssumptionLine
-                      state={state}
-                      onOpen={handleOpenAssumption}
-                      areaOverridden={selectedUnit !== null}
+                  ) : (
+                    <ResultSummaryItem
+                      label="실구매 가능 가격"
+                      value={ZERO_BUDGET_HEADLINE}
+                      notice
+                      onToggle={() => setBudgetPanelRequested((v) => !v)}
+                      expanded={budgetPanelOpen}
+                      controls={BUDGET_PANEL_ID}
+                      buttonRef={budgetTriggerRef}
                     />
-                    <BudgetResult
-                      result={affordability.result}
-                      safePrice={affordability.safePrice}
-                      householdCountNote={householdCountNoteFor(
-                        residentialProfile,
-                        rules,
-                      )}
-                    />
-                    {affordability.result.affordablePrice > 0 && (
-                      <>
-                        <PriceSlider
-                          price={affordability.price}
-                          max={affordability.result.affordablePrice}
-                          safePrice={affordability.safePrice}
-                          onChange={affordability.setPrice}
-                        />
-                        <SafetyBadge
-                          safety={affordability.safety}
-                          // 상세가 열려 있을 때만 라벨을 붙인다. 그때만 화면에
-                          // 배지가 둘(여기 + ComplexDetail 안)이고, 마크업이
-                          // 같아서 어느 쪽이 "이 집을 사면"의 답인지 알 수 없다 —
-                          // 하필 더 낙관적인 쪽이 매물 옆에 붙는다. 목록 화면에서는
-                          // 배지가 하나뿐이라 라벨이 잡음이 된다.
-                          //
-                          // 패널로 옮긴 뒤에도 조건은 그대로다: 화면에서는
-                          // 패널을 열어야 둘이 함께 보이고, **종이에서는
-                          // 언제나 둘이 함께 나온다**(패널은 닫혀 있어도
-                          // 인쇄된다) — 라벨이 필요한 쪽은 후자다.
-                          label={
-                            selectedUnit !== null
-                              ? "위 가격에서 최대로 빌렸을 때예요"
-                              : undefined
-                          }
-                          // 평형을 고른 동안에는 이 배지도 그 평형을 전제로
-                          // 계산된다(면적·가격 범위 모두). 상세 배지는
-                          // 등급을 붙드는데 이 배지만 "안전"이라고 말하면 한
-                          // 화면이 스스로 모순되고, 하필 먼저 읽히는 쪽이
-                          // 낙관적이다. 고른 평형이 없으면 넘기지 않는다 —
-                          // 그때 이 배지는 어떤 집도 가리키지 않는다.
-                          landLeasehold={selectedUnit?.landLeasehold}
-                          // 등급이 왜 멈췄는지는 상세 배지가 말한다.
-                          // 두 배지가 같은 문장을 말하면 한 화면에 똑같은
-                          // 경고가 두 번 뜨고 둘 다 잡음으로 읽힌다. 등급
-                          // 글자는 여기에도 그대로 남는다.
-                          explainGrade={false}
-                        />
-                      </>
-                    )}
-                  </BudgetPanel>
-                }
-                sidebar={
-                  <>
+                  )}
+                  {/*
+                    지역 이름은 코드가 아니라 이름으로 적는다(위
+                    `currentRegionName` 주석 참고).
+                  */}
+                  {currentRegionName !== null && (
+                    <ResultSummaryItem label="지역" value={currentRegionName} />
+                  )}
+                </>
+              }
+              actions={
+                <>
+                  {/*
+                    인쇄 버튼은 사용자 지시로 없앴다. 인쇄 자체는 그대로
+                    살아 있다 — 브라우저의 Cmd+P가 그대로 `@media print`
+                    규칙을 타므로, 없앤 것은 버튼 하나뿐이다.
+                  */}
+                  {/*
+                    화면 1(영상 위 입력)로 돌아간다. 프로필·지역 조회 결과는
+                    그대로 남는다(handleBackToEntry 문서 참고) — 이 버튼은
+                    화면 전환일 뿐 리셋이 아니다.
+
+                    `phase === "결과"`일 때만 보인다 — 프로필은 채웠지만 아직
+                    지역을 조회하지 않았을 때(phase가 여전히 "입력")는 이미
+                    `EntryScreen`이 화면을 덮고 있어 이 버튼이 뜻이 없다.
+                  */}
+                  {phase === "결과" && (
+                    <button
+                      type="button"
+                      className="back-to-entry-button"
+                      onClick={handleBackToEntry}
+                    >
+                      조건 다시 넣기
+                    </button>
+                  )}
+                </>
+              }
+              map={
+                /*
+                  지도 칸의 내용. 칸(`.region-results-map`) 자체는
+                  `ResultShell`이 만든다 — 조건부 렌더링은 예전 그대로다.
+                */
+                <>
                 {/*
-                  엔진이 낸 경고. **사이드바 맨 위, 접히는 것 바깥이다** —
-                  상단바(트리거) 아래, 목록/상세보다 위.
+                  이 안쪽 조건의 `status === "success"`는 바깥
+                  `region-results-grid` 조건이 이미 보장한다 — 이
+                  블록에 들어왔다는 것 자체가 참이라는 뜻이라
+                  여기서는 redundant하다. 그래도 diff 리뷰에서
+                  "왜 지워졌는지"를 되짚게 만들지 않으려 그대로
+                  남긴다. 실제로 걸러내는 건 `complexList !== null`과
+                  아래 `hasMappedUnits` 분기다.
 
-                  `BudgetResult` 안에 있던 것을 여기로 들어냈다. 그
-                  컴포넌트가 자기 문서에 적어 뒀던 이유가 그대로 이 자리의
-                  이유다: **접으면 안 되는 종류의 정보다.** Task 5가 예산
-                  블록을 접힌 채로 시작하는 상세 패널 안으로 옮기면서
-                  경고까지 함께 접혔고, 결과 화면에는 굵은 "실구매 가능
-                  가격"만 뜨고 그 숫자를 **한정하는** 문장("기존 주택
-                  정보가 없어 매도 대금이 반영되지 않았어요" 같은,
-                  `src/lib/finance/available-cash.ts`의 줄)은 "자세히"를
-                  눌러야 보이는 상태가 됐다. 상단바의 헤드라인 숫자가 어떤
-                  조건 위에 서 있는지를 말하는 문장이라, 그 숫자와 같은
-                  화면에 함께 있어야 한다.
-
-                  **`BudgetResult`에 "경고를 숨기는 prop"을 더하는 대신
-                  들어냈다** — 두면 출처가 둘이 되고, 언젠가 두 자리가
-                  서로 다른 경고 집합을 말한다. 이 자리가 유일한 출처다.
-
-                  경고가 0건이면 `WarningList`가 `null`을 돌려주므로 사이드바
-                  맨 위에 빈 상자도 빈 여백도 생기지 않는다.
-
-                  **패널이 열린 동안에는 가려진다**(패널이 이 열을 덮고
-                  `inert`로 잠근다). 그대로 둔 판단이다 — 패널이 담는 것이
-                  바로 그 숫자의 근거(`ZeroBudgetMessage`·`BindingExplainer`·
-                  `CostBreakdown`)라, 패널이 열린 순간은 사용자가 한정
-                  조건을 **읽고 있는** 상태다. 고쳐야 했던 것은 기본
-                  상태(닫힘)에서 숫자만 보이던 것이고, 그 상태는
-                  App.test.tsx의 "엔진 경고의 자리"가 잠근다.
-
-                  인쇄에서는 패널이 흐름에 합류하므로 종이 순서가
-                  전제(PrintSummary) → 가정 → 예산 → **경고** → 목록/상세 →
-                  면책이 된다. 경고가 예산 블록 **뒤**로 밀렸지만 같은
-                  종이에 정확히 한 번 나온다(`warning-list`는
-                  `MUST_SURVIVE_PRINT_CLASSES`다).
+                  예전에 있던 `!dongFilteredEmpty`는 뺐다 — 동으로
+                  좁혀 0건이면 `mappedUnits`도 반드시 0이라 아래
+                  분기가 이미 같은 경우를 잡는다. 두 조건을 함께
+                  두면 "동 때문에 0건"일 때만 지도 칸이 통째로
+                  비고(아무 문구도 없이), "예산 때문에 0건"일 때는
+                  문구가 뜨는, 같은 사실을 두 가지로 보여주는
+                  어긋남이 생긴다.
                 */}
-                <WarningList warnings={affordability.result.warnings} />
+                {regionComplexes.status === "success" &&
+                  complexList !== null &&
+                  !hasMappedUnits && (
+                    /*
+                      지도에 그릴 단지가 없다. **원인을 여기서
+                      단정하지 않는다** — 원인은 왼쪽(모바일에선
+                      아래) 목록 칸이 이미 자기 문구로 말한다:
+                      동으로 좁혀서면 `.dong-empty`, 예산 때문이면
+                      `ComplexList`의 예산/상환능력 문구. 여기서
+                      "예산이 부족해요"라고 적으면 동 때문에 빈
+                      경우에 틀린 원인을 말하게 되고, 그건 이
+                      화면이 이미 한 번 겪은 오귀속이다.
 
-                {/*
-                  사이드바는 이제 **목록 ↔ 단지 상세** 두 화면만 오간다
-                  (design.md §5). 조건식(`detail !== null`)은 Task 4에서
-                  쓰던 것 그대로다 — 브리프가 "조건식 자체는 바꾸지
-                  않는다"고 못 박은 자리다.
-                */}
-                {detail !== null ? (
-                  <>
-                    <ComplexDetail
-                      unit={detail.unit}
-                      burden={detail.burden}
-                      costs={detail.costs}
-                      householdCountNote={detail.householdCountNote}
-                      priceBudget={detail.priceBudget}
-                      onClose={handleCloseDetail}
-                    />
-                  </>
-                ) : (
-                  <>
-                    {/*
-                      `RegionSelect`와 조회 로딩/실패 문구는 이제
-                      `EntryScreen`(화면 1) 안에만 있다 — 여기(화면 2에
-                      해당하는 내용)는 조회가 이미 **성공**했을 때만
-                      렌더되므로(phase가 "결과"가 되는 유일한 조건과 같다),
-                      그 두 상태를 다시 그릴 필요가 없다.
+                      그래서 이 문구는 지도 칸이 아는 사실 하나만
+                      말한다: 그릴 것이 없다. "지도를 표시하지
+                      못했어요"(SDK 실패)·"단지 위치를 불러오지
+                      못했어요"(좌표 조회 실패)와 절대 같은 말을
+                      쓰지 않는다 — 여기는 아무것도 실패하지
+                      않았다.
+                    */
+                    <p className="complex-map-empty">
+                      조건에 맞는 단지가 없어 지도에 표시할 단지가
+                      없어요.
+                    </p>
+                  )}
+                {regionComplexes.status === "success" &&
+                  complexList !== null &&
+                  hasMappedUnits && (
+                    <>
+                      {/*
+                        좌표 조회(complexCoordinates)는 목록 조회와 별개로
+                        도는 상태 기계다 — idle/loading/error/success를
+                        그대로 구분해 보여준다. "조회 실패"와 "조회했더니
+                        단지가 하나도 없더라"를 같은 빈 지도로 보여주면,
+                        이 앱이 가장 경계하는 오류(모르는 것과 확인한
+                        것을 같은 문구로 보여주는 것)를 지도에서도
+                        반복하게 된다.
 
-                      **"이 지역엔 실거래가가 0건"은 여기서 직접 가른다** —
-                      `ComplexList`의 `emptyBecauseOfFilter`에 맡기지 않는다.
+                        idle은 이 렌더 경로에선 사실상 스치는 순간뿐이다
+                        — 위 useEffect가 regionComplexes.status가
+                        "success"로 바뀌자마자(바로 이 조건 블록이
+                        그려지는 시점과 같은 렌더) query()를 호출해
+                        "loading"으로 넘어간다. 그래도 그 찰나에 아무것도
+                        안 그리면 화면이 깜빡이므로 로딩과 같은 문구를
+                        보여준다.
+                      */}
+                      {/*
+                        로딩·실패 문구를 `.complex-map-status`로 함께
+                        감싼다 — 인쇄에서는 아래 지도 자신
+                        (`.complex-map`)이 지워지므로, 이 문구들을 종이에
+                        남기면 근거를 잃은 "불러오고 있어요…"나 눌러도
+                        반응 없는 "다시 시도" 버튼만 남는 고아 문구가
+                        된다(src/print/hiddenInPrint.ts 참고).
+                      */}
+                      {(complexCoordinates.status === "idle" ||
+                        complexCoordinates.status === "loading" ||
+                        complexCoordinates.status === "error") && (
+                        <div className="complex-map-status">
+                          {(complexCoordinates.status === "idle" ||
+                            complexCoordinates.status === "loading") && (
+                            <p>지도를 불러오고 있어요…</p>
+                          )}
 
-                      `buildComplexList`의 그 값은 `shown.length === 0 &&
-                      units.some(affordable)`인데, 위에서 `regionCodes: []`
-                      (필터 없음)를 넘기므로 `shown`이 곧 `units.filter(affordable)`
-                      이 된다 — 그러면 두 조건이 동시에 참일 수 없어
-                      `emptyBecauseOfFilter`가 **구조적으로 항상 false**다.
-                      `hasRegionFilter`를 참으로 고정해도 "지역을 넓혀
-                      보세요" 분기는 절대 뜨지 않고, 진짜 원인이 "이 지역엔
-                      데이터가 없다"인 경우까지 "예산이 부족해요"로 잘못
-                      표시된다 — 모르는 것과 확인한 것을 같은 문구로 보여주는,
-                      이 앱이 가장 경계하는 오류다.
-
-                      그래서 `hasRegionFilter`는 `false`로 둔다. 지역을 이미
-                      하나로 확정한 뒤라 "넓혀 보라"는 조언 자체가 성립하지
-                      않는다. `units.length > 0`인데 예산이 안 맞는 경우는
-                      `ComplexList`의 기존 예산 기반 문구가 그대로, 올바르게
-                      처리한다.
-
-                      집계 창은 `AGGREGATION_WINDOW_LABEL`에서만 만든다 —
-                      "최근 6개월"을 직접 박아 넣으면 파이프라인이 창을 바꿨을
-                      때 이 문구만 남아 근거 기간을 실제와 다르게 말하게 된다
-                      (`src/data/complexes.ts` 참고).
-                    */}
-                    {regionComplexes.status === "success" &&
-                      regionComplexes.units.length === 0 && (
-                        <p className="region-empty">
-                          이 지역엔 {AGGREGATION_WINDOW_LABEL} 실거래가 자체가
-                          없어요. 다른 지역을 선택해 보세요.
-                        </p>
-                      )}
-
-                    {regionComplexes.status === "success" &&
-                      regionComplexes.units.length > 0 && (
-                        <>
-                            {/*
-                              매물 유형(아파트/오피스텔) 필터 자리 — 지금은
-                              비활성 placeholder다. 오피스텔 실거래가 데이터는
-                              아직 연동하지 않았다(국토부 아파트매매 실거래가
-                              API만 쓴다 — 별도 스펙에서 오피스텔 매매 실거래가
-                              API를 새로 연동할 때 이 select를 활성화한다).
-                              `dongOptions`(동 좁히기)와 달리 데이터 유무에
-                              좌우되지 않는 정적 요소라 그 조건 밖, 사이드바
-                              상단에 항상 그린다.
-                            */}
-                            <div className="field housing-type-select">
-                              <label htmlFor="housing-type">매물 유형</label>
-                              <select id="housing-type" value="apartment" disabled>
-                                <option value="apartment">아파트</option>
-                              </select>
-                            </div>
-                            {/*
-                              `.dong-narrow`는 인쇄에서 지우는 선택자다
-                              (`src/print/hiddenInPrint.ts`) — 종이 위에서는
-                              고를 수 없는 장치다. 클래스가 없으면 그 규칙이
-                              이 select에 닿지 못한다.
-                            */}
-                            {dongOptions.length > 1 && (
-                              <div className="field dong-narrow">
-                                <label htmlFor="dong-narrow">행정동으로 좁히기</label>
-                                <select
-                                  id="dong-narrow"
-                                  value={selectedDong ?? ""}
-                                  onChange={(e) => {
-                                    setSelectedDong(
-                                      e.target.value === "" ? null : e.target.value,
-                                    );
-                                    // 동을 바꾸면 앞서 고른 단지가 새 목록에
-                                    // 없을 수 있다 — 목록에 없는 행을 가리키는
-                                    // 표시가 남지 않게 함께 되돌린다.
-                                    setFocusedComplexKey(null);
-                                    // 앞서 걸러지지 않은 목록에서 "더 보기"로
-                                    // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
-                                    // 좁힌 새 목록이 이전 목록의 스크롤
-                                    // 깊이를 그대로 물려받는다
-                                    // (handleRegionSelect와 같은 이유).
-                                    setVisibleCount(10);
-                                  }}
-                                >
-                                  <option value="">전체</option>
-                                  {dongOptions.map((d) => (
-                                    <option key={d} value={d}>
-                                      {d}
-                                    </option>
-                                  ))}
-                                </select>
-                              </div>
-                            )}
-                            {dongFilteredEmpty ? (
-                              <p className="dong-empty">
-                                이 동엔 조건에 맞는 단지가 없어요. 다른 동을
-                                선택하거나 전체로 넓혀 보세요.
-                              </p>
-                            ) : (
-                              complexList !== null && (
-                                <ComplexList
-                                  result={complexList}
-                                  /*
-                                    이 조회가 실제로 반영한 계약월이다.
-                                    번들의 `DATA_AS_OF`(옛 배치 파이프라인이
-                                    3개 구를 돌린 시점)를 쓰면, 전국 아무
-                                    지역이나 그때그때 조회하는 지금 화면에서는
-                                    확인한 적 없는 신선도를 사실처럼 말하게
-                                    된다. 모르면(null) ComplexList가 그 줄을
-                                    아예 그리지 않는다.
-                                  */
-                                  dataAsOf={regionComplexes.dataAsOf}
-                                  hasRegionFilter={false}
-                                  noRepaymentCapacity={
-                                    affordability.result.loanLimit.breakdown.DSR === 0
+                          {complexCoordinates.status === "error" && (
+                            <div className="region-query-error">
+                              {/*
+                                세 실패 문구는 원인이 다르므로 서로 다르게
+                                말한다: 목록 조회 실패("지금 실거래가를…"),
+                                좌표 조회 실패(여기), 네이버지도 SDK 로드
+                                실패("지도를 표시하지 못했어요" —
+                                ComplexMap.tsx). 같은 문구로 뭉치면 사용자도
+                                테스트도 무엇이 실패했는지 구분하지 못한다.
+                              */}
+                              <p>단지 위치를 불러오지 못했어요.</p>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (currentRegionCode !== null) {
+                                    complexCoordinates.query(currentRegionCode, null);
                                   }
-                                  visibleCount={visibleCount}
-                                  onShowMore={() => setVisibleCount((n) => n + 10)}
-                                  onSelect={handleSelectUnit}
-                                  /*
-                                    지도에서 고른 단지. 마커 강조와 같은
-                                    값을 본다(위 `focusedComplexKey` 주석).
-                                  */
-                                  focusedComplexKey={focusedComplexKey}
-                                />
-                              )
+                                }}
+                              >
+                                다시 시도
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {complexCoordinates.status === "success" && (
+                        <>
+                          <ComplexMap
+                            /*
+                              목록과 **정확히 같은 집합**을 넘긴다
+                              (`mappedUnits` 정의의 주석 참고).
+                              `dongFilteredUnits`(예산 필터 전)를
+                              넘기면 두 창이 다른 단지를 말한다.
+                            */
+                            units={mappedUnits}
+                            coordinates={complexCoordinates.coordinates}
+                            /*
+                              마커 색이 뜻하는 부담 수준. 목록 항목에서
+                              뽑아 온 값을 그대로 넘긴다 — 지도가 자기
+                              계산을 새로 하지 않게 하는 자리다
+                              (`burdenByUnit` 정의의 주석 참고).
+                            */
+                            burdenByUnit={burdenByUnit}
+                            /*
+                              선택은 App이 한 벌만 든다 — 목록 행 표시와
+                              이 마커 강조가 같은 값을 본다.
+                            */
+                            focusedComplexKey={focusedComplexKey}
+                            onFocusComplex={handleFocusComplex}
+                            naverMapClientId={
+                              import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
+                            }
+                          />
+                          {/*
+                            지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
+                            오류) — 주소가 진짜로 없어서가 아니다
+                            (api/_lib/handleGeocode.ts의 partialFailureCount
+                            참고). 새 로딩/에러/성공 3분기를 또 만들지
+                            않고, 이미 뜬 지도 옆에 한 줄만 덧붙인다 —
+                            성공적으로 찾은 단지는 그대로 지도에 남아
+                            있으니 "지도가 비어 있다"와 다르게 말해야
+                            한다.
+
+                            리뷰 수정(Minor 4): 위 조건만으로는 ComplexMap이
+                            이미 "주소로는 위치를 찾을 수 없었어요"(noneLocated)를
+                            보여주고 있을 때도 이 줄이 함께 뜰 수 있었다 —
+                            "**일부** 단지의 위치를…"이 안엔 "하나도"라고
+                            말하는 문구와 부딪힌다. `groupWithCoords`로
+                            ComplexMap 내부와 같은 계산(좌표를 아는 단지가
+                            하나라도 있는가)을 여기서도 돌려, 하나도 없을
+                            땐 이 줄을 접는다 — 있을 땐 그대로 뜬다.
+                          */}
+                          {complexCoordinates.hasPartialFailures &&
+                            groupWithCoords(mappedUnits, complexCoordinates.coordinates)
+                              .length > 0 && (
+                              <p className="complex-map-caveat">
+                                일부 단지의 위치를 확인하지 못했어요. 지도에
+                                안 보이는 단지가 있을 수 있어요.
+                              </p>
                             )}
                         </>
                       )}
-                  </>
-                )}
+                    </>
+                  )}
+                </>
+              }
+              panel={
+                /*
+                  예산 상세 패널(design.md §5, Task 5). Task 4까지
+                  사이드바 맨 위에 세로로 쌓여 있던 예산 블록이 통째로
+                  여기로 옮겨 왔다 — **컴포넌트도 prop도 조건도 그대로**
+                  이고 자리만 바뀌었다.
 
-                    {/*
-                      면책은 **목록·상세 어느 쪽에서도** 사이드바 끝에
-                      남는다(dispatch B). `disclaimer`는
-                      MUST_SURVIVE_PRINT_CLASSES라 어느 화면에서 인쇄해도
-                      종이에 남아야 한다.
-                    */}
-                    {disclaimer}
-                  </>
-                }
-              />
-            ) : (
-              /*
-                프로필이 아직 안 끝났다 — 셸을 세우지 않는다(그 안에 담을
-                숫자가 하나도 없다. 무엇이 모자란지는 화면 1이 말한다).
-                그래도 **면책은 남긴다**: 이 상태에서 인쇄한 종이(인쇄는
-                브라우저의 Cmd+P로만 한다)에 구매 유형 한 줄만 남지 않게
-                한다.
-              */
-              disclaimer
-            )}
-            </>
+                  닫혀 있어도 언마운트하지 않는다. 이 안에는 보호 대상
+                  클래스가 열 개 들어 있고, 패널의 기본 상태는 닫힘이며,
+                  Cmd+P는 어느 단계에서든 눌린다(BudgetPanel.tsx 참고).
+                */
+                <BudgetPanel
+                  open={budgetPanelOpen}
+                  onClose={() => setBudgetPanelRequested(false)}
+                  returnFocusRef={budgetTriggerRef}
+                >
+                  {/*
+                    화면에서는 숨고 인쇄에서만 나온다(styles.css의
+                    .print-summary). 지금 화면 그대로 인쇄되는 이 리포트가
+                    배우자·부모님처럼 화면을 보지 않은 사람에게 건네지므로,
+                    계산의 전제(사용가능 현금 예산·연 소득·생애최초 여부·
+                    기존 대출·규제지역 여부·전용면적)와 룰셋 기준·인쇄일을
+                    종이에도 남긴다.
+
+                    사이드바가 아니라 **이 패널 안**에 둔다. 화면에서는
+                    어차피 `display: none`이라 어디 있든 같고, 종이에서는
+                    이 순서가 곧 지면 순서다 — 전제(이 요약) → 가정 →
+                    예산 → 목록/상세 → 면책이라는 Task 4까지의 지면
+                    순서를 그대로 유지한다.
+                  */}
+                  <PrintSummary
+                    state={state}
+                    effectiveAreaSqm={effectiveAreaSqm}
+                    areaSource={areaSource}
+                    rules={rules}
+                  />
+                  <AssumptionLine
+                    state={state}
+                    onOpen={handleOpenAssumption}
+                    areaOverridden={selectedUnit !== null}
+                  />
+                  <BudgetResult
+                    result={affordability.result}
+                    safePrice={affordability.safePrice}
+                    householdCountNote={householdCountNoteFor(
+                      residentialProfile,
+                      rules,
+                    )}
+                  />
+                  {affordability.result.affordablePrice > 0 && (
+                    <>
+                      <PriceSlider
+                        price={affordability.price}
+                        max={affordability.result.affordablePrice}
+                        safePrice={affordability.safePrice}
+                        onChange={affordability.setPrice}
+                      />
+                      <SafetyBadge
+                        safety={affordability.safety}
+                        // 상세가 열려 있을 때만 라벨을 붙인다. 그때만 화면에
+                        // 배지가 둘(여기 + ComplexDetail 안)이고, 마크업이
+                        // 같아서 어느 쪽이 "이 집을 사면"의 답인지 알 수 없다 —
+                        // 하필 더 낙관적인 쪽이 매물 옆에 붙는다. 목록 화면에서는
+                        // 배지가 하나뿐이라 라벨이 잡음이 된다.
+                        //
+                        // 패널로 옮긴 뒤에도 조건은 그대로다: 화면에서는
+                        // 패널을 열어야 둘이 함께 보이고, **종이에서는
+                        // 언제나 둘이 함께 나온다**(패널은 닫혀 있어도
+                        // 인쇄된다) — 라벨이 필요한 쪽은 후자다.
+                        label={
+                          selectedUnit !== null
+                            ? "위 가격에서 최대로 빌렸을 때예요"
+                            : undefined
+                        }
+                        // 평형을 고른 동안에는 이 배지도 그 평형을 전제로
+                        // 계산된다(면적·가격 범위 모두). 상세 배지는
+                        // 등급을 붙드는데 이 배지만 "안전"이라고 말하면 한
+                        // 화면이 스스로 모순되고, 하필 먼저 읽히는 쪽이
+                        // 낙관적이다. 고른 평형이 없으면 넘기지 않는다 —
+                        // 그때 이 배지는 어떤 집도 가리키지 않는다.
+                        landLeasehold={selectedUnit?.landLeasehold}
+                        // 등급이 왜 멈췄는지는 상세 배지가 말한다.
+                        // 두 배지가 같은 문장을 말하면 한 화면에 똑같은
+                        // 경고가 두 번 뜨고 둘 다 잡음으로 읽힌다. 등급
+                        // 글자는 여기에도 그대로 남는다.
+                        explainGrade={false}
+                      />
+                    </>
+                  )}
+                </BudgetPanel>
+              }
+              sidebar={
+                <>
+              {/*
+                엔진이 낸 경고. **사이드바 맨 위, 접히는 것 바깥이다** —
+                상단바(트리거) 아래, 목록/상세보다 위.
+
+                `BudgetResult` 안에 있던 것을 여기로 들어냈다. 그
+                컴포넌트가 자기 문서에 적어 뒀던 이유가 그대로 이 자리의
+                이유다: **접으면 안 되는 종류의 정보다.** Task 5가 예산
+                블록을 접힌 채로 시작하는 상세 패널 안으로 옮기면서
+                경고까지 함께 접혔고, 결과 화면에는 굵은 "실구매 가능
+                가격"만 뜨고 그 숫자를 **한정하는** 문장("기존 주택
+                정보가 없어 매도 대금이 반영되지 않았어요" 같은,
+                `src/lib/finance/available-cash.ts`의 줄)은 "자세히"를
+                눌러야 보이는 상태가 됐다. 상단바의 헤드라인 숫자가 어떤
+                조건 위에 서 있는지를 말하는 문장이라, 그 숫자와 같은
+                화면에 함께 있어야 한다.
+
+                **`BudgetResult`에 "경고를 숨기는 prop"을 더하는 대신
+                들어냈다** — 두면 출처가 둘이 되고, 언젠가 두 자리가
+                서로 다른 경고 집합을 말한다. 이 자리가 유일한 출처다.
+
+                경고가 0건이면 `WarningList`가 `null`을 돌려주므로 사이드바
+                맨 위에 빈 상자도 빈 여백도 생기지 않는다.
+
+                **패널이 열린 동안에는 가려진다**(패널이 이 열을 덮고
+                `inert`로 잠근다). 그대로 둔 판단이다 — 패널이 담는 것이
+                바로 그 숫자의 근거(`ZeroBudgetMessage`·`BindingExplainer`·
+                `CostBreakdown`)라, 패널이 열린 순간은 사용자가 한정
+                조건을 **읽고 있는** 상태다. 고쳐야 했던 것은 기본
+                상태(닫힘)에서 숫자만 보이던 것이고, 그 상태는
+                App.test.tsx의 "엔진 경고의 자리"가 잠근다.
+
+                인쇄에서는 패널이 흐름에 합류하므로 종이 순서가
+                전제(PrintSummary) → 가정 → 예산 → **경고** → 목록/상세 →
+                면책이 된다. 경고가 예산 블록 **뒤**로 밀렸지만 같은
+                종이에 정확히 한 번 나온다(`warning-list`는
+                `MUST_SURVIVE_PRINT_CLASSES`다).
+              */}
+              <WarningList warnings={affordability.result.warnings} />
+
+              {/*
+                사이드바는 이제 **목록 ↔ 단지 상세** 두 화면만 오간다
+                (design.md §5). 조건식(`detail !== null`)은 Task 4에서
+                쓰던 것 그대로다 — 브리프가 "조건식 자체는 바꾸지
+                않는다"고 못 박은 자리다.
+              */}
+              {detail !== null ? (
+                <>
+                  <ComplexDetail
+                    unit={detail.unit}
+                    burden={detail.burden}
+                    costs={detail.costs}
+                    householdCountNote={detail.householdCountNote}
+                    priceBudget={detail.priceBudget}
+                    onClose={handleCloseDetail}
+                  />
+                </>
+              ) : (
+                <>
+                  {/*
+                    `RegionSelect`와 조회 로딩/실패 문구는 이제
+                    `EntryScreen`(화면 1) 안에만 있다 — 여기(화면 2에
+                    해당하는 내용)는 조회가 이미 **성공**했을 때만
+                    렌더되므로(phase가 "결과"가 되는 유일한 조건과 같다),
+                    그 두 상태를 다시 그릴 필요가 없다.
+
+                    **"이 지역엔 실거래가가 0건"은 여기서 직접 가른다** —
+                    `ComplexList`의 `emptyBecauseOfFilter`에 맡기지 않는다.
+
+                    `buildComplexList`의 그 값은 `shown.length === 0 &&
+                    units.some(affordable)`인데, 위에서 `regionCodes: []`
+                    (필터 없음)를 넘기므로 `shown`이 곧 `units.filter(affordable)`
+                    이 된다 — 그러면 두 조건이 동시에 참일 수 없어
+                    `emptyBecauseOfFilter`가 **구조적으로 항상 false**다.
+                    `hasRegionFilter`를 참으로 고정해도 "지역을 넓혀
+                    보세요" 분기는 절대 뜨지 않고, 진짜 원인이 "이 지역엔
+                    데이터가 없다"인 경우까지 "예산이 부족해요"로 잘못
+                    표시된다 — 모르는 것과 확인한 것을 같은 문구로 보여주는,
+                    이 앱이 가장 경계하는 오류다.
+
+                    그래서 `hasRegionFilter`는 `false`로 둔다. 지역을 이미
+                    하나로 확정한 뒤라 "넓혀 보라"는 조언 자체가 성립하지
+                    않는다. `units.length > 0`인데 예산이 안 맞는 경우는
+                    `ComplexList`의 기존 예산 기반 문구가 그대로, 올바르게
+                    처리한다.
+
+                    집계 창은 `AGGREGATION_WINDOW_LABEL`에서만 만든다 —
+                    "최근 6개월"을 직접 박아 넣으면 파이프라인이 창을 바꿨을
+                    때 이 문구만 남아 근거 기간을 실제와 다르게 말하게 된다
+                    (`src/data/complexes.ts` 참고).
+                  */}
+                  {regionComplexes.status === "success" &&
+                    regionComplexes.units.length === 0 && (
+                      <p className="region-empty">
+                        이 지역엔 {AGGREGATION_WINDOW_LABEL} 실거래가 자체가
+                        없어요. 다른 지역을 선택해 보세요.
+                      </p>
+                    )}
+
+                  {regionComplexes.status === "success" &&
+                    regionComplexes.units.length > 0 && (
+                      <>
+                          {/*
+                            매물 유형(아파트/오피스텔) 필터 자리 — 지금은
+                            비활성 placeholder다. 오피스텔 실거래가 데이터는
+                            아직 연동하지 않았다(국토부 아파트매매 실거래가
+                            API만 쓴다 — 별도 스펙에서 오피스텔 매매 실거래가
+                            API를 새로 연동할 때 이 select를 활성화한다).
+                            `dongOptions`(동 좁히기)와 달리 데이터 유무에
+                            좌우되지 않는 정적 요소라 그 조건 밖, 사이드바
+                            상단에 항상 그린다.
+                          */}
+                          <div className="field housing-type-select">
+                            <label htmlFor="housing-type">매물 유형</label>
+                            <select id="housing-type" value="apartment" disabled>
+                              <option value="apartment">아파트</option>
+                            </select>
+                          </div>
+                          {/*
+                            `.dong-narrow`는 인쇄에서 지우는 선택자다
+                            (`src/print/hiddenInPrint.ts`) — 종이 위에서는
+                            고를 수 없는 장치다. 클래스가 없으면 그 규칙이
+                            이 select에 닿지 못한다.
+                          */}
+                          {dongOptions.length > 1 && (
+                            <div className="field dong-narrow">
+                              <label htmlFor="dong-narrow">행정동으로 좁히기</label>
+                              <select
+                                id="dong-narrow"
+                                value={selectedDong ?? ""}
+                                onChange={(e) => {
+                                  setSelectedDong(
+                                    e.target.value === "" ? null : e.target.value,
+                                  );
+                                  // 동을 바꾸면 앞서 고른 단지가 새 목록에
+                                  // 없을 수 있다 — 목록에 없는 행을 가리키는
+                                  // 표시가 남지 않게 함께 되돌린다.
+                                  setFocusedComplexKey(null);
+                                  // 앞서 걸러지지 않은 목록에서 "더 보기"로
+                                  // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
+                                  // 좁힌 새 목록이 이전 목록의 스크롤
+                                  // 깊이를 그대로 물려받는다
+                                  // (handleRegionSelect와 같은 이유).
+                                  setVisibleCount(10);
+                                }}
+                              >
+                                <option value="">전체</option>
+                                {dongOptions.map((d) => (
+                                  <option key={d} value={d}>
+                                    {d}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                          {dongFilteredEmpty ? (
+                            <p className="dong-empty">
+                              이 동엔 조건에 맞는 단지가 없어요. 다른 동을
+                              선택하거나 전체로 넓혀 보세요.
+                            </p>
+                          ) : (
+                            complexList !== null && (
+                              <ComplexList
+                                result={complexList}
+                                /*
+                                  이 조회가 실제로 반영한 계약월이다.
+                                  번들의 `DATA_AS_OF`(옛 배치 파이프라인이
+                                  3개 구를 돌린 시점)를 쓰면, 전국 아무
+                                  지역이나 그때그때 조회하는 지금 화면에서는
+                                  확인한 적 없는 신선도를 사실처럼 말하게
+                                  된다. 모르면(null) ComplexList가 그 줄을
+                                  아예 그리지 않는다.
+                                */
+                                dataAsOf={regionComplexes.dataAsOf}
+                                hasRegionFilter={false}
+                                noRepaymentCapacity={
+                                  affordability.result.loanLimit.breakdown.DSR === 0
+                                }
+                                visibleCount={visibleCount}
+                                onShowMore={() => setVisibleCount((n) => n + 10)}
+                                onSelect={handleSelectUnit}
+                                /*
+                                  지도에서 고른 단지. 마커 강조와 같은
+                                  값을 본다(위 `focusedComplexKey` 주석).
+                                */
+                                focusedComplexKey={focusedComplexKey}
+                              />
+                            )
+                          )}
+                      </>
+                    )}
+                </>
+              )}
+
+                  {/*
+                    면책은 **목록·상세 어느 쪽에서도** 사이드바 끝에
+                    남는다(dispatch B). `disclaimer`는
+                    MUST_SURVIVE_PRINT_CLASSES라 어느 화면에서 인쇄해도
+                    종이에 남아야 한다.
+                  */}
+                  {disclaimer}
+                </>
+              }
+            />
           ) : (
-            <>
-              {/*
-                투자 경로의 유형 선택은 이 화면에 선다(위 `EntryScreen`의
-                같은 주석 참고) — 이 경로에서 화면 1은 항상 숨어 있으므로,
-                여기 없으면 유형을 바꿀 자리가 화면 어디에도 없다.
-              */}
-              <PurchaseTypeSelect
-                rules={purchaseRules}
-                value={purchaseType}
-                onChange={handlePurchaseTypeChange}
-                restoreFailed={restoreFailed}
-              />
-
-              <PurchaseCheck type={purchaseType} />
-
-              {/*
-                리뷰 수정(Important 3): 이 경로에는 "조건 다시 넣기"를 두지
-                않는다. 되돌릴 조건이 화면 1에 없기 때문이다 —
-                `ProfileForm`·`RegionSelect`는 실거주 전용이라 투자 경로에서
-                화면 1이 담는 것은 제목과 유형 라디오뿐이고, 그 라디오는
-                이제 바로 위에 있다. 이 경로의 입력은 전부
-                `PurchaseCheck`(이 화면) 안에 있으므로 "조건을 다시 넣는"
-                자리도 이 화면이다.
-
-                예전에는 이 버튼이 유형을 바꿀 유일한 통로였는데, 그 통로가
-                데려가는 화면은 유형 라디오 하나뿐인 막다른 길이었다(위
-                주석). 통로를 없애는 대신 목적지를 이 화면으로 끌어왔다.
-              */}
-              {disclaimer}
-            </>
+            /*
+              프로필이 아직 안 끝났다 — 셸을 세우지 않는다(그 안에 담을
+              숫자가 하나도 없다. 무엇이 모자란지는 화면 1이 말한다).
+              그래도 **면책은 남긴다**: 이 상태에서 인쇄한 종이(인쇄는
+              브라우저의 Cmd+P로만 한다)에 구매 유형 한 줄만 남지 않게
+              한다.
+            */
+            disclaimer
           )}
 
         </ErrorBoundary>
