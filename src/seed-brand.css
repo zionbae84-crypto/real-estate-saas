@@ -2,11 +2,12 @@
  * SEED Design 브랜드 토큰 재정의.
  *
  * SEED의 기본 브랜드 색은 carrot(당근 주황)이다. 이 서비스는 당근마켓이
- * 아니므로 브랜드 계열을 Seline 스타일의 청록(cyan)으로 다시 가리킨다.
+ * 아니므로 브랜드 계열을 이 앱의 배경 영상(한강 안개 톤, 평균색
+ * rgb(104,117,132))에서 뽑은 청회색·황동 팔레트로 다시 가리킨다.
  *
- * **Seline 고유 hex를 직접 쓴다.** Seline 팔레트는 SEED 팔레트 시스템
- * 안에 없으므로 --seed-color-palette-* 변수로는 가리킬 수 없다 — 아래
- * 나머지 의미 계층 토큰들과 마찬가지로 hex 리터럴을 쓴다.
+ * **팔레트 고유 hex를 직접 쓴다.** 이 팔레트는 SEED 팔레트 시스템 안에
+ * 없으므로 --seed-color-palette-* 변수로는 가리킬 수 없다 — 아래 나머지
+ * 의미 계층 토큰들과 마찬가지로 hex 리터럴을 쓴다.
  *
  * ⚠ **셀렉터를 SEED의 라이트 모드 셀렉터와 똑같이 맞춰야 한다.**
  * 맨 `:root`로 쓰면 명시도(0,1,0)가 SEED의
@@ -25,85 +26,134 @@
  *
  * ⚠ **라이트 모드 전용이다.** vite.config.ts가 colorMode를 "light-only"로
  * 고정하고 있다. 다크 모드를 켠다면 SEED의 다크 셀렉터에 대응하는 블록을
- * 여기 함께 추가해야 한다.
+ * 여기 함께 추가해야 한다. 아래 "어두운 면" 토큰들은 SEED 다크 모드가
+ * 아니라 영상 배경 위 입력 화면(Task 2~3이 만든다)이 직접 참조하는
+ * 앱 전용 커스텀 프로퍼티다 — light-only 고정과는 무관하다.
  */
 :root,
 :root[data-seed-color-mode="system"][data-seed-user-color-scheme="light"],
 :root[data-seed-color-mode="light-only"],
 :root [data-seed-color-mode="light-only"] {
-  --seed-color-bg-brand-solid: #3ba6f1;
-  --seed-color-bg-brand-solid-pressed: #3398e1;
-  --seed-color-bg-brand-weak: #c1e1f7;
-  --seed-color-bg-brand-weak-pressed: #a8d3f2;
-  --seed-color-fg-brand: #3ba6f1;
-  --seed-color-fg-brand-contrast: #3398e1;
-  --seed-color-stroke-brand-solid: #3398e1;
-  --seed-color-stroke-brand-weak: #3ba6f1;
+  /*
+   * ── 어두운 면 (영상 위 입력 화면) ──────────────────────────────
+   * docs/superpowers/specs/2026-08-26-영상히어로-전체화면지도-design.md
+   * §1의 표를 그대로 옮긴 값이다. 지금 이 시점에는 이 토큰을 쓰는
+   * 화면이 아직 없다(Task 2~3에서 만든다) — 여기서는 값만 정의한다.
+   */
+  --ink: #0d1319;
+  --ink-2: #131b23;
+  --panel: #182029;
+  --rule: #26313c;
+  --haze: #6c7a88;
+  --haze-lift: #9aa7b4;
+  --paper: #eef1f4;
+  --paper-dim: #cfd6dd;
+  --brass: #c8913c;
+  --brass-lift: #e0aa54;
 
   /*
-   * Seline 스타일(따뜻한 시안 배경 + 청록 단색 악센트)로 의미 계층
-   * 전체를 새로 가리킨다. 위 brand 토큰들과 마찬가지로 Seline 고유
-   * hex를 직접 쓴다 — Seline 팔레트가 SEED 안에 없기 때문이다.
-   *
-   * fg-brand-contrast(cyan-edge, #3398e1)는 흰 배경 대비 3.13:1, 이 앱의
-   * 실제 캔버스(--seed-color-bg-layer-default, #fafaf9) 대비로는
-   * **2.99:1**이다 — 실측, docs/superpowers/plans/
-   * 2026-08-25-지도중심-리디자인.md Task 4, src/styles.css의
-   * `.safe-line-item--max .safe-line-amount` 규칙 위 주석 참고. 두 수치
-   * 모두 본문 크기 기준(4.5:1)에는 크게 못 미치고,
-   * fafaf9 캔버스 위에서는 큰 글자 기준(3:1)에도 아슬아슬하게 못
-   * 미친다(0.01 차이) — 그래서 굵은 큰 글자나 비텍스트 요소에만 쓴다.
-   *
-   * 리뷰 수정(Minor 2): 이 토큰을 실제로 쓰는 자리는 세 곳뿐이고
-   * (`.affordable-price`, `.safe-line-item--max .safe-line-amount`,
-   * `.slider-price--max` — 모두 src/styles.css, 전부 굵은 큰 글자), 세
-   * 자리 모두 이 0.01 미달을 감수하기로 한 것도 같은 이유(한 화면에
-   * 같은 금액이 여러 번 나오는데 한 자리만 색이 다르면 더 이상하다)다.
-   * 다음 색 체계 정비 때는 **이 세 자리를 반드시 함께** 옮겨야 한다 —
-   * 한 곳만 진하게 바꾸면 같은 금액이 화면에서 두 색으로 보인다.
-   * 참고로 계산해 보면 #3194dc는 fafaf9 대비 3.14:1(큰 글자 기준만
-   * 겨우 넘김), #2879b4는 4.48:1(본문 크기 기준까지 넘겨 이 토큰이
-   * "굵은 큰 글자 전용"일 필요가 아예 없어진다) — 값은 참고용이며 이
-   * 커밋에서 실제로 바꾸지는 않는다.
+   * ── 밝은 면 (결과 화면의 상단바·사이드바) ──────────────────────
+   * 따뜻한 크림이 아니라 같은 청회색 계열의 밝은 쪽이다 — 지도·영상과
+   * 한 가족으로 보이게 한다. bg-layer-default 등 아래 SEED 의미 토큰이
+   * 이 값들을 그대로 가리킨다.
    */
-  --seed-color-bg-layer-default: #fafaf9;
-  --seed-color-bg-layer-floating: #ffffff;
-  --seed-color-fg-neutral: #0c0a09;
-  --seed-color-fg-neutral-muted: #78716c;
-  --seed-color-fg-neutral-subtle: #a8a29e;
-  --seed-color-stroke-neutral-weak: #e8e6e5;
-  --seed-color-stroke-neutral-muted: #d6d3d1;
-  --seed-color-bg-neutral-weak: #f5f4f3;
-  /*
-   * SEED 기본값(cool gray #eeeff1)은 위 따뜻한 stone 배경과 색감이
-   * 어긋난다. 호버 시에도 같은 stone 계열 안에서 한 단계만 어두워지게
-   * 값을 새로 고른다(task-5-brief.md 참고 — src/styles.css의
-   * .assumption-item:hover가 이 토큰을 쓴다).
-   */
-  --seed-color-bg-neutral-weak-pressed: #ececeb;
+  --sheet: #f3f6f8;
+  --sheet-2: #ffffff;
+  --sheet-rule: #dde4ea;
+  --sheet-tint: #eef3f7;
+  --on-sheet: #15202b;
+  --on-sheet-soft: #61707e;
+  --on-sheet-faint: #8b98a4;
+  --brass-ink: #8a5f14;
 
   /*
-   * 안전/주의/위험 등급색. 흰 배경·본문 크기 기준 4.5:1 이상을 직접
-   * 계산해서 골랐다(SEED 기본값이 실패했던 것과 같은 함정 — task-2-
-   * report.md 참고). -contrast는 텍스트·배지용 진한 값, -weak는
-   * 배경 전용 옅은 값이라 대비 검증 대상이 아니다.
+   * 브랜드(brand) 계열 — 흔한 핀테크 파랑을 피하고 황동으로 통일한다.
+   * 영상 위에서 파랑은 묻힌다는 것이 이 팔레트의 출발점이다
+   * (design.md "왜 바꾸는가" 참고).
+   *
+   * fg-brand-contrast·bg-brand-solid 등 텍스트·버튼에 쓰이는 자리는
+   * --brass(#c8913c)가 아니라 --brass-ink(#8a5f14)를 가리킨다. 옅은
+   * --brass는 흰 텍스트 대비 2.77:1로 SEED ActionButton의 흰 글자
+   * (--seed-color-palette-static-white 고정, action-button.css 72-73행)
+   * 기준을 못 넘는다 — 계산값, 이 커밋에서 실측했다. --brass-ink는 흰
+   * 글자 대비 5.63:1로 넘는다. --brass 원색은 옅은 배경(bg-brand-weak)
+   * 쪽에만 남긴다.
    */
-  --seed-color-fg-positive-contrast: #15803d;
-  --seed-color-bg-positive-weak: #ecfdf3;
-  --seed-color-fg-warning-contrast: #b45309;
-  --seed-color-bg-warning-weak: #fffbeb;
-  --seed-color-fg-critical-contrast: #b91c1c;
-  --seed-color-bg-critical-weak: #fef2f2;
+  --seed-color-bg-brand-solid: var(--brass-ink);
+  --seed-color-bg-brand-solid-pressed: #6f4b10;
+  --seed-color-bg-brand-weak: #f3e2c4;
+  --seed-color-bg-brand-weak-pressed: #ecd6ab;
+  --seed-color-fg-brand: var(--brass-ink);
+  --seed-color-fg-brand-contrast: var(--brass-ink);
+  --seed-color-stroke-brand-solid: var(--brass-ink);
+  --seed-color-stroke-brand-weak: var(--brass);
+
+  /*
+   * 배경·중립 계층을 청회색 밝은 면(위 --sheet 계열)으로 다시 가리킨다.
+   * 이전 Seline 값(#fafaf9 등 따뜻한 stone)은 전부 교체된다.
+   */
+  --seed-color-bg-layer-default: var(--sheet);
+  --seed-color-bg-layer-floating: var(--sheet-2);
+  --seed-color-fg-neutral: var(--on-sheet);
+  --seed-color-fg-neutral-muted: var(--on-sheet-soft);
+  --seed-color-fg-neutral-subtle: var(--on-sheet-faint);
+  --seed-color-stroke-neutral-weak: var(--sheet-rule);
+  /*
+   * stroke-neutral-weak(경계선, #dde4ea)보다 한 단계 더 뚜렷해야 하는
+   * 자리를 위한 값이다. 스펙 §1 표에는 이 단계가 없어 같은 청회색
+   * 계열 안에서 --sheet-rule보다 한 단계 어둡게 새로 골랐다(판단
+   * 근거는 task-1-report.md 참고).
+   */
+  --seed-color-stroke-neutral-muted: #c5ced6;
+  --seed-color-bg-neutral-weak: var(--sheet-tint);
+  /*
+   * .assumption-item:hover 전용 "pressed" 단계. 스펙 §1 표에는 없어
+   * --sheet-tint보다 한 단계 더 눌린 값으로 새로 골랐다(위 stroke와
+   * 같은 이유 — task-1-report.md 참고).
+   */
+  --seed-color-bg-neutral-weak-pressed: #e2e9ef;
+
+  /*
+   * 안전/주의/위험 등급색.
+   *
+   * 스펙 §1 "상태색" 표는 --safe #4c9d7a / --warn #c98a3c / --risk
+   * #c4574f를 준다. 이 값들은 흰 배경(≈--sheet-2) 대비로 각각
+   * 3.28:1 / 2.92:1 / 4.35:1(계산값)이라 셋 다 본문 크기 기준(4.5:1)에
+   * 못 미치고, --warn은 큰 굵은 글자 기준(3:1)에도 못 미친다. 그런데
+   * src/styles.css는 이 토큰들을 본문 크기 텍스트(.slider-warning,
+   * .safety-badge 등)에 광범위하게 쓴다 — 원색 그대로 쓰면 새 팔레트가
+   * 오히려 예전보다 읽기 어려워진다.
+   *
+   * 그래서 스펙이 "밝은 면 위 태그"로 따로 제시한 진한 텍스트 값을
+   * --safe·--warn에 쓴다(스펙 §1에 이미 있는 값). --risk는 스펙 표에
+   * 태그 짝이 없어(위험 등급 태그 배경·텍스트 쌍이 표에서 빠져 있다)
+   * 같은 방식으로 직접 골라 계산했다 — #c4574f를 어둡게 눌러
+   * #8a2e28로, 옅게 눌러 바탕 #fbe0dd로 만들었다. 흰 배경 대비
+   * 8.39:1, 이 배경(--sheet) 대비 7.73:1(둘 다 계산값, 4.5:1을 넉넉히
+   * 넘는다). 원색(#4c9d7a/#c98a3c/#c4574f)은 스펙이 준 그대로 --safe·
+   * --warn·--risk에 넣지 않았다 — 대신 아래 --seed-color-fg-*-contrast
+   * 자리에 이 진한 버전을 넣고, src/styles.css의 --safe·--warn·--risk
+   * (SEED 토큰을 통해 이 값을 가리킨다)가 그것을 그대로 쓴다.
+   */
+  --seed-color-fg-positive-contrast: #1d5c43;
+  --seed-color-bg-positive-weak: #dff0e8;
+  --seed-color-fg-warning-contrast: #6d4610;
+  --seed-color-bg-warning-weak: #f7e9cf;
+  /* .assumption-item[data-field="existingDebt"]:hover 전용 pressed 단계. */
+  --seed-color-bg-warning-weak-pressed: #f1dfb8;
+  --seed-color-fg-critical-contrast: #8a2e28;
+  --seed-color-bg-critical-weak: #fbe0dd;
 
   /*
    * 지도 마커 가격 3분위 색(`.complex-map-marker--{low,mid,high}`,
-   * src/styles.css). low/mid는 이미 있는 브랜드 톤(bg-brand-weak,
-   * bg-brand-solid)이 그대로 맞아서 새로 만들지 않았다. high만
-   * 새로 만든다 — bg-brand-solid-pressed(#3398e1)는 bg-brand-solid와
-   * 명도 차가 ~5%뿐이라 mid와 구분이 잘 안 되고(review 발견), 흰 텍스트
-   * 대비도 3.13:1로 4.5:1에 못 미친다. 같은 청록 색상(hue ~205°)에서
-   * 명도만 크게 낮춰 만들었다 — 흰 텍스트 대비 6.78:1(계산값,
-   * scripts/seed-semantic-tokens.test.ts 참고).
+   * src/styles.css). low/mid는 bg-brand-weak/bg-brand-solid(위에서
+   * 황동으로 다시 가리켰다)를 그대로 쓴다.
+   *
+   * high(--seed-color-bg-tier-high)는 **여기서 값을 바꾸지 않는다.**
+   * design.md는 이 토큰의 "뜻"이 Task 4에서 가격대→부담 수준으로
+   * 바뀐다고 명시한다 — 지금 값(#0f5f96, 진한 청색)을 건드리면 Task 4가
+   * 다시 계산해야 할 일을 여기서 미리 절반만 해 놓는 셈이라 그대로
+   * 둔다.
    */
   --seed-color-bg-tier-high: #0f5f96;
 }

@@ -184,8 +184,11 @@ describe("토지임대부 표시의 색", () => {
   });
 
   it("검사기가 '안전' 색을 실제로 잡아낸다(변이 검사)", () => {
+    // 2026-08-26 팔레트 교체로 src/styles.css의 --caution은 --warn으로
+    // 이름이 바뀌었다(스펙의 상태색 이름에 맞춤 — task-1-report.md
+    // 참고). 이 변이 문자열도 함께 옮긴다.
     const poisoned = DECLARATIONS.replace(
-      ".land-lease-badge {\n  font-weight: 700;\n  color: var(--caution);",
+      ".land-lease-badge {\n  font-weight: 700;\n  color: var(--warn);",
       ".land-lease-badge {\n  font-weight: 700;\n  color: var(--safe);",
     );
     expect(poisoned).not.toBe(DECLARATIONS);

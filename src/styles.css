@@ -4,18 +4,26 @@
    * src/seed-brand.css와 같다 — 명도 단계와 모드별 값이 이미 검증돼 있고,
    * 우리가 색을 두 벌 관리하지 않아도 된다.
    *
-   * 이름은 이 저장소에서 쓰던 것을 유지한다. 소비처가 여럿이라
-   * 이름까지 바꾸면 이번 변경의 범위가 불필요하게 넓어진다.
+   * 이름은 스펙(docs/superpowers/specs/2026-08-26-영상히어로-전체화면지도
+   * -design.md §1 "상태색")이 쓰는 이름(--safe/--warn/--risk)으로
+   * 맞췄다 — 예전 이름은 --safe/--caution/--danger였다(task-1에서
+   * --caution→--warn, --danger→--risk로 바꿨다. 소비처가 이 파일
+   * 안에만 있어 범위가 크지 않았다).
    *
-   * -contrast 단계를 쓴다. base(-fg-positive 등)는 흰 배경에서 본문
-   * 크기 글자 기준 4.5:1을 못 넘는 조합이 있었다(safe 3.96:1, caution
-   * 4.12:1, danger 3.76:1 — 실측, task-2-report.md 참고). -contrast는
-   * 같은 계열의 더 진한 단계이고 24px 굵은 배지 텍스트에서도 여전히
-   * 등급 셋이 서로 다른 색으로 보여 구분이 흐려지지 않는다.
+   * -contrast 단계를 쓴다. 스펙 §1의 "상태색" 원색(--safe #4c9d7a,
+   * --warn #c98a3c, --risk #c4574f)은 흰 배경 대비 각각 3.28:1 /
+   * 2.92:1 / 4.35:1(계산값)이라 셋 다 본문 크기 기준(4.5:1)에 못
+   * 미치고 --warn은 큰 굵은 글자 기준(3:1)에도 못 미친다 — 그런데 이
+   * 변수들은 이 파일 곳곳에서 본문 크기 텍스트에 쓰인다. 그래서 -contrast
+   * 단계(스펙이 "밝은 면 위 태그"로 제시한 진한 값, --risk는 표에
+   * 태그 짝이 없어 같은 방식으로 새로 골랐다 — 근거는
+   * src/seed-brand.css 주석과 task-1-report.md 참고)를 그대로
+   * 가리킨다. 흰 배경 대비 safe 7.88:1 / warn 8.29:1 / risk
+   * 8.39:1(계산값)로 본문 기준을 넉넉히 넘는다.
    */
   --safe: var(--seed-color-fg-positive-contrast);
-  --caution: var(--seed-color-fg-warning-contrast);
-  --danger: var(--seed-color-fg-critical-contrast);
+  --warn: var(--seed-color-fg-warning-contrast);
+  --risk: var(--seed-color-fg-critical-contrast);
   --border: var(--seed-color-stroke-neutral-weak);
   color-scheme: light;
 }
@@ -140,12 +148,16 @@ body {
   font-weight: 700;
   margin: 0.25rem 0;
   /*
-   * fg-brand(#3ba6f1)는 이 화면 배경(#fafaf9) 대비 2.54:1(흰 배경
-   * 기준 2.65:1)로 큰 글자 기준(3:1)에도 못 미친다 — 그래서 한 단계
-   * 진한 -contrast를 쓴다. 숫자는 계산값이며
-   * `scripts/seed-semantic-tokens.test.ts`가 같은 계산을 검사한다.
-   * (예전 주석은 브랜드색이 #5e98fe이던 시절의 2.84:1을 그대로
-   * 들고 있었다 — 결론은 같지만 근거가 실제 값이 아니었다.)
+   * 팔레트를 영상에서 뽑은 청회색·황동으로 바꾸면서 fg-brand와
+   * fg-brand-contrast가 같은 값(--brass-ink, #8a5f14)을 가리키게
+   * 됐다 — 이 화면 배경(bg-layer-default, 이제 #f3f6f8) 대비
+   * 5.19:1, 흰 배경 기준 5.63:1(계산값)로 본문 크기 기준(4.5:1)까지
+   * 넉넉히 넘는다. 예전 cyan(#3ba6f1)은 2.54~2.65:1로 큰 글자
+   * 기준(3:1)에도 못 미쳐 -contrast를 따로 써야 했지만, 지금은 그
+   * 구분이 더 이상 필요하지 않다 — 다만 이 토큰을 쓰는 자리를 셋으로
+   * 못박아 둔 기존 규칙(scripts/seed-semantic-tokens.test.ts)은
+   * 그대로 유지한다. 숫자는 계산값이며 그 테스트가 같은 계산을
+   * 검사한다.
    */
   color: var(--seed-color-fg-brand-contrast);
 }
@@ -218,25 +230,25 @@ body {
  * `.affordable-price`·`.slider-price--max`와 같은 -contrast 토큰을
  * 그대로 재사용한다.
  *
- * 대비는 계산값으로 #3398e1 기준 흰 배경(#ffffff) 3.13:1, 이 화면
- * 배경(#fafaf9) 2.99:1이다. 22px 굵게(1.375rem/700)는 WCAG의 큰 글자
- * (18.66px 이상 굵게)에 들어가 기준이 3:1인데, **이 배경에서는 그
- * 3:1을 아슬아슬하게 넘지 못한다.** 예전 주석의 "3.95:1"은 브랜드색이
- * 바뀌기 전(당근 계열) 값이 그대로 남은 것이라 근거로 쓸 수 없다.
- * 이 토큰을 쓰는 세 자리(`.affordable-price`·이 규칙·
- * `.slider-price--max`)는 모두 같은 상황이며, 색 체계를 다시 고를 때
- * 함께 처리해야 한다 — 여기서 한 자리만 바꾸면 같은 금액이 한 화면에
- * 세 번 나오면서 그중 하나만 색이 달라진다(위 문단이 막으려던 바로
- * 그 상태다). 본문 크기 글자에는 절대 쓰지 않는다(4.5:1에 한참
- * 못 미친다) — `scripts/seed-semantic-tokens.test.ts`가 그 경계를
- * 검사한다.
+ * 대비는 계산값으로 --brass-ink(#8a5f14) 기준 흰 배경(#ffffff)
+ * 5.63:1, 이 화면 배경(bg-layer-default, #f3f6f8) 5.19:1이다(2026-08-26
+ * 팔레트 교체 — 예전 cyan #3398e1은 흰 배경 3.13:1, 이 화면 배경
+ * 2.99:1로 22px 굵게(1.375rem/700, WCAG 큰 글자 기준 3:1)도 아슬아슬하게
+ * 못 넘었다). 지금 값은 본문 크기 기준(4.5:1)까지 넘기 때문에 "굵은
+ * 큰 글자에만 쓴다"는 예전 제약이 더 이상 값 때문에 강제되지는 않지만,
+ * 이 토큰을 쓰는 자리를 셋(`.affordable-price`·이 규칙·
+ * `.slider-price--max`)으로 못박은 규칙은 그대로 둔다 — 색 체계를
+ * 다시 고를 때 세 자리를 함께 처리한다는 원래 취지(같은 금액이 한
+ * 화면에 여러 번 나올 때 색이 갈리지 않게 한다)는 값이 바뀌어도
+ * 유효하다. `scripts/seed-semantic-tokens.test.ts`가 계산값과 사용
+ * 자리를 함께 검사한다.
  */
 .safe-line-item--max .safe-line-amount {
   color: var(--seed-color-fg-brand-contrast);
 }
 
 .safe-line--none {
-  color: var(--danger);
+  color: var(--risk);
   margin: 0 0 1rem;
 }
 
@@ -253,21 +265,21 @@ body {
  */
 .warning-list {
   background: var(--seed-color-bg-critical-weak);
-  border-left: 4px solid var(--danger);
+  border-left: 4px solid var(--risk);
   padding: 0.75rem 1rem;
   list-style: none;
 }
 
 .safety-badge[data-level="safe"] .safety-level { color: var(--safe); }
-.safety-badge[data-level="caution"] .safety-level { color: var(--caution); }
-.safety-badge[data-level="danger"] .safety-level { color: var(--danger); }
+.safety-badge[data-level="caution"] .safety-level { color: var(--warn); }
+.safety-badge[data-level="danger"] .safety-level { color: var(--risk); }
 /*
  * 우리 숫자가 이 집의 매달 부담을 다 담지 못할 때의 등급. **--safe를
  * 쓰지 않는다** — 이 등급이 존재하는 이유가 "안전"이라고 말하지 않기
  * 위해서인데 색이 그 말을 되돌려 주면 소용이 없다(색이 글자보다 먼저
  * 읽힌다). LandLeaseNote와 같은 계열로 둔다.
  */
-.safety-badge[data-level="unverified"] .safety-level { color: var(--caution); }
+.safety-badge[data-level="unverified"] .safety-level { color: var(--warn); }
 
 /*
  * 등급이 왜 거기서 멈췄는지. 등급 글자 바로 아래에 붙고, 뜻은 이
@@ -319,7 +331,7 @@ body {
 }
 
 .slider-warning {
-  color: var(--caution);
+  color: var(--warn);
   font-size: 0.875rem;
 }
 
@@ -366,14 +378,14 @@ body {
 
 .runner-up-tied {
   background: var(--seed-color-bg-warning-weak);
-  border-left: 3px solid var(--caution);
+  border-left: 3px solid var(--warn);
 }
 
 .no-budget {
   margin: 1rem 0;
   padding: 1rem;
   background: var(--seed-color-bg-critical-weak);
-  border-left: 4px solid var(--danger);
+  border-left: 4px solid var(--risk);
   border-radius: 0.25rem;
 }
 
@@ -381,7 +393,7 @@ body {
   margin: 1rem 0;
   padding: 1rem;
   background: var(--seed-color-bg-critical-weak);
-  border: 1px solid var(--danger);
+  border: 1px solid var(--risk);
   border-radius: 0.375rem;
 }
 
@@ -456,9 +468,9 @@ body {
 
 .assumption-item:hover {
   /*
-   * bg-neutral-weak(#f5f4f3)와 같은 토큰으로 두면 호버 구분이 사라진다
-   * (task-5-brief.md 참고). 팔레트에 없던 "pressed" 단계를 seed-brand.css에
-   * 새로 추가해 이 자리에서만 쓴다.
+   * bg-neutral-weak(2026-08-26 팔레트 교체 후 #eef3f7)와 같은 토큰으로
+   * 두면 호버 구분이 사라진다(task-5-brief.md 참고). 팔레트에 없던
+   * "pressed" 단계를 seed-brand.css에 새로 추가해 이 자리에서만 쓴다.
    */
   background: var(--seed-color-bg-neutral-weak-pressed);
 }
@@ -471,7 +483,7 @@ body {
  */
 .assumption-item[data-field="existingDebt"] {
   background: var(--seed-color-bg-warning-weak);
-  border-color: var(--caution);
+  border-color: var(--warn);
 }
 
 .assumption-item[data-field="existingDebt"]:hover {
@@ -615,7 +627,7 @@ body {
 }
 
 .complex-group--beyond {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 /*
@@ -624,7 +636,7 @@ body {
  * 넣지 않기 위해서인데, 색이 그 말을 되돌려 주면 헤더 문구가 무력해진다.
  */
 .complex-group--unverified {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 .complex-rows {
@@ -634,8 +646,9 @@ body {
 }
 
 /*
- * 320px 사이드바 폭에서 각 행에 카드 표면을 준다(Seline 톤) — 예전
- * `border-top` 구분선 대신 카드 하나하나가 자기 테두리를 가진다.
+ * 320px 사이드바 폭에서 각 행에 카드 표면을 준다(bg-layer-floating,
+ * 2026-08-26 팔레트 교체 후 --sheet-2 #ffffff) — 예전 `border-top`
+ * 구분선 대신 카드 하나하나가 자기 테두리를 가진다.
  */
 .complex-row {
   background: var(--seed-color-bg-layer-floating);
@@ -688,14 +701,14 @@ body {
 }
 
 .complex-burden[data-level="safe"] .complex-level { color: var(--safe); }
-.complex-burden[data-level="caution"] .complex-level { color: var(--caution); }
-.complex-burden[data-level="danger"] .complex-level { color: var(--danger); }
+.complex-burden[data-level="caution"] .complex-level { color: var(--warn); }
+.complex-burden[data-level="danger"] .complex-level { color: var(--risk); }
 /*
  * 우리 숫자가 이 행의 매달 부담을 다 담지 못할 때의 등급. 위 배지
  * (`.safety-badge[data-level="unverified"]`)와 같은 이유로 `--safe`를
  * 쓰지 않는다 — 색이 먼저 읽혀 글자를 되돌려 주면 안 된다.
  */
-.complex-burden[data-level="unverified"] .complex-level { color: var(--caution); }
+.complex-burden[data-level="unverified"] .complex-level { color: var(--warn); }
 
 .complex-level {
   font-weight: 600;
@@ -758,7 +771,7 @@ body {
 }
 
 .complex-no-loan[data-complete="false"] {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 .complex-no-loan-caveat {
@@ -788,7 +801,7 @@ body {
   display: block;
   margin: 0.4rem 0;
   padding: 0.5rem 0.6rem;
-  border-left: 3px solid var(--caution);
+  border-left: 3px solid var(--warn);
   background: var(--seed-color-bg-warning-weak);
   font-size: 0.875rem;
   font-weight: 400;
@@ -797,7 +810,7 @@ body {
 
 .land-lease-badge {
   font-weight: 700;
-  color: var(--caution);
+  color: var(--warn);
 }
 
 /*
@@ -823,21 +836,25 @@ body {
  * 목록으로 돌아가는 버튼. 상세 화면에서 **되돌아가는 유일한 길**이다.
  *
  * `font: inherit`이라 본문 크기(16px/400)로 그려지고, 그러면 WCAG의
- * 본문 기준 4.5:1이 그대로 적용된다. 예전에 쓰던
- * `--seed-color-fg-brand-contrast`(#3398e1)는 이 화면 배경(#fafaf9)
- * 대비 **2.99:1**이라 그 기준에 크게 못 미쳤다 — 게다가 그 토큰은
- * `src/seed-brand.css`가 스스로 "굵은 큰 글자나 비텍스트 요소에만"
- * 쓰라고 적어 둔 값이라, 이 자리는 그 파일이 쓴 규칙을 어기고 있었다.
+ * 본문 기준 4.5:1이 그대로 적용된다. 이 규칙이 만들어질 당시 쓰던
+ * `--seed-color-fg-brand-contrast`(cyan #3398e1)는 그때 화면 배경
+ * (#fafaf9) 대비 2.99:1이라 그 기준에 크게 못 미쳤다 — 게다가 그
+ * 토큰은 당시 `src/seed-brand.css`가 스스로 "굵은 큰 글자나 비텍스트
+ * 요소에만" 쓰라고 적어 둔 값이라, 이 자리는 그 파일이 쓴 규칙을
+ * 어기고 있었다.
  *
- * 그래서 본문 색(`--seed-color-fg-neutral`, #0c0a09 — #fafaf9 대비
- * **18.92:1**, 계산값은 `scripts/seed-semantic-tokens.test.ts`가
+ * 그래서 본문 색(`--seed-color-fg-neutral`, 2026-08-26 팔레트 교체
+ * 후 --on-sheet #15202b — 이 화면 배경(bg-layer-default, #f3f6f8)
+ * 대비 **15.20:1**, 계산값은 `scripts/seed-semantic-tokens.test.ts`가
  * 검사한다)으로 바꾸고, "누를 수 있다"는 신호는 색이 아니라 밑줄로
  * 준다. 색만으로 링크를 표시하면 색각 이상에서 평범한 문장과
  * 구분되지 않는데, 하필 이 버튼이 유일한 되돌아가는 길이다.
  *
- * 브랜드 계열에서 4.5:1을 넘는 **글자용** 토큰은 이 프로젝트에 없다.
- * 새로 만들 수도 없다 — `scripts/seed-brand-tokens.test.ts`가 SEED에
- * 없는 brand 토큰을 덮는 것을 금지한다(죽은 재정의 방지).
+ * (참고: 2026-08-26 팔레트 교체로 fg-brand-contrast는 이제 --brass-ink
+ * #8a5f14를 가리키고 본문 기준(4.5:1)도 넘긴다 — 그렇다고 이 규칙을
+ * 다시 브랜드색으로 되돌리지는 않았다. 이 버튼의 색은 "누를 수 있다"는
+ * 뜻이 아니라 순수 본문이라는 뜻이라, 브랜드색 대신 중립색을 쓴다는
+ * 판단 자체는 값과 무관하게 유효하다.)
  */
 .complex-detail-back {
   border: none;
@@ -972,20 +989,23 @@ body {
 /*
  * 마커 위에 항상 보이는 라벨(면적+가격범위). 클릭 전에도 보여야 해서
  * InfoWindow와 달리 지도에 바로 얹힌다 — 가격 3분위 구간별로 배경색만
- * 다르게 준다.
+ * 다르게 준다(이 3분위 구분 자체는 design.md에 따르면 Task 4에서
+ * 가격대→부담 수준 2분류로 바뀔 예정이다 — 여기서는 팔레트만 바꾼다).
  *
- * 예전엔 mid(bg-brand-solid, #3ba6f1)와 high(bg-brand-solid-pressed,
- * #3398e1)가 명도 차 ~5%뿐이라 육안으로 거의 구분이 안 됐고(review 발견),
- * 셋 다 흰 텍스트 대비가 4.5:1(WCAG AA 본문 크기)에 못 미쳤다(low
- * ~1.9:1, mid ~2.7:1, high ~3.1:1) — 0.75rem/600 굵기는 large-text
- * 기준(3:1)이 아니라 본문 기준이 적용된다.
+ * 2026-08-26 팔레트 교체: bg-brand-weak·bg-brand-solid가 cyan에서
+ * 황동(각각 옅은 tint #f3e2c4, 진한 --brass-ink #8a5f14)으로 바뀌면서
+ * mid의 글자색도 어두운 글자에서 흰 글자로 바꿨다 — 어두운 글자
+ * (on-sheet #15202b)는 새 mid 배경(#8a5f14, 그 자체가 어둡다) 위에서
+ * 2.93:1로 4.5:1을 못 넘지만, 흰 글자는 5.63:1로 넘는다(계산값). low는
+ * 배경이 밝은 tint라 어두운 글자를 그대로 쓴다. high(bg-tier-high,
+ * #0f5f96)는 design.md 지시대로 이번 커밋에서 값을 바꾸지 않았다 —
+ * 아직은 예전 cyan 계열 진한 톤 그대로다.
  *
- * 지금은 옅은 배경+어두운 글자(low, mid)에서 진한 배경+흰 글자(high)로
- * 명도를 크게 벌려 세 단계가 한눈에 갈린다. 세 색 다 계산된 대비율이
- * 4.5:1을 넘는다(scripts/seed-semantic-tokens.test.ts가 검증):
- *   low  bg #c1e1f7 / text #0c0a09 → 14.47:1
- *   mid  bg #3ba6f1 / text #0c0a09 →  7.44:1
- *   high bg #0f5f96 / text #ffffff →  6.78:1
+ * 세 색 다 계산된 대비율이 4.5:1을 넘는다
+ * (scripts/seed-semantic-tokens.test.ts가 검증):
+ *   low  bg #f3e2c4 / text #15202b → 12.95:1
+ *   mid  bg #8a5f14 / text #ffffff →  5.63:1
+ *   high bg #0f5f96 / text #ffffff →  6.78:1(변경 없음)
  */
 .complex-map-marker {
   font-size: 0.75rem;
@@ -1012,17 +1032,18 @@ body {
 }
 
 .complex-map-marker--low {
-  background: var(--seed-color-bg-brand-weak); /* cyan-signal의 옅은 톤 */
-  color: var(--seed-color-fg-neutral); /* ink-black */
+  background: var(--seed-color-bg-brand-weak); /* 황동의 옅은 톤 */
+  color: var(--seed-color-fg-neutral); /* on-sheet */
 }
 
 .complex-map-marker--mid {
-  background: var(--seed-color-bg-brand-solid); /* cyan-signal */
-  color: var(--seed-color-fg-neutral); /* ink-black */
+  background: var(--seed-color-bg-brand-solid); /* 황동(--brass-ink) */
+  color: var(--seed-color-palette-static-white);
 }
 
 .complex-map-marker--high {
-  background: var(--seed-color-bg-tier-high); /* cyan-signal보다 훨씬 진한 톤 */
+  /* bg-tier-high는 design.md 지시대로 이번 커밋에서 바꾸지 않았다(Task 4가 뜻을 바꾼다) */
+  background: var(--seed-color-bg-tier-high);
   color: var(--seed-color-palette-static-white);
 }
 
@@ -1055,7 +1076,7 @@ body {
  * 꼭 필요해요 / 확인했어요 / 아직 낼 수 없어요)은 **언제나 글자로 먼저**
  * 있고, 아래 색은 그 글자를 거들 뿐이다. 색이 하나도 적용되지 않아도
  * (흑백 인쇄·색각 이상) 뜻이 그대로 남아야 한다. 새 hex를 만들지 않고
- * 이 파일이 이미 쓰던 의미 변수(--danger·--caution·--safe)와 SEED 배경
+ * 이 파일이 이미 쓰던 의미 변수(--risk·--warn·--safe)와 SEED 배경
  * 토큰만 재사용한다.
  */
 .purchase-type {
@@ -1079,7 +1100,7 @@ body {
  * 눈에 띄게 하는 역할만 한다(색만으로 전달하는 정보가 없다).
  */
 .purchase-type-restore-notice {
-  border-left: 4px solid var(--caution);
+  border-left: 4px solid var(--warn);
   background: var(--seed-color-bg-warning-weak);
   padding: 0.75rem 1rem;
   margin: 0 0 1rem;
@@ -1152,7 +1173,7 @@ body {
  * 아래 지표들만 남아 한도가 문제되지 않는 것처럼 읽힌다.
  */
 .purchase-loan-note {
-  border-left: 4px solid var(--caution);
+  border-left: 4px solid var(--warn);
   background: var(--seed-color-bg-warning-weak);
   padding: 0.75rem 1rem;
   margin: 0 0 1rem;
@@ -1209,11 +1230,11 @@ body {
 }
 
 .purchase-overall[data-verdict="stop"] {
-  color: var(--danger);
+  color: var(--risk);
 }
 
 .purchase-overall[data-verdict="expert"] {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 .purchase-overall[data-verdict="incomplete"] {
@@ -1249,12 +1270,12 @@ body {
 }
 
 .purchase-metric[data-verdict="stop"] {
-  border-left-color: var(--danger);
+  border-left-color: var(--risk);
   background: var(--seed-color-bg-critical-weak);
 }
 
 .purchase-metric[data-verdict="expert"] {
-  border-left-color: var(--caution);
+  border-left-color: var(--warn);
   background: var(--seed-color-bg-warning-weak);
 }
 
@@ -1333,7 +1354,7 @@ body {
 
 /* 막을 수 있는지는 이미 글자로 적혀 있다. 색은 그 글자를 거들 뿐이다. */
 .purchase-stage[data-covered="no"] .purchase-stage-covered {
-  color: var(--danger);
+  color: var(--risk);
   font-weight: 600;
 }
 
@@ -1398,11 +1419,11 @@ body {
 }
 
 .price-overall[data-verdict="stop"] {
-  color: var(--danger);
+  color: var(--risk);
 }
 
 .price-overall[data-verdict="expert"] {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 .price-overall[data-verdict="incomplete"],
@@ -1467,12 +1488,12 @@ body {
 }
 
 .price-finding[data-verdict="stop"] {
-  border-left-color: var(--danger);
+  border-left-color: var(--risk);
   background: var(--seed-color-bg-critical-weak);
 }
 
 .price-finding[data-verdict="expert"] {
-  border-left-color: var(--caution);
+  border-left-color: var(--warn);
   background: var(--seed-color-bg-warning-weak);
 }
 
