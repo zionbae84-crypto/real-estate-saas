@@ -17,6 +17,15 @@ export interface LocationFactsProps {
    * 다르고, 여기서도 새로 계산하지 않는다.
    */
   onAssessment?: (assessment: LocationAssessment) => void;
+  /**
+   * 이 영역이 자기 제목을 그릴 것인가. 기본은 그린다.
+   *
+   * `false`를 주는 자리는 하나뿐이다: 단지 상세가 이 영역을
+   * `<details>`로 접고 **같은 문구**(`locationRules.label`)를
+   * `summary`에 적는 자리(design.md §6). `PriceCheck.showTitle`과 같은
+   * 이유이며, 섹션의 접근 가능한 이름은 그대로 남는다.
+   */
+  showTitle?: boolean;
 }
 
 /**
@@ -58,7 +67,11 @@ export interface LocationFactsProps {
  * 것이 없고, 여기서 가장 무거운 말인 두 고지는 종이에서 더 중요하다 —
  * 종이를 건네받은 사람은 화면의 다른 맥락을 보지 못했다.
  */
-export function LocationFacts({ complexKey, onAssessment }: LocationFactsProps) {
+export function LocationFacts({
+  complexKey,
+  onAssessment,
+  showTitle = true,
+}: LocationFactsProps) {
   const { rules, assessment } = useLocationFacts(complexKey);
 
   // useEffect가 아니라 useLayoutEffect다 — 페인트 **전에** 부모 상태를
@@ -68,7 +81,13 @@ export function LocationFacts({ complexKey, onAssessment }: LocationFactsProps) 
     onAssessment?.(assessment);
   }, [assessment, onAssessment]);
 
-  return <LocationFactsView rules={rules} assessment={assessment} />;
+  return (
+    <LocationFactsView
+      rules={rules}
+      assessment={assessment}
+      showTitle={showTitle}
+    />
+  );
 }
 
 /**
@@ -83,13 +102,18 @@ export function LocationFacts({ complexKey, onAssessment }: LocationFactsProps) 
 export function LocationFactsView({
   rules,
   assessment,
+  showTitle = true,
 }: {
   rules: LocationRules;
   assessment: LocationAssessment;
+  /** {@link LocationFactsProps.showTitle} 참고 */
+  showTitle?: boolean;
 }) {
   return (
     <section className="location-facts" aria-label="주변에 무엇이 있는지">
-      <h3 className="location-facts-title">{assessment.label}</h3>
+      {showTitle && (
+        <h3 className="location-facts-title">{assessment.label}</h3>
+      )}
 
       {/*
         상태는 **글자**로 말한다. `data-state`는 색을 입히는 고리일 뿐이고,

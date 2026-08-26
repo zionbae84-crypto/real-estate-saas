@@ -14,6 +14,20 @@ export interface CostBreakdownProps {
    * 하나뿐이라 이 화면과 `PriceCheck`가 서로 다른 말을 할 수 없다.
    */
   householdCountNote: string;
+  /**
+   * summary가 합계를 한 번 더 적을 것인가. 기본은 적는다
+   * ("부대비용 850만 5,278원").
+   *
+   * `false`를 주는 자리는 하나뿐이다: 단지 상세의 ① 블록(design.md
+   * §6). 그 화면은 바로 위에서 같은 합계를 "살 때 드는 비용"으로
+   * 크게 내므로, summary가 같은 숫자를 되풀이하면 한 화면에 같은
+   * 금액이 두 번 박힌다. 그때 summary는 "내역"만 말한다 — 접힌 것이
+   * 무엇인지는 여전히 글자로 남는다.
+   *
+   * **계산은 어느 쪽에서도 달라지지 않는다.** 이 prop이 정하는 것은
+   * summary 문구 하나뿐이고, 표(`<dl>`) 안의 항목·금액은 그대로다.
+   */
+  repeatTotal?: boolean;
 }
 
 type CostKey = keyof Omit<CostBreakdownData, "total">;
@@ -65,11 +79,26 @@ const ROW_ORDER: readonly CostKey[] = [
 export function CostBreakdown({
   costs,
   householdCountNote,
+  repeatTotal = true,
 }: CostBreakdownProps) {
   return (
     <details className="cost-breakdown">
       <summary>
-        부대비용 <span className="cost-total">{formatWon(costs.total)}</span>
+        {repeatTotal ? (
+          <>
+            부대비용 <span className="cost-total">{formatWon(costs.total)}</span>
+          </>
+        ) : (
+          /*
+            합계는 바로 위에서 이미 크게 적혔다. 여기서는 접힌 것이
+            무엇인지만 말한다 — "더 보기"는 인쇄에서 <details>가 강제로
+            펼쳐지면 죽은 지시문이 되므로 접미사만 따로 감싼다
+            (hiddenInPrint.ts의 `.fold-more-hint`).
+          */
+          <>
+            내역<span className="fold-more-hint"> 보기</span>
+          </>
+        )}
       </summary>
       <dl>
         {ROW_ORDER.map((key) => {

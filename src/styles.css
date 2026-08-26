@@ -942,7 +942,7 @@ h2 {
 }
 
 .complex-detail-built,
-.complex-detail-area-note {
+.complex-detail-basis {
   color: var(--seed-color-fg-neutral-muted);
   font-size: 0.9rem;
   margin: 0.15rem 0;
@@ -953,8 +953,120 @@ h2 {
   margin: 0.75rem 0 0.5rem;
 }
 
-.complex-detail-loan {
-  margin: 0.5rem 0 1.5rem;
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 단지 상세의 두 블록 (ComplexDetail.tsx, design.md §6)
+ *
+ * `DESIGN.md`의 **Stat Block** 규율 그대로다 — 라벨 작게 위, 값 크게
+ * 아래, **왼쪽 정렬.** 예전에는 `<dl>`의 `<dt>`/`<dd>`가 세로로 흩어지고
+ * 값만 어정쩡하게 들여쓰기돼 있었다(사용자가 스크린샷으로 지적한 자리).
+ *
+ * **색은 빌리지 않는다.** 금액에 쓰는 황동은 이 파일이 이미 세 자리에서
+ * 쓰던 `--seed-color-fg-brand-contrast`(--brass-ink #8a5f14) 그대로이며,
+ * 새 hex를 만들지 않았다. 사이드바 바탕(`--sheet` #f3f6f8) 대비 **5.19:1**
+ * 로 본문 기준(4.5:1)까지 넘는다 — `scripts/seed-semantic-tokens.test.ts`가
+ * 그 계산과 "이 토큰을 쓰는 자리 목록"을 함께 잠근다.
+ *
+ * ⚠ `overflow`·`max-height`·`position`을 걸지 않는다. 이 화면에는 접히는
+ * `<details>`가 넷 있고(부대비용 내역 · 금리 시나리오 · 호가의 위치 ·
+ * 주변에 무엇이 있는지), 그 안에 `MUST_SURVIVE_PRINT_CLASSES`가
+ * 열 개 넘게 들어 있다 — 상자에 가두는 규칙 하나면 종이에서 그것들이
+ * 통째로 잘린다(`.budget-panel`이 이미 한 번 막은 사고). 그래서 애초에
+ * 걸지 않고, `scripts/printCss.test.ts`가 `.detail-fold`에 대해 그
+ * 사실을 검사한다.
+ * ══════════════════════════════════════════════════════════════════
+ */
+.detail-block {
+  margin: 1.5rem 0;
+}
+
+.detail-stat-label {
+  /* 12px. DESIGN.md의 Stat Block 라벨 크기 */
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--seed-color-fg-neutral-muted);
+  margin: 0;
+}
+
+.detail-stat-value {
+  /* 28px. DESIGN.md가 정한 24~30px 범위 안이다 */
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.2;
+  margin: 0.15rem 0 0;
+  color: var(--seed-color-fg-brand-contrast);
+}
+
+/*
+ * 값 자리에 숫자가 아니라 **문장**이 들어가는 경우("대출 없이 살 수
+ * 있어요"). 28px짜리 문장은 사이드바 폭(372px)에서 서너 줄이 되므로
+ * 한 단계 줄인다.
+ *
+ * **색을 다시 정하지 않는다.** 이 문장의 색은 `NoLoanLine`이 이미
+ * 자기 규칙(`.complex-no-loan[data-complete]`)으로 정하고 있고, 그
+ * 규칙이 특정도로 이긴다 — 단서가 붙은 경우와 아닌 경우를 색으로도
+ * 가르는 그 구분을 여기서 덮으면 안 된다.
+ */
+.detail-stat-value--sentence {
+  font-size: 1.25rem;
+}
+
+/* 단서는 값이 아니라 문장이다 — 값 크기를 따라가지 않는다 */
+.detail-stat-value--sentence .complex-no-loan-caveat {
+  display: block;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* 값 바로 아래의 가정·고지 한 줄(금리·기간, 농특세) */
+.detail-stat-note {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--seed-color-fg-neutral-muted);
+  margin: 0.35rem 0 0;
+}
+
+/* 상환부담률. **한 줄이다** — 별도 지표 블록으로 키우지 않는다 */
+.detail-burden-ratio {
+  font-weight: 600;
+  margin: 0.35rem 0 0;
+}
+
+/*
+ * 접히는 자리(호가의 위치 · 주변에 무엇이 있는지 · 금리 상승 시나리오).
+ * 위 블록 주석의 경고가 그대로 걸린다 — 숨기거나 가두는 선언을 여기
+ * 넣지 마라.
+ */
+.detail-fold {
+  margin: 1.25rem 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.detail-fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* 금리 시나리오는 ② 블록 **안**의 곁가지라 구분선을 그리지 않는다 */
+.detail-fold--stress {
+  margin-top: 0.5rem;
+  border-top: none;
+  padding-top: 0;
+  font-size: 0.875rem;
+}
+
+/*
+ * 접힌 두 영역은 자기 위에 구분선을 다시 그리지 않는다 — `.detail-fold`가
+ * 이미 그렸다(화면에서는 선이 겹치고, 인쇄에서는 펼쳐진 내용 위에 선이
+ * 두 번 나온다).
+ */
+.detail-fold .price-check,
+.detail-fold .location-facts {
+  margin-top: 0.75rem;
+  border-top: none;
+  padding-top: 0;
 }
 
 /*

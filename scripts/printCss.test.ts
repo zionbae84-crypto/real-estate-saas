@@ -94,6 +94,58 @@ function hiddenSelectorsIn(block: string): string[] {
   return hidden;
 }
 
+const SCREEN_MEDIA_START = /@media\s+screen\s*/;
+
+/** `@media …{ … }` 블록이 원문에서 차지하는 [시작, 끝) 구간 */
+function blockRange(css: string, startRegex: RegExp): [number, number] | null {
+  const match = startRegex.exec(css);
+  if (!match) return null;
+  const braceStart = css.indexOf("{", match.index);
+  if (braceStart === -1) return null;
+  let depth = 0;
+  for (let i = braceStart; i < css.length; i++) {
+    if (css[i] === "{") depth++;
+    else if (css[i] === "}") {
+      depth--;
+      if (depth === 0) return [match.index, i + 1];
+    }
+  }
+  return null;
+}
+
+/**
+ * 이 문자열을 겨누면서 요소를 **숨기거나 상자 안에 가두는** 선언을
+ * 가진 규칙들의 원문 위치. `display: none`뿐 아니라 인쇄에서 같은
+ * 결과(내용이 종이에서 사라짐)를 내는 형태를 함께 본다 —
+ * design.md §6이 "인쇄에서 반드시 푼다"고 정한 그 목록이다.
+ *
+ * **두 자리가 이 함수를 쓴다**: 접히는 예산 상세 패널(`.budget-panel`,
+ * Task 5)과 단지 상세의 접히는 블록(`.detail-fold`, design.md §6).
+ * 둘 다 "닫힌 채로 Cmd+P를 누르는 것이 정상 경로"인 자리라 같은 사고를
+ * 같은 방식으로 막는다.
+ */
+function confiningRuleIndexes(css: string, needle: string): number[] {
+  const out: number[] = [];
+  const re = /([^{}]+)\{([^{}]*)\}/g;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(css)) !== null) {
+    const selector = m[1] ?? "";
+    const body = m[2] ?? "";
+    if (!selector.includes(needle)) continue;
+    if (
+      /display\s*:\s*none\b/i.test(body) ||
+      /visibility\s*:\s*hidden\b/i.test(body) ||
+      /content-visibility\s*:\s*hidden\b/i.test(body) ||
+      /max-height\s*:\s*0\b/i.test(body) ||
+      /position\s*:\s*(fixed|absolute)\b/i.test(body) ||
+      /overflow(-[xy])?\s*:\s*(auto|hidden|scroll)\b/i.test(body)
+    ) {
+      out.push(m.index);
+    }
+  }
+  return out;
+}
+
 describe("인쇄 CSS", () => {
   it("@media print 블록이 존재한다", () => {
     expect(DECLARATIONS).toMatch(PRINT_MEDIA_START);
@@ -755,53 +807,6 @@ describe("인쇄 CSS", () => {
    * 아래 두 describe가 그 둘을 각각 잠근다.
    */
   describe("예산 상세 패널의 화면 전용 제약이 인쇄에 닿지 않는다", () => {
-    const SCREEN_MEDIA_START = /@media\s+screen\s*/;
-
-    /** `@media …{ … }` 블록이 원문에서 차지하는 [시작, 끝) 구간 */
-    function blockRange(css: string, startRegex: RegExp): [number, number] | null {
-      const match = startRegex.exec(css);
-      if (!match) return null;
-      const braceStart = css.indexOf("{", match.index);
-      if (braceStart === -1) return null;
-      let depth = 0;
-      for (let i = braceStart; i < css.length; i++) {
-        if (css[i] === "{") depth++;
-        else if (css[i] === "}") {
-          depth--;
-          if (depth === 0) return [match.index, i + 1];
-        }
-      }
-      return null;
-    }
-
-    /**
-     * 이 문자열을 겨누면서 요소를 **숨기거나 상자 안에 가두는** 선언을
-     * 가진 규칙들의 원문 위치. `display: none`뿐 아니라 인쇄에서 같은
-     * 결과(내용이 종이에서 사라짐)를 내는 형태를 함께 본다 —
-     * design.md §6이 "인쇄에서 반드시 푼다"고 정한 그 목록이다.
-     */
-    function confiningRuleIndexes(css: string, needle: string): number[] {
-      const out: number[] = [];
-      const re = /([^{}]+)\{([^{}]*)\}/g;
-      let m: RegExpExecArray | null;
-      while ((m = re.exec(css)) !== null) {
-        const selector = m[1] ?? "";
-        const body = m[2] ?? "";
-        if (!selector.includes(needle)) continue;
-        if (
-          /display\s*:\s*none\b/i.test(body) ||
-          /visibility\s*:\s*hidden\b/i.test(body) ||
-          /content-visibility\s*:\s*hidden\b/i.test(body) ||
-          /max-height\s*:\s*0\b/i.test(body) ||
-          /position\s*:\s*(fixed|absolute)\b/i.test(body) ||
-          /overflow(-[xy])?\s*:\s*(auto|hidden|scroll)\b/i.test(body)
-        ) {
-          out.push(m.index);
-        }
-      }
-      return out;
-    }
-
     const screenRange = blockRange(DECLARATIONS, SCREEN_MEDIA_START);
 
     it("@media screen 블록이 실제로 존재한다(전제)", () => {
@@ -899,6 +904,79 @@ describe("인쇄 CSS", () => {
       const screenOnly = `.budget-panel { position: absolute; overflow-y: auto; }`;
       expect(lastValue(screenOnly, ".budget-panel", "position")).toBe("absolute");
       expect(lastValue(screenOnly, ".budget-panel", "overflow")).toBeUndefined();
+    });
+  });
+
+  /**
+   * **접히는 단지 상세 블록 × 인쇄**(design.md §6).
+   *
+   * 단지 상세는 `PriceCheck`·`LocationFacts`·금리 상승 시나리오를
+   * `<details class="detail-fold">`(기본 **닫힘**)로 접는다. 그 안에는
+   * `MUST_SURVIVE_PRINT_CLASSES`가 열 개 넘게 들어 있다
+   * (`price-no-estimate`·`price-disclosure`·`price-disclaimer`·
+   * `price-verdict`·`location-state`·`location-state-note`·
+   * `location-disclosure`·`location-disclaimer` 등). 닫힌 채로 Cmd+P를
+   * 누르는 것은 **정상 경로**다 — 기본이 닫힘이고 Cmd+P는 어느
+   * 단계에서든 눌린다.
+   *
+   * `.budget-panel`이 이미 한 번 막은 사고와 정확히 같은 모양이라
+   * **같은 해법·같은 검사**를 쓴다.
+   *
+   * 1. 내용을 실제로 펼치는 것은 이 파일 위쪽의 두 describe가 이미
+   *    잠근 `@media print`의 `details:not([open])::details-content`
+   *    규칙이다. 그 규칙은 `details` 요소 전부에 걸리므로, 상세가 진짜
+   *    `<details>`를 쓰는 한(그 형태는 `ComplexDetail.test.tsx`가
+   *    잠근다) 새 접기에도 그대로 걸린다.
+   * 2. 남는 위험은 **누군가 이 접기에 상자를 씌우는 것**이다
+   *    (`overflow: auto`로 스크롤을 주거나 `max-height: 0`으로 접거나
+   *    `display: none`으로 숨기거나). 미디어 조건 없이 걸면 그 제약이
+   *    인쇄에도 그대로 적용돼, 위 1이 펼쳐 놓은 내용이 상자 밖에서
+   *    잘린다. 그래서 지금은 그런 규칙을 **하나도 두지 않았고**,
+   *    앞으로 두게 되면 반드시 `@media screen` 안이어야 한다.
+   */
+  describe("접히는 단지 상세 블록의 제약이 인쇄에 닿지 않는다", () => {
+    const screenRange = blockRange(DECLARATIONS, SCREEN_MEDIA_START);
+
+    it("`.detail-fold` 규칙이 실제로 존재한다(전제)", () => {
+      // 없으면 아래 검사가 공허하게 통과한다.
+      expect(
+        DECLARATIONS,
+        ".detail-fold 규칙이 styles.css에 없습니다 — 아래 검사의 전제가 " +
+          "깨졌습니다(클래스 이름을 바꿨다면 이 검사도 함께 옮기세요).",
+      ).toContain(".detail-fold");
+    });
+
+    it("접기를 숨기거나 가두는 규칙이 @media screen 밖에는 하나도 없다", () => {
+      const [start, end] = screenRange ?? [0, 0];
+      const offenders = confiningRuleIndexes(DECLARATIONS, ".detail-fold")
+        .filter((index) => index < start || index >= end)
+        .map((index) => DECLARATIONS.slice(index, index + 120));
+      expect(
+        offenders,
+        "`.detail-fold`를 숨기거나(display:none 등) 상자에 가두는" +
+          "(position:fixed/absolute, overflow:auto, max-height:0 등) 규칙이 " +
+          "@media screen 밖에 있습니다 — 그 제약은 인쇄에도 그대로 적용돼, " +
+          "접힌 채 인쇄한 종이에서 호가·입지 고지가 잘립니다.",
+      ).toEqual([]);
+    });
+
+    // 변이 검사: 이 가드가 실제로 뭔가를 잡아내는지, 가장 흔한 형태
+    // (스크롤 상자를 씌우는 것)로 확인한다.
+    it("미디어 조건 없이 상자를 씌우면 잡아낸다(변이 검사)", () => {
+      const poisoned = `
+        .detail-fold { max-height: 12rem; overflow-y: auto; }
+        @media screen { .detail-fold { border-top: 1px solid; } }
+      `;
+      const range = blockRange(poisoned, SCREEN_MEDIA_START)!;
+      const outside = confiningRuleIndexes(poisoned, ".detail-fold").filter(
+        (index) => index < range[0] || index >= range[1],
+      );
+      expect(outside).toHaveLength(1);
+    });
+
+    it("가두지 않는 규칙은 밖에 있어도 통과한다(오탐 방지 확인)", () => {
+      const fine = `.detail-fold { margin: 1.25rem 0 0; border-top: 1px solid; }`;
+      expect(confiningRuleIndexes(fine, ".detail-fold")).toEqual([]);
     });
   });
 });

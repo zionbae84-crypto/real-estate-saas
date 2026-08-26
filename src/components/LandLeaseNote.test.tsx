@@ -304,19 +304,28 @@ describe("토지임대부 표시", () => {
       expect(button?.querySelectorAll("p")).toHaveLength(0);
     });
 
-    it("상세에서는 월 상환액 배지 바로 다음이다", () => {
+    it("상세에서는 등급 배지 바로 다음, 금액 블록 바로 앞이다", () => {
+      // 상세가 두 블록으로 줄면서(design.md §6) 월 상환액·부담률은
+      // 배지가 아니라 아래 "매달 나가는 돈" 블록이 낸다. 이 표시가
+      // 있어야 하는 자리는 그대로다 — **금액을 읽기 직전**이라야, 그
+      // 금액에 토지 사용료가 빠져 있다는 사실이 정정처럼 이어 읽힌다.
       const { container } = renderDetail(unit({ landLeasehold: "Y" }));
       const badge = container.querySelector(".safety-badge");
       const note = container.querySelector('.land-lease-note[data-variant="monthly"]');
-      expect(badge?.textContent).toContain("월 상환액");
+      const monthly = container.querySelector(".detail-block--monthly");
       expect(badge).not.toBeNull();
       expect(note).not.toBeNull();
-      if (badge === null || note === null) return;
+      expect(monthly).not.toBeNull();
+      if (badge === null || note === null || monthly === null) return;
       // 문서 순서상 배지가 먼저다.
       expect(
         badge.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
       expect(badge.nextElementSibling).toBe(note);
+      // 그리고 금액 블록보다는 앞이다.
+      expect(
+        note.compareDocumentPosition(monthly) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
 
     it("호가 화면에서는 호가를 적기 전에 먼저 나온다", () => {

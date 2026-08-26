@@ -168,13 +168,20 @@ describe("fg-brand-contrast를 쓰는 자리", () => {
     (m) => m[1]!.trim().split("\n").pop()!.trim(),
   );
 
-  it("큰 굵은 글자 세 자리에서만 쓴다", () => {
+  it("큰 굵은 글자 네 자리에서만 쓴다", () => {
     // 늘리려면 그 자리가 정말 큰 굵은 글자인지 먼저 확인하고 여기에
     // 적어야 한다. (2026-08-26 팔레트 교체로 이 토큰은 이제 본문 크기
     // 기준도 넘지만, 이 제약은 "여러 자리에서 색이 갈리지 않게 한다"는
     // 목적이라 값과 무관하게 유지한다 — 위 describe 블록 참고.)
+    //
+    // `.detail-stat-value`가 넷째로 들어왔다(단지 상세의 두 블록,
+    // design.md §6). 확인한 것: 28px/600으로 이 파일이 "큰 굵은 글자"로
+    // 인정해 온 크기(`.affordable-price` 32px/700, `.slider-price--max`
+    // 24px/700)와 같은 계열이고, 화면에 찍히는 값도 같은 종류다 —
+    // 금액이다. 대비는 아래 "단지 상세 Stat Block" describe가 실측한다.
     expect(users.sort()).toEqual([
       ".affordable-price",
+      ".detail-stat-value",
       ".safe-line-item--max .safe-line-amount",
       ".slider-price--max",
     ]);
@@ -366,6 +373,54 @@ describe("평형대 칩 대비율 실측 — 본문 크기 기준 4.5:1", () => 
     const ratio = contrastRatio(rawToken("--on-sheet-soft"), paper);
     expect(ratio).toBeLessThan(BODY_TEXT_MIN_RATIO);
     expect(ratio.toFixed(2)).toBe("4.49");
+  });
+});
+
+/**
+ * 단지 상세의 두 블록(design.md §6) — **새로 만든 Stat Block이라 실측을
+ * 여기 못박는다.**
+ *
+ * 평형대 칩과 같은 이유다: 아래 "텍스트 색 사용처 전수 검사"가 이미 모든
+ * `color` 규칙을 훑지만 그 검사는 통과하면 조용해져 어느 값이 얼마였는지
+ * 남지 않는다. 팔레트가 움직였을 때 **어느 방향으로** 움직였는지 diff에서
+ * 보이게 한다.
+ *
+ * 이 블록이 앉는 면은 사이드바 바탕(`--sheet`, `.region-results-sidebar`가
+ * `--seed-color-bg-layer-default`로 칠한다) 하나다 — 상세 화면은 그
+ * 사이드바 열 안에서만 그려진다.
+ */
+describe("단지 상세 Stat Block 대비율 실측 — 본문 크기 기준 4.5:1", () => {
+  const sheet = rawToken("--sheet");
+
+  it("값(.detail-stat-value): --brass-ink on --sheet = 5.19:1", () => {
+    const ratio = contrastRatio(rawToken("--brass-ink"), sheet);
+    // 28px/600은 WCAG의 "큰 글자"(18.66px 이상 굵은 글자)라 3:1이면
+    // 되지만, 이 값은 본문 기준까지 넘는다 — 여유를 숫자로 남긴다.
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("5.19");
+  });
+
+  it("라벨(.detail-stat-label): --on-sheet-soft on --sheet = 4.69:1", () => {
+    // 12px짜리 본문이라 4.5:1이 그대로 요구된다.
+    const ratio = contrastRatio(rawToken("--on-sheet-soft"), sheet);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("4.69");
+  });
+
+  it("가정 한 줄(.detail-stat-note): --on-sheet-soft on --sheet = 4.69:1", () => {
+    // 금리·기간 가정과 농특세 고지가 이 색으로 나간다. 라벨과 같은
+    // 토큰이라 값도 같다 — 여기서 따로 재는 이유는 이 줄이 "가정"이라는
+    // 무게를 지기 때문이다: 대비가 무너지면 가장 먼저 안 읽히는 줄이다.
+    const ratio = contrastRatio(rawToken("--on-sheet-soft"), sheet);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("4.69");
+  });
+
+  it("부담률 한 줄(.detail-burden-ratio): --on-sheet on --sheet = 15.19:1", () => {
+    // 자기 color 규칙이 없어 본문 색을 그대로 물려받는다.
+    const ratio = contrastRatio(rawToken("--on-sheet"), sheet);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("15.19");
   });
 });
 

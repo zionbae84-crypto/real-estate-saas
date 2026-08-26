@@ -216,6 +216,20 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "safe-line", // 안전선
   "binding-explainer", // 무엇이 한도를 막았는지 설명
   "cost-breakdown", // 부대비용 내역
+  /*
+   * 단지 상세의 두 블록(design.md §6). 이 종이에서 사람이 가장 먼저
+   * 보는 두 숫자가 여기 있다 — "살 때 드는 비용"과 "매달 나가는 돈".
+   *
+   * `detail-stat-note`가 특히 무겁다: 그 줄이 **금리·기간 가정**을
+   * 진다("대출 1억 2,744만원 · 30년 · 연 4.53% 가정")와 85㎡ 초과
+   * 농어촌특별세 고지를 함께 낸다. 종이에서 그 줄만 사라지면 위의 월
+   * 상환액이 어떤 금리·어떤 기간을 전제로 한 값인지가 통째로 없어지고,
+   * 종이를 건네받은 사람은 그 금액을 확정된 값으로 읽는다 —
+   * `assumption-notice`를 보호 대상으로 둔 것과 같은 이유다.
+   */
+  "detail-stat-value", // 두 블록의 값(또는 "대출 없이 살 수 있어요")
+  "detail-stat-note", // 금리·기간 가정, 농어촌특별세 고지
+  "detail-burden-ratio", // 소득 대비 부담률 한 줄
   "policy-loan-list", // 정책대출 목록
   "no-budget", // 예산 0원 안내
   // 구매 유형별 재무 지표. 이 화면에서 가장 무거운 말은 "이 유형의

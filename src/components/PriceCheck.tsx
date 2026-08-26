@@ -31,6 +31,20 @@ export interface PriceCheckProps {
    * 같은 배선·같은 이유다 — 새로 계산하지 않고 이미 낸 값을 올릴 뿐이다.
    */
   onAssessment?: (assessment: PriceAssessment) => void;
+  /**
+   * 이 영역이 자기 제목을 그릴 것인가. 기본은 그린다.
+   *
+   * `false`를 주는 자리는 하나뿐이다: 단지 상세가 이 영역을
+   * `<details>`로 접고 **같은 문구**(`rules.position.label`)를
+   * `summary`에 적는 자리(design.md §6). 제목이 둘이 되면 인쇄에서
+   * `<details>`가 강제로 펼쳐질 때 종이에 같은 제목이 연달아 두 번
+   * 찍힌다.
+   *
+   * 섹션의 접근 가능한 이름(`aria-label="호가 위치 확인"`)은 그대로
+   * 남으므로, 제목을 지워도 스크린리더에서 이 영역이 무엇인지 잃지
+   * 않는다. `BindingExplainer.showTitle`과 같은 갈래의 prop이다.
+   */
+  showTitle?: boolean;
 }
 
 /**
@@ -58,7 +72,12 @@ export interface PriceCheckProps {
  * 종이에서 잃는 정보가 없고, 층·향 고지와 신고 지연 고지는
  * `.price-disclosure`로 언제나 함께 남는다.
  */
-export function PriceCheck({ unit, budget, onAssessment }: PriceCheckProps) {
+export function PriceCheck({
+  unit,
+  budget,
+  onAssessment,
+  showTitle = true,
+}: PriceCheckProps) {
   // 평형이 바뀌면 이 컴포넌트는 통째로 다시 마운트된다(호출부의 key).
   // 그래도 근거 객체는 렌더마다 새로 만들지 않는다 — 훅의 useMemo가
   // 참조로 의존성을 보기 때문이다.
@@ -90,7 +109,9 @@ export function PriceCheck({ unit, budget, onAssessment }: PriceCheckProps) {
 
   return (
     <section className="price-check" aria-label="호가 위치 확인">
-      <h3 className="price-check-title">{rules.position.label}</h3>
+      {showTitle && (
+        <h3 className="price-check-title">{rules.position.label}</h3>
+      )}
 
       {/*
         무엇을 말하지 않는 화면인지 먼저 밝힌다. 이 문단은 인쇄에서도
