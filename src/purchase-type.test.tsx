@@ -231,12 +231,6 @@ describe("투자 목적 유형", () => {
     expect(screen.getByLabelText("월세")).toBeInTheDocument();
     expect(screen.queryByLabelText("전세보증금")).not.toBeInTheDocument();
   });
-
-  it("인쇄 버튼은 유형과 무관하게 있다", async () => {
-    render(<App />);
-    await choose("월세수익형");
-    expect(screen.getByRole("button", { name: "인쇄하기" })).toBeInTheDocument();
-  });
 });
 
 /**
@@ -484,8 +478,8 @@ describe("재검토 수정: 저장된 투자 유형으로 새로 열기", () => 
 
   it("reachable()이 실제로 무언가를 걸러낸다(전제)", async () => {
     const { container } = render(<App />);
-    // 프로필만 채우고 지역은 조회하지 않은 상태 — 실거주 결과 트리에
-    // 인쇄 버튼이 그려지지만 phase는 아직 "입력"이라 화면 1이 그 위를
+    // 프로필만 채우고 지역은 조회하지 않은 상태 — 실거주 결과 트리의
+    // 상단바가 그려지지만 phase는 아직 "입력"이라 화면 1이 그 위를
     // 덮고 있다(리뷰 수정 Important 4가 `inert`로 끊은 바로 그 상태).
     await fillProfile();
     expect(container.querySelector(".entry-screen")).not.toHaveClass(
@@ -494,8 +488,10 @@ describe("재검토 수정: 저장된 투자 유형으로 새로 열기", () => 
     expect(container.querySelector(".results-screen")).toHaveAttribute("inert");
 
     // 그 inert 트리 안의 컨트롤은 닿지 않는 것으로 판정돼야 한다.
-    const printButton = screen.getByRole("button", { name: "인쇄하기" });
-    expect(reachable(printButton)).toBe(false);
+    const budgetTrigger = screen.getByRole("button", {
+      name: /실구매 가능 가격/,
+    });
+    expect(reachable(budgetTrigger)).toBe(false);
     // 화면 1 안의 입력은 닿는다 — 이 헬퍼가 전부 false를 내는 것이
     // 아님을 함께 확인한다.
     expect(reachable(screen.getByLabelText("사용가능 현금 예산"))).toBe(true);
@@ -540,9 +536,6 @@ describe("재검토 수정: 저장된 투자 유형으로 새로 열기", () => 
       ).toBe(true);
     }
     expect(reachable(screen.getByLabelText("월세"))).toBe(true);
-    expect(reachable(screen.getByRole("button", { name: "인쇄하기" }))).toBe(
-      true,
-    );
   });
 
   it("실거주가 복원되면 화면 1이 그대로 뜨고 그 안의 입력에 닿는다(대조군)", () => {

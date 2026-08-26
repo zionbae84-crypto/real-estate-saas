@@ -6,7 +6,7 @@
  * 예전에는 `EntryScreen`이 `document.body.style.overflow = "hidden"`을
  * 직접 썼다. 그 잠금은 `phase === "입력"`인 내내 걸려 있는데, 바로 그
  * 상태가 앞선 리뷰(Critical 1)가 "인쇄할 수 있어야 한다"고 고친 상태다
- * — 그 화면의 인쇄 버튼은 지금 `inert`라 Cmd+P가 유일한 경로다.
+ * — 인쇄는 브라우저의 Cmd+P로만 하고, 그 단계에서도 눌린다.
  *
  * `<html>`의 `overflow`는 기본값이 `visible`이라 `<body>`의 `hidden`이
  * 뷰포트로 전파된다. 크롬·파이어폭스에서 인쇄물이 첫 장에서 잘리는

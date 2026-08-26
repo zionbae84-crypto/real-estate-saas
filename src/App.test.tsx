@@ -1108,7 +1108,7 @@ describe("App - 단지 상세(화면 4)", () => {
       );
     });
 
-    it("인쇄 버튼도 그 안에 있다 — 오버레이 뒤에서 키보드로 눌리지 않는다", async () => {
+    it("상단바 버튼도 그 안에 있다 — 오버레이 뒤에서 키보드로 눌리지 않는다", async () => {
       const { container } = render(<App />);
       await fillProfile();
       await userEvent.click(
@@ -1116,7 +1116,9 @@ describe("App - 단지 상세(화면 4)", () => {
       );
       const results = container.querySelector(".results-screen");
       expect(
-        results?.contains(screen.getByRole("button", { name: "인쇄하기" })),
+        results?.contains(
+          screen.getByRole("button", { name: /실구매 가능 가격/ }),
+        ),
       ).toBe(true);
     });
   });
@@ -1170,13 +1172,6 @@ describe("App - 단지 상세(화면 4)", () => {
   });
 
   describe("리뷰 수정: 인쇄(화면 5)", () => {
-    it("현금·소득을 입력하기 전에는 인쇄 버튼이 없다", () => {
-      render(<App />);
-      expect(
-        screen.queryByRole("button", { name: "인쇄하기" }),
-      ).not.toBeInTheDocument();
-    });
-
     /**
      * 리뷰 수정(Critical 1). 화면 1(`.entry-screen`)은 불투명한 전체화면
      * 고정 레이어라 인쇄에서 통째로 지운다 — 그러면 그 **안에** 있던
@@ -1342,18 +1337,6 @@ describe("App - 단지 상세(화면 4)", () => {
       }
 
       check("월세수익형 투자 화면");
-    });
-
-    it("계산이 나오면 인쇄 버튼이 나타나고, 누르면 브라우저 인쇄 대화상자를 연다", async () => {
-      const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
-      render(<App />);
-      await fillProfile();
-
-      const button = screen.getByRole("button", { name: "인쇄하기" });
-      await userEvent.click(button);
-
-      expect(printSpy).toHaveBeenCalledTimes(1);
-      printSpy.mockRestore();
     });
 
     it("입력한 전제(현금·소득·주택 수·룰셋 기준)가 인쇄 전용 요약에 나온다", async () => {
@@ -2064,7 +2047,7 @@ describe("전체화면 결과 셸", () => {
     expect(container.querySelector(".disclaimer")).not.toBeNull();
   });
 
-  it("상단바가 전제와 결과를 요약하고, 인쇄·조건 다시 넣기가 그 안에 선다", async () => {
+  it("상단바가 전제와 결과를 요약하고, 조건 다시 넣기가 그 안에 선다", async () => {
     const { container } = await renderResults();
     const topbar = container.querySelector(".result-topbar");
 
@@ -2080,9 +2063,6 @@ describe("전체화면 결과 셸", () => {
     expect(topbar?.textContent).toContain("서울특별시 강남구");
     expect(topbar?.textContent).not.toContain("11680");
 
-    expect(
-      topbar?.contains(screen.getByRole("button", { name: "인쇄하기" })),
-    ).toBe(true);
     expect(
       topbar?.contains(screen.getByRole("button", { name: "조건 다시 넣기" })),
     ).toBe(true);

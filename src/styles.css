@@ -1146,16 +1146,6 @@ h2 {
   flex-shrink: 0;
 }
 
-/*
- * 상단바 안에서는 인쇄 버튼의 세로 여백(.print-button의 margin)을
- * 없앤다 — 그 값은 세로로 흐르던 문서 시절의 것이다.
- */
-.result-topbar .print-button {
-  margin: 0;
-  /* 눌려서 글자가 세로로 쪼개지지 않게 한다(위 flex-wrap 주석의 실측). */
-  white-space: nowrap;
-}
-
 .back-to-entry-button {
   padding: 0.5rem 0.875rem;
   font: inherit;
@@ -1454,28 +1444,6 @@ h2 {
   outline: 2px solid var(--seed-color-stroke-brand-solid);
   outline-offset: 1px;
   z-index: 1;
-}
-
-/*
- * 인쇄 버튼. 화면 어조("해요체")를 그대로 쓴다 — 버튼 문구는 짧은 동사형
- * 명사구("인쇄하기")라 tone-guard의 대상(문장 종결)이 아니다.
- */
-.print-button {
-  margin: 1.5rem 0 0;
-  padding: 0.625rem 1.25rem;
-  font: inherit;
-  font-weight: 600;
-  /*
-   * 흰 글자는 배경 토큰(bg-layer-floating)이 아니라 팔레트의 정적
-   * 흰색으로 낸다 — `.complex-map-marker--high`와 같은 토큰을 쓴다.
-   * 배경 토큰을 글자색으로 빌려 쓰면, 그 토큰이 "떠 있는 면의 배경"
-   * 이라는 이유로 값이 바뀌는 날 이 글자색이 함께 끌려간다.
-   */
-  color: var(--seed-color-palette-static-white);
-  background: var(--seed-color-bg-brand-solid);
-  border: none;
-  border-radius: 0.375rem;
-  cursor: pointer;
 }
 
 /*
@@ -2147,8 +2115,8 @@ h2 {
  * 스타일은 `!important` 없이 CSS로 덮을 수 없어, 아래 `@media print`가
  * 이 잠금을 풀 방법이 없었다 — `<html>`의 `overflow` 기본값이
  * `visible`이라 `<body>`의 `hidden`이 뷰포트로 전파되고, 그 상태로
- * 인쇄하면(화면 1의 인쇄 버튼은 `inert`라 Cmd+P가 유일한 경로다)
- * 크롬·파이어폭스에서 종이가 첫 장에서 잘린다. design.md §6의 규칙
+ * 인쇄하면(인쇄는 브라우저의 Cmd+P로만 한다) 크롬·파이어폭스에서
+ * 종이가 첫 장에서 잘린다. design.md §6의 규칙
  * (`overflow`/`max-height` 제약을 건 요소는 반드시 `@media print`에서
  * 푼다)이 그대로 걸리는 자리다.
  *
@@ -2191,7 +2159,6 @@ body.body-scroll-locked {
   .price-slider-control,
   .region-select,
   .dong-narrow,
-  .print-button,
   .back-to-entry-button,
   .complex-more,
   .complex-detail-back,
@@ -2215,8 +2182,8 @@ body.body-scroll-locked {
   /*
    * 화면 1의 문서 스크롤 잠금을 푼다(재검토 수정 Critical 2).
    *
-   * `phase === "입력"`인 채로 인쇄하는 것은 정상 경로다 — 화면 1의
-   * 인쇄 버튼은 `inert`라 그 상태에서는 Cmd+P가 유일한 길이다. 잠금이
+   * `phase === "입력"`인 채로 인쇄하는 것은 정상 경로다 — 인쇄는
+   * 브라우저의 Cmd+P로만 하고, 그 단계에서도 눌린다. 잠금이
    * 남아 있으면 `<body>`의 `overflow: hidden`이 (`<html>`의 기본값
    * `visible`을 통해) 뷰포트로 전파돼 종이가 첫 장에서 잘린다.
    *
