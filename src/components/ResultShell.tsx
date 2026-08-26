@@ -90,6 +90,17 @@ export interface ResultSummaryItemProps {
   value: string;
   /** 금액 강조(황동). 지금은 "실구매 가능 가격" 하나뿐이다 */
   emphasis?: boolean;
+  /**
+   * 값 자리가 숫자가 아니라 **원인을 말하는 문장**일 때 켠다
+   * (리뷰 수정 Important 1: 실구매 가능 가격이 0원인 프로필).
+   *
+   * `emphasis`와 함께 쓰지 않는다 — 켜면 이쪽이 이긴다. 강조(황동 +
+   * `tabular-nums`)는 "여기 금액이 있다"는 신호라, 금액이 없다고
+   * 말하는 문장에 그 옷을 입히면 화면에서 가장 큰 글씨가 없는 숫자를
+   * 있는 것처럼 광고한다. 문장은 좁은 화면에서 줄바꿈도 해야 한다
+   * (`.result-topbar-item`의 `nowrap`을 값 쪽에서 되돌린다).
+   */
+  notice?: boolean;
 }
 
 /**
@@ -105,19 +116,22 @@ export interface ResultSummaryItemProps {
  * 된다 — Task 3이 리뷰에서 잡힌 실패 중 하나가 정확히 그것이었다
  * (누르라고 적어 놓고 아무 일도 하지 않던 가정 칩).
  */
-export function ResultSummaryItem({ label, value, emphasis = false }: ResultSummaryItemProps) {
+export function ResultSummaryItem({
+  label,
+  value,
+  emphasis = false,
+  notice = false,
+}: ResultSummaryItemProps) {
+  const valueClass = notice
+    ? "result-topbar-item-value result-topbar-item-value--notice"
+    : emphasis
+      ? "result-topbar-item-value result-topbar-item-value--money"
+      : "result-topbar-item-value";
+
   return (
     <div className="result-topbar-item">
       <span className="result-topbar-item-label">{label}</span>
-      <span
-        className={
-          emphasis
-            ? "result-topbar-item-value result-topbar-item-value--money"
-            : "result-topbar-item-value"
-        }
-      >
-        {value}
-      </span>
+      <span className={valueClass}>{value}</span>
     </div>
   );
 }

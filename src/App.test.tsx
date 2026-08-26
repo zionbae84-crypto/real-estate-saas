@@ -2,6 +2,7 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { ZERO_BUDGET_HEADLINE } from "./components/BudgetResult";
 import type { ComplexUnit } from "./data/complexes";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import * as loadNaverMaps from "./lib/loadNaverMaps";
@@ -1772,9 +1773,10 @@ describe("전체화면 결과 셸", () => {
     document.body.classList.remove(BODY_SCROLL_LOCK_CLASS);
   });
 
-  async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+  /** 단위는 만원이다(150000 = 15억). */
+  async function fillProfile(cash = "150000", income = "15000") {
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), cash);
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), income);
     await userEvent.click(screen.getByLabelText("무주택"));
   }
 
@@ -1787,7 +1789,10 @@ describe("전체화면 결과 셸", () => {
   }
 
   /** 두 단지가 뜨는 결과 화면까지 간다. 지도까지 실제로 그린다. */
-  async function renderResults(units: ComplexUnit[] = [CASH_UNIT, LOAN_UNIT]) {
+  async function renderResults(
+    units: ComplexUnit[] = [CASH_UNIT, LOAN_UNIT],
+    profile: { cash?: string; income?: string } = {},
+  ) {
     const fake = fakeNaver();
     vi.spyOn(loadNaverMaps, "loadNaverMaps").mockResolvedValue(
       fake.naverGlobal as unknown as typeof naver,
@@ -1807,7 +1812,7 @@ describe("전체화면 결과 셸", () => {
     });
 
     const rendered = render(<App />);
-    await fillProfile();
+    await fillProfile(profile.cash, profile.income);
     await chooseRegion();
     await screen.findByRole("region", { name: "살 수 있는 단지" });
     return { ...rendered, ...fake };
@@ -1871,6 +1876,10 @@ describe("전체화면 결과 셸", () => {
     expect(topbar?.textContent).toContain("15억");
     expect(topbar?.textContent).toContain("연 소득(세전)");
     expect(topbar?.textContent).toContain("실구매 가능 가격");
+    // 금액이 있는 프로필에서는 그 자리가 황동 강조다 — 아래 0원 테스트의 대조군.
+    expect(
+      topbar?.querySelector(".result-topbar-item-value--money"),
+    ).not.toBeNull();
     // 지역은 코드가 아니라 이름으로 적는다.
     expect(topbar?.textContent).toContain("서울특별시 강남구");
     expect(topbar?.textContent).not.toContain("11680");
@@ -1990,6 +1999,35 @@ describe("전체화면 결과 셸", () => {
     expect(
       screen.getByRole("region", { name: "살 수 있는 단지" }),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * 리뷰 수정 Important 1 — **상단바가 맨숫자 0을 내지 않는다.**
+   *
+   * `useAffordability`는 프로필이 완성되면 `null`을 내지 않으므로, 현금이
+   * 고정 부대비용에도 못 미치는 사람도 이 셸에 도달한다. 그때 상단바는
+   * 화면에서 가장 큰 글씨이자 종이의 첫 줄인데, 예전에는 거기에 황동으로
+   * "실구매 가능 가격 / 0원"만 찍혔다.
+   */
+  it("실구매 가능 가격이 0원이면 상단바가 숫자 대신 원인을 말한다", async () => {
+    // 현금 100만원 — 매매가 0원에서도 드는 고정 부대비용(법무비·이사비)에도
+    // 못 미쳐 실구매 가능 가격이 0이 된다.
+    const { container } = await renderResults([CASH_UNIT, LOAN_UNIT], {
+      cash: "100",
+    });
+
+    // 전제: 실제로 0원 상태다(사이드바가 그 사실을 말하고 있다).
+    expect(container.querySelector(".no-budget")).not.toBeNull();
+
+    const topbar = container.querySelector(".result-topbar");
+    expect(topbar?.textContent).toContain("실구매 가능 가격");
+    expect(topbar?.textContent).not.toContain("0원");
+    // 사이드바가 쓰는 것과 같은 문장이다(같은 상수).
+    expect(topbar?.textContent).toContain(ZERO_BUDGET_HEADLINE);
+    // 금액 강조(황동)를 입히지 않는다 — 없는 숫자를 있는 것처럼 광고하지 않는다.
+    expect(
+      topbar?.querySelector(".result-topbar-item-value--money"),
+    ).toBeNull();
   });
 
   /**

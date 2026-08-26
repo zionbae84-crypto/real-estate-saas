@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { AssumptionLine } from "./components/AssumptionLine";
-import { BudgetResult } from "./components/BudgetResult";
+import { BudgetResult, ZERO_BUDGET_HEADLINE } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
 import { ComplexList } from "./components/ComplexList";
 import { ComplexMap, groupWithCoords } from "./components/ComplexMap";
@@ -1031,11 +1031,36 @@ export function App() {
                       뺀 매매가다 — 화면의 다른 자리와 다른 이름으로
                       부르면 종이와 화면이 같은 숫자를 두고 두 말을 한다.
                     */}
-                    <ResultSummaryItem
-                      label="실구매 가능 가격"
-                      value={formatWon(affordability.result.affordablePrice)}
-                      emphasis
-                    />
+                    {/*
+                      **0원이면 숫자를 내지 않는다**(리뷰 수정 Important 1).
+
+                      `affordability`는 프로필만 완성되면 `null`이 아니라,
+                      DSR이 0이거나 현금이 고정 부대비용에도 못 미치는
+                      사람도 이 셸에 도달한다. 그때 이 자리는 화면에서
+                      가장 큰 글씨이자 종이의 첫 줄인데, 예전에는 거기에
+                      황동으로 "실구매 가능 가격 / 0원"만 찍혔다 — 이
+                      저장소가 `no-budget`을 `MUST_SURVIVE_PRINT_CLASSES`에
+                      넣어 둔 바로 그 이유(맨숫자 0은 답의 모양을 한
+                      거짓말이다)에 정면으로 어긋난다.
+
+                      그래서 다른 모든 자리와 같은 규칙을 따른다: 숫자를
+                      숨기고 원인을 말한다. 문구는 사이드바의
+                      `ZeroBudgetMessage`가 쓰는 것과 **같은 상수**다
+                      (`ZERO_BUDGET_HEADLINE`) — 여기서 새로 짓지 않는다.
+                    */}
+                    {affordability.result.affordablePrice > 0 ? (
+                      <ResultSummaryItem
+                        label="실구매 가능 가격"
+                        value={formatWon(affordability.result.affordablePrice)}
+                        emphasis
+                      />
+                    ) : (
+                      <ResultSummaryItem
+                        label="실구매 가능 가격"
+                        value={ZERO_BUDGET_HEADLINE}
+                        notice
+                      />
+                    )}
                     {/*
                       지역 이름은 코드가 아니라 이름으로 적는다(위
                       `currentRegionName` 주석 참고).

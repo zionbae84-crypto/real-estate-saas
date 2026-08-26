@@ -7,6 +7,19 @@ import { PolicyLoanList } from "./PolicyLoanList";
 import { SafeLine } from "./SafeLine";
 import { WarningList } from "./WarningList";
 
+/**
+ * `affordablePrice === 0`일 때 이 앱이 숫자 대신 내는 **한 문장**.
+ *
+ * 아래 {@link ZeroBudgetMessage}의 제목이자, 상단바 요약
+ * (`ResultSummaryItem`, App.tsx)이 "실구매 가능 가격" 자리에 넣는 값이다.
+ * **두 자리가 같은 상수를 본다** — 상단바가 자기 문구를 따로 지으면
+ * 같은 사실을 두 가지 말로 하게 되고, 그중 하나가 바뀌는 날 화면과
+ * 종이가 서로 다른 이유를 댄다. 원인 갈래(현금 부족 / 상환능력 0)는
+ * 이 문장 아래에서 갈린다 — 상단바는 한 줄뿐이라 그 갈래까지는 지고
+ * 가지 않고, 사이드바의 {@link ZeroBudgetMessage}가 이어서 말한다.
+ */
+export const ZERO_BUDGET_HEADLINE = "현재 조건으로는 주택담보대출이 나오지 않아요";
+
 export interface BudgetResultProps {
   result: AffordableResult;
   /**
@@ -124,7 +137,7 @@ function ZeroBudgetMessage({ result }: { result: AffordableResult }) {
 
   return (
     <div className="no-budget">
-      <h2>현재 조건으로는 주택담보대출이 나오지 않아요</h2>
+      <h2>{ZERO_BUDGET_HEADLINE}</h2>
       {incomeOrDebtBlocked ? (
         <p>
           소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어요.

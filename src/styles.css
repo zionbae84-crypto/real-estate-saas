@@ -1108,6 +1108,18 @@ h2 {
   color: var(--seed-color-fg-brand);
 }
 
+/*
+ * 값 자리가 문장일 때(실구매 가능 가격이 0원 — ResultShell.tsx의
+ * `notice` prop 문서 참고). 황동 강조를 쓰지 않고, `.result-topbar-item`이
+ * 건 `nowrap`을 여기서만 되돌린다 — 24자짜리 문장을 한 줄로 붙들면
+ * 좁은 화면에서 상단바가 통째로 가로 스크롤 상자가 된다.
+ */
+.result-topbar-item-value--notice {
+  font-weight: 600;
+  white-space: normal;
+  color: var(--seed-color-fg-neutral);
+}
+
 .result-topbar-actions {
   display: flex;
   align-items: center;
