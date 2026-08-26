@@ -10,6 +10,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaSource } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
+import { ResultShell, ResultSummaryItem } from "./components/ResultShell";
 import { PurchaseCheck } from "./components/PurchaseCheck";
 import { PurchaseTypeSelect } from "./components/PurchaseTypeSelect";
 import { RegionSelect } from "./components/RegionSelect";
@@ -18,8 +19,11 @@ import {
   AGGREGATION_WINDOW_LABEL,
   type ComplexUnit,
 } from "./data/complexes";
-import { buildComplexList } from "./lib/complex-list";
+import { buildComplexList, burdenTierOf } from "./lib/complex-list";
+import { unitKey } from "./components/ComplexList";
+import { regionNameByCode } from "./data/regions";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
+import { formatWon } from "./format/won";
 import {
   calcAcquisitionCosts,
   calcBurdenAt,
@@ -120,6 +124,25 @@ export function App() {
   const [visibleCount, setVisibleCount] = useState(10);
   // 상세(상환 시뮬레이션)를 연 평형. null이면 목록 화면이다.
   const [selectedUnit, setSelectedUnit] = useState<ComplexUnit | null>(null);
+  /**
+   * 지금 고른 단지(`complexKey`) — 목록 행 표시와 지도 마커 강조가
+   * **이 한 벌**을 함께 본다(task-4-brief Step 4: "선택 상태는 한 곳에서
+   * 관리한다"). 목록과 지도가 각자 자기 선택을 들면 두 창이 서로 다른
+   * 단지를 가리키는 날이 온다.
+   *
+   * **`selectedUnit`과 다른 축이다.** `selectedUnit`은 "상세를 연
+   * 평형"이고, 그 값은 화면 전체의 계산을 그 평형의 실제 면적으로
+   * 바꿔치기한다(`effectiveProfile`) — 상세를 닫으면 반드시 `null`로
+   * 돌아가야 하는 값이다. 반면 이 값은 "지금 보고 있는 단지"일 뿐이라
+   * 상세를 닫아도 남는다(닫은 뒤에도 그 행이 어디였는지 보인다).
+   * 하나로 합치면 둘 중 한쪽의 규칙이 반드시 깨진다.
+   *
+   * 단지(complexKey) 단위인 이유는 마커가 단지 하나에 하나이기
+   * 때문이다(ComplexMap의 `groupByComplex`). 그래서 같은 단지의 평형
+   * 행이 여럿이면 그 행들이 함께 표시된다 — 마커가 실제로 가리키는 것이
+   * 그 단지 전체다.
+   */
+  const [focusedComplexKey, setFocusedComplexKey] = useState<string | null>(null);
 
   /**
    * 진단 종합(`DiagnosisSummary`)이 읽는 네 축의 최신 판정.
@@ -241,6 +264,8 @@ export function App() {
   function handleRegionSelect(regionCode: string) {
     setSelectedDong(null);
     setVisibleCount(10);
+    // 앞 지역에서 고른 단지는 새 지역 목록에도 지도에도 없다.
+    setFocusedComplexKey(null);
     setCurrentRegionCode(regionCode);
     regionComplexes.query(regionCode);
   }
@@ -307,6 +332,16 @@ export function App() {
    * 지역 조회가 성공하면(목록이 이미 뜬 뒤) 같은 지역으로 좌표도 조회한다.
    */
   const complexCoordinates = useComplexCoordinates();
+
+  /**
+   * 지금 보고 있는 지역의 사람이 읽는 이름("서울특별시 강남구").
+   *
+   * 모르는 코드면 `null`이고, 그때 상단바는 그 칸을 아예 내지 않는다 —
+   * 코드(`11680`)를 그대로 보여주면 사용자가 읽을 수 없는 숫자를
+   * 확인된 사실처럼 세우게 된다.
+   */
+  const currentRegionName =
+    currentRegionCode === null ? null : regionNameByCode(currentRegionCode);
 
   /** 조회 결과에 실제로 있는 행정동만. 없는 동은 고를 수 있으면 안 된다 */
   const dongOptions = useMemo(
@@ -435,7 +470,7 @@ export function App() {
    * 확인 필요·부담이 큼). 지도에서 `withinSafe`만 그리면 지도가
    * 목록보다 낙관적으로 말하게 된다.
    */
-  const mappedUnits = useMemo(
+  const mappedEntries = useMemo(
     () =>
       complexList === null
         ? []
@@ -443,8 +478,39 @@ export function App() {
             ...complexList.withinSafe,
             ...complexList.unverified,
             ...complexList.beyondSafe,
-          ].map((entry) => entry.unit),
+          ],
     [complexList],
+  );
+
+  const mappedUnits = useMemo(
+    () => mappedEntries.map((entry) => entry.unit),
+    [mappedEntries],
+  );
+
+  /**
+   * 지도 마커 색이 뜻할 **부담 수준**(대출 없이 / 대출 필요).
+   *
+   * **지도가 이 값을 스스로 계산하지 않게 하는 자리다.** 위
+   * `mappedEntries`는 목록이 그리는 바로 그 항목들이고, `burdenTierOf`는
+   * 목록 행이 "대출 없이 살 수 있어요"와 "월 …· 부담률 …"을 가를 때
+   * 부르는 것과 **같은 함수**다(`lib/complex-list.ts`). 그래서 지도와
+   * 목록이 같은 단지를 두고 다른 말을 하려면 그 함수 하나가 같은 입력에
+   * 다른 답을 내야 한다.
+   *
+   * 예전 마커 색(가격 3분위)은 **그린 집합 안에서의 상대 위치**라
+   * "이 지역 기준으로 싼 편"일 뿐인데 "내 예산에 맞는다"로 읽혔다
+   * (design.md §4가 그 뜻을 바꾼 이유). 지금은 단지 자체의 사실이라
+   * 몇 개를 함께 그리든 같은 단지는 같은 색이다.
+   *
+   * 키는 평형 단위(`unitKey`)다 — 부담은 평형마다 다르고, 마커는 그중
+   * 대표 평형의 숫자를 라벨에 낸다(ComplexMap의 `burdenTiers`).
+   */
+  const burdenByUnit = useMemo(
+    () =>
+      new Map(
+        mappedEntries.map((entry) => [unitKey(entry.unit), burdenTierOf(entry)]),
+      ),
+    [mappedEntries],
   );
 
   /**
@@ -487,6 +553,37 @@ export function App() {
   }, [regionComplexes.status, currentRegionCode, hasMappedUnits, complexCoordinates.query]);
 
   /**
+   * 지도에서 마커를 눌렀다. 목록 쪽 선택을 같은 단지로 맞추고, 그 행이
+   * "더 보기" 너머에 있으면 **보이는 데까지 목록을 펼친다.**
+   *
+   * 펼치지 않으면 이 배선은 절반만 동작한다: 지도는 30개까지 그리는데
+   * (`MARKER_LIMIT`) 목록은 덩어리마다 `visibleCount`(기본 10)개씩만
+   * 그리므로, 11번째 단지의 마커를 누르면 선택은 바뀌는데 화면에는
+   * 아무 변화가 없다 — 사용자에겐 마커가 죽은 것으로 보인다.
+   *
+   * 상세(`selectedUnit`)는 열지 않는다. 마커는 단지 하나를 가리키고
+   * 상세는 **평형** 하나에 대한 것이라, 어느 평형인지는 마커가 정할 수
+   * 없다 — 그 선택은 목록 행이 한다(`handleSelectUnit`).
+   */
+  function handleFocusComplex(complexKey: string) {
+    setFocusedComplexKey(complexKey);
+    if (complexList === null) return;
+    // 덩어리마다 같은 visibleCount로 잘리므로(ComplexList), 그 단지가
+    // 들어 있는 덩어리에서의 자리(1부터 센 순번)만큼은 펼쳐야 한다.
+    const needed = Math.max(
+      ...[complexList.withinSafe, complexList.unverified, complexList.beyondSafe].map(
+        (chunk) => {
+          const index = chunk.findIndex((e) => e.unit.complexKey === complexKey);
+          return index === -1 ? 0 : index + 1;
+        },
+      ),
+    );
+    // 줄이지는 않는다 — 이미 더 펼쳐 둔 목록을 접으면 사용자가 방금
+    // 누른 "더 보기"를 화면이 되돌리는 셈이 된다.
+    setVisibleCount((n) => Math.max(n, needed));
+  }
+
+  /**
    * 단지 목록의 행을 누르면 그 평형의 상세(상환 시뮬레이션)를 연다.
    *
    * 화면 상태(`selectedUnit`)만 바꾼다 — 프로필에는 아무것도 쓰지
@@ -497,6 +594,9 @@ export function App() {
    */
   function handleSelectUnit(unit: ComplexUnit) {
     setSelectedUnit(unit);
+    // 행을 누르면 지도도 그 단지로 옮겨 가며 마커를 강조한다
+    // (design.md §4: 목록 행 ↔ 마커는 양방향으로 이어진다).
+    setFocusedComplexKey(unit.complexKey);
     // 새 평형의 PriceCheck·LocationFacts가 다시 마운트되며 자기
     // onAssessment로 새 값을 곧바로 올려 주지만(App.tsx 상단 주석), 그
     // 전까지 앞 평형의 판정이 잠깐이라도 새 평형에 대한 것처럼 남지
@@ -627,6 +727,68 @@ export function App() {
       householdCountNote: householdCountNoteFor(residentialProfile, rules),
     };
   }, [residentialProfile, selectedUnit]);
+
+  /**
+   * 화면 맨 끝의 두 조각 — 진단 종합과 면책 문구.
+   *
+   * **한 번만 적고 두 자리에 그린다.** 실거주 경로에서는 전체화면 셸
+   * (`ResultShell`) **안**의 사이드바 끝에, 투자 경로에서는 지금까지처럼
+   * 문서 흐름 끝에 온다. 셸은 `position: fixed; inset: 0`이라 그 **밖에**
+   * 남겨 두면 화면을 덮은 셸 뒤에 깔려 보이지도 눌리지도 않는다 —
+   * `phase === "입력"`일 때 결과 트리가 오버레이 뒤에 깔려 있던 것과
+   * 똑같은 실패다(Task 3 리뷰 Important 4·5).
+   *
+   * 두 자리에 각각 적지 않는 이유는 그쪽이 갈라지기 때문이다. 이 두
+   * 조각은 "못 본 축을 숨기지 않는다"와 면책이라 한쪽만 고쳐지면
+   * 곧바로 사고가 된다.
+   */
+  const resultTail = (
+    <>
+    {/*
+      진단 종합은 화면의 맨 끝(면책 문구 바로 위)에 둔다 —
+      "지금까지 본 것 전부를 한자리에 모으는 마무리"로 두는 이유는
+      `DiagnosisSummary.tsx` 문서에 적었다.
+
+      네 축이 동시에 다 채워지는 일은 없다(권리분석은 이 앱에서
+      제거돼 항상 `null`이고, 구매 유형별 금융은 투자 경로에서만,
+      호가·입지는 실거주에서 평형을 고른 동안만 존재한다) — 그래서
+      못 본 축은 값을 지어내지 않고 그대로 `null`을 넘긴다.
+      `DiagnosisSummary`가 그 `null`을 "못 봤다"로 그린다.
+
+      `<details>`로 접지 않는다 — 이 화면의 존재 이유가 "못 본
+      축을 숨기지 않는 것"인데, 화면 전체를 접어 두면 클릭하지
+      않은 사람에게는 그 못 본 축조차 보이지 않는다.
+    */}
+    <DiagnosisSummary
+      rights={null}
+      purchase={purchaseAssessment}
+      price={priceAssessment}
+      location={locationAssessment}
+    />
+    {/*
+      면책 문구도 유형에 따라 갈린다.
+
+      "추정치이며 실제 대출한도는 …"은 이 화면이 대출한도 추정치를 낸다는
+      것을 전제한 문장이다. 투자 경로에서는 바로 위에서 "이 유형의 대출
+      한도는 우리가 계산하지 않아요"라고 말한 뒤라, 그 문장이 그대로
+      남으면 어딘가에 한도 추정치가 있는 것처럼 읽힌다.
+    */}
+    <footer className="disclaimer">
+      {purchaseType === "실거주" ? (
+        <>
+          추정치이며 실제 대출한도는 금융기관 심사 결과에 따릅니다.
+          시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
+        </>
+      ) : (
+        <>
+          이 화면은 대출한도를 계산하지 않아요. 여기 있는 숫자는 적어 주신
+          값으로 낸 비율이에요.
+          시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
+        </>
+      )}
+    </footer>
+    </>
+  );
 
   return (
     <main className="app">
@@ -841,8 +1003,257 @@ export function App() {
               아래에서 이 프로필로 취득세 고지를 골라야 하는데, 두 값이
               같은 조건에서 생기고 사라지므로 조건도 함께 둔다.
             */}
-            {affordability !== null && residentialProfile !== null && (
-              <>
+            {affordability !== null && residentialProfile !== null ? (
+              /*
+                화면 2 — 전체화면 셸(design.md §4). 상단바 + 사이드바 +
+                지도. 안에 담기는 것은 지금까지와 **같은 컴포넌트들이고
+                조건도 그대로**다 — 바뀐 것은 어디에 그리는가뿐이다.
+              */
+              <ResultShell
+                summary={
+                  <>
+                    {state.cash !== null && (
+                      <ResultSummaryItem
+                        label="사용가능 현금 예산"
+                        value={formatWon(state.cash)}
+                      />
+                    )}
+                    {state.annualIncome !== null && (
+                      <ResultSummaryItem
+                        label="연 소득(세전)"
+                        value={formatWon(state.annualIncome)}
+                      />
+                    )}
+                    {/*
+                      라벨은 `BudgetResult`의 제목("실구매 가능 가격")을
+                      그대로 쓴다. design.md §4의 그림은 이 자리를 "한도"라
+                      부르지만, 이 숫자는 대출 한도가 아니라 부대비용까지
+                      뺀 매매가다 — 화면의 다른 자리와 다른 이름으로
+                      부르면 종이와 화면이 같은 숫자를 두고 두 말을 한다.
+                    */}
+                    <ResultSummaryItem
+                      label="실구매 가능 가격"
+                      value={formatWon(affordability.result.affordablePrice)}
+                      emphasis
+                    />
+                    {/*
+                      지역 이름은 코드가 아니라 이름으로 적는다(위
+                      `currentRegionName` 주석 참고).
+                    */}
+                    {currentRegionName !== null && (
+                      <ResultSummaryItem label="지역" value={currentRegionName} />
+                    )}
+                  </>
+                }
+                actions={
+                  <>
+                    {/*
+                      지금 보고 있는 화면 상태 그대로(상세가 열려 있으면 그 매물,
+                      아니면 목록) 인쇄한다 — 별도 인쇄 화면을 만들지 않는다.
+                      버튼 자신은 인쇄에서 지운다(styles.css의 .print-button).
+                    */}
+                    <button
+                      type="button"
+                      className="print-button"
+                      onClick={() => window.print()}
+                    >
+                      인쇄하기
+                    </button>
+                    {/*
+                      화면 1(영상 위 입력)로 돌아간다. 프로필·지역 조회 결과는
+                      그대로 남는다(handleBackToEntry 문서 참고) — 이 버튼은
+                      화면 전환일 뿐 리셋이 아니다.
+
+                      `phase === "결과"`일 때만 보인다 — 프로필은 채웠지만 아직
+                      지역을 조회하지 않았을 때(phase가 여전히 "입력")는 이미
+                      `EntryScreen`이 화면을 덮고 있어 이 버튼이 뜻이 없다.
+                    */}
+                    {phase === "결과" && (
+                      <button
+                        type="button"
+                        className="back-to-entry-button"
+                        onClick={handleBackToEntry}
+                      >
+                        조건 다시 넣기
+                      </button>
+                    )}
+                  </>
+                }
+                map={
+                  /*
+                    지도 칸의 내용. 칸(`.region-results-map`) 자체는
+                    `ResultShell`이 만든다 — 조건부 렌더링은 예전 그대로다.
+                  */
+                  <>
+                  {/*
+                    이 안쪽 조건의 `status === "success"`는 바깥
+                    `region-results-grid` 조건이 이미 보장한다 — 이
+                    블록에 들어왔다는 것 자체가 참이라는 뜻이라
+                    여기서는 redundant하다. 그래도 diff 리뷰에서
+                    "왜 지워졌는지"를 되짚게 만들지 않으려 그대로
+                    남긴다. 실제로 걸러내는 건 `complexList !== null`과
+                    아래 `hasMappedUnits` 분기다.
+
+                    예전에 있던 `!dongFilteredEmpty`는 뺐다 — 동으로
+                    좁혀 0건이면 `mappedUnits`도 반드시 0이라 아래
+                    분기가 이미 같은 경우를 잡는다. 두 조건을 함께
+                    두면 "동 때문에 0건"일 때만 지도 칸이 통째로
+                    비고(아무 문구도 없이), "예산 때문에 0건"일 때는
+                    문구가 뜨는, 같은 사실을 두 가지로 보여주는
+                    어긋남이 생긴다.
+                  */}
+                  {regionComplexes.status === "success" &&
+                    complexList !== null &&
+                    !hasMappedUnits && (
+                      /*
+                        지도에 그릴 단지가 없다. **원인을 여기서
+                        단정하지 않는다** — 원인은 왼쪽(모바일에선
+                        아래) 목록 칸이 이미 자기 문구로 말한다:
+                        동으로 좁혀서면 `.dong-empty`, 예산 때문이면
+                        `ComplexList`의 예산/상환능력 문구. 여기서
+                        "예산이 부족해요"라고 적으면 동 때문에 빈
+                        경우에 틀린 원인을 말하게 되고, 그건 이
+                        화면이 이미 한 번 겪은 오귀속이다.
+
+                        그래서 이 문구는 지도 칸이 아는 사실 하나만
+                        말한다: 그릴 것이 없다. "지도를 표시하지
+                        못했어요"(SDK 실패)·"단지 위치를 불러오지
+                        못했어요"(좌표 조회 실패)와 절대 같은 말을
+                        쓰지 않는다 — 여기는 아무것도 실패하지
+                        않았다.
+                      */
+                      <p className="complex-map-empty">
+                        조건에 맞는 단지가 없어 지도에 표시할 단지가
+                        없어요.
+                      </p>
+                    )}
+                  {regionComplexes.status === "success" &&
+                    complexList !== null &&
+                    hasMappedUnits && (
+                      <>
+                        {/*
+                          좌표 조회(complexCoordinates)는 목록 조회와 별개로
+                          도는 상태 기계다 — idle/loading/error/success를
+                          그대로 구분해 보여준다. "조회 실패"와 "조회했더니
+                          단지가 하나도 없더라"를 같은 빈 지도로 보여주면,
+                          이 앱이 가장 경계하는 오류(모르는 것과 확인한
+                          것을 같은 문구로 보여주는 것)를 지도에서도
+                          반복하게 된다.
+
+                          idle은 이 렌더 경로에선 사실상 스치는 순간뿐이다
+                          — 위 useEffect가 regionComplexes.status가
+                          "success"로 바뀌자마자(바로 이 조건 블록이
+                          그려지는 시점과 같은 렌더) query()를 호출해
+                          "loading"으로 넘어간다. 그래도 그 찰나에 아무것도
+                          안 그리면 화면이 깜빡이므로 로딩과 같은 문구를
+                          보여준다.
+                        */}
+                        {/*
+                          로딩·실패 문구를 `.complex-map-status`로 함께
+                          감싼다 — 인쇄에서는 아래 지도 자신
+                          (`.complex-map`)이 지워지므로, 이 문구들을 종이에
+                          남기면 근거를 잃은 "불러오고 있어요…"나 눌러도
+                          반응 없는 "다시 시도" 버튼만 남는 고아 문구가
+                          된다(src/print/hiddenInPrint.ts 참고).
+                        */}
+                        {(complexCoordinates.status === "idle" ||
+                          complexCoordinates.status === "loading" ||
+                          complexCoordinates.status === "error") && (
+                          <div className="complex-map-status">
+                            {(complexCoordinates.status === "idle" ||
+                              complexCoordinates.status === "loading") && (
+                              <p>지도를 불러오고 있어요…</p>
+                            )}
+
+                            {complexCoordinates.status === "error" && (
+                              <div className="region-query-error">
+                                {/*
+                                  세 실패 문구는 원인이 다르므로 서로 다르게
+                                  말한다: 목록 조회 실패("지금 실거래가를…"),
+                                  좌표 조회 실패(여기), 네이버지도 SDK 로드
+                                  실패("지도를 표시하지 못했어요" —
+                                  ComplexMap.tsx). 같은 문구로 뭉치면 사용자도
+                                  테스트도 무엇이 실패했는지 구분하지 못한다.
+                                */}
+                                <p>단지 위치를 불러오지 못했어요.</p>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    if (currentRegionCode !== null) {
+                                      complexCoordinates.query(currentRegionCode, null);
+                                    }
+                                  }}
+                                >
+                                  다시 시도
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {complexCoordinates.status === "success" && (
+                          <>
+                            <ComplexMap
+                              /*
+                                목록과 **정확히 같은 집합**을 넘긴다
+                                (`mappedUnits` 정의의 주석 참고).
+                                `dongFilteredUnits`(예산 필터 전)를
+                                넘기면 두 창이 다른 단지를 말한다.
+                              */
+                              units={mappedUnits}
+                              coordinates={complexCoordinates.coordinates}
+                              /*
+                                마커 색이 뜻하는 부담 수준. 목록 항목에서
+                                뽑아 온 값을 그대로 넘긴다 — 지도가 자기
+                                계산을 새로 하지 않게 하는 자리다
+                                (`burdenByUnit` 정의의 주석 참고).
+                              */
+                              burdenByUnit={burdenByUnit}
+                              /*
+                                선택은 App이 한 벌만 든다 — 목록 행 표시와
+                                이 마커 강조가 같은 값을 본다.
+                              */
+                              focusedComplexKey={focusedComplexKey}
+                              onFocusComplex={handleFocusComplex}
+                              naverMapClientId={
+                                import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
+                              }
+                            />
+                            {/*
+                              지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
+                              오류) — 주소가 진짜로 없어서가 아니다
+                              (api/_lib/handleGeocode.ts의 partialFailureCount
+                              참고). 새 로딩/에러/성공 3분기를 또 만들지
+                              않고, 이미 뜬 지도 옆에 한 줄만 덧붙인다 —
+                              성공적으로 찾은 단지는 그대로 지도에 남아
+                              있으니 "지도가 비어 있다"와 다르게 말해야
+                              한다.
+
+                              리뷰 수정(Minor 4): 위 조건만으로는 ComplexMap이
+                              이미 "주소로는 위치를 찾을 수 없었어요"(noneLocated)를
+                              보여주고 있을 때도 이 줄이 함께 뜰 수 있었다 —
+                              "**일부** 단지의 위치를…"이 안엔 "하나도"라고
+                              말하는 문구와 부딪힌다. `groupWithCoords`로
+                              ComplexMap 내부와 같은 계산(좌표를 아는 단지가
+                              하나라도 있는가)을 여기서도 돌려, 하나도 없을
+                              땐 이 줄을 접는다 — 있을 땐 그대로 뜬다.
+                            */}
+                            {complexCoordinates.hasPartialFailures &&
+                              groupWithCoords(mappedUnits, complexCoordinates.coordinates)
+                                .length > 0 && (
+                                <p className="complex-map-caveat">
+                                  일부 단지의 위치를 확인하지 못했어요. 지도에
+                                  안 보이는 단지가 있을 수 있어요.
+                                </p>
+                              )}
+                          </>
+                        )}
+                      </>
+                    )}
+                  </>
+                }
+                sidebar={
+                  <>
                 {/*
                   화면에서는 숨고 인쇄에서만 나온다(styles.css의 .print-summary).
                   지금 화면 그대로 인쇄되는 이 리포트가 배우자·부모님처럼 화면을
@@ -959,8 +1370,7 @@ export function App() {
 
                     {regionComplexes.status === "success" &&
                       regionComplexes.units.length > 0 && (
-                        <div className="region-results-grid">
-                          <div className="region-results-sidebar">
+                        <>
                             {/*
                               매물 유형(아파트/오피스텔) 필터 자리 — 지금은
                               비활성 placeholder다. 오피스텔 실거래가 데이터는
@@ -993,6 +1403,10 @@ export function App() {
                                     setSelectedDong(
                                       e.target.value === "" ? null : e.target.value,
                                     );
+                                    // 동을 바꾸면 앞서 고른 단지가 새 목록에
+                                    // 없을 수 있다 — 목록에 없는 행을 가리키는
+                                    // 표시가 남지 않게 함께 되돌린다.
+                                    setFocusedComplexKey(null);
                                     // 앞서 걸러지지 않은 목록에서 "더 보기"로
                                     // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
                                     // 좁힌 새 목록이 이전 목록의 스크롤
@@ -1036,200 +1450,35 @@ export function App() {
                                   visibleCount={visibleCount}
                                   onShowMore={() => setVisibleCount((n) => n + 10)}
                                   onSelect={handleSelectUnit}
+                                  /*
+                                    지도에서 고른 단지. 마커 강조와 같은
+                                    값을 본다(위 `focusedComplexKey` 주석).
+                                  */
+                                  focusedComplexKey={focusedComplexKey}
                                 />
                               )
                             )}
-                          </div>
-                          <div className="region-results-map">
-                            {/*
-                              이 안쪽 조건의 `status === "success"`는 바깥
-                              `region-results-grid` 조건이 이미 보장한다 — 이
-                              블록에 들어왔다는 것 자체가 참이라는 뜻이라
-                              여기서는 redundant하다. 그래도 diff 리뷰에서
-                              "왜 지워졌는지"를 되짚게 만들지 않으려 그대로
-                              남긴다. 실제로 걸러내는 건 `complexList !== null`과
-                              아래 `hasMappedUnits` 분기다.
-
-                              예전에 있던 `!dongFilteredEmpty`는 뺐다 — 동으로
-                              좁혀 0건이면 `mappedUnits`도 반드시 0이라 아래
-                              분기가 이미 같은 경우를 잡는다. 두 조건을 함께
-                              두면 "동 때문에 0건"일 때만 지도 칸이 통째로
-                              비고(아무 문구도 없이), "예산 때문에 0건"일 때는
-                              문구가 뜨는, 같은 사실을 두 가지로 보여주는
-                              어긋남이 생긴다.
-                            */}
-                            {regionComplexes.status === "success" &&
-                              complexList !== null &&
-                              !hasMappedUnits && (
-                                /*
-                                  지도에 그릴 단지가 없다. **원인을 여기서
-                                  단정하지 않는다** — 원인은 왼쪽(모바일에선
-                                  아래) 목록 칸이 이미 자기 문구로 말한다:
-                                  동으로 좁혀서면 `.dong-empty`, 예산 때문이면
-                                  `ComplexList`의 예산/상환능력 문구. 여기서
-                                  "예산이 부족해요"라고 적으면 동 때문에 빈
-                                  경우에 틀린 원인을 말하게 되고, 그건 이
-                                  화면이 이미 한 번 겪은 오귀속이다.
-
-                                  그래서 이 문구는 지도 칸이 아는 사실 하나만
-                                  말한다: 그릴 것이 없다. "지도를 표시하지
-                                  못했어요"(SDK 실패)·"단지 위치를 불러오지
-                                  못했어요"(좌표 조회 실패)와 절대 같은 말을
-                                  쓰지 않는다 — 여기는 아무것도 실패하지
-                                  않았다.
-                                */
-                                <p className="complex-map-empty">
-                                  조건에 맞는 단지가 없어 지도에 표시할 단지가
-                                  없어요.
-                                </p>
-                              )}
-                            {regionComplexes.status === "success" &&
-                              complexList !== null &&
-                              hasMappedUnits && (
-                                <>
-                                  {/*
-                                    좌표 조회(complexCoordinates)는 목록 조회와 별개로
-                                    도는 상태 기계다 — idle/loading/error/success를
-                                    그대로 구분해 보여준다. "조회 실패"와 "조회했더니
-                                    단지가 하나도 없더라"를 같은 빈 지도로 보여주면,
-                                    이 앱이 가장 경계하는 오류(모르는 것과 확인한
-                                    것을 같은 문구로 보여주는 것)를 지도에서도
-                                    반복하게 된다.
-
-                                    idle은 이 렌더 경로에선 사실상 스치는 순간뿐이다
-                                    — 위 useEffect가 regionComplexes.status가
-                                    "success"로 바뀌자마자(바로 이 조건 블록이
-                                    그려지는 시점과 같은 렌더) query()를 호출해
-                                    "loading"으로 넘어간다. 그래도 그 찰나에 아무것도
-                                    안 그리면 화면이 깜빡이므로 로딩과 같은 문구를
-                                    보여준다.
-                                  */}
-                                  {/*
-                                    로딩·실패 문구를 `.complex-map-status`로 함께
-                                    감싼다 — 인쇄에서는 아래 지도 자신
-                                    (`.complex-map`)이 지워지므로, 이 문구들을 종이에
-                                    남기면 근거를 잃은 "불러오고 있어요…"나 눌러도
-                                    반응 없는 "다시 시도" 버튼만 남는 고아 문구가
-                                    된다(src/print/hiddenInPrint.ts 참고).
-                                  */}
-                                  {(complexCoordinates.status === "idle" ||
-                                    complexCoordinates.status === "loading" ||
-                                    complexCoordinates.status === "error") && (
-                                    <div className="complex-map-status">
-                                      {(complexCoordinates.status === "idle" ||
-                                        complexCoordinates.status === "loading") && (
-                                        <p>지도를 불러오고 있어요…</p>
-                                      )}
-
-                                      {complexCoordinates.status === "error" && (
-                                        <div className="region-query-error">
-                                          {/*
-                                            세 실패 문구는 원인이 다르므로 서로 다르게
-                                            말한다: 목록 조회 실패("지금 실거래가를…"),
-                                            좌표 조회 실패(여기), 네이버지도 SDK 로드
-                                            실패("지도를 표시하지 못했어요" —
-                                            ComplexMap.tsx). 같은 문구로 뭉치면 사용자도
-                                            테스트도 무엇이 실패했는지 구분하지 못한다.
-                                          */}
-                                          <p>단지 위치를 불러오지 못했어요.</p>
-                                          <button
-                                            type="button"
-                                            onClick={() => {
-                                              if (currentRegionCode !== null) {
-                                                complexCoordinates.query(currentRegionCode, null);
-                                              }
-                                            }}
-                                          >
-                                            다시 시도
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
-
-                                  {complexCoordinates.status === "success" && (
-                                    <>
-                                      <ComplexMap
-                                        /*
-                                          목록과 **정확히 같은 집합**을 넘긴다
-                                          (`mappedUnits` 정의의 주석 참고).
-                                          `dongFilteredUnits`(예산 필터 전)를
-                                          넘기면 두 창이 다른 단지를 말한다.
-                                        */
-                                        units={mappedUnits}
-                                        coordinates={complexCoordinates.coordinates}
-                                        naverMapClientId={
-                                          import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
-                                        }
-                                      />
-                                      {/*
-                                        지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
-                                        오류) — 주소가 진짜로 없어서가 아니다
-                                        (api/_lib/handleGeocode.ts의 partialFailureCount
-                                        참고). 새 로딩/에러/성공 3분기를 또 만들지
-                                        않고, 이미 뜬 지도 옆에 한 줄만 덧붙인다 —
-                                        성공적으로 찾은 단지는 그대로 지도에 남아
-                                        있으니 "지도가 비어 있다"와 다르게 말해야
-                                        한다.
-
-                                        리뷰 수정(Minor 4): 위 조건만으로는 ComplexMap이
-                                        이미 "주소로는 위치를 찾을 수 없었어요"(noneLocated)를
-                                        보여주고 있을 때도 이 줄이 함께 뜰 수 있었다 —
-                                        "**일부** 단지의 위치를…"이 안엔 "하나도"라고
-                                        말하는 문구와 부딪힌다. `groupWithCoords`로
-                                        ComplexMap 내부와 같은 계산(좌표를 아는 단지가
-                                        하나라도 있는가)을 여기서도 돌려, 하나도 없을
-                                        땐 이 줄을 접는다 — 있을 땐 그대로 뜬다.
-                                      */}
-                                      {complexCoordinates.hasPartialFailures &&
-                                        groupWithCoords(mappedUnits, complexCoordinates.coordinates)
-                                          .length > 0 && (
-                                          <p className="complex-map-caveat">
-                                            일부 단지의 위치를 확인하지 못했어요. 지도에
-                                            안 보이는 단지가 있을 수 있어요.
-                                          </p>
-                                        )}
-                                    </>
-                                  )}
-                                </>
-                              )}
-                          </div>
-                        </div>
+                        </>
                       )}
                   </>
                 )}
 
-                {/*
-                  지금 보고 있는 화면 상태 그대로(상세가 열려 있으면 그 매물,
-                  아니면 목록) 인쇄한다 — 별도 인쇄 화면을 만들지 않는다.
-                  버튼 자신은 인쇄에서 지운다(styles.css의 .print-button).
-                */}
-                <button
-                  type="button"
-                  className="print-button"
-                  onClick={() => window.print()}
-                >
-                  인쇄하기
-                </button>
-                {/*
-                  화면 1(영상 위 입력)로 돌아간다. 프로필·지역 조회 결과는
-                  그대로 남는다(handleBackToEntry 문서 참고) — 이 버튼은
-                  화면 전환일 뿐 리셋이 아니다.
-
-                  `phase === "결과"`일 때만 보인다 — 프로필은 채웠지만 아직
-                  지역을 조회하지 않았을 때(phase가 여전히 "입력")는 이미
-                  `EntryScreen`이 화면을 덮고 있어 이 버튼이 뜻이 없다.
-                */}
-                {phase === "결과" && (
-                  <button
-                    type="button"
-                    className="back-to-entry-button"
-                    onClick={handleBackToEntry}
-                  >
-                    조건 다시 넣기
-                  </button>
-                )}
-              </>
+                    {resultTail}
+                  </>
+                }
+              />
+            ) : (
+              /*
+                프로필이 아직 안 끝났다 — 셸을 세우지 않는다(그 안에 담을
+                숫자가 하나도 없다. 무엇이 모자란지는 화면 1이 말한다).
+                그래도 **진단 종합과 면책은 남긴다**: 셸이 없는 이 상태에서
+                두 조각까지 함께 사라지면, 이 단계에서 인쇄한 종이(화면 1의
+                인쇄 버튼은 `inert`라 Cmd+P가 유일한 경로다)에는 구매 유형
+                한 줄만 남는다. 지금까지 이 두 조각은 프로필 완성 여부와
+                무관하게 늘 그려졌고, 그 계약을 셸 도입이 조용히 바꾸지
+                않게 한다.
+              */
+              resultTail
             )}
             </>
           ) : (
@@ -1272,54 +1521,12 @@ export function App() {
                 데려가는 화면은 유형 라디오 하나뿐인 막다른 길이었다(위
                 주석). 통로를 없애는 대신 목적지를 이 화면으로 끌어왔다.
               */}
+              {resultTail}
             </>
           )}
 
-          {/*
-            진단 종합은 화면의 맨 끝(면책 문구 바로 위)에 둔다 —
-            "지금까지 본 것 전부를 한자리에 모으는 마무리"로 두는 이유는
-            `DiagnosisSummary.tsx` 문서에 적었다.
-
-            네 축이 동시에 다 채워지는 일은 없다(권리분석은 이 앱에서
-            제거돼 항상 `null`이고, 구매 유형별 금융은 투자 경로에서만,
-            호가·입지는 실거주에서 평형을 고른 동안만 존재한다) — 그래서
-            못 본 축은 값을 지어내지 않고 그대로 `null`을 넘긴다.
-            `DiagnosisSummary`가 그 `null`을 "못 봤다"로 그린다.
-
-            `<details>`로 접지 않는다 — 이 화면의 존재 이유가 "못 본
-            축을 숨기지 않는 것"인데, 화면 전체를 접어 두면 클릭하지
-            않은 사람에게는 그 못 본 축조차 보이지 않는다.
-          */}
-          <DiagnosisSummary
-            rights={null}
-            purchase={purchaseAssessment}
-            price={priceAssessment}
-            location={locationAssessment}
-          />
         </ErrorBoundary>
 
-        {/*
-          면책 문구도 유형에 따라 갈린다.
-
-          "추정치이며 실제 대출한도는 …"은 이 화면이 대출한도 추정치를 낸다는
-          것을 전제한 문장이다. 투자 경로에서는 바로 위에서 "이 유형의 대출
-          한도는 우리가 계산하지 않아요"라고 말한 뒤라, 그 문장이 그대로
-          남으면 어딘가에 한도 추정치가 있는 것처럼 읽힌다.
-        */}
-        <footer className="disclaimer">
-          {purchaseType === "실거주" ? (
-            <>
-              추정치이며 실제 대출한도는 금융기관 심사 결과에 따릅니다.
-              시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
-            </>
-          ) : (
-            <>
-              이 화면은 대출한도를 계산하지 않아요. 여기 있는 숫자는 적어 주신
-              값으로 낸 비율이에요.
-              시세는 국토교통부 실거래가에 기반한 추정 범위입니다.
-            </>
-          )}
-        </footer>
       </div>
     </main>
   );

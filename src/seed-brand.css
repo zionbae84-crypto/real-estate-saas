@@ -145,15 +145,14 @@
   --seed-color-bg-critical-weak: #fbe0dd;
 
   /*
-   * 지도 마커 가격 3분위 색(`.complex-map-marker--{low,mid,high}`,
-   * src/styles.css). low/mid는 bg-brand-weak/bg-brand-solid(위에서
-   * 황동으로 다시 가리켰다)를 그대로 쓴다.
+   * 지도 마커 색은 이제 이 위의 positive/warning 짝을 그대로 쓴다
+   * (`.complex-map-marker--{no-loan,loan}`, src/styles.css).
    *
-   * high(--seed-color-bg-tier-high)는 **여기서 값을 바꾸지 않는다.**
-   * design.md는 이 토큰의 "뜻"이 Task 4에서 가격대→부담 수준으로
-   * 바뀐다고 명시한다 — 지금 값(#0f5f96, 진한 청색)을 건드리면 Task 4가
-   * 다시 계산해야 할 일을 여기서 미리 절반만 해 놓는 셈이라 그대로
-   * 둔다.
+   * 예전에는 여기에 `--seed-color-bg-tier-high`(#0f5f96, 진한 청색)가
+   * 있었다. 가격 3분위(low/mid/high)의 셋째 색이었는데, Task 4에서 마커
+   * 색의 뜻이 가격대에서 **부담 수준 2분류**(대출 없이 / 대출 필요)로
+   * 바뀌며 셋째 단계 자체가 사라졌다 — 아무 규칙도 가리키지 않는 토큰을
+   * 남겨 두면 다음 사람이 "어딘가 쓰이는 색"으로 읽는다. 두 색은
+   * design.md §1의 "밝은 면 위 태그"(안전/주의) 짝 그대로다.
    */
-  --seed-color-bg-tier-high: #0f5f96;
 }

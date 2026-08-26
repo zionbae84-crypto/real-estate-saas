@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { BODY_SCROLL_LOCK_CLASS } from "../print/bodyScrollLock";
+import { lockBodyScroll } from "../print/bodyScrollLock";
 
 export interface EntryScreenProps {
   /**
@@ -94,17 +94,16 @@ export function EntryScreen({ phase, children }: EntryScreenProps) {
    * 그 사이 다른 곳이 쓴 값을 조용히 지웠다. 지금은 인라인 스타일을
    * 아예 건드리지 않는다.
    *
-   * 클래스를 뗄 때 `remove`만 부르는 것도 같은 이유다 — 다른 곳이 같은
-   * 이유로 이 클래스를 붙였을 가능성은 없지만(이 컴포넌트 하나뿐이다),
-   * `remove`는 없는 클래스에 대해서도 안전하고 다른 클래스는 건드리지
-   * 않는다.
+   * **잠그는 레이어가 둘이 됐다(Task 4).** 화면 2의 셸(`ResultShell`)도
+   * 전체화면 고정 레이어라 같은 잠금이 필요한데, 그 셸은 이 화면이 떠
+   * 있는 동안에도 뒤에 깔린 채 살아 있다. 각자 클래스를 붙였다 떼면
+   * 먼저 떼는 쪽이 이겨 아직 떠 있는 레이어의 잠금까지 풀린다 — 그래서
+   * 클래스를 직접 만지지 않고 `lockBodyScroll()`이 세어 준다(그 함수의
+   * 주석에 실제로 났던 버그를 적어 뒀다).
    */
   useEffect(() => {
     if (phase !== "입력") return;
-    document.body.classList.add(BODY_SCROLL_LOCK_CLASS);
-    return () => {
-      document.body.classList.remove(BODY_SCROLL_LOCK_CLASS);
-    };
+    return lockBodyScroll();
   }, [phase]);
 
   return (

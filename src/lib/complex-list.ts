@@ -173,6 +173,33 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
   };
 }
 
+/**
+ * 부담 수준 2분류 — **대출 없이 살 수 있는가, 대출이 필요한가.**
+ *
+ * 지도 마커 색이 이 뜻을 지고(design.md §4: "마커 색의 뜻이 바뀐다 —
+ * 가격대가 아니라 부담 수준이다"), 목록 행도 같은 값으로 갈린다.
+ */
+export type BurdenTier = "no-loan" | "loan";
+
+/**
+ * 그 행이 대출 없이 살 수 있는 집인가.
+ *
+ * **목록과 지도가 이 함수 하나를 함께 부른다.** 목록 행
+ * (`ComplexList`의 `ComplexRow`)은 이 값으로 "대출 없이 살 수 있어요"
+ * (`NoLoanLine`)와 "월 …· 부담률 …"을 가르고, 지도 마커
+ * (`ComplexMap`의 `burdenTiers`)는 같은 값으로 색과 라벨 꼬리표를
+ * 가른다. 지도가 자기 계산을 따로 하면 두 창이 같은 단지를 두고 다른
+ * 말을 하게 된다 — 이 저장소가 여섯 번 겪은 버그 형태다(design.md의
+ * Global Constraints, App.tsx의 `mappedUnits` 주석).
+ *
+ * 판정 근거는 `entry.burden`(= `calcBurdenAt`이 그 행의 실제 전용면적
+ * 프로필로 `maxPrice`에서 낸 값)뿐이다. 새 계산을 하지 않고, 이미
+ * 그 행이 화면에 그리고 있는 숫자를 그대로 읽는다.
+ */
+export function burdenTierOf(entry: ComplexListEntry): BurdenTier {
+  return entry.burden.neededLoan === 0 ? "no-loan" : "loan";
+}
+
 /** 이름·법정동만으로는 구분되지 않는 단지의 키 */
 function nameKey(u: ComplexUnit): string {
   return `${u.legalDongName}|${u.complexName}`;

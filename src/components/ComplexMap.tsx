@@ -1,12 +1,27 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComplexUnit } from "../data/complexes";
+import type { BurdenTier } from "../lib/complex-list";
 import { loadNaverMaps } from "../lib/loadNaverMaps";
-import { formatRange } from "./ComplexList";
+import { formatRange, unitKey } from "./ComplexList";
 
 export interface ComplexMapProps {
   units: readonly ComplexUnit[];
   /** complexKey → 좌표. 여기 없는 단지는 지도에 안 그린다 — 대체 좌표를 만들지 않는다. */
   coordinates: ReadonlyMap<string, { lat: number; lon: number }>;
+  /**
+   * 평형(`unitKey`) → 부담 수준. **이 지도는 부담 수준을 스스로 계산하지
+   * 않는다** — 목록을 만든 `buildComplexList`의 항목에서 `burdenTierOf`로
+   * 뽑아 온 값을 그대로 받는다(App.tsx의 `burdenByUnit`).
+   *
+   * 지도가 자기 계산을 새로 하면 두 창이 같은 단지를 두고 다른 말을
+   * 하게 된다 — 이 저장소가 여섯 번 겪은 버그 형태다. 그래서 이 값은
+   * 계산이 아니라 **배선**이다.
+   */
+  burdenByUnit: ReadonlyMap<string, BurdenTier>;
+  /** 지금 고른 단지(complexKey). 그 마커를 강조하고 지도를 그리로 옮긴다 */
+  focusedComplexKey?: string | null;
+  /** 마커를 눌렀다. 선택 상태는 App이 한 벌만 들고 있다(목록과 공유) */
+  onFocusComplex?: (complexKey: string) => void;
   naverMapClientId: string;
 }
 
@@ -124,42 +139,78 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * 파라미터로 받아 템플릿 리터럴 안에서 완성된 클래스 문자열을 만들면
  * 그 실패 경로 자체가 없어진다.
  */
-function markerLabel(representative: ComplexUnit, tier: PriceTier): string {
+function markerLabel(
+  complexKey: string,
+  representative: ComplexUnit,
+  tier: BurdenTier,
+): string {
   const area = escapeHtml(String(representative.areaBucket));
   const range = escapeHtml(formatRange(representative.minPrice, representative.maxPrice));
   const trades = escapeHtml(String(representative.tradeCount));
   return (
-    `<div class="complex-map-marker complex-map-marker--${tier}">${area}㎡ ${range}` +
-    `<span class="complex-map-marker-trades">거래 ${trades}건</span></div>`
+    `<div class="complex-map-marker complex-map-marker--${tier}" ` +
+    `data-complex-key="${escapeHtml(complexKey)}">${area}㎡ ${range}` +
+    `<span class="complex-map-marker-trades">거래 ${trades}건 · ` +
+    `${BURDEN_TIER_MARKER_LABEL[tier]}</span></div>`
   );
 }
 
 /**
- * 지금 지도에 그려지는 단지들(대표 평형 minPrice 기준) 중 가격 3분위
- * 구간을 매긴다. 단지가 3개 미만이면 전부 중간 톤 하나로 통일한다.
- * 절대 가격대를 하드코딩하지 않는다 — 지역마다 시세가 달라 상대적인
- * 기준이어야 의미가 있다(부모 스펙 §1.4).
+ * 마커 라벨 꼬리표와 범례에 쓰는 부담 수준 문구.
  *
- * `Math.ceil(n/3)`으로 3등분하기 때문에 n=4처럼 3으로 안 나뉘는 개수에서는
- * 구간이 고르지 않다 — n=4는 low 2개·mid 2개·high 0개가 된다(low/mid가
- * `third`씩, high는 나머지). 의도된 알고리즘의 실제 동작이라 여기서
- * "고치지" 않는다 — `priceTiers.test.ts`류 경계 테스트가 이 동작을
- * 그대로 문서화한다.
+ * **색만으로 뜻을 지지 않게 하는 자리다.** 이 앱의 규칙은 "등급은 언제나
+ * 글자로 먼저 있고 색은 거들 뿐"(styles.css의 구매 유형 섹션 주석)인데,
+ * 마커 색의 뜻이 가격대(라벨에 숫자로 이미 적혀 있어 색이 덧말이었다)에서
+ * 부담 수준으로 바뀌면 색이 **유일한** 전달자가 된다 — 흑백·색각 이상에서
+ * 뜻이 통째로 사라진다. 그래서 라벨의 둘째 줄(거래 건수 옆)에 같은 뜻을
+ * 짧은 글자로 함께 적는다. 가장 넓은 줄은 첫 줄(가격 범위)이라 마커 폭도
+ * 대개 그대로다.
  */
-export type PriceTier = "low" | "mid" | "high";
+const BURDEN_TIER_MARKER_LABEL: Record<BurdenTier, string> = {
+  "no-loan": "대출 없이",
+  loan: "대출 필요",
+};
 
-export function priceTiers(groups: Array<{ complexKey: string; representative: ComplexUnit }>): Map<string, PriceTier> {
-  if (groups.length < 3) {
-    return new Map(groups.map((g) => [g.complexKey, "mid"]));
-  }
-  const sorted = [...groups].sort((a, b) => a.representative.minPrice - b.representative.minPrice);
-  const third = Math.ceil(sorted.length / 3);
-  const tiers = new Map<string, PriceTier>();
-  sorted.forEach((g, i) => {
-    const tier: PriceTier = i < third ? "low" : i < third * 2 ? "mid" : "high";
-    tiers.set(g.complexKey, tier);
-  });
-  return tiers;
+/** 범례에 쓰는 완전한 문장. 목록 행이 쓰는 말(`NoLoanLine`)과 같은 뜻이다 */
+const BURDEN_TIER_LEGEND: ReadonlyArray<{ tier: BurdenTier; text: string }> = [
+  { tier: "no-loan", text: "대출 없이 살 수 있어요" },
+  { tier: "loan", text: "대출이 필요해요" },
+];
+
+/**
+ * 그리는 단지마다 마커 색이 뜻할 **부담 수준**을 정한다.
+ *
+ * 예전에는 이 자리에 `priceTiers`(그린 단지들 안에서의 가격 3분위)가
+ * 있었다. 그 색은 "이 지역 기준으로 싼 편"일 뿐인데 "내 예산에 맞는다"로
+ * 읽혔다(App.tsx의 `mappedUnits` 주석에 남은 이력). design.md §4가 그
+ * 뜻을 **부담 수준 2분류**(대출 없이 / 대출 필요)로 바꿨다 — 목록 행의
+ * 같은 갈림과 뜻이 같아져, 지도와 목록이 같은 말을 한다.
+ *
+ * **여기서 판정하지 않는다.** `burdenByUnit`은 목록을 만든
+ * `buildComplexList`의 항목에서 `burdenTierOf`로 뽑아 온 값이고, 이
+ * 함수는 그 값을 대표 평형의 키로 찾아 오기만 한다. 3분위 시절과 달리
+ * "그린 단지들 안에서의 상대 위치"가 아니라 **그 단지 자체의 사실**이라,
+ * 몇 개를 그리든 같은 단지는 같은 색이다.
+ *
+ * 대표 평형(`representative`)의 값을 쓴다 — 마커 라벨에 면적·가격 범위·
+ * 거래 건수를 내는 바로 그 평형이다. 한 단지 안에서 평형마다 부담이
+ * 다를 수 있는데, 라벨이 말하는 평형과 색이 말하는 평형이 다르면 그
+ * 마커가 스스로 어긋난다.
+ *
+ * 키가 없으면 `"loan"`으로 둔다. 이 앱에서는 일어날 수 없지만(같은
+ * 목록에서 온 단지들이다), 일어난다면 **모르는 채로 "대출 없이 살 수
+ * 있다"고 말하지 않는 쪽**이 안전한 방향이다.
+ */
+export function burdenTiers(
+  groups: Array<{ complexKey: string; representative: ComplexUnit }>,
+  burdenByUnit: ReadonlyMap<string, BurdenTier>,
+): Map<string, BurdenTier> {
+  return new Map(
+    groups.map((g) => [
+      g.complexKey,
+      burdenByUnit.get(unitKey(g.representative)) ?? "loan",
+    ]),
+  );
 }
 
 /**
@@ -192,8 +243,32 @@ const MARKER_LIMIT = 30;
  * 범위·거래 건수 팝업이 뜬다 — 목록 행과 같은 정보이고, 단일 "적정가"
  * 숫자는 여기서도 내지 않는다(부모 스펙 §6).
  */
-export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapProps) {
+export function ComplexMap({
+  units,
+  coordinates,
+  burdenByUnit,
+  focusedComplexKey = null,
+  onFocusComplex,
+  naverMapClientId,
+}: ComplexMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  /**
+   * 지금 살아 있는 지도·SDK 핸들. 아래 "고른 단지" effect가 지도를
+   * 다시 만들지 않고 **이미 있는 지도를 옮기기** 위해 쓴다 — 선택이
+   * 바뀔 때마다 지도를 재생성하면 마커·팝업이 통째로 다시 그려지고
+   * 사용자가 맞춰 둔 줌·위치가 매번 날아간다.
+   */
+  const mapRef = useRef<naver.maps.Map | null>(null);
+  const naverRef = useRef<typeof naver | null>(null);
+  /**
+   * 마커를 눌렀을 때 부를 콜백과, 지금 고른 단지를 담아 두는 ref.
+   *
+   * **의존성 배열이 아니라 ref인 이유**: 이 둘은 부모가 렌더할 때마다
+   * 새 값이 될 수 있는데(핸들러는 새 함수, 선택은 매번 바뀐다), 아래
+   * 그리기 effect의 의존성에 넣으면 그때마다 지도가 destroy → 재생성된다.
+   */
+  const onFocusRef = useRef(onFocusComplex);
+  const focusedRef = useRef(focusedComplexKey);
   const [loadFailed, setLoadFailed] = useState(false);
   /**
    * SDK는 정상인데 **그릴 좌표가 하나도 없는** 상태.
@@ -214,6 +289,49 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
   /** {@link MARKER_LIMIT}에 걸려 지도에 그리지 못한 단지 수 */
   const [hiddenCount, setHiddenCount] = useState(0);
 
+  /**
+   * 고른 단지의 마커에 강조 클래스를 붙이고 나머지에서 뗀다.
+   *
+   * 마커 라벨은 SDK가 우리 HTML 문자열을 지도 컨테이너 안에 그린 것이라
+   * 리액트가 관리하지 않는다 — 그래서 렌더로 바꾸지 않고 여기서 직접
+   * 클래스를 토글한다. 어느 마커가 어느 단지인지는 라벨에 박아 둔
+   * `data-complex-key`가 말한다(`markerLabel`).
+   */
+  const applyFocus = useCallback((focused: string | null) => {
+    const container = containerRef.current;
+    if (container === null) return;
+    for (const el of container.querySelectorAll<HTMLElement>(".complex-map-marker")) {
+      el.classList.toggle(
+        "complex-map-marker--focused",
+        focused !== null && el.dataset.complexKey === focused,
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    onFocusRef.current = onFocusComplex;
+  }, [onFocusComplex]);
+
+  /*
+   * 목록에서 행을 눌렀거나 마커를 눌렀다 — 그 단지로 지도를 옮기고
+   * 마커를 강조한다. 지도를 다시 만들지 않는다(위 mapRef 주석).
+   *
+   * 지도가 아직 안 떴을 수 있다(SDK 로드가 비동기다) — 그때는 여기서
+   * 아무 일도 일어나지 않고, 그리기 effect가 끝나면서 `focusedRef`를
+   * 보고 같은 강조를 다시 적용한다.
+   */
+  useEffect(() => {
+    focusedRef.current = focusedComplexKey;
+    applyFocus(focusedComplexKey);
+
+    const map = mapRef.current;
+    const naverGlobal = naverRef.current;
+    if (map === null || naverGlobal === null || focusedComplexKey === null) return;
+    const coord = coordinates.get(focusedComplexKey);
+    if (coord === undefined) return;
+    map.panTo(new naverGlobal.maps.LatLng(coord.lat, coord.lon));
+  }, [focusedComplexKey, coordinates, applyFocus]);
+
   useEffect(() => {
     let cancelled = false;
     const cleanupFns: Array<() => void> = [];
@@ -224,6 +342,7 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
     loadNaverMaps(naverMapClientId)
       .then((naverGlobal) => {
         if (cancelled || containerRef.current === null) return;
+        naverRef.current = naverGlobal;
 
         const withCoords = groupWithCoords(units, coordinates);
         if (withCoords.length === 0) {
@@ -277,22 +396,27 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
         }
         // 재렌더로 이 effect가 다시 돌면(예: units/coordinates가 바뀌면) 같은
         // DOM 컨테이너에 새 Map을 또 만들기 전에, 이전 Map을 확실히 치운다.
-        cleanupFns.push(() => map.destroy());
+        mapRef.current = map;
+        cleanupFns.push(() => {
+          mapRef.current = null;
+          map.destroy();
+        });
 
-        // 가격 3분위는 **실제로 그린 단지들** 안에서 매긴다 — 그리지도
-        // 않은 단지가 분위 경계를 흔들면 화면의 색이 화면에 없는 것을
-        // 근거로 삼게 된다(priceTiers 문서의 "지금 지도에 그려지는
-        // 단지들" 참고).
+        /*
+         * 마커 색이 뜻하는 것은 **부담 수준**이다(대출 없이 / 대출 필요).
+         * 목록이 쓰는 값을 그대로 받아 오므로(`burdenByUnit`), 3분위
+         * 시절과 달리 "몇 개를 함께 그렸는가"가 색을 흔들지 않는다.
+         */
         const groupsWithRepresentative = drawn.map((g) => ({
           ...g,
           representative: representativeUnit(g.units),
         }));
-        const tiers = priceTiers(groupsWithRepresentative);
+        const tiers = burdenTiers(groupsWithRepresentative, burdenByUnit);
 
         for (const group of groupsWithRepresentative) {
           const coord = coordinates.get(group.complexKey)!;
-          const tier = tiers.get(group.complexKey) ?? "mid";
-          const labelHtml = markerLabel(group.representative, tier);
+          const tier = tiers.get(group.complexKey) ?? "loan";
+          const labelHtml = markerLabel(group.complexKey, group.representative, tier);
           const marker = new naverGlobal.maps.Marker({
             position: new naverGlobal.maps.LatLng(coord.lat, coord.lon),
             map,
@@ -305,6 +429,14 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
             content: popupContent(group.units),
           });
           const clickListener = naverGlobal.maps.Event.addListener(marker, "click", () => {
+            /*
+             * 마커를 누르면 **목록 쪽 선택도 함께 움직인다** — App이 그
+             * 선택을 한 벌만 들고 있어(`focusedComplexKey`) 목록이 그
+             * 행으로 스크롤하며 표시를 단다. 팝업 토글은 그대로 둔다:
+             * 팝업은 이 단지의 평형을 전부 펼쳐 보여주는 자리라 선택과
+             * 하는 일이 다르다.
+             */
+            onFocusRef.current?.(group.complexKey);
             if (infoWindow.getMap()) infoWindow.close();
             else infoWindow.open(map, marker);
           });
@@ -316,6 +448,13 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
             marker.setMap(null);
           });
         }
+
+        /*
+         * 마커를 방금 새로 그렸다 — 그리기 전에 고른 단지가 있었다면
+         * 그 강조는 새 마커에 없다. 여기서 다시 입힌다(위 "고른 단지"
+         * effect는 선택이 **바뀔 때만** 돈다).
+         */
+        applyFocus(focusedRef.current);
       })
       .catch(() => {
         if (!cancelled) setLoadFailed(true);
@@ -325,10 +464,26 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
       cancelled = true;
       for (const fn of cleanupFns) fn();
     };
-  }, [units, coordinates, naverMapClientId]);
+  }, [units, coordinates, burdenByUnit, naverMapClientId, applyFocus]);
+
+  /*
+   * 지도가 실제로 마커를 그린 상태에서만 범례를 낸다. 로드 실패·좌표
+   * 없음일 때 색 안내만 남으면 가리킬 대상이 없는 고아 문구가 된다
+   * (`.complex-map-status`를 인쇄에서 지우는 것과 같은 이유).
+   */
+  const showLegend = !loadFailed && !noneLocated;
 
   return (
     <>
+    {/*
+      지도 칸을 채우는 액자. 범례를 지도 위 좌측 하단에 얹으려면 기준
+      상자가 필요한데, **지도 컨테이너 자신을 기준으로 쓸 수 없다** —
+      네이버 SDK가 그 요소의 `position`을 인라인으로 덮어쓰고(그래서
+      아래 `.complex-map`은 `inset` 대신 `width/height: 100%`로 칸을
+      채운다), 그 안에 우리 자식을 두면 SDK가 관리하는 DOM과 섞인다.
+      그래서 액자를 하나 더 두고 범례는 그 액자의 자식으로 둔다.
+    */}
+    <div className="complex-map-frame">
     <div ref={containerRef} className="complex-map" role="region" aria-label="단지 지도">
       {loadFailed && (
         <div className="region-query-error">
@@ -358,6 +513,26 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
           주소로는 위치를 찾을 수 없었어요. 목록은 그대로 쓰실 수 있어요.
         </p>
       )}
+    </div>
+    {showLegend && (
+      /*
+        마커 색이 무엇을 뜻하는지(design.md §4: "좌측 하단에 범례").
+        색은 여기서도 **덧말**이다 — 같은 뜻이 마커 라벨에 글자로도
+        적혀 있다(`BURDEN_TIER_MARKER_LABEL`). 색 견본에는
+        `aria-hidden`을 걸어, 보조기술에는 문장만 읽히게 한다.
+      */
+      <ul className="complex-map-legend" aria-label="마커 색 안내">
+        {BURDEN_TIER_LEGEND.map(({ tier, text }) => (
+          <li key={tier} className="complex-map-legend-item">
+            <span
+              aria-hidden="true"
+              className={`complex-map-legend-swatch complex-map-legend-swatch--${tier}`}
+            />
+            {text}
+          </li>
+        ))}
+      </ul>
+    )}
     </div>
     {hiddenCount > 0 && (
       /*

@@ -29,3 +29,49 @@
  * 함께 움직인다(같은 이유로 `hiddenInPrint.ts`도 여기 있다).
  */
 export const BODY_SCROLL_LOCK_CLASS = "body-scroll-locked";
+
+/**
+ * 지금 문서 스크롤을 잠그고 있는 레이어들.
+ *
+ * **왜 세어야 하는가(Task 4에서 실제로 겪은 버그).** 전체화면 레이어가
+ * 둘이 됐다 — 화면 1(`EntryScreen`)과 화면 2의 셸(`ResultShell`)이다.
+ * 그리고 둘은 **동시에 살아 있다**: `phase === "입력"`인 동안에도 결과
+ * 트리는 언마운트되지 않고 오버레이 뒤에 깔려 있다(App.tsx의 `phase`
+ * 주석).
+ *
+ * 각자 마운트에서 클래스를 붙이고 정리에서 떼면, 나중에 붙인 쪽이
+ * 아니라 **먼저 떼는 쪽**이 이긴다: 프로필을 채우는 순간 셸이 마운트돼
+ * 클래스를 붙이고, 지역 조회가 성공해 `phase`가 "결과"로 넘어가면
+ * `EntryScreen`의 effect 정리가 그 클래스를 떼어 버린다 — 셸은 여전히
+ * 떠 있는데 잠금만 사라져, 전체화면 뒤로 아무것도 움직이지 않는
+ * 페이지 스크롤바가 다시 생긴다. (테스트가 이걸 잡았다.)
+ *
+ * 그래서 "누가 붙였나"가 아니라 **"지금 잠글 이유가 하나라도 있나"**로
+ * 판단한다. `remove`가 아니라 매번 집합에서 다시 계산하므로, 밖에서
+ * 누가 클래스를 손대도 다음 잠금·해제에서 스스로 맞춰진다.
+ */
+const holders = new Set<symbol>();
+
+function syncBodyScrollLock(): void {
+  document.body.classList.toggle(BODY_SCROLL_LOCK_CLASS, holders.size > 0);
+}
+
+/**
+ * 문서 스크롤을 잠근다. 돌려받은 함수를 부르면 **그 잠금 하나**가
+ * 풀린다 — 다른 레이어가 아직 잠그고 있으면 클래스는 그대로 남는다.
+ *
+ * 여러 번 풀어도 안전하다(리액트 19의 effect 정리는 한 번만 불리지만,
+ * 두 번 불려도 다른 레이어의 잠금을 대신 풀어 버리지 않아야 한다).
+ *
+ * 인라인 스타일을 쓰지 않는 이유는 위 상수 주석에 있다 — 인쇄에서
+ * 풀 수 있어야 한다.
+ */
+export function lockBodyScroll(): () => void {
+  const holder = Symbol("body-scroll-lock");
+  holders.add(holder);
+  syncBodyScrollLock();
+  return () => {
+    if (!holders.delete(holder)) return;
+    syncBodyScrollLock();
+  };
+}

@@ -34,7 +34,6 @@ const EXTENDED_TOKENS = [
   "--seed-color-bg-warning-weak",
   "--seed-color-fg-critical-contrast",
   "--seed-color-bg-critical-weak",
-  "--seed-color-bg-tier-high",
 ];
 
 describe("SEED 의미 계층 토큰 확장", () => {
@@ -88,27 +87,24 @@ describe("등급색 대비율 — 흰 배경(#ffffff), 본문 크기 기준 4.5:
 });
 
 /**
- * 지도 마커 가격 3분위(low/mid/high) 배경-텍스트 대비율.
- * src/styles.css .complex-map-marker--{low,mid,high}와 src/seed-brand.css의
- * 실제 값을 그대로 옮겨 계산한다.
+ * 지도 마커 **부담 수준** 2분류의 배경-텍스트 대비율.
+ * `src/styles.css`의 `.complex-map-marker--{no-loan,loan}`(과 같은 규칙을
+ * 공유하는 범례 견본)이 실제로 쓰는 토큰 값을 그대로 옮겨 계산한다.
  *
- * 2026-08-26 팔레트 교체로 low/mid의 배경이 cyan 계열에서 황동 계열로
- * 바뀌었다. low(#f3e2c4, 옅은 황동)는 여전히 어두운 글자(on-sheet,
- * #15202b)와 짝짓고, mid(#8a5f14, --brass-ink — 그 자체가 어둡다)는
- * 어두운 글자와 짝지으면 2.93:1로 4.5:1을 못 넘어 흰 글자로 바꿨다.
- * high(bg-tier-high, #0f5f96)는 design.md 지시대로 이번 교체에서 값을
- * 건드리지 않았다 — Task 4가 "가격대"에서 "부담 수준"으로 뜻을 바꿀 때
- * 함께 바뀐다.
+ * **예전에는 가격 3분위(low/mid/high)였다.** Task 4에서 마커 색의 뜻이
+ * 가격대에서 부담 수준으로 바뀌며 그 세 클래스가 사라졌다 — 그 조합을
+ * 그대로 두면 이 테스트는 **화면 어디에도 없는 색**의 대비율을 재는,
+ * 통과해도 아무것도 지키지 않는 검사가 된다(task-1에서
+ * `land-lease.test.ts`가 같은 이유로 함께 옮겨졌다).
+ *
+ * 두 색은 design.md §1이 "밝은 면 위 태그"로 제시한 짝 그대로다.
  */
-describe("지도 마커 티어 대비율 — 배경 대비 텍스트, 본문 크기 기준 4.5:1", () => {
-  it("low: bg #f3e2c4(bg-brand-weak) / text #15202b(fg-neutral/on-sheet)", () => {
-    expect(contrastRatio("#f3e2c4", "#15202b")).toBeGreaterThanOrEqual(4.5);
+describe("지도 마커 부담 수준 대비율 — 배경 대비 텍스트, 본문 크기 기준 4.5:1", () => {
+  it("대출 없이: bg #dff0e8(bg-positive-weak) / text #1d5c43(fg-positive-contrast)", () => {
+    expect(contrastRatio("#dff0e8", "#1d5c43")).toBeGreaterThanOrEqual(4.5);
   });
-  it("mid: bg #8a5f14(bg-brand-solid/brass-ink) / text #ffffff(palette-static-white)", () => {
-    expect(contrastRatio("#8a5f14", "#ffffff")).toBeGreaterThanOrEqual(4.5);
-  });
-  it("high: bg #0f5f96(bg-tier-high, 이번 교체에서 값 유지) / text #ffffff(palette-static-white)", () => {
-    expect(contrastRatio("#0f5f96", "#ffffff")).toBeGreaterThanOrEqual(4.5);
+  it("대출 필요: bg #f7e9cf(bg-warning-weak) / text #6d4610(fg-warning-contrast)", () => {
+    expect(contrastRatio("#f7e9cf", "#6d4610")).toBeGreaterThanOrEqual(4.5);
   });
 });
 

@@ -1019,6 +1019,46 @@ describe("App - 단지 상세(화면 4)", () => {
      * 보지 못해 잡아내지 못했다. 그래서 렌더된 DOM에서 직접 확인한다.
      */
     it("인쇄에서 지우는 요소 안에 보호 대상 클래스가 들어 있지 않다", async () => {
+      /*
+       * Task 4에서 화면 상태가 늘었다 — 전체화면 셸(상단바·사이드바·
+       * 지도)과 그 안의 목록·상세다. 지도까지 실제로 그려야
+       * `.complex-map-frame`(이번에 새로 숨기게 된 조상)과 그 안의
+       * 범례가 DOM에 생긴다 — 안 그리면 이 교차곱은 그 조상을 아예
+       * 방문하지 않고 통과한다.
+       */
+      vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+        units: [
+          { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
+        ],
+        partialFailureCount: 0,
+      });
+      vi.spyOn(loadNaverMaps, "loadNaverMaps").mockResolvedValue(
+        {
+          maps: {
+            Map: class {
+              fitBounds() {}
+              panTo() {}
+              destroy() {}
+            },
+            LatLng: class {},
+            LatLngBounds: class {},
+            Point: class {},
+            Marker: class {
+              setMap() {}
+            },
+            InfoWindow: class {
+              getMap() {
+                return undefined;
+              }
+              open() {}
+              close() {}
+              setMap() {}
+            },
+            Event: { addListener: () => ({}), removeListener: () => {} },
+          },
+        } as unknown as typeof naver,
+      );
+
       const { container } = render(<App />);
 
       function check(state: string) {
@@ -1047,8 +1087,36 @@ describe("App - 단지 상세(화면 4)", () => {
       }
 
       check("빈 입력 화면(실거주)");
+
+      // 이 블록의 fillProfile은 지역 조회까지 마친다 — 도착점이
+      // 전체화면 셸(목록 + 지도)이다.
       await fillProfile();
-      check("프로필을 채운 실거주 화면");
+      await screen.findByRole("region", { name: "단지 지도" });
+
+      // 전제: 이 상태가 실제로 셸과 지도 액자를 그렸다. 없으면 아래
+      // check()가 새 조상을 하나도 순회하지 않고 공허하게 통과한다.
+      for (const selector of [
+        ".result-shell",
+        ".region-results-sidebar",
+        ".complex-map-frame",
+        ".complex-map-legend",
+        ".back-to-entry-button",
+      ]) {
+        expect(
+          container.querySelector(selector),
+          `${selector}가 결과 화면에 없습니다 — 이 검사의 전제가 깨졌습니다.`,
+        ).not.toBeNull();
+      }
+      check("지역 조회 결과가 뜬 전체화면 셸");
+
+      // 사이드바가 목록에서 단지 상세로 바뀐 상태. 상세 안에는 보호 대상
+      // 클래스가 몰려 있다(호가·입지·등급 근거).
+      await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+      expect(
+        container.querySelector(".complex-detail-back"),
+        "단지 상세가 열리지 않았습니다 — 이 검사의 전제가 깨졌습니다.",
+      ).not.toBeNull();
+      check("단지 상세가 열린 전체화면 셸");
 
       /*
        * 재검토 수정(Important 3): 투자 경로도 반드시 지난다.
@@ -1588,5 +1656,373 @@ describe("재검토 수정: 화면 1의 문서 스크롤 잠금", () => {
     window.localStorage.setItem(PURCHASE_TYPE_STORAGE_KEY, "월세수익형");
     render(<App />);
     expect(document.body).not.toHaveClass(BODY_SCROLL_LOCK_CLASS);
+  });
+});
+
+/**
+ * 화면 2 — 전체화면 셸(design.md §4, Task 4).
+ *
+ * 여기서 확인하는 것은 **어디에 무엇이 그려지는가**다. 계산은
+ * 건드리지 않았으므로 숫자 검증은 기존 테스트들이 그대로 맡는다.
+ */
+describe("전체화면 결과 셸", () => {
+  /**
+   * 마커를 실제 DOM에 그리고 클릭 리스너를 붙잡아 두는 최소 SDK 가짜.
+   * `panTo`가 있어야 한다 — 고른 단지로 지도를 옮길 때 부른다.
+   */
+  function fakeNaver() {
+    const markers: Array<{ listeners: Record<string, () => void> }> = [];
+    const panToCalls: unknown[] = [];
+    let mapContainer: HTMLElement | null = null;
+    const naverGlobal = {
+      maps: {
+        Map: class {
+          constructor(el: HTMLElement) {
+            mapContainer = el;
+          }
+          fitBounds() {}
+          panTo(coord: unknown) {
+            panToCalls.push(coord);
+          }
+          destroy() {}
+        },
+        LatLng: class {
+          constructor(
+            public lat: number,
+            public lng: number,
+          ) {}
+        },
+        LatLngBounds: class {
+          constructor(
+            public sw: unknown,
+            public ne: unknown,
+          ) {}
+        },
+        Point: class {
+          constructor(
+            public x: number,
+            public y: number,
+          ) {}
+        },
+        Marker: class {
+          listeners: Record<string, () => void> = {};
+          constructor(opts: { icon?: { content?: string } }) {
+            markers.push(this);
+            if (opts.icon?.content !== undefined && mapContainer !== null) {
+              const el = document.createElement("div");
+              el.innerHTML = opts.icon.content;
+              mapContainer.appendChild(el);
+            }
+          }
+          setMap() {}
+        },
+        InfoWindow: class {
+          constructor(public opts: unknown) {}
+          getMap() {
+            return undefined;
+          }
+          open() {}
+          close() {}
+          setMap() {}
+        },
+        Event: {
+          addListener(
+            marker: { listeners: Record<string, () => void> },
+            event: string,
+            fn: () => void,
+          ) {
+            marker.listeners[event] = fn;
+            return { marker, event };
+          },
+          removeListener() {},
+        },
+      },
+    };
+    return { naverGlobal, markers, panToCalls };
+  }
+
+  /** 현금 15억으로 대출 없이 살 수 있는 단지 */
+  const CASH_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|테스트동|2015|현금단지",
+    complexName: "현금단지",
+    areaBucket: 59,
+    maxExclusiveAreaSqm: 59,
+    minPrice: 200_000_000,
+    maxPrice: 210_000_000,
+  };
+
+  /** 살 수는 있지만 대출이 필요한 단지 */
+  const LOAN_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|테스트동|2015|대출단지",
+    complexName: "대출단지",
+    areaBucket: 84,
+    maxExclusiveAreaSqm: 84,
+    minPrice: 1_800_000_000,
+    maxPrice: 1_800_000_000,
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.classList.remove(BODY_SCROLL_LOCK_CLASS);
+  });
+
+  async function fillProfile() {
+    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
+    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
+    await userEvent.click(screen.getByLabelText("무주택"));
+  }
+
+  async function chooseRegion() {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  /** 두 단지가 뜨는 결과 화면까지 간다. 지도까지 실제로 그린다. */
+  async function renderResults(units: ComplexUnit[] = [CASH_UNIT, LOAN_UNIT]) {
+    const fake = fakeNaver();
+    vi.spyOn(loadNaverMaps, "loadNaverMaps").mockResolvedValue(
+      fake.naverGlobal as unknown as typeof naver,
+    );
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units,
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: units.map((u, i) => ({
+        complexKey: u.complexKey,
+        lat: 37.1 + i * 0.01,
+        lon: 127.1 + i * 0.01,
+      })),
+      partialFailureCount: 0,
+    });
+
+    const rendered = render(<App />);
+    await fillProfile();
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    return { ...rendered, ...fake };
+  }
+
+  it("상단바 + 사이드바 + 지도 세 자리가 서고, 목록과 지도가 각자의 자리에 들어간다", async () => {
+    const { container } = await renderResults();
+
+    const shell = container.querySelector(".result-shell");
+    expect(shell).not.toBeNull();
+    const sidebar = container.querySelector(".region-results-sidebar");
+    const mapColumn = container.querySelector(".region-results-map");
+    expect(container.querySelector(".result-topbar")).not.toBeNull();
+    expect(sidebar).not.toBeNull();
+    expect(mapColumn).not.toBeNull();
+
+    // 목록은 사이드바 안, 지도는 지도 칸 안.
+    expect(
+      sidebar?.contains(screen.getByRole("region", { name: "살 수 있는 단지" })),
+    ).toBe(true);
+    await screen.findByRole("region", { name: "단지 지도" });
+    expect(
+      mapColumn?.contains(screen.getByRole("region", { name: "단지 지도" })),
+    ).toBe(true);
+  });
+
+  /**
+   * 셸은 `position: fixed; inset: 0`이라 그 **밖에** 남은 것은 화면에서
+   * 덮인다 — `phase === "입력"`일 때 결과 트리가 오버레이 뒤에 깔려
+   * 있던 것과 같은 실패다(Task 3 리뷰 Important 4·5). jsdom은 레이아웃을
+   * 계산하지 않으므로 "보이는가"를 물을 수 없다 — 대신 **셸 안에
+   * 들어 있는가**를 구조로 확인한다.
+   */
+  it("진단 종합과 면책 문구가 셸 **안**에 있다 — 고정 레이어 뒤에 깔리지 않는다", async () => {
+    const { container } = await renderResults();
+    const shell = container.querySelector(".result-shell");
+
+    const diagnosis = container.querySelector(".diagnosis-summary");
+    const disclaimer = container.querySelector(".disclaimer");
+    expect(diagnosis).not.toBeNull();
+    expect(disclaimer).not.toBeNull();
+    expect(shell?.contains(diagnosis!)).toBe(true);
+    expect(shell?.contains(disclaimer!)).toBe(true);
+    // 화면에 한 벌만 있다 — 두 자리에 각각 적으면 갈라진다.
+    expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+    expect(container.querySelectorAll(".diagnosis-summary")).toHaveLength(1);
+  });
+
+  it("프로필이 아직 안 끝났으면 셸을 세우지 않지만, 진단 종합과 면책은 그대로 남는다", () => {
+    const { container } = render(<App />);
+    expect(container.querySelector(".result-shell")).toBeNull();
+    expect(container.querySelector(".diagnosis-summary")).not.toBeNull();
+    expect(container.querySelector(".disclaimer")).not.toBeNull();
+  });
+
+  it("상단바가 전제와 결과를 요약하고, 인쇄·조건 다시 넣기가 그 안에 선다", async () => {
+    const { container } = await renderResults();
+    const topbar = container.querySelector(".result-topbar");
+
+    expect(topbar?.textContent).toContain("사용가능 현금 예산");
+    expect(topbar?.textContent).toContain("15억");
+    expect(topbar?.textContent).toContain("연 소득(세전)");
+    expect(topbar?.textContent).toContain("실구매 가능 가격");
+    // 지역은 코드가 아니라 이름으로 적는다.
+    expect(topbar?.textContent).toContain("서울특별시 강남구");
+    expect(topbar?.textContent).not.toContain("11680");
+
+    expect(
+      topbar?.contains(screen.getByRole("button", { name: "인쇄하기" })),
+    ).toBe(true);
+    expect(
+      topbar?.contains(screen.getByRole("button", { name: "조건 다시 넣기" })),
+    ).toBe(true);
+  });
+
+  it("셸이 서 있는 동안 문서 스크롤이 잠기고, 셸이 사라지면 풀린다", async () => {
+    await renderResults();
+    /*
+     * 여기서 실제로 잡은 버그: 셸은 프로필을 채운 순간(아직
+     * `phase === "입력"`) 마운트되며 잠금을 걸고, 지역 조회가 성공해
+     * `phase`가 "결과"로 넘어가면 `EntryScreen`의 effect 정리가 그
+     * 잠금을 떼어 버렸다 — 전체화면 셸이 떠 있는데 뒤로 페이지
+     * 스크롤바가 남았다. 지금은 `lockBodyScroll()`이 잠글 이유를 센다.
+     */
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+
+    // 화면 1로 돌아가면 두 레이어가 동시에 잠근다 — 그래도 잠금은 하나다.
+    await userEvent.click(
+      screen.getByRole("button", { name: "조건 다시 넣기" }),
+    );
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+    // 다시 결과로 돌아와도 유지된다(유형 라디오를 거치지 않는 경로).
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+
+    // 투자 유형으로 가면 셸이 사라진다(그 화면은 세로로 흐르는 문서다).
+    await userEvent.click(
+      screen.getByLabelText(new RegExp(purchaseRules.types.월세수익형.label)),
+    );
+    expect(document.body).not.toHaveClass(BODY_SCROLL_LOCK_CLASS);
+  });
+
+  /**
+   * 마커 색의 뜻이 부담 수준으로 바뀌었다(design.md §4). **지도가 그
+   * 판정을 새로 하지 않는다**는 것을 여기서 확인한다 — 목록 행이 자기
+   * 자리에서 말하는 것과 마커 색이 단지별로 일치하는지 대조한다.
+   */
+  it("마커 색(부담 수준)이 같은 단지의 목록 행이 말하는 것과 일치한다", async () => {
+    const { container } = await renderResults();
+    await screen.findByRole("region", { name: "단지 지도" });
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll(".complex-map-marker")).toHaveLength(2),
+    );
+
+    const tierOf = (complexKey: string) => {
+      const marker = [
+        ...container.querySelectorAll<HTMLElement>(".complex-map-marker"),
+      ].find((el) => el.dataset.complexKey === complexKey);
+      expect(marker, `${complexKey} 마커가 없습니다`).toBeDefined();
+      return marker!.classList.contains("complex-map-marker--no-loan")
+        ? "no-loan"
+        : "loan";
+    };
+
+    const rowText = (name: string) =>
+      screen.getByRole("button", { name: new RegExp(name) }).textContent ?? "";
+
+    // 전제: 두 색이 실제로 갈렸다. 안 갈리면 아래 대조가 공허해진다.
+    expect(tierOf(CASH_UNIT.complexKey)).toBe("no-loan");
+    expect(tierOf(LOAN_UNIT.complexKey)).toBe("loan");
+
+    // 그리고 목록 행이 같은 말을 한다.
+    expect(rowText("현금단지")).toContain("대출 없이 살 수 있어요");
+    expect(rowText("대출단지")).toContain("부담률");
+    expect(rowText("대출단지")).not.toContain("대출 없이 살 수 있어요");
+
+    // 마커 라벨도 색에만 기대지 않고 글자로 말한다.
+    const cashMarker = [
+      ...container.querySelectorAll<HTMLElement>(".complex-map-marker"),
+    ].find((el) => el.dataset.complexKey === CASH_UNIT.complexKey);
+    expect(cashMarker?.textContent).toContain("대출 없이");
+  });
+
+  it("목록 행을 누르면 그 단지의 마커가 강조된다", async () => {
+    const { container } = await renderResults();
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll(".complex-map-marker")).toHaveLength(2),
+    );
+    expect(container.querySelectorAll(".complex-map-marker--focused")).toHaveLength(
+      0,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+
+    await vi.waitFor(() => {
+      const focused = container.querySelectorAll<HTMLElement>(
+        ".complex-map-marker--focused",
+      );
+      expect(focused).toHaveLength(1);
+      expect(focused[0]!.dataset.complexKey).toBe(CASH_UNIT.complexKey);
+    });
+  });
+
+  it("마커를 누르면 그 단지의 목록 행이 선택되고, 상세는 열리지 않는다", async () => {
+    const { container, markers } = await renderResults();
+    await vi.waitFor(() => expect(markers.length).toBe(2));
+
+    // 마커 순서는 목록 순서를 따른다(부담이 낮은 것부터).
+    markers[1]!.listeners.click!();
+
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll(".complex-row--focused")).toHaveLength(1),
+    );
+    const row = container.querySelector(".complex-row--focused");
+    expect(row?.textContent).toContain("대출단지");
+    expect(row).toHaveAttribute("aria-current", "true");
+    // 마커는 단지를 가리키지 상세(평형)를 고르지 않는다 — 목록은 그대로다.
+    expect(
+      screen.getByRole("region", { name: "살 수 있는 단지" }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * 지도는 30개까지 그리는데 목록은 덩어리마다 10개씩만 그린다. 그 너머의
+   * 마커를 누르면 선택은 바뀌는데 화면엔 아무 변화가 없다 — 사용자에겐
+   * 마커가 죽은 것으로 보인다.
+   */
+  it("'더 보기' 너머의 마커를 눌러도 그 행이 목록에 나타난다", async () => {
+    // 같은 부담 덩어리(대출 없이)에 12개를 넣어 10개 상한을 넘긴다.
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      ...CASH_UNIT,
+      complexKey: `11680|테스트동|2015|현금단지${i}`,
+      complexName: `현금단지${i}`,
+      // 부담률 오름차순 정렬이 예측 가능하도록 가격을 조금씩 올린다.
+      minPrice: 200_000_000 + i * 1_000_000,
+      maxPrice: 210_000_000 + i * 1_000_000,
+    }));
+    const { container, markers } = await renderResults(many);
+
+    await vi.waitFor(() => expect(markers.length).toBe(12));
+    // 전제: 12번째 단지는 아직 목록에 없다.
+    expect(
+      screen.queryByRole("button", { name: /현금단지11/ }),
+    ).not.toBeInTheDocument();
+
+    markers[11]!.listeners.click!();
+
+    await vi.waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /현금단지11/ }),
+      ).toBeInTheDocument();
+    });
+    const focused = container.querySelector(".complex-row--focused");
+    expect(focused?.textContent).toContain("현금단지11");
   });
 });

@@ -1,7 +1,9 @@
+import { useEffect, useRef } from "react";
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import { burdenGrade } from "../lib/burden-grade";
+import { burdenTierOf } from "../lib/complex-list";
 import type { ComplexListEntry, ComplexListResult } from "../lib/complex-list";
 import { landLeaseRules } from "../state/landLeaseRules";
 import { LandLeaseNote } from "./LandLeaseNote";
@@ -47,6 +49,20 @@ export interface ComplexListProps {
    * 보이면 그 자체가 거짓말이다(AssumptionLine의 같은 원칙).
    */
   onSelect?: (unit: ComplexUnit) => void;
+  /**
+   * 지금 지도에서 고른 단지(`complexKey`). 그 단지의 행에 표시를 달고,
+   * 값이 바뀌면 그 행을 목록 스크롤 안으로 끌어온다.
+   *
+   * **단지 키라 같은 단지의 평형 행이 여럿이면 전부 표시된다.** 마커는
+   * 단지 하나에 하나이므로(ComplexMap의 `groupByComplex`) 그것이 정직한
+   * 대응이다 — 평형 하나만 골라 표시하면 지도에서 누른 마커가 가리키는
+   * 것보다 좁게 말하게 된다.
+   *
+   * 선택 상태는 여기서 만들지 않는다. `App.tsx`가 한 벌만 들고
+   * (`focusedComplexKey`) 목록과 지도에 같은 값을 내려 준다 — 두 벌로
+   * 관리하면 어긋난다(task-4-brief Step 4).
+   */
+  focusedComplexKey?: string | null;
 }
 
 /**
@@ -79,13 +95,39 @@ export function ComplexList({
   visibleCount = PAGE_SIZE,
   onShowMore,
   onSelect,
+  focusedComplexKey = null,
 }: ComplexListProps) {
+  const sectionRef = useRef<HTMLElement>(null);
+
+  /*
+   * 지도에서 마커를 누르면 그 단지의 행이 사이드바 스크롤 밖에 있을 수
+   * 있다 — 그때 목록은 아무 반응도 하지 않는 것처럼 보인다. 표시된 행을
+   * 스크롤 안으로 끌어온다.
+   *
+   * **`querySelector`로 첫 번째 표시 행 하나만 끌어온다.** 같은 단지의
+   * 평형 행이 여럿이면 전부 표시되는데(위 prop 주석), 행마다 각자
+   * `scrollIntoView`를 부르면 마지막 행이 이겨 목록이 그 단지의 **끝**으로
+   * 내려간다.
+   *
+   * `visibleCount`도 의존성에 넣는다 — 마커가 가리키는 행이 "더 보기"
+   * 너머에 있으면 App이 먼저 `visibleCount`를 늘리고, 그 행은 이 렌더
+   * **다음**에야 DOM에 생긴다.
+   *
+   * `scrollIntoView`는 jsdom에 없다(정의되지 않은 속성이다) — 옵셔널
+   * 호출로 둬야 테스트 환경에서 터지지 않는다.
+   */
+  useEffect(() => {
+    if (focusedComplexKey === null) return;
+    const row = sectionRef.current?.querySelector(".complex-row--focused");
+    row?.scrollIntoView?.({ block: "nearest" });
+  }, [focusedComplexKey, visibleCount]);
+
   const total =
     result.withinSafe.length + result.unverified.length + result.beyondSafe.length;
 
   if (total === 0) {
     return (
-      <section className="complex-list" aria-label="살 수 있는 단지">
+      <section className="complex-list" aria-label="살 수 있는 단지" ref={sectionRef}>
         <h2>살 수 있는 단지</h2>
         <EmptyMessage
           emptyBecauseOfFilter={result.emptyBecauseOfFilter}
@@ -104,7 +146,7 @@ export function ComplexList({
     total - safeShown.length - unverifiedShown.length - beyondShown.length;
 
   return (
-    <section className="complex-list" aria-label="살 수 있는 단지">
+    <section className="complex-list" aria-label="살 수 있는 단지" ref={sectionRef}>
       <h2>살 수 있는 단지</h2>
       <BasisNote />
 
@@ -113,7 +155,12 @@ export function ComplexList({
           <h3 className="complex-group complex-group--safe">무리 없이 살 수 있어요</h3>
           <ul className="complex-rows">
             {safeShown.map((e) => (
-              <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
+              <ComplexRow
+                key={unitKey(e.unit)}
+                entry={e}
+                onSelect={onSelect}
+                focused={e.unit.complexKey === focusedComplexKey}
+              />
             ))}
           </ul>
         </>
@@ -132,7 +179,12 @@ export function ComplexList({
           </h3>
           <ul className="complex-rows">
             {unverifiedShown.map((e) => (
-              <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
+              <ComplexRow
+                key={unitKey(e.unit)}
+                entry={e}
+                onSelect={onSelect}
+                focused={e.unit.complexKey === focusedComplexKey}
+              />
             ))}
           </ul>
         </>
@@ -143,7 +195,12 @@ export function ComplexList({
           <h3 className="complex-group complex-group--beyond">살 수는 있지만 부담이 커요</h3>
           <ul className="complex-rows">
             {beyondShown.map((e) => (
-              <ComplexRow key={unitKey(e.unit)} entry={e} onSelect={onSelect} />
+              <ComplexRow
+                key={unitKey(e.unit)}
+                entry={e}
+                onSelect={onSelect}
+                focused={e.unit.complexKey === focusedComplexKey}
+              />
             ))}
           </ul>
         </>
@@ -167,16 +224,19 @@ export function ComplexList({
  * 있으면 두 행의 키가 같아지고, React가 행을 중복하거나 누락시킬 수 있다.
  * 평형까지 넣어야 유일하다.
  */
-function unitKey(unit: ComplexUnit): string {
+export function unitKey(unit: ComplexUnit): string {
   return `${unit.complexKey}|${unit.areaBucket}`;
 }
 
 function ComplexRow({
   entry,
   onSelect,
+  focused = false,
 }: {
   entry: ComplexListEntry;
   onSelect?: (unit: ComplexUnit) => void;
+  /** 지도에서 이 단지를 고른 상태인가 */
+  focused?: boolean;
 }) {
   const { unit, burden, needsBuiltYear } = entry;
   // 덩어리를 가른 것과 **같은 함수**다(lib/complex-list.ts). 배지와
@@ -199,7 +259,14 @@ function ComplexRow({
       </span>
       <span className="complex-burden" data-level={grade.level}>
         범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
-        {burden.neededLoan === 0 ? (
+        {/*
+          대출이 필요한지 아닌지는 `burdenTierOf`가 가른다 — **지도 마커의
+          색·꼬리표를 가르는 것과 같은 함수다**(lib/complex-list.ts). 여기서
+          `burden.neededLoan === 0`을 직접 다시 쓰면 두 화면이 각자의 조건을
+          갖게 되고, 한쪽만 고쳐지는 날 지도와 목록이 같은 단지를 두고 다른
+          말을 한다.
+        */}
+        {burdenTierOf(entry) === "no-loan" ? (
           // 현금만으로 덮이는 가격이다. "월 0원 · 부담률 0%"만 보여주면
           // 계산이 안 된 것처럼 읽힌다 — 왜 0인지를 말한다. 그 말이
           // "매달 나가는 돈이 없다"로 읽히지 않게 하는 일은 NoLoanLine이
@@ -239,12 +306,18 @@ function ComplexRow({
     </>
   );
 
+  const className = focused ? "complex-row complex-row--focused" : "complex-row";
+
   if (onSelect === undefined) {
-    return <li className="complex-row">{rows}</li>;
+    return (
+      <li className={className} aria-current={focused ? "true" : undefined}>
+        {rows}
+      </li>
+    );
   }
 
   return (
-    <li className="complex-row">
+    <li className={className} aria-current={focused ? "true" : undefined}>
       <button
         type="button"
         className="complex-row-button"

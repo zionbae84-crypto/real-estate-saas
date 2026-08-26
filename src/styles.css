@@ -107,9 +107,15 @@ h2 {
  * (`.results-screen`의 `display: contents`는 상자만 없앨 뿐 선택자가 보는
  * DOM 구조는 그대로다) 그 항은 아무것도 걸러내지 못하는 죽은 조건이었다.
  * 예외가 필요한 자리는 아래 둘째 줄 하나뿐이다.
+ *
+ * 둘째 줄의 예외는 이제 `.result-shell`이다(Task 4). 그 셸은
+ * `position: fixed; inset: 0`이라 이 42rem 제한을 받으면 `left`/`right`가
+ * 함께 걸린 과도제약이 되어 폭이 672px로 눌린다 — `.entry-screen`이
+ * 정확히 그 이유로 첫 줄의 예외가 된 것과 같은 형태다. 전체화면 결과가
+ * 화면의 3분의 1만 덮고 나머지로 뒤가 비친다.
  */
 .app > :not(.entry-screen),
-.results-screen > :not(.region-results-grid) {
+.results-screen > :not(.result-shell) {
   max-width: 42rem;
   margin-inline: auto;
 }
@@ -950,71 +956,250 @@ h2 {
 /*
  * 단지 지도(ComplexMap)가 들어가는 자리.
  *
- * **높이를 반드시 명시해야 한다.** 네이버지도 SDK는 넘겨받은 컨테이너의
- * 실제 크기 안에 지도를 그리는데, 이 <div>는 안이 비어 있어 높이를 주지
+ * **크기를 반드시 명시해야 한다.** 네이버지도 SDK는 넘겨받은 컨테이너의
+ * 실제 크기 안에 지도를 그리는데, 이 <div>는 안이 비어 있어 크기를 주지
  * 않으면 0px가 된다 — 스크립트도 마커도 정상인데 화면엔 아무것도 안
  * 보이고, 지도가 없는 것과 실패한 것이 구분되지 않는다.
  *
- * 테두리·모서리는 이 화면의 다른 상자들(`.complex-detail`류, 인쇄 버튼)과
- * 같은 값을 쓴다.
+ * 예전에는 `height: 600px` 고정이었다. 지금은 전체화면 무대의 한 칸을
+ * 통째로 채운다(design.md §4).
  */
 .complex-map {
-  height: 600px;
   /*
-   * 위쪽 여백을 두지 않는다. 지도가 목록 **아래**에 있던 시절의
-   * 값이었는데, 지금은 사이드바와 나란한 그리드 컬럼이라 이 여백이
-   * 남으면 지도만 옆 사이드바보다 24px 내려앉는다.
+   * ⚠ **`position: absolute; inset: 0`을 쓰지 않는다 — 네이버 SDK가 이
+   * 요소의 `position`을 인라인으로 `relative`로 덮어써서 그 순간
+   * `inset`이 무력화된다.** (프로토타입에서 실제로 겪은 버그다.
+   * design.md §4의 두 경고 중 둘째.) `width`/`height` 100%는 인라인
+   * `position`과 무관하게 살아남는다.
    */
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  overflow: hidden;
+  width: 100%;
+  height: 100%;
 }
 
 /*
- * 지역 결과 화면(목록+지도)을 담는 그리드. 목록 블록·지도 블록은 이
- * 두 컬럼 중 한쪽에 그대로 옮겨졌을 뿐, 각자의 기존 조건부 렌더링은
- * 바뀌지 않았다 — 이 그리드는 순수 레이아웃 컨테이너다.
+ * 지도 액자(ComplexMap.tsx). 범례를 지도 위에 얹기 위한 기준 상자다 —
+ * 지도 컨테이너 자신을 기준으로 쓸 수 없는 이유는 바로 위 경고와 같다
+ * (SDK가 그 요소의 position을 인라인으로 정한다).
+ */
+.complex-map-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--border);
+}
+
+/*
+ * 마커 색 범례(design.md §4: "좌측 하단에 범례"). 색은 덧말이고 같은
+ * 뜻이 마커 라벨에 글자로도 적혀 있다 — 이 상자가 없어도 뜻은 남는다.
+ */
+.complex-map-legend {
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 2;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  list-style: none;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  background: var(--seed-color-bg-layer-floating);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.complex-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.complex-map-legend-swatch {
+  width: 0.875rem;
+  height: 0.875rem;
+  border-radius: 0.1875rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 화면 2 — 전체화면 결과 셸 (ResultShell.tsx, design.md §4)
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+/*
+ * 뷰포트를 통째로 덮는 고정 레이어. 위는 상단바(내용 높이), 아래는
+ * 남는 높이 전부를 쓰는 무대다.
+ *
+ * `z-index`를 화면 1(`.entry-screen`, z-index 40)보다 **낮게** 둔다 —
+ * `phase === "입력"`인 동안 이 셸은 언마운트되지 않고 그 뒤에 깔려
+ * 있어야 한다(그 트리는 통째로 `inert`다, App.tsx 참고).
+ */
+.result-shell {
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--seed-color-bg-layer-default);
+}
+
+.result-topbar {
+  display: flex;
+  align-items: center;
+  /*
+   * **줄바꿈을 허용한다.** 안 하면 좁은 화면에서 flex가 요약 칸을
+   * 0px까지 눌러 버린다 — 실측(420px): `.result-topbar-summary`의 폭이
+   * 0이 되어 현금·연소득·실구매 가능 가격이 화면에서 사라지고, 인쇄
+   * 버튼은 글자가 세로로 쪼개져 122px짜리 기둥이 됐다. 넘치면 아래로
+   * 흐르게 두는 쪽이 정직하다(무대는 `minmax(0, 1fr)`이라 그만큼
+   * 줄어들 뿐 잘리지 않는다).
+   */
+  flex-wrap: wrap;
+  gap: 0.5rem 1.5rem;
+  padding: 0.75rem 1.25rem;
+  background: var(--seed-color-bg-layer-floating);
+  border-bottom: 1px solid var(--border);
+  /*
+   * 요약 항목이 좁은 화면에서 넘칠 수 있다. 상단바가 세로로 자라
+   * 무대를 밀어내지 않게 가로로만 흐르게 한다 — **이 `overflow`는
+   * 인쇄에서 반드시 풀어야 한다**(아래 @media print, design.md §6).
+   */
+  overflow-x: auto;
+}
+
+.result-topbar-brand {
+  margin: 0;
+  flex-shrink: 0;
+  font-family: var(--font-serif);
+  font-size: 1rem;
+  white-space: nowrap;
+}
+
+.result-topbar-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  min-width: 0;
+}
+
+.result-topbar-item {
+  display: grid;
+  gap: 0.125rem;
+  white-space: nowrap;
+}
+
+.result-topbar-item-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--seed-color-fg-neutral-subtle);
+}
+
+.result-topbar-item-value {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.result-topbar-item-value--money {
+  color: var(--seed-color-fg-brand);
+}
+
+.result-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/*
+ * 상단바 안에서는 인쇄 버튼의 세로 여백(.print-button의 margin)을
+ * 없앤다 — 그 값은 세로로 흐르던 문서 시절의 것이다.
+ */
+.result-topbar .print-button {
+  margin: 0;
+  /* 눌려서 글자가 세로로 쪼개지지 않게 한다(위 flex-wrap 주석의 실측). */
+  white-space: nowrap;
+}
+
+.back-to-entry-button {
+  padding: 0.5rem 0.875rem;
+  font: inherit;
+  font-weight: 600;
+  color: var(--seed-color-fg-neutral);
+  background: var(--seed-color-bg-layer-default);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/*
+ * 무대(design.md §4의 `.stage`). 왼쪽 사이드바 + 오른쪽 지도.
+ *
+ * ⚠ **행은 반드시 `minmax(0, 1fr)`이다.** `auto`로 두면 지도 칸이
+ * 내용 높이(지도의 자식은 전부 absolute라 0)만큼만 받아 타일이 아예
+ * 뜨지 않는다 — 프로토타입에서 실제로 겪은 버그이고, 이 규칙 하나가
+ * 그것을 막는다. design.md §4의 두 경고 중 첫째.
  */
 .region-results-grid {
   display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 1rem;
-  margin: 1.5rem 0;
-  width: 100%;
+  grid-template-columns: 372px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
 }
 
+/*
+ * 사이드바만 스크롤한다(페이지 자체는 스크롤하지 않는다 —
+ * `body.body-scroll-locked`). **이 `overflow`는 인쇄에서 반드시
+ * 풀린다**(아래 @media print) — `overflow: auto`로 갇힌 상자는 CSS
+ * 페이지네이션이 여러 쪽으로 나누지 못해, 넘치는 목록 행이 종이에서
+ * 조용히 잘린다.
+ */
 .region-results-sidebar {
-  max-height: 600px;
+  min-height: 0;
   overflow-y: auto;
+  padding: 1.25rem 1rem 3rem;
+  background: var(--seed-color-bg-layer-default);
 }
 
 .region-results-map {
   min-width: 0; /* 그리드 아이템이 내용물 크기로 넘치지 않도록 */
+  min-height: 0;
+  /*
+   * 지도가 남는 높이를 전부 쓰고, 그 아래 캐비앗 한 줄들(마커 상한·
+   * 부분 실패)은 내용 높이만 쓴다.
+   */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
 }
 
-@media (max-width: 768px) {
+/*
+ * design.md §4: 900px 아래에서는 1열 — 지도 위, 목록 아래.
+ *
+ * 예전 규칙(768px)은 여기서 사이드바의 높이 제한·스크롤을 **풀었다**.
+ * 그때는 페이지 자체가 세로로 흐르는 문서였기 때문이다. 지금은 셸이
+ * 뷰포트에 고정돼 페이지가 스크롤하지 않으므로, 사이드바가 자기
+ * 스크롤을 잃으면 목록의 아래쪽에 닿을 방법이 아예 없어진다 —
+ * 그래서 두 행 모두 `minmax(0, 1fr)`로 두고 각자 스크롤하게 한다.
+ */
+@media (max-width: 900px) {
   .region-results-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .region-results-map {
     order: -1; /* 지도를 목록보다 먼저 보여준다 */
   }
 
-  /*
-   * 1열이 되면 사이드바의 높이 제한·자체 스크롤을 푼다.
-   *
-   * 2열에서는 이 제한이 "지도 옆 칸이 지도보다 길어지지 않게" 하는
-   * 장치지만, 1열에서는 페이지 스크롤 **안에** 600px짜리 중첩 스크롤
-   * 영역을 만든다. 게다가 바로 위 `order: -1` 때문에 그 앞에 600px
-   * 지도가 먼저 온다 — 결과 화면에 막 도착한 휴대폰 사용자는 화면
-   * 가득 지도만 보고, 목록은 그 아래에서 다시 손가락으로 굴려야 하는
-   * 작은 창 안에 갇힌다. 인쇄에서 같은 제한을 푸는 것과 같은 이유다
-   * (@media print의 .region-results-sidebar 참고).
-   */
-  .region-results-sidebar {
-    max-height: none;
-    overflow-y: visible;
+  .complex-map-frame {
+    border-left: none;
+    border-bottom: 1px solid var(--border);
   }
 }
 
@@ -1047,25 +1232,19 @@ h2 {
 }
 
 /*
- * 마커 위에 항상 보이는 라벨(면적+가격범위). 클릭 전에도 보여야 해서
- * InfoWindow와 달리 지도에 바로 얹힌다 — 가격 3분위 구간별로 배경색만
- * 다르게 준다(이 3분위 구분 자체는 design.md에 따르면 Task 4에서
- * 가격대→부담 수준 2분류로 바뀔 예정이다 — 여기서는 팔레트만 바꾼다).
+ * 마커 위에 항상 보이는 라벨(면적+가격범위+거래건수+부담 수준). 클릭
+ * 전에도 보여야 해서 InfoWindow와 달리 지도에 바로 얹힌다.
  *
- * 2026-08-26 팔레트 교체: bg-brand-weak·bg-brand-solid가 cyan에서
- * 황동(각각 옅은 tint #f3e2c4, 진한 --brass-ink #8a5f14)으로 바뀌면서
- * mid의 글자색도 어두운 글자에서 흰 글자로 바꿨다 — 어두운 글자
- * (on-sheet #15202b)는 새 mid 배경(#8a5f14, 그 자체가 어둡다) 위에서
- * 2.93:1로 4.5:1을 못 넘지만, 흰 글자는 5.63:1로 넘는다(계산값). low는
- * 배경이 밝은 tint라 어두운 글자를 그대로 쓴다. high(bg-tier-high,
- * #0f5f96)는 design.md 지시대로 이번 커밋에서 값을 바꾸지 않았다 —
- * 아직은 예전 cyan 계열 진한 톤 그대로다.
+ * **색의 뜻이 바뀌었다(Task 4, design.md §4).** 예전에는 가격 3분위
+ * (그린 단지들 안에서 싼가/비싼가)였는데, 그 색은 "이 지역 기준으로 싼
+ * 편"일 뿐인데 "내 예산에 맞는다"로 읽혔다. 지금은 **부담 수준**이다 —
+ * 대출 없이 살 수 있는가, 대출이 필요한가. 목록 행의 갈림과 뜻이 같고
+ * (`lib/complex-list.ts`의 `burdenTierOf`), 같은 뜻이 라벨에 글자로도
+ * 적혀 있어 색이 유일한 전달자가 아니다.
  *
- * 세 색 다 계산된 대비율이 4.5:1을 넘는다
- * (scripts/seed-semantic-tokens.test.ts가 검증):
- *   low  bg #f3e2c4 / text #15202b → 12.95:1
- *   mid  bg #8a5f14 / text #ffffff →  5.63:1
- *   high bg #0f5f96 / text #ffffff →  6.78:1(변경 없음)
+ * 두 색은 design.md §1이 "밝은 면 위 태그"로 못 박은 짝을 그대로 쓴다
+ * (안전: 글자 #1d5c43 / 바탕 #dff0e8, 주의: 글자 #6d4610 / 바탕 #f7e9cf).
+ * 대비율은 scripts/seed-semantic-tokens.test.ts가 검증한다.
  */
 .complex-map-marker {
   font-size: 0.75rem;
@@ -1077,12 +1256,12 @@ h2 {
 }
 
 /*
- * 마커 라벨 둘째 줄의 거래 건수. 가격 문자열이 min===max에서 숫자
- * 하나로 접히므로(formatRange), 이 줄이 없으면 마커는 아무 단서 없는
- * 가격 하나를 늘 띄우게 된다 — 목록 행·팝업이 늘 달고 있는 "거래 N건"이
- * 여기만 빠져 있었다(ComplexMap.tsx의 markerLabel 주석 참고).
+ * 마커 라벨 둘째 줄 — 거래 건수와 부담 수준. 가격 문자열이 min===max에서
+ * 숫자 하나로 접히므로(formatRange), 이 줄이 없으면 마커는 아무 단서 없는
+ * 가격 하나를 늘 띄우게 된다(ComplexMap.tsx의 markerLabel 주석).
  *
- * 같은 줄이 아니라 아랫줄에 둔다 — 마커 폭이 늘면 서로 겹친다.
+ * 같은 줄이 아니라 아랫줄에 둔다 — 마커 폭이 늘면 서로 겹친다. 부담
+ * 수준 글자도 (첫 줄이 아니라) 여기 붙는 이유가 그것이다.
  */
 .complex-map-marker-trades {
   display: block;
@@ -1091,20 +1270,29 @@ h2 {
   opacity: 0.85;
 }
 
-.complex-map-marker--low {
-  background: var(--seed-color-bg-brand-weak); /* 황동의 옅은 톤 */
-  color: var(--seed-color-fg-neutral); /* on-sheet */
+/* 대출 없이 살 수 있는 단지 — design.md §1의 "안전" 태그 짝 */
+.complex-map-marker--no-loan,
+.complex-map-legend-swatch--no-loan {
+  background: var(--seed-color-bg-positive-weak);
+  color: var(--seed-color-fg-positive-contrast);
 }
 
-.complex-map-marker--mid {
-  background: var(--seed-color-bg-brand-solid); /* 황동(--brass-ink) */
-  color: var(--seed-color-palette-static-white);
+/* 대출이 필요한 단지 — design.md §1의 "주의" 태그 짝 */
+.complex-map-marker--loan,
+.complex-map-legend-swatch--loan {
+  background: var(--seed-color-bg-warning-weak);
+  color: var(--seed-color-fg-warning-contrast);
 }
 
-.complex-map-marker--high {
-  /* bg-tier-high는 design.md 지시대로 이번 커밋에서 바꾸지 않았다(Task 4가 뜻을 바꾼다) */
-  background: var(--seed-color-bg-tier-high);
-  color: var(--seed-color-palette-static-white);
+/*
+ * 목록에서 고른(또는 방금 누른) 단지의 마커. 색이 아니라 **테두리와
+ * 층위**로 구분한다 — 색은 이미 부담 수준이라는 다른 뜻을 지고 있어서,
+ * 선택까지 색으로 말하면 두 뜻이 한 채널에서 부딪힌다.
+ */
+.complex-map-marker--focused {
+  outline: 2px solid var(--seed-color-stroke-brand-solid);
+  outline-offset: 1px;
+  z-index: 1;
 }
 
 /*
@@ -1843,6 +2031,7 @@ body.body-scroll-locked {
   .region-select,
   .dong-narrow,
   .print-button,
+  .back-to-entry-button,
   .complex-more,
   .complex-detail-back,
   .subtitle-privacy-note,
@@ -1853,6 +2042,7 @@ body.body-scroll-locked {
   .purchase-form,
   .price-check-form,
   .complex-map,
+  .complex-map-frame,
   .complex-map-status,
   .complex-map-caveat,
   .complex-map-empty,
@@ -2015,6 +2205,55 @@ body.body-scroll-locked {
   .region-results-sidebar {
     max-height: none;
     overflow: visible;
+    /*
+     * 화면에서 이 상자는 `min-height: 0`인 그리드 아이템이자 스크롤
+     * 상자다. 인쇄에서는 둘 다 뜻이 없고, 남겨 두면 위 `overflow:
+     * visible`만으로는 풀리지 않는 높이 계산이 남는다.
+     */
+    min-height: auto;
+    padding: 0;
+  }
+
+  /*
+   * **전체화면 셸을 통째로 푼다**(design.md §6).
+   *
+   * `.result-shell`은 `position: fixed; inset: 0`에 뷰포트 높이를 두
+   * 행으로 나눈 그리드다. 인쇄는 정적 문서라 고정 요소는 첫 장에 한 번만
+   * 찍히고, 그 안의 내용은 뷰포트 한 화면 분량에서 잘린다 — 목록 행·
+   * 토지임대부 경고·면책까지 통째로 종이에서 사라진다. `.entry-screen`을
+   * 인쇄에서 지운 것과 같은 이유지만, 이쪽은 **지울 수 없다**: 종이에
+   * 나가야 하는 것이 전부 이 안에 들어 있다. 그래서 지우는 대신 푼다.
+   *
+   * `display: block`은 두 행 그리드도 함께 푼다 — 자식(상단바·무대)이
+   * 세로로 흐른다.
+   */
+  .result-shell {
+    position: static;
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  /*
+   * 상단바의 가로 스크롤(`overflow-x: auto`)도 같은 규칙에 걸린다 —
+   * `overflow`로 갇힌 상자는 종이에서 잘린다. 요약 항목은 값이라
+   * 지우지 않고 흐르게 둔다(줄바꿈도 함께 푼다 — `white-space: nowrap`인
+   * 항목들이 종이 폭을 넘으면 그대로 잘린다).
+   */
+  .result-topbar {
+    display: block;
+    overflow: visible;
+  }
+
+  .result-topbar-summary,
+  .result-topbar-item {
+    display: block;
+  }
+
+  .result-topbar-item,
+  .result-topbar-brand,
+  .result-topbar-item-value {
+    white-space: normal;
   }
 }
 
