@@ -11,6 +11,7 @@ import * as regionQuery from "./lib/regionQuery";
 import {
   calcAcquisitionCosts,
   calcBurdenAt,
+  calcMaxLoan,
   householdCountNoteFor,
   parseRules,
   type BuyerProfile,
@@ -359,6 +360,10 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
         costs={calcAcquisitionCosts(u.maxPrice, rowProfile, rules)}
         householdCountNote={householdCountNoteFor(rowProfile, rules)}
         priceBudget={{ profile: rowProfile, financeRules: rules }}
+        // App.tsx와 **같은 인자**로 낸다 — 목록과 상세가 같은 판단을
+        // 보여 주는지 재는 파일이라, 계산기의 한도도 같은 프로필·같은
+        // 가격에서 나와야 한다.
+        maxLoan={calcMaxLoan(rowProfile, rules, u.maxPrice)}
         onClose={() => undefined}
       />,
     );

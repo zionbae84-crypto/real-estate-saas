@@ -27,6 +27,7 @@ import { formatWon } from "./format/won";
 import {
   calcAcquisitionCosts,
   calcBurdenAt,
+  calcMaxLoan,
   householdCountNoteFor,
 } from "./lib/finance";
 import { rules, useAffordability } from "./state/useAffordability";
@@ -763,6 +764,20 @@ export function App() {
        * 하지 않는다 — 고르는 규칙은 `householdCountNoteFor` 하나뿐이다.
        */
       householdCountNote: householdCountNoteFor(residentialProfile, rules),
+      /*
+       * "매달 나가는 돈" 계산기의 입력 범위 상한(`ComplexDetail` →
+       * `LoanCalculator`).
+       *
+       * **`burden`·`costs`와 정확히 같은 인자로 낸다** — 같은 프로필,
+       * 같은 가격(`selectedUnit.maxPrice`), 같은 룰셋이다. 여기서만
+       * 다른 가격을 쓰면 화면이 "받을 수 있는 최대 대출액"이라고 적은
+       * 숫자가 바로 위 부담 계산과 다른 전제를 말하게 된다.
+       *
+       * 이 값은 **읽기만 한다** — 계산기의 입력은 프로필에 저장되지
+       * 않고, 위쪽 실구매 가능 가격·목록·지도에 영향을 주지 않는다
+       * (`PriceCheck`의 호가 입력과 같은 성격).
+       */
+      maxLoan: calcMaxLoan(residentialProfile, rules, selectedUnit.maxPrice),
     };
   }, [residentialProfile, selectedUnit]);
 
@@ -1461,6 +1476,7 @@ export function App() {
                     costs={detail.costs}
                     householdCountNote={detail.householdCountNote}
                     priceBudget={detail.priceBudget}
+                    maxLoan={detail.maxLoan}
                     onClose={handleCloseDetail}
                   />
                 </>

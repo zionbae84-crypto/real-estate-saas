@@ -993,48 +993,167 @@ describe("인쇄 CSS", () => {
   });
 
   /**
-   * **부대비용 내역의 아이콘 트리거 × 인쇄**(사용자 지시 ③).
+   * **아이콘 트리거 × 인쇄**(사용자 지시 ③, 그리고 매달 나가는 돈
+   * 계산기의 "이것도 상세보기 아이콘").
    *
-   * 그 트리거는 `<summary class="fold-more-hint cost-breakdown-toggle">`
-   * 하나다 — 인쇄에서 `<details>`가 강제로 펼쳐지면 트리거는 죽은
-   * 장치가 되므로(종이에서는 누를 수 없다) `.fold-more-hint`가 지운다.
+   * 트리거는 `<summary class="fold-more-hint …-toggle">` 형태다 —
+   * 인쇄에서 `<details>`가 강제로 펼쳐지면 트리거는 죽은 장치가
+   * 되므로(종이에서는 누를 수 없다) `.fold-more-hint`가 지운다.
    *
    * ⚠ **두 클래스가 같은 요소에 함께 붙어 있고 특정도가 (0,1,0)으로
-   * 같다.** 화면 쪽 `.cost-breakdown-toggle { display: flex }`와 인쇄
-   * 쪽 `.fold-more-hint { display: none }`이 그대로 부딪히므로, 순서가
+   * 같다.** 화면 쪽 `…-toggle { display: flex }`와 인쇄 쪽
+   * `.fold-more-hint { display: none }`이 그대로 부딪히므로, 순서가
    * 승패를 가른다 — 인쇄 규칙이 **뒤에** 와야 `!important` 없이 이긴다.
    * `body.body-scroll-locked`가 같은 이유로 이미 순서를 잠그고 있고,
    * 여기도 같은 함정이다: 누가 이 규칙을 파일 아래쪽으로 옮기면
    * 종이에 뜻 없는 화살표 버튼이 찍힌다.
+   *
+   * **트리거가 둘이 되면서 검사도 둘을 돈다.** 두 트리거는 지금 같은
+   * 규칙(쉼표로 묶인 선택자 목록)에 앉아 있으므로, 선택자가 `{` 앞이
+   * 아니라 `,` 앞에 올 수도 있다 — 아래 정규식이 두 형태를 모두 본다
+   * (예전에는 `indexOf("… {")` 하나여서, 규칙을 공유하는 순간 검사가
+   * 조용히 "찾지 못함"으로 깨졌다).
    */
-  describe("내역 아이콘 트리거가 인쇄에서 실제로 지워진다", () => {
-    const TOGGLE = ".cost-breakdown-toggle";
+  describe("아이콘 트리거가 인쇄에서 실제로 지워진다", () => {
+    const TOGGLES = [".cost-breakdown-toggle", ".loan-calc-toggle"];
 
-    it("트리거가 화면에서 display를 다시 선언한다(전제)", () => {
+    /** 이 선택자가 규칙 목록의 한 항목으로 등장하는 자리(`,` 또는 `{` 앞) */
+    function selectorHeadIndex(selector: string): number {
+      return DECLARATIONS.search(new RegExp(`\\${selector}\\s*[,{]`));
+    }
+
+    it.each(TOGGLES)("%s가 화면에서 display를 다시 선언한다(전제)", (TOGGLE) => {
       // 이 선언이 없으면 아래 순서 검사는 아무 의미가 없다.
-      const screenRule = new RegExp(
-        `\\${TOGGLE}\\s*{[^}]*display\\s*:`,
+      // 선택자가 규칙의 마지막 항목이면 바로 `{`가 오고, 앞 항목이면
+      // `,` 뒤에 나머지 목록이 붙은 뒤 `{`가 온다 — 두 형태를 모두 본다.
+      expect(DECLARATIONS).toMatch(
+        new RegExp(`\\${TOGGLE}\\s*(?:,[^{}]*)?\\{[^}]*display\\s*:`),
       );
-      expect(DECLARATIONS).toMatch(screenRule);
     });
 
-    it("그 선언이 @media print 블록보다 앞에 있다 — 특정도가 같아 순서가 가른다", () => {
-      const screenRuleIndex = DECLARATIONS.indexOf(`${TOGGLE} {`);
-      const printBlockIndex = DECLARATIONS.search(PRINT_MEDIA_START);
-      expect(screenRuleIndex).toBeGreaterThan(-1);
-      expect(printBlockIndex).toBeGreaterThan(-1);
-      expect(
-        screenRuleIndex,
-        `${TOGGLE}의 display 규칙이 @media print 블록보다 뒤에 있습니다 — ` +
-          ".fold-more-hint(display:none)와 특정도가 같아 나중 규칙이 " +
-          "이기므로, 종이에 누를 수 없는 아이콘 버튼이 그대로 찍힙니다.",
-      ).toBeLessThan(printBlockIndex);
-    });
+    it.each(TOGGLES)(
+      "%s의 선언이 @media print 블록보다 앞에 있다 — 특정도가 같아 순서가 가른다",
+      (TOGGLE) => {
+        const screenRuleIndex = selectorHeadIndex(TOGGLE);
+        const printBlockIndex = DECLARATIONS.search(PRINT_MEDIA_START);
+        expect(screenRuleIndex).toBeGreaterThan(-1);
+        expect(printBlockIndex).toBeGreaterThan(-1);
+        expect(
+          screenRuleIndex,
+          `${TOGGLE}의 display 규칙이 @media print 블록보다 뒤에 있습니다 — ` +
+            ".fold-more-hint(display:none)와 특정도가 같아 나중 규칙이 " +
+            "이기므로, 종이에 누를 수 없는 아이콘 버튼이 그대로 찍힙니다.",
+        ).toBeLessThan(printBlockIndex);
+      },
+    );
 
     it(".fold-more-hint가 여전히 인쇄 숨김 목록에 있다", () => {
       // 트리거가 기대는 유일한 장치다. 목록에서 빠지면 위 순서를
       // 지켜도 아무것도 지워지지 않는다.
       expect(PRINT_HIDDEN_SELECTORS).toContain(".fold-more-hint");
+    });
+  });
+
+  /**
+   * **매달 나가는 돈 계산기 × 인쇄.**
+   *
+   * 계산기는 `<details class="loan-calc">`(기본 닫힘)이고, 그 안에는
+   * 인쇄에서 반드시 남아야 하는 결과 카드가 있다 — 무엇을 전제로
+   * 계산했는지(`.loan-calc-basis`), 이 숫자가 가정이라는 사실
+   * (`.loan-calc-note`), 계산하지 않았다면 그 이유
+   * (`.loan-calc-guidance`·`.loan-calc-unavailable`). 사용자가 대출금액·
+   * 금리를 바꿔 둔 채로 인쇄하면 **그 가정 그대로** 종이에 남는 것이
+   * 의도한 동작이므로, 그 가정을 적은 줄이 함께 남지 않으면 종이를
+   * 건네받은 사람은 표에 박힌 숫자를 확정값으로 읽는다.
+   *
+   * `.detail-fold`·`.budget-panel`과 **같은 형태의 사고**를 같은 방식으로
+   * 막는다: 미디어 조건 없이 이 접기를 숨기거나 상자에 가두는 규칙이
+   * 하나라도 있으면 그 제약이 인쇄에도 그대로 걸린다.
+   */
+  describe("계산기 접기를 숨기거나 가두는 규칙이 화면 밖으로 새지 않는다", () => {
+    const screenRange = blockRange(DECLARATIONS, SCREEN_MEDIA_START);
+
+    it("`.loan-calc` 규칙이 실제로 존재한다(전제)", () => {
+      expect(
+        DECLARATIONS,
+        ".loan-calc 규칙이 styles.css에 없습니다 — 아래 검사의 전제가 " +
+          "깨졌습니다(클래스 이름을 바꿨다면 이 검사도 함께 옮기세요).",
+      ).toContain(".loan-calc");
+    });
+
+    /**
+     * `confiningRuleIndexes`를 그대로 쓰지 않고 여기서 한 겹 걸러낸다.
+     *
+     * 이 접기의 트리거에는 `.loan-calc-toggle::-webkit-details-marker
+     * { display: none }`이 있다 — **의사 요소 하나(네이티브 삼각형
+     * 마커)를 지우는 규칙**이지 내용을 숨기는 규칙이 아니다. 부분
+     * 일치로 needle을 재는 원래 함수는 그것까지 위반으로 세므로,
+     * `::`가 붙은 선택자는 제외한다. 의사 요소에 건 `display: none`은
+     * 그 의사 요소만 사라지게 할 뿐 `<details>` 안의 내용을 종이에서
+     * 지우지 못한다.
+     *
+     * 입력란(`.loan-input-form`)이 다른 접두사를 쓰는 것도 같은 결의
+     * 장치다 — 그쪽은 **의도적으로** 인쇄에서 지우므로 이 needle에
+     * 걸리면 안 된다(`src/print/hiddenInPrint.ts` 주석 참고).
+     */
+    function confiningNonPseudo(needle: string): number[] {
+      return confiningRuleIndexes(DECLARATIONS, needle).filter((index) => {
+        const head = DECLARATIONS.slice(index, DECLARATIONS.indexOf("{", index));
+        return !head.includes("::");
+      });
+    }
+
+    it("가두는 규칙이 @media screen 밖에는 하나도 없다", () => {
+      const [start, end] = screenRange ?? [0, 0];
+      const offenders = confiningNonPseudo(".loan-calc")
+        .filter((index) => index < start || index >= end)
+        .map((index) => DECLARATIONS.slice(index, index + 120));
+      expect(
+        offenders,
+        "`.loan-calc`를 숨기거나(display:none 등) 상자에 가두는" +
+          "(position:fixed/absolute, overflow:auto, max-height:0 등) 규칙이 " +
+          "@media screen 밖에 있습니다 — 그 제약은 인쇄에도 그대로 적용돼, " +
+          "접힌 채 인쇄한 종이에서 계산 결과와 그 가정이 사라집니다.",
+      ).toEqual([]);
+    });
+
+    it("미디어 조건 없이 상자를 씌우면 잡아낸다(변이 검사)", () => {
+      const poisoned = `
+        .loan-calc { max-height: 12rem; overflow-y: auto; }
+      `;
+      expect(confiningRuleIndexes(poisoned, ".loan-calc")).toHaveLength(1);
+    });
+
+    it("의사 요소에 건 display:none은 세지 않는다(오탐 방지 확인)", () => {
+      // 실제 파일에 있는 그 규칙이다. 원래 함수는 잡고, 위 필터가 뺀다.
+      expect(
+        confiningRuleIndexes(
+          ".loan-calc-toggle::-webkit-details-marker { display: none; }",
+          ".loan-calc",
+        ),
+      ).toHaveLength(1);
+      expect(confiningNonPseudo(".loan-calc-toggle::-webkit-details-marker")).toEqual(
+        [],
+      );
+    });
+
+    /**
+     * 입력란만 인쇄에서 지우고 **결과는 남긴다**는 계약을 목록 쪽에서
+     * 한 번 더 못박는다. 위 "보호 대상 클래스는 어떤 숨김 선택자에도
+     * 등장하지 않는다"가 부분 일치로 이미 막지만, 그 검사는 목록이
+     * 실수로 좁아지는 경우(보호 대상에서 `loan-calc`가 빠지는 경우)를
+     * 잡지 못한다.
+     */
+    it("입력란은 숨기고 결과는 보호 대상이다", () => {
+      expect(PRINT_HIDDEN_SELECTORS).toContain(".loan-input-form");
+      expect(MUST_SURVIVE_PRINT_CLASSES).toContain("loan-calc");
+      for (const selector of PRINT_HIDDEN_SELECTORS) {
+        expect(
+          selector.includes("loan-calc"),
+          `${selector}가 계산기 쪽 클래스를 숨기고 있습니다 — 결과 카드와 ` +
+            "그 가정이 종이에서 사라집니다.",
+        ).toBe(false);
+      }
     });
   });
 });

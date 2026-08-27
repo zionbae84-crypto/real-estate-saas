@@ -1,9 +1,25 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { ComplexUnit } from "../data/complexes";
-import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
+import type {
+  BurdenAtPrice,
+  CostBreakdown as CostBreakdownData,
+  LoanLimit,
+} from "../lib/finance";
 import { rules } from "../state/useAffordability";
 import { ComplexDetail } from "./ComplexDetail";
+
+/**
+ * 계산기의 입력 상한. 호출부(App.tsx)가 `calcMaxLoan`으로 낸 값을
+ * 그대로 넘기는 자리라, 이 테스트에서는 고정값으로 둔다.
+ */
+function maxLoan(amount = 240_000_000): LoanLimit {
+  return {
+    amount,
+    binding: "LTV",
+    breakdown: { LTV: amount, DSR: amount, CAP: amount, POLICY: 0 },
+  };
+}
 
 function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
   const areaBucket = overrides.areaBucket ?? 59;
@@ -61,7 +77,7 @@ describe("ComplexDetail", () => {
   it("단지명·평형·법정동·가격범위·거래 건수를 목록과 같은 규칙으로 보여준다", () => {
     const { container } = render(
       <ComplexDetail unit={unit()} burden={burden()} costs={costs()}
-        householdCountNote={주택수고지} priceBudget={null} onClose={vi.fn()} />,
+        householdCountNote={주택수고지} priceBudget={null} maxLoan={maxLoan()} onClose={vi.fn()} />,
     );
     const title = container.querySelector(".complex-detail-title")?.textContent ?? "";
     expect(title).toMatch(/테스트아파트/);
@@ -81,7 +97,7 @@ describe("ComplexDetail", () => {
   it("변동률을 화면에 내지 않는다", () => {
     const { container } = render(
       <ComplexDetail unit={unit()} burden={burden()} costs={costs()}
-        householdCountNote={주택수고지} priceBudget={null} onClose={vi.fn()} />,
+        householdCountNote={주택수고지} priceBudget={null} maxLoan={maxLoan()} onClose={vi.fn()} />,
     );
     expect(container.textContent).not.toMatch(/상승|하락|변동률|수익률/);
   });
@@ -89,7 +105,7 @@ describe("ComplexDetail", () => {
   it("어느 가격 기준인지 문구로 드러낸다", () => {
     const { container } = render(
       <ComplexDetail unit={unit()} burden={burden()} costs={costs()}
-        householdCountNote={주택수고지} priceBudget={null} onClose={vi.fn()} />,
+        householdCountNote={주택수고지} priceBudget={null} maxLoan={maxLoan()} onClose={vi.fn()} />,
     );
     // 두 블록이 **같은** 가격 전제를 쓰므로 그 전제는 화면 위쪽에서
     // 한 번만 적는다(design.md §6).
@@ -105,7 +121,7 @@ describe("ComplexDetail", () => {
         burden={burden({ neededLoan: 250_000_000 })}
         costs={costs()}
         householdCountNote={주택수고지}
-        priceBudget={null}
+        priceBudget={null} maxLoan={maxLoan()}
         onClose={vi.fn()}
       />,
     );
@@ -135,7 +151,7 @@ describe("ComplexDetail", () => {
         })}
         costs={costs()}
         householdCountNote={주택수고지}
-        priceBudget={null}
+        priceBudget={null} maxLoan={maxLoan()}
         onClose={vi.fn()}
       />,
     );
@@ -158,7 +174,7 @@ describe("ComplexDetail", () => {
         })}
         costs={costs()}
         householdCountNote={주택수고지}
-        priceBudget={null}
+        priceBudget={null} maxLoan={maxLoan()}
         onClose={vi.fn()}
       />,
     );
@@ -184,7 +200,7 @@ describe("ComplexDetail", () => {
         })}
         costs={costs()}
         householdCountNote={주택수고지}
-        priceBudget={null}
+        priceBudget={null} maxLoan={maxLoan()}
         onClose={vi.fn()}
       />,
     );
@@ -199,7 +215,7 @@ describe("ComplexDetail", () => {
         burden={burden()}
         costs={costs({ acquisitionTax: 3_200_000, total: 7_160_000 })}
         householdCountNote={주택수고지}
-        priceBudget={null}
+        priceBudget={null} maxLoan={maxLoan()}
         onClose={vi.fn()}
       />,
     );
@@ -220,7 +236,7 @@ describe("ComplexDetail", () => {
         burden={burden()}
         costs={costs()}
         householdCountNote={주택수고지}
-        priceBudget={null}
+        priceBudget={null} maxLoan={maxLoan()}
         onClose={vi.fn()}
       />,
     );
@@ -236,7 +252,7 @@ describe("ComplexDetail", () => {
     // 쓰이는 임시값이라는 것.
     const { container } = render(
       <ComplexDetail unit={unit({ areaBucket: 59 })} burden={burden()} costs={costs()}
-        householdCountNote={주택수고지} priceBudget={null} onClose={vi.fn()} />,
+        householdCountNote={주택수고지} priceBudget={null} maxLoan={maxLoan()} onClose={vi.fn()} />,
     );
     const basis = container.querySelector(".complex-detail-basis")?.textContent ?? "";
     expect(basis).toMatch(/59㎡/);
@@ -252,7 +268,7 @@ describe("ComplexDetail", () => {
       // 뜬다. 라벨이 없으면 어느 쪽이 이 매물의 답인지 알 수 없다.
       const { container } = render(
         <ComplexDetail unit={unit()} burden={burden()} costs={costs()}
-        householdCountNote={주택수고지} priceBudget={null} onClose={vi.fn()} />,
+        householdCountNote={주택수고지} priceBudget={null} maxLoan={maxLoan()} onClose={vi.fn()} />,
       );
       expect(container.querySelector(".safety-badge-label")?.textContent).toMatch(
         /이 집을 샀을 때/,
@@ -266,7 +282,7 @@ describe("ComplexDetail", () => {
       // 등급을 말하는 자리는 배지 하나뿐이다.
       const { container } = render(
         <ComplexDetail unit={unit()} burden={burden()} costs={costs()}
-        householdCountNote={주택수고지} priceBudget={null} onClose={vi.fn()} />,
+        householdCountNote={주택수고지} priceBudget={null} maxLoan={maxLoan()} onClose={vi.fn()} />,
       );
       const blocks = [...container.querySelectorAll(".detail-block")];
       expect(blocks).toHaveLength(2);
@@ -281,7 +297,7 @@ describe("ComplexDetail", () => {
       // 버튼 자리에 남으면 스크린리더 사용자는 화면이 바뀐 것을 모른다.
       render(
         <ComplexDetail unit={unit()} burden={burden()} costs={costs()}
-        householdCountNote={주택수고지} priceBudget={null} onClose={vi.fn()} />,
+        householdCountNote={주택수고지} priceBudget={null} maxLoan={maxLoan()} onClose={vi.fn()} />,
       );
       expect(document.activeElement).toBe(
         screen.getByRole("region", { name: "단지 상세" }),
@@ -293,7 +309,7 @@ describe("ComplexDetail", () => {
     const onClose = vi.fn();
     render(
       <ComplexDetail unit={unit()} burden={burden()} costs={costs()}
-        householdCountNote={주택수고지} priceBudget={null} onClose={onClose} />,
+        householdCountNote={주택수고지} priceBudget={null} maxLoan={maxLoan()} onClose={onClose} />,
     );
     screen.getByRole("button", { name: /목록으로/ }).click();
     expect(onClose).toHaveBeenCalledOnce();
@@ -322,6 +338,7 @@ describe("두 블록으로 줄인 상세", () => {
       unit?: ComplexUnit;
       burden?: BurdenAtPrice;
       costs?: CostBreakdownData;
+      maxLoan?: LoanLimit;
     } = {},
   ) {
     return render(
@@ -331,6 +348,7 @@ describe("두 블록으로 줄인 상세", () => {
         costs={props.costs ?? costs()}
         householdCountNote={주택수고지}
         priceBudget={null}
+        maxLoan={props.maxLoan ?? maxLoan()}
         onClose={vi.fn()}
       />,
     );
@@ -501,6 +519,114 @@ describe("두 블록으로 줄인 상세", () => {
         /150만원/,
       );
     });
+
+    /**
+     * ────────────────────────────────────────────────────────────
+     * 계산기 트리거 (사용자 지시: "매달나가는비용도 상세보기해서 표로
+     * 만들고 … 이것도 상세보기 아이콘을 만들어서 카드형식으로 결과를
+     * 볼수있도록 해줘")
+     * ────────────────────────────────────────────────────────────
+     *
+     * **취득비용 내역과 같은 장치를 쓴다** — 아이콘이 큰 금액 옆에 붙고,
+     * 여닫는 것은 네이티브 `<details>`가 맡는다(새 `useState` 토글을
+     * 만들지 않는다). 그래야 인쇄에서 `::details-content` 규칙이 그대로
+     * 걸려 종이에 계산 결과가 남는다.
+     */
+    describe("계산기 상세보기 아이콘", () => {
+      it("큰 금액과 같은 줄에 아이콘 트리거가 붙는다", () => {
+        const { container } = renderDetail();
+        const line = container.querySelector(
+          ".detail-block--monthly .detail-stat-line",
+        );
+        expect(line?.querySelector(".detail-stat-value")).not.toBeNull();
+        const summary = line?.querySelector(".loan-calc > summary");
+        expect(summary).not.toBeNull();
+        // 보이는 글자 없이 아이콘 하나 — 뜻은 aria-label이 진다.
+        expect(summary?.textContent?.trim()).toBe("");
+        expect(summary?.querySelector("svg")).not.toBeNull();
+        expect(summary?.getAttribute("aria-label")).toMatch(/계산/);
+      });
+
+      it("계산기도 진짜 <details>이고 기본이 닫힘이다", () => {
+        const { container } = renderDetail();
+        const fold = container.querySelector(".loan-calc");
+        expect(fold?.tagName).toBe("DETAILS");
+        expect(fold?.hasAttribute("open")).toBe(false);
+      });
+
+      it("트리거는 인쇄에서 지워진다 — 종이에서는 누를 수 없다", () => {
+        const { container } = renderDetail();
+        const summary = container.querySelector(".loan-calc > summary");
+        expect(summary?.classList.contains("fold-more-hint")).toBe(true);
+      });
+
+      it("접혀 있어도 결과 카드가 DOM에 남는다 — 인쇄에서 펼쳐진다", () => {
+        const { container } = renderDetail();
+        const fold = container.querySelector(".loan-calc");
+        expect(fold?.querySelector(".loan-calc-result")).not.toBeNull();
+        expect(fold?.querySelector(".loan-calc-basis")?.textContent).toMatch(
+          /2억원/,
+        );
+      });
+
+      it("기본 대출금액은 이 단지의 필요 대출액이다", () => {
+        const { container } = renderDetail({
+          burden: burden({ neededLoan: 180_000_000 }),
+        });
+        expect(
+          container.querySelector(".loan-calc-basis")?.textContent,
+        ).toMatch(/1억 8,000만원/);
+      });
+
+      it("필요 대출액이 한도를 넘으면 한도로 깎아서 시작한다", () => {
+        const { container } = renderDetail({
+          burden: burden({ neededLoan: 500_000_000 }),
+          maxLoan: maxLoan(240_000_000),
+        });
+        expect(
+          container.querySelector(".loan-calc-basis")?.textContent,
+        ).toMatch(/2억 4,000만원/);
+      });
+
+      /**
+       * 단지를 갈아타면 계산기 입력이 비워져야 한다. `PriceCheck`가
+       * `key`로 강제 리마운트하는 것과 같은 이유 — 다른 단지의 가정이
+       * 남아 있으면 화면은 멀쩡한 숫자를 내는데 그 숫자가 통째로 다른
+       * 집에 대한 것이 된다.
+       */
+      it("평형이 바뀌면 계산기가 다시 마운트되도록 key를 준다", () => {
+        const { container, rerender } = render(
+          <ComplexDetail
+            unit={unit({ areaBucket: 59 })}
+            burden={burden({ neededLoan: 100_000_000 })}
+            costs={costs()}
+            householdCountNote={주택수고지}
+            priceBudget={null}
+            maxLoan={maxLoan()}
+            onClose={vi.fn()}
+          />,
+        );
+        expect(
+          container.querySelector(".loan-calc-basis")?.textContent,
+        ).toMatch(/1억원/);
+
+        rerender(
+          <ComplexDetail
+            unit={unit({ areaBucket: 84, complexKey: "11680-9002" })}
+            burden={burden({ neededLoan: 220_000_000 })}
+            costs={costs()}
+            householdCountNote={주택수고지}
+            priceBudget={null}
+            maxLoan={maxLoan()}
+            onClose={vi.fn()}
+          />,
+        );
+        // key가 없으면 useState 초기값이 유지돼 앞 단지의 1억원이 남는다.
+        expect(
+          container.querySelector(".loan-calc-basis")?.textContent,
+        ).toMatch(/2억 2,000만원/);
+      });
+    });
   });
 
   describe("⚠ 대출이 필요 없을 때 — 맨숫자 0을 크게 찍지 않는다", () => {
@@ -528,6 +654,17 @@ describe("두 블록으로 줄인 상세", () => {
       expect(monthly?.textContent).not.toMatch(/0\.0%/);
       expect(container.querySelector(".detail-burden-ratio")).toBeNull();
       expect(container.querySelector(".detail-fold--stress")).toBeNull();
+    });
+
+    /**
+     * 계산기도 이 갈래에서는 만들지 않는다. 대출이 필요 없는 집에서
+     * 계산기를 열면 입력 기본값이 0원이 되고, 그 표는 "매달 상환액
+     * 0원"이라는 맨숫자 0을 세 줄로 늘려 찍는다 — 이 블록이 애초에
+     * 문장으로 답하기로 한 바로 그 이유가 그대로 걸리는 자리다.
+     */
+    it("계산기 트리거도 만들지 않는다", () => {
+      const { container } = renderDetail({ burden: 무대출 });
+      expect(container.querySelector(".loan-calc")).toBeNull();
     });
 
     it("토지임대부면 같은 자리에서 단서가 함께 읽힌다", () => {

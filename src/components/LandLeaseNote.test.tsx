@@ -6,7 +6,11 @@ import {
   PRINT_HIDDEN_SELECTORS,
 } from "../print/hiddenInPrint";
 import { COMPLEX_UNITS, type ComplexUnit } from "../data/complexes";
-import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
+import type {
+  BurdenAtPrice,
+  CostBreakdown as CostBreakdownData,
+  LoanLimit,
+} from "../lib/finance";
 import { parseRules, type BuyerProfile } from "../lib/finance";
 import type { ComplexListEntry, ComplexListResult } from "../lib/complex-list";
 import type { PriceBudgetInput } from "../lib/price";
@@ -130,6 +134,22 @@ function renderList(entries: ComplexListEntry[], onSelect?: () => void) {
   );
 }
 
+/**
+ * "매달 나가는 돈" 계산기의 입력 상한. 이 파일이 보는 것은 토지임대부
+ * 표시라 한도 값 자체는 상관이 없다 — 계산기가 그려질 만큼만 크게 둔다
+ * (0이면 입력란 대신 "받을 수 있는 대출이 없어요"가 뜬다).
+ */
+const maxLoan: LoanLimit = {
+  amount: 400_000_000,
+  binding: "LTV",
+  breakdown: {
+    LTV: 400_000_000,
+    DSR: 400_000_000,
+    CAP: 400_000_000,
+    POLICY: 0,
+  },
+};
+
 function renderDetail(u: ComplexUnit) {
   return render(
     <ComplexDetail
@@ -138,6 +158,7 @@ function renderDetail(u: ComplexUnit) {
       costs={costs()}
         householdCountNote={주택수고지}
       priceBudget={priceBudget}
+      maxLoan={maxLoan}
       onClose={vi.fn()}
     />,
   );

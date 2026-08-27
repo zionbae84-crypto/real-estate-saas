@@ -2,14 +2,20 @@ import { useEffect, useRef } from "react";
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon, formatWonRoundedToMan } from "../format/won";
-import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
+import type {
+  BurdenAtPrice,
+  CostBreakdown as CostBreakdownData,
+  LoanLimit,
+} from "../lib/finance";
 import type { PriceBudgetInput } from "../lib/price";
 import { rules } from "../state/useAffordability";
 import { locationRules } from "../state/useLocationFacts";
 import { priceRules } from "../state/usePriceCheck";
+import { ChevronIcon } from "./ChevronIcon";
 import { formatRange } from "./ComplexList";
 import { CostBreakdown } from "./CostBreakdown";
 import { LandLeaseNote } from "./LandLeaseNote";
+import { LoanCalculator } from "./LoanCalculator";
 import { LocationFacts } from "./LocationFacts";
 import { NoLoanLine } from "./NoLoanLine";
 import { PriceCheck } from "./PriceCheck";
@@ -32,6 +38,16 @@ export interface ComplexDetailProps {
    * 만들지 않는다({@link PriceCheck} 참고).
    */
   priceBudget: PriceBudgetInput | null;
+  /**
+   * 이 프로필·이 가격(`unit.maxPrice`)에서 **실제로 받을 수 있는** 최대
+   * 대출액(`calcMaxLoan`). "매달 나가는 돈" 계산기의 입력 범위 상한이다
+   * ({@link LoanCalculator}).
+   *
+   * 호출부가 `burden`·`costs`와 **정확히 같은 인자**로 낸 값을 넘긴다 —
+   * 한도가 다른 가격·다른 프로필에서 나오면 이 화면이 "받을 수 있는
+   * 최대"라고 적은 숫자가 위의 부담 계산과 다른 전제를 말하게 된다.
+   */
+  maxLoan: LoanLimit;
   onClose: () => void;
 }
 
@@ -118,6 +134,7 @@ export function ComplexDetail({
   costs,
   householdCountNote,
   priceBudget,
+  maxLoan,
   onClose,
 }: ComplexDetailProps) {
   /**
@@ -297,9 +314,47 @@ export function ComplexDetail({
               그 줄은 이 숫자가 무엇을 전제로 나왔는지 말하는 자리라
               계산에 들어간 값 그대로여야 한다.
             */}
-            <p className="detail-stat-value">
-              {formatWonRoundedToMan(burden.safety.monthlyPayment)}
-            </p>
+            {/*
+              값과 계산기 트리거를 **한 줄**에 둔다 — ① 블록의 부대비용
+              내역과 **정확히 같은 장치**다(사용자 지시: "이것도 상세보기
+              아이콘을 만들어서 카드형식으로 결과를 볼수있도록 해줘").
+              배치도 같은 규칙(`.detail-stat-line`)을 쓴다: 아이콘은 값의
+              오른쪽 끝에 서고, 펼친 계산기는 값 아래에서 카드 전체 폭을
+              쓴다.
+
+              ⚠ **새 토글 상태를 만들지 않는다.** 여닫는 것은 네이티브
+              `<details>`가 맡는다 — 인쇄에서 내용을 강제로 펼치는 규칙
+              (`::details-content`)이 그 태그에만 걸리므로, 직접 만든
+              상자로 접으면 종이에서 계산 결과가 통째로 사라진다
+              (CostBreakdown 주석과 같은 함정이다). 안쪽 입력값만
+              `useState`로 관리한다(`LoanCalculator`) — 그건 조작
+              장치이지 인쇄 대상이 아니다.
+            */}
+            <div className="detail-stat-line">
+              <p className="detail-stat-value">
+                {formatWonRoundedToMan(burden.safety.monthlyPayment)}
+              </p>
+              <details className="loan-calc">
+                <summary
+                  className="fold-more-hint loan-calc-toggle"
+                  aria-label="대출금액·금리를 바꿔서 계산해 보기"
+                >
+                  <ChevronIcon />
+                </summary>
+                {/*
+                  **평형별 `key`를 준다.** `PriceCheck`와 같은 이유다 —
+                  다른 평형으로 갈아탈 때 이 컴포넌트가 다시 마운트되면서
+                  앞 단지의 대출금액·금리 가정이 비워진다. 없으면 화면은
+                  멀쩡한 상환액을 내는데 그 숫자가 통째로 다른 집에 대한
+                  것이 된다.
+                */}
+                <LoanCalculator
+                  key={`${unit.complexKey}|${unit.areaBucket}`}
+                  neededLoan={burden.neededLoan}
+                  maxLoan={maxLoan}
+                />
+              </details>
+            </div>
             {/*
               금리·기간은 **가정이고 화면에 적는다.** 값은 룰셋에서
               오므로, 룰셋이 바뀌면 이 줄도 함께 바뀐다.

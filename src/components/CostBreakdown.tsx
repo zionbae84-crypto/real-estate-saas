@@ -1,5 +1,6 @@
 import { formatWon } from "../format/won";
 import type { CostBreakdown as CostBreakdownData } from "../lib/finance";
+import { ChevronIcon } from "./ChevronIcon";
 
 export interface CostBreakdownProps {
   costs: CostBreakdownData;
@@ -33,37 +34,11 @@ export interface CostBreakdownProps {
   repeatTotal?: boolean;
 }
 
-/**
- * 내역을 펼치는 아이콘. 이 저장소에 아이콘 컴포넌트 선례가 없어
- * 인라인 SVG로 둔다(아이콘 하나 때문에 라이브러리를 들이지 않는다).
- *
- * 모양은 **아래를 가리키는 홑화살괄호(chevron)**다. 정보(ⓘ)가 아니라
- * 화살표를 고른 이유: 이 버튼이 여는 것은 설명이 아니라 **이 자리에서
- * 아래로 펼쳐지는 표**이고, 열림·닫힘 상태를 회전 하나로 그대로 보일
- * 수 있다(`.cost-breakdown[open]`에서 180° 돈다 — styles.css).
- *
- * `aria-hidden`인 이유는 접근 가능한 이름을 `<summary>`가 지기
- * 때문이다. 이름을 둘 다 주면 스크린리더가 같은 말을 두 번 읽는다.
- * `stroke="currentColor"`라 색은 버튼 규칙 하나만 정하면 된다.
+/*
+ * 내역을 펼치는 아이콘은 `./ChevronIcon`으로 나갔다 — 매달 나가는 돈
+ * 계산기가 **같은 트리거**를 쓰게 되면서 출처를 하나로 뒀다. 모양·속성은
+ * 그대로이고, 이 파일에서 바뀐 것은 정의가 import로 바뀐 것뿐이다.
  */
-function ChevronIcon() {
-  return (
-    <svg
-      aria-hidden="true"
-      focusable="false"
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.75"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M4 6.5 8 10.5 12 6.5" />
-    </svg>
-  );
-}
 
 type CostKey = keyof Omit<CostBreakdownData, "total">;
 

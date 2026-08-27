@@ -1138,7 +1138,8 @@ body {
   grid-area: 1 / 1;
 }
 
-.detail-stat-line > .cost-breakdown {
+.detail-stat-line > .cost-breakdown,
+.detail-stat-line > .loan-calc {
   grid-area: 1 / 1 / auto / 3;
 }
 
@@ -1162,7 +1163,15 @@ body {
  * summary 상자가 큰 금액 위를 덮지 않는다(덮으면 숫자를 누를 때마다
  * 표가 열린다).
  */
-.cost-breakdown-toggle {
+/*
+ * `.loan-calc-toggle`이 **같은 규칙에 함께 앉는다**(사용자 지시: 매달
+ * 나가는 돈도 "이것도 상세보기 아이콘을 만들어서"). 두 트리거는 같은
+ * 화면의 같은 열에서 같은 약속("여기를 누르면 아래로 펼쳐진다")을
+ * 하므로, 값을 두 벌로 두면 한쪽만 움직이는 날 같은 카드 위에서 서로
+ * 다른 버튼이 뜬다. 아이콘 자체도 `ChevronIcon` 하나에서 온다.
+ */
+.cost-breakdown-toggle,
+.loan-calc-toggle {
   /* 기본 삼각형 마커를 지운다 — 보이는 것은 아이콘 하나여야 한다 */
   list-style: none;
   display: flex;
@@ -1181,12 +1190,21 @@ body {
     background var(--seed-duration-d3) var(--seed-timing-function-easing);
 }
 
-/* Safari/구 Chromium은 마커를 이 의사 요소로 그린다 */
-.cost-breakdown-toggle::-webkit-details-marker {
+/*
+ * Safari/구 Chromium은 마커를 이 의사 요소로 그린다.
+ *
+ * ⚠ 이 `display: none`은 **의사 요소 하나**를 지우는 것이지 내용을
+ * 숨기는 것이 아니다 — `scripts/printCss.test.ts`의 "계산기 접기를
+ * 가두지 않는다" 가드가 `::`가 붙은 선택자를 세지 않는 이유가 정확히
+ * 이 규칙이다(그 가드 주석 참고).
+ */
+.cost-breakdown-toggle::-webkit-details-marker,
+.loan-calc-toggle::-webkit-details-marker {
   display: none;
 }
 
-.cost-breakdown-toggle:hover {
+.cost-breakdown-toggle:hover,
+.loan-calc-toggle:hover {
   border-color: var(--result-signal);
   background: var(--result-signal-wash);
 }
@@ -1197,11 +1215,13 @@ body {
  * `prefers-reduced-motion` 블록이 전역으로 끄고(그때는 회전이 즉시
  * 일어난다), 방향 자체는 남는다.
  */
-.cost-breakdown-toggle svg {
+.cost-breakdown-toggle svg,
+.loan-calc-toggle svg {
   transition: transform var(--seed-duration-d3) var(--seed-timing-function-easing);
 }
 
-.cost-breakdown[open] > .cost-breakdown-toggle svg {
+.cost-breakdown[open] > .cost-breakdown-toggle svg,
+.loan-calc[open] > .loan-calc-toggle svg {
   transform: rotate(180deg);
 }
 
@@ -1367,6 +1387,158 @@ body {
   margin-top: 0.75rem;
   border-top: none;
   padding-top: 0;
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 매달 나가는 돈 계산기 (LoanCalculator)
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 사용자 지시: "매달나가는비용도 상세보기해서 표로 만들고, 대출금액 및
+ * 금리는 한도액 내에 직접 입력할수 있도록 해서 … 이것도 상세보기
+ * 아이콘을 만들어서 카드형식으로 결과를 볼수있도록 해줘."
+ *
+ * ⚠ **`overflow`·`max-height`·`position`을 걸지 않는다.** 이 접기 안에는
+ * `MUST_SURVIVE_PRINT_CLASSES`(`loan-calc`)가 지키는 결과 카드가 들어
+ * 있고, 인쇄에서는 `<details>`가 강제로 펼쳐져 그 카드가 종이에 나간다 —
+ * 상자에 가두는 규칙 하나면 화면에서 잘리고 종이에서 사라진다
+ * (`.budget-panel`·`.detail-fold`가 이미 두 번 막은 사고).
+ * `scripts/printCss.test.ts`가 그 사실을 검사한다.
+ *
+ * 여닫는 트리거(`.loan-calc-toggle`)의 모양은 위 `.cost-breakdown-toggle`
+ * 과 **같은 규칙**에서 온다 — 같은 열의 두 카드가 같은 버튼을 쓴다.
+ */
+.loan-calc-body {
+  margin: 0.75rem 0 0;
+}
+
+/*
+ * 입력란 묶음. **인쇄에서 통째로 지운다**(`src/print/hiddenInPrint.ts`의
+ * `.loan-input-form`) — 종이 위에서는 채울 수도 고를 수도 없다. 아래
+ * 결과 카드는 그대로 남으므로, 무엇을 넣었는지는 `.loan-calc-basis`가
+ * 종이에서 다시 적는다.
+ */
+.loan-input-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.loan-input-field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.loan-input-field input {
+  /*
+   * 네이티브 입력이라 폼 컨트롤 기본 글꼴을 물려받지 못한다 —
+   * 명시하지 않으면 이 칸만 시스템 글꼴로 뜬다.
+   */
+  font: inherit;
+  font-weight: 400;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 8px;
+  background: var(--result-paper);
+}
+
+/* 라디오 두 개. `<fieldset>` 기본 테두리·여백은 걷어낸다 */
+.loan-input-method {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  align-items: center;
+}
+
+.loan-input-method legend {
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.loan-input-method-option {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/*
+ * 결과 카드(사용자 지시: "카드형식으로 결과를 볼수있도록"). 상세 블록
+ * 카드(`.detail-block`) 안에 앉는 한 겹 안쪽 카드라, 같은 카드 언어를
+ * 쓰되 그림자는 얹지 않는다 — 카드 위의 카드에 그림자를 두 번 얹으면
+ * 화면이 층으로 읽힌다.
+ */
+.loan-calc-result {
+  margin-top: 0.75rem;
+  padding: 12px 14px;
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 16px;
+  background: var(--result-paper);
+}
+
+/* 부대비용 내역과 같은 두 칸 표 — 라벨 왼쪽, 금액 오른쪽 */
+.loan-calc-figures {
+  margin: 0;
+}
+
+.loan-calc-figures > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7.5rem, max-content);
+  align-items: baseline;
+  column-gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.loan-calc-figures > div:last-child {
+  border-bottom: none;
+}
+
+.loan-calc-figures dt {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.loan-calc-figures dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  /* 금액은 줄바꿈하지 않는다 — 끊기면 두 값을 적은 것처럼 읽힌다 */
+  white-space: nowrap;
+}
+
+/*
+ * 무엇을 전제로 계산했는가 / 이 숫자가 가정이라는 사실. 둘 다 종이에
+ * 남아야 하는 줄이라 `.detail-stat-note`와 **같은 어조·같은 크기**로
+ * 적는다(그 줄이 금리·기간 가정을 지는 것과 같은 성격이다).
+ */
+.loan-calc-basis,
+.loan-calc-note {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--seed-color-fg-neutral-muted);
+  margin: 0.5rem 0 0;
+}
+
+/*
+ * 계산하지 않은 이유. **빈칸을 남기지 않는다** — 빈 자리는 언제나
+ * "문제 없음"으로 읽힌다. `.price-no-estimate`와 같은 모양(왼쪽 선)을
+ * 써서 "이건 값이 아니라 안내"라는 것이 한눈에 보이게 한다.
+ */
+.loan-calc-guidance,
+.loan-calc-unavailable {
+  border-left: 4px solid var(--border);
+  padding: 0.25rem 0.75rem;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
 /*
@@ -2711,6 +2883,13 @@ body.body-scroll-locked {
   .fold-more-hint,
   .purchase-form,
   .price-check-form,
+  /*
+   * 매달 나가는 돈 계산기의 입력란(대출금액·금리·상환방식). 바로 위
+   * `.price-check-form`과 같은 이유다 — 종이에서는 채울 수 없다.
+   * **결과 카드(`.loan-calc-result`)는 지우지 않는다**: 그 안에 무엇을
+   * 전제로 계산했는지와 이 숫자가 가정이라는 사실이 함께 있다.
+   */
+  .loan-input-form,
   .complex-map,
   .complex-map-frame,
   .complex-map-status,

@@ -120,6 +120,23 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 지킨다. 그 한 줄이 사라지면 종이를 건네받은 사람이 아래 판정을
   // "적정가 판정"으로 읽는다.
   ".price-check-form",
+  // "매달 나가는 돈" 계산기의 **입력란**(대출금액·금리·상환방식 라디오,
+  // LoanCalculator.tsx). 바로 위 `.price-check-form`과 **같은 성격**이다 —
+  // 종이 위에서는 채울 수도 고를 수도 없는 조작 장치다. 무엇을 넣었고
+  // 무엇이 나왔는지는 결과 카드가 스스로 다시 적으므로(`.loan-calc-basis`가
+  // "대출 1억 5,000만원 · 30년 · 연 4.53% · 원금균등으로 계산했어요"를,
+  // `.loan-calc-note`가 이 숫자가 가정이라는 사실을 낸다) 종이에서 잃는
+  // 정보가 없다.
+  //
+  // ⚠ **클래스 이름에 `loan-calc`를 쓰지 않았다.** 아래
+  // MUST_SURVIVE_PRINT_CLASSES가 `loan-calc`를 보호 대상으로 올려 두는데,
+  // 이 목록은 선택자 **문자열의 부분 일치**로 위반을 검사하므로
+  // (`printCss.test.ts`) 이름이 `.loan-calc-form`이었다면 그 검사에
+  // 오탐으로 걸린다. `.budget-detail-close`가 `.budget-panel`과의 충돌을
+  // 피하려고 이름 하나로 같은 일을 한 전례를 그대로 따른다 — 그리고 그
+  // 대가로 `loan-calc`로 시작하는 어떤 것도 실수로 이 숨김 목록에 오를
+  // 수 없게 된다.
+  ".loan-input-form",
   // 갭투자·월세 수익형의 **값 입력란**(매매 예정가·보증금·현금·월세·
   // 운영비용·대출 답). 종이에서는 채울 수 없다. 무엇을 넣었고 무엇이
   // 나왔는지는 `PurchaseVerdict`가 결과 안에 값과 판정을 다시 적으므로
@@ -234,6 +251,24 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "detail-stat-value", // 두 블록의 값(또는 "대출 없이 살 수 있어요")
   "detail-stat-note", // 금리·기간 가정, 농어촌특별세 고지
   "detail-burden-ratio", // 소득 대비 부담률 한 줄
+  /*
+   * "매달 나가는 돈" 계산기(`LoanCalculator`). 사용자가 대출금액·금리를
+   * 바꿔 둔 채로 인쇄하면 **그 가정 그대로** 종이에 남는다 — 가정을
+   * 숨기지 않는다는 이 저장소의 규칙과 같은 방향이고, 그래서 결과 카드는
+   * 값만이 아니라 무엇을 전제로 계산했는지(`.loan-calc-basis`)와 이
+   * 숫자가 가정이라는 사실(`.loan-calc-note`), 계산하지 않았다면 그
+   * 이유(`.loan-calc-guidance`·`.loan-calc-unavailable`)까지 함께 낸다.
+   * 그 줄들이 사라지면 종이를 건네받은 사람은 표에 박힌 상환액을 은행이
+   * 확정해 준 값으로 읽는다.
+   *
+   * **이름 하나로 그 전부를 지킨다.** 이 검사는 부분 일치라
+   * `loan-calc` 한 줄이 `.loan-calc`(접기 자체)부터
+   * `.loan-calc-result`·`-figures`·`-basis`·`-note`·`-guidance`·
+   * `-unavailable`까지 전부 숨김 목록에 오르지 못하게 막는다. 입력란만
+   * 다른 접두사(`.loan-input-form`)를 쓰는 이유가 정확히 이것이다(위
+   * PRINT_HIDDEN_SELECTORS의 해당 항목 주석 참고).
+   */
+  "loan-calc",
   "policy-loan-list", // 정책대출 목록
   "no-budget", // 예산 0원 안내
   // 구매 유형별 재무 지표. 이 화면에서 가장 무거운 말은 "이 유형의
