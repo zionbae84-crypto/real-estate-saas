@@ -274,19 +274,31 @@ describe("평형대 칩 — 상자가 아니라 밑줄 토글", () => {
   });
 });
 
-describe("조회 버튼 — 화살표가 자라는 텍스트 버튼", () => {
-  /** `prototype.html`의 `.go`: 채운 버튼이 아니라 글자 + 늘어나는 선. */
-  it("화살표는 ::after로 그린다 — RegionSelect의 마크업을 건드리지 않는다", () => {
-    const arrow = ruleBody(".entry-screen .region-select button::after");
-    expect(arrow).toContain('content: ""');
-    expect(arrow).toContain("background: currentColor");
+/**
+ * 조회 버튼은 원래 `prototype.html`의 `.go`(글자 + 늘어나는 선)였다 —
+ * 사용자 지시로 원형 아이콘 버튼으로 바뀌었고(RegionSelect.tsx의 SVG
+ * 화살표), 자리도 selects 아래 독립된 줄에서 두 select와 같은 줄의
+ * 셋째 열로 옮겨졌다. 이 describe는 그 새 모양을 잠근다.
+ */
+describe("조회 버튼 — 원형 아이콘 버튼", () => {
+  it("두 select와 같은 줄, 셋째 열에 원형 테두리로 선다", () => {
+    const btn = ruleBody(".entry-screen .region-select-query");
+    expect(btn).toContain("grid-column: 3");
+    expect(btn).toContain("border-radius: 50%");
+    expect(btn).toContain("border: 1.5px solid var(--brass-lift)");
   });
 
-  it("호버에서 화살표가 길어진다", () => {
-    expect(
-      ruleBody(
-        ".entry-screen .region-select button:not(:disabled):hover::after",
-      ),
-    ).toContain("width:");
+  it("호버에서 테두리색으로 채워지고 글자색이 뒤집힌다", () => {
+    const hover = ruleBody(
+      ".entry-screen .region-select-query:not(:disabled):hover",
+    );
+    expect(hover).toContain("background: var(--brass-lift)");
+    expect(hover).toContain("color: var(--ink)");
+  });
+
+  it("비활성은 화살표 버튼과 같은 --haze다(WCAG 1.4.3 예외지만 읽히는 값)", () => {
+    const disabled = ruleBody(".entry-screen .region-select-query:disabled");
+    expect(disabled).toContain("border-color: var(--haze)");
+    expect(disabled).toContain("color: var(--haze)");
   });
 });

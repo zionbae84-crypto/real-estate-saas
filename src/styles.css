@@ -3760,10 +3760,15 @@ body.body-scroll-locked {
  */
 .entry-screen .echo {
   position: absolute;
-  top: 2.125rem;
+  /*
+   * 사용자 지시로 글자를 2배 키웠다(0.8125rem → 1.625rem) — 커진
+   * 만큼 위로 올려 입력 줄과 다시 나란해지게 `top`도 같이 낮췄다(옛
+   * top은 옛 글자 높이 기준으로 손으로 맞춘 값이었다).
+   */
+  top: 1.5rem;
   right: 1.125rem;
   margin: 0;
-  font-size: 0.8125rem;
+  font-size: 1.625rem;
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--brass-lift);
@@ -3982,7 +3987,11 @@ body.body-scroll-locked {
   border: none;
   padding: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  /*
+   * 사용자 지시로 조회 버튼이 아이콘이 되어 셋째 열로 들어왔다 — 두
+   * select와 같은 줄, 오른쪽 끝(`auto` 폭)에 선다.
+   */
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
   gap: 0.75rem;
   align-items: end;
   /* 다른 카드의 라디오·칩 줄과 같은 간격(0.25rem) — 제목은 이미 테두리에 뜬다 */
@@ -3992,6 +4001,18 @@ body.body-scroll-locked {
 .entry-screen .region-select .field {
   margin: 0;
   min-width: 0;
+}
+
+/*
+ * "광역단체"·"자치구" — 사용자 지시로 값(select)보다 훨씬 작은 라벨로
+ * 낮춘다. `AreaBandSelect.tsx`가 이미 쓰는 "라벨 작게 위, 값 크게 아래"
+ * Stat Block 규율(DESIGN.md)과 같은 위계다.
+ */
+.entry-screen .region-select .field label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--haze-lift);
+  margin: 0 0 0.25rem;
 }
 
 /*
@@ -4011,41 +4032,34 @@ body.body-scroll-locked {
 }
 
 /*
- * "이 지역으로 조회하기" — 프로토타입의 `.go`. 채운 버튼이 아니라
- * **글자 + 자라는 선**이다.
- *
- * 화살표는 `::after`로 그린다 — 마크업에 아이콘 요소를 더하지 않고
- * 같은 모양을 낸다.
+ * "이 지역으로 조회하기" — 사용자 지시로 텍스트+자라는 선 버튼을
+ * 원형 아이콘 버튼으로 바꿨다. `.field` 두 칸과 같은 줄, 셋째 열
+ * (`auto` 폭)에 선다 — select의 밑줄과 바닥이 맞도록 `align-self:end`
+ * (부모의 `align-items:end`를 그대로 물려받는다)를 쓴다.
  */
-.entry-screen .region-select button {
-  grid-column: 1 / -1;
-  justify-self: start;
-  margin-top: clamp(0.5rem, 1.6vh, 1rem);
+.entry-screen .region-select-query {
+  grid-column: 3;
+  align-self: end;
   display: inline-flex;
   align-items: center;
-  gap: 0.75rem;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  /* select 밑줄(`border-bottom`) 두께만큼 내려 바닥선을 맞춘다 */
+  margin-bottom: 1px;
   background: none;
-  border: 0;
-  border-radius: 0;
-  padding: 0;
+  border: 1.5px solid var(--brass-lift);
+  border-radius: 50%;
   color: var(--brass-lift);
-  font-family: inherit;
-  font-size: 1rem;
-  font-weight: 600;
-  letter-spacing: -0.015em;
   cursor: pointer;
+  transition:
+    background-color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    color var(--seed-duration-d3) var(--seed-timing-function-easing);
 }
 
-.entry-screen .region-select button::after {
-  content: "";
-  width: 46px;
-  height: 1px;
-  background: currentColor;
-  transition: width var(--seed-duration-d4) var(--seed-timing-function-easing);
-}
-
-.entry-screen .region-select button:not(:disabled):hover::after {
-  width: 66px;
+.entry-screen .region-select-query:not(:disabled):hover {
+  background: var(--brass-lift);
+  color: var(--ink);
 }
 
 /*
@@ -4054,14 +4068,15 @@ body.body-scroll-locked {
  * 전달되지 않는다. 프로토타입의 `--haze-dim`(2.75:1) 대신 `--haze`
  * (4.70:1)다.
  */
-.entry-screen .region-select button:disabled {
+.entry-screen .region-select-query:disabled {
+  border-color: var(--haze);
   color: var(--haze);
   cursor: default;
 }
 
-.entry-screen .region-select button:focus-visible {
+.entry-screen .region-select-query:focus-visible {
   outline: 2px solid var(--brass-lift);
-  outline-offset: 4px;
+  outline-offset: 3px;
 }
 
 /* 예산이 덜 찼을 때만 뜨는 이유 문구 — 버튼과 같은 전체 폭에 놓는다 */
