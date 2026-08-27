@@ -3,7 +3,6 @@ import type { LiveComplexesResult } from "../../scripts/pipeline/live";
 
 export interface RegulatedRegions {
   regulated: string[];
-  nonRegulated: string[];
 }
 
 export interface HandleComplexesDeps {
@@ -24,10 +23,15 @@ export interface HandleComplexesResult {
 
 const REGION_CODE_PATTERN = /^\d{5}$/;
 
-function resolveIsRegulated(regionCode: string, regions: RegulatedRegions): boolean | null {
-  if (regions.regulated.includes(regionCode)) return true;
-  if (regions.nonRegulated.includes(regionCode)) return false;
-  return null;
+/**
+ * `regulated` 목록에 없는 지역은 **비규제로 본다.** 국토부 보도자료가
+ * 규제지역만 나열하므로 이 판정은 "목록에 없다"는 사실 하나에 기대는
+ * 확정값이다 — 근거 문서에 없는 지역까지 규제로 단정하던 예전
+ * 보수적 기본값(가정 상태로 남기기)을 사용자 지시로 걷어냈다
+ * (`api/_data/regulated-regions.README.md` 참고).
+ */
+function resolveIsRegulated(regionCode: string, regions: RegulatedRegions): boolean {
+  return regions.regulated.includes(regionCode);
 }
 
 /**

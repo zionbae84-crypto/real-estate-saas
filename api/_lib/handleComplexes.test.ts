@@ -20,7 +20,7 @@ const UNIT: EmittedComplexUnit = {
   lowConfidence: true,
 };
 
-const REGIONS = { regulated: ["11680"], nonRegulated: ["11110"] };
+const REGIONS = { regulated: ["11680"] };
 
 describe("handleComplexesRequest", () => {
   it("regionCode가 없으면 400을 반환한다", async () => {
@@ -67,22 +67,13 @@ describe("handleComplexesRequest", () => {
     expect((result.body as { dataAsOf: unknown }).dataAsOf).toBeNull();
   });
 
-  it("nonRegulated 목록에 있으면 isRegulatedArea: false를 반환한다", async () => {
-    const fetchLive = vi.fn().mockResolvedValue({ units: [], dataAsOf: null });
-    const result = await handleComplexesRequest(
-      { regionCode: "11110", dong: null },
-      { fetchLive, key: "dummy", regions: REGIONS },
-    );
-    expect((result.body as { isRegulatedArea: unknown }).isRegulatedArea).toBe(false);
-  });
-
-  it("어느 목록에도 없으면 isRegulatedArea: null을 반환한다", async () => {
+  it("regulated 목록에 없으면 isRegulatedArea: false를 반환한다 — 목록에 없는 지역은 비규제로 본다", async () => {
     const fetchLive = vi.fn().mockResolvedValue({ units: [], dataAsOf: null });
     const result = await handleComplexesRequest(
       { regionCode: "99999", dong: null },
       { fetchLive, key: "dummy", regions: REGIONS },
     );
-    expect((result.body as { isRegulatedArea: unknown }).isRegulatedArea).toBeNull();
+    expect((result.body as { isRegulatedArea: unknown }).isRegulatedArea).toBe(false);
   });
 
   it("국토부 조회가 실패하면 502와 에러 메시지를 반환한다 — 200+빈배열이 아니다", async () => {
