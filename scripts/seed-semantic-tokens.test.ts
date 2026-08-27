@@ -465,6 +465,101 @@ describe("화면 1 재스킨 대비율 실측 — 영상 위 스크림 바닥 �
 });
 
 /**
+ * 화면 2 재스킨(`prototype-results.html`) — **옮겨 온 색을 전부 실측해
+ * 여기 못박는다.**
+ *
+ * 화면 1과 같은 이유다(위 describe 참고): 아래 전수 검사는 통과하면
+ * 조용해져 **어느 값이 얼마였는지** 남지 않는다. 프로토타입 머리주석이
+ * 실측표로 남긴 숫자를 그대로 다시 계산해, 팔레트가 움직였을 때 어느
+ * 방향으로 움직였는지 diff에서 보이게 한다.
+ *
+ * 화면 2의 면은 **흰색**이다(사용자 지시 ③으로 사이드바까지 흰색이
+ * 됐다) — 영상 위 스크림이 아니다.
+ *
+ * ⚠ **마지막 두 테스트는 기준에 못 미치는 값을 남긴다.** 사용자가 두 번
+ * 명시적으로 지시한 채움이고, 위 전수 검사의 예외 목록이 같은 세 자리를
+ * 다시 잰다. 디자인을 옮기는 일과 읽히지 않는 글자를 옮기는 일은 다르지만,
+ * 이 자리들은 **뜻이 색이 아니라 글자에 있다**(마커 라벨·범례에 "대출
+ * 없이"/"대출 필요"가 적혀 있다).
+ */
+describe("화면 2 재스킨 대비율 실측 — 흰 면 기준", () => {
+  const paper = "#ffffff";
+
+  it("본문·제목(--result-ink) on 흰 면 = 14.48:1", () => {
+    const ratio = contrastRatio(rawToken("--result-ink"), paper);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("14.48");
+  });
+
+  it("보조 글자(--result-gray) on 흰 면 = 5.57:1", () => {
+    const ratio = contrastRatio(rawToken("--result-gray"), paper);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("5.57");
+  });
+
+  /** 화면에서 가장 중요한 숫자(실구매 가능 가격)가 이 색이다. */
+  it("금액(--result-signal-ink) on 흰 면 = 5.44:1", () => {
+    const ratio = contrastRatio(rawToken("--result-signal-ink"), paper);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("5.44");
+  });
+
+  /**
+   * 선택된 카드는 바탕이 `--result-signal-wash`로 바뀐다. 그 위에 앉는
+   * 가장 옅은 글자(`--result-gray`)가 기준을 넘는지가 이 면의 관건이다 —
+   * 전수 검사는 규칙에 배경이 **함께 선언된 경우만** 그 면으로 재므로,
+   * 물려받는 이 면은 여기서만 잰다.
+   */
+  it("선택된 카드 바탕 위 보조 글자: --result-gray on --result-signal-wash = 4.98:1", () => {
+    const ratio = contrastRatio(
+      rawToken("--result-gray"),
+      rawToken("--result-signal-wash"),
+    );
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("4.98");
+  });
+
+  it("선택된 카드 바탕 위 본문: --result-ink on --result-signal-wash = 12.97:1", () => {
+    const ratio = contrastRatio(
+      rawToken("--result-ink"),
+      rawToken("--result-signal-wash"),
+    );
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("12.97");
+  });
+
+  it("파랑 채움 위 흰 글자 = 2.65:1 — 기준 미달, 사용자 지시", () => {
+    const ratio = contrastRatio(paper, rawToken("--result-signal"));
+    expect(ratio).toBeLessThan(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("2.65");
+  });
+
+  it("주황 채움 위 흰 글자 = 3.28:1 — 기준 미달, 파랑보다는 낫다", () => {
+    const ratio = contrastRatio(paper, rawToken("--result-warn"));
+    expect(ratio).toBeLessThan(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("3.28");
+  });
+
+  /**
+   * 카드 경계선. 흰 사이드바 위 흰 카드에서 이 선이 유일한 경계라
+   * **비텍스트 대비(WCAG 1.4.11)의 3:1**이 걸릴 법한 자리지만, 실측은
+   * 1.25:1이다.
+   *
+   * **그래도 프로토타입 값을 그대로 쓴다.** 1.4.11이 요구하는 것은 "그
+   * 컨트롤을 식별하는 데 필요한 시각적 정보"인데, 카드는 자기 경계가
+   * 없어도 이름·가격·거래 건수라는 글자 덩어리로 이미 식별된다 — 화면
+   * 1의 입력 밑줄(상자 없는 입력에서 밑줄이 컨트롤을 식별하는 **유일한**
+   * 단서라 3:1을 맞춰 올렸다)과 다른 사정이다. 대신 그 사실을 여기
+   * 숫자로 남긴다.
+   */
+  it("카드 테두리(--result-rule) on 흰 면 = 1.25:1 — 비텍스트 3:1 미만", () => {
+    const ratio = contrastRatio(rawToken("--result-rule"), paper);
+    expect(ratio).toBeLessThan(3);
+    expect(ratio.toFixed(2)).toBe("1.25");
+  });
+});
+
+/**
  * 단지 상세의 두 블록(design.md §6) — **새로 만든 Stat Block이라 실측을
  * 여기 못박는다.**
  *
@@ -570,6 +665,45 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
    */
   const isDisabledControl = (selector: string) => selector.includes(":disabled");
 
+  /**
+   * **사용자가 명시적으로 지시한, 기준에 못 미치는 채움 세 자리.**
+   *
+   * 화면 2 재스킨의 출처인 `prototype-results.html`은 그 판단을 머리주석에
+   * 이미 적어 두었다 — 파랑(`--result-signal` #3ba6f1)·주황
+   * (`--result-warn` #e8663c) 채움 **위 굵은 흰 글자**는 각각 2.65:1 /
+   * 3.28:1로 본문 기준(4.5:1)에 못 미친다. 굵기로도 메워지지 않는다:
+   * 3:1 완화는 18.66px부터인데 이 자리들은 11~13px이다.
+   *
+   * **통과시키는 방법은 있다** — 채움을 `--result-signal-ink`(#1f6ea9,
+   * 흰 글자 5.44:1)나 `#c8431b`(4.91:1)로 내리면 된다. 그만큼 사용자가
+   * 지정한 색에서 멀어지고, 사용자는 이 색을 두 차례(커밋 `1c47333`·
+   * `ce41eda`) 명시적으로 지시했다. 지시가 바뀌면 여기부터 고치면 된다.
+   *
+   * **색만으로 말하지는 않는다.** 두 채움의 뜻(대출 없이 / 대출 필요)은
+   * 마커 라벨과 범례에 **글자로도** 적혀 있다(`ComplexMap.tsx`의
+   * `BURDEN_TIER_MARKER_LABEL`·`BURDEN_TIER_LEGEND`) — 색이 하나도
+   * 전달되지 않아도 뜻은 남는다.
+   *
+   * ⚠ **예외는 선택자 하나하나로 적는다.** "흰 글자면 봐준다" 같은 규칙을
+   * 두면 다음 사람이 아무 자리에나 흰 글자를 얹어 조용히 이 검사를
+   * 빠져나간다. 아래 "예외가 실제로 그 값인지" 테스트가 각 자리의 실측을
+   * 다시 잰다 — 채움이 움직이면 예외 쪽이 먼저 깨진다.
+   */
+  const USER_MANDATED_LOW_CONTRAST_FILLS: ReadonlyArray<{
+    selector: string;
+    /** 실측 대비율(소수 둘째 자리까지) */
+    ratio: string;
+  }> = [
+    // 상단바 "조건 다시 넣기"(프로토타입의 `.ghost`)
+    { selector: ".back-to-entry-button", ratio: "2.65" },
+    // 지도 마커 — 대출 없이(파랑) / 대출 필요(주황)
+    { selector: ".complex-map-marker--no-loan", ratio: "2.65" },
+    { selector: ".complex-map-marker--loan", ratio: "3.28" },
+  ];
+
+  const isUserMandatedFill = (selector: string) =>
+    USER_MANDATED_LOW_CONTRAST_FILLS.some((e) => e.selector === selector);
+
   it("검사할 규칙이 실제로 많다 — 파서가 아무것도 못 찾은 채 통과하지 않는다", () => {
     expect(COLOR_RULES.length).toBeGreaterThan(50);
   });
@@ -609,6 +743,7 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
     for (const rule of COLOR_RULES) {
       if (rule.color === "inherit") continue;
       if (isDisabledControl(rule.selector)) continue;
+      if (isUserMandatedFill(rule.selector)) continue;
       const fg = resolveColor(rule.color);
       if (fg === null) continue; // 위 테스트가 따로 잡는다
       for (const bg of surfacesOf(rule)) {
@@ -624,14 +759,87 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
     expect(failures).toEqual([]);
   });
 
-  it("두 문제 토큰이 실제로 이 검사를 받는 자리에 쓰이고 있다", () => {
+  /*
+   * ── 예외가 조용히 낡지 않게 한다 ────────────────────────────────
+   * 위 예외 목록은 "검사에서 빼는" 목록이라, 아무 검사도 받지 않으면
+   * 채움이 바뀌어도 조용하다. 그래서 각 자리를 여기서 **다시 잰다** —
+   * 채움이 움직이면 이 세 테스트가 먼저 깨지고, 그때 예외를 유지할지
+   * 지울지 다시 판단하게 된다.
+   */
+  it("예외 세 자리가 실제로 존재하고, 흰 글자 + 채움 짝이다", () => {
+    const missing = USER_MANDATED_LOW_CONTRAST_FILLS.filter(
+      (e) =>
+        !COLOR_RULES.some(
+          (r) =>
+            r.selector === e.selector &&
+            resolveColor(r.color) === "#ffffff" &&
+            r.background !== null &&
+            resolveColor(r.background) !== null,
+        ),
+    ).map((e) => e.selector);
+
+    expect(
+      missing,
+      "예외 목록에 있는 선택자가 styles.css에서 '흰 글자 + 채움' 규칙으로 " +
+        "존재하지 않습니다 — 아무것도 지키지 않는 예외가 남았습니다.",
+    ).toEqual([]);
+  });
+
+  it("예외 세 자리의 실측 대비율이 못박은 값 그대로다", () => {
+    const measured = USER_MANDATED_LOW_CONTRAST_FILLS.map((e) => {
+      const rule = COLOR_RULES.find((r) => r.selector === e.selector)!;
+      const ratio = contrastRatio(
+        resolveColor(rule.color)!,
+        resolveColor(rule.background!)!,
+      );
+      return `${e.selector} ${ratio.toFixed(2)}`;
+    });
+
+    expect(measured).toEqual(
+      USER_MANDATED_LOW_CONTRAST_FILLS.map((e) => `${e.selector} ${e.ratio}`),
+    );
+  });
+
+  it("예외를 어둡게 하면 기준을 넘는다 — 지시가 바뀌면 여기부터 고친다", () => {
+    // 프로토타입 머리주석이 적어 둔 두 대안. 값이 실제로 통과한다는 것을
+    // 계산으로 남겨, "고칠 방법이 없다"로 굳지 않게 한다.
+    expect(contrastRatio("#ffffff", rawToken("--result-signal-ink")).toFixed(2)).toBe(
+      "5.44",
+    );
+    expect(contrastRatio("#ffffff", "#c8431b").toFixed(2)).toBe("4.91");
+  });
+
+  it("문제 토큰이 실제로 이 검사를 받는 자리에 쓰이고 있다", () => {
     // 위 테스트가 "쓰이는 데가 없어서" 통과하는 일이 없게 못박는다.
     const used = (token: string) =>
       COLOR_RULES.some(
         (r) => r.color === `var(${token})` && !isDisabledControl(r.selector),
       );
 
-    expect(used("--seed-color-fg-neutral-subtle")).toBe(true);
     expect(used("--haze")).toBe(true);
+  });
+
+  /**
+   * `--seed-color-fg-neutral-subtle`은 이 목록에서 빠졌다 — **없어진 것이
+   * 아니라 우리 CSS의 소비처가 바뀐 것이다.**
+   *
+   * 예전 소비처는 결과 화면 상단바의 모든 값 라벨(`.result-topbar-item-label`,
+   * 11px)이었다. 화면 2 재스킨이 그 자리를 프로토타입의 `--result-gray`
+   * (#4f6a8c, 흰 면 5.57:1)로 옮기면서, `src/styles.css`에 남은 소비처는
+   * 비활성 컨트롤(`.housing-type-select select:disabled`) 하나뿐이 됐고
+   * 그 자리는 WCAG 1.4.3의 명시적 예외라 위 검사에서 제외된다.
+   *
+   * 토큰 자체는 죽지 않았다 — SEED 벤더 CSS가 `.seed-field__description`과
+   * text-input placeholder에 그대로 쓴다(`src/seed-brand.css`의 해당 주석).
+   * 그쪽은 `scripts/seed-vendor-colors.test.ts`가 본다. 그래서 여기서는
+   * **"우리 CSS에서 조용히 사라지지는 않았다"**만 잠근다.
+   */
+  it("--seed-color-fg-neutral-subtle은 비활성 컨트롤에만 남아 있다", () => {
+    const consumers = COLOR_RULES.filter(
+      (r) => r.color === "var(--seed-color-fg-neutral-subtle)",
+    ).map((r) => r.selector);
+
+    expect(consumers.length).toBeGreaterThan(0);
+    expect(consumers.every((s) => isDisabledControl(s))).toBe(true);
   });
 });
