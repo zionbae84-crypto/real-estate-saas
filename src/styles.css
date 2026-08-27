@@ -283,24 +283,6 @@ body {
 }
 
 /*
- * "실구매 가능 가격" 제목을 **작은 라벨로 낮춘다**(사용자 지시: 요점만
- * 보이게). `DESIGN.md`의 Stat Block 규율 그대로다 — 라벨 작게 위, 값 크게
- * 아래. 예전에는 전역 `h2`(24px 700)를 그대로 받아 바로 아래 금액(32px)과
- * 크기가 붙어, 298px짜리 좁은 카드 안에서 둘 중 무엇이 답인지가 흐렸다.
- *
- * **태그는 `<h2>` 그대로 둔다.** 이 패널에서 문서 구조상 여기가 제목
- * 자리이고, 종이에서도 `<h2>`여야 덩어리의 시작으로 읽힌다 — 바꾸는
- * 것은 크기뿐이다.
- */
-.budget-card--headline .result-step--price h2 {
-  margin: 0;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--result-gray);
-}
-
-/*
  * 카드 안에서 마지막 요소의 아래 여백을 지운다 — 안 지우면 카드마다
  * 바닥에 빈 줄이 하나씩 생겨 카드 높이가 내용과 무관하게 들쭉날쭉해진다.
  */
@@ -333,6 +315,13 @@ body {
 }
 
 .affordable-price {
+  /*
+   * 예전엔 `<p className="affordable-price">`가 블록이라 자동으로
+   * 다음 줄에 섰다. 지금은 `<summary><h2>` 안에서 라벨 span 바로
+   * 옆에 오는 `<Text>`(기본 inline span)라 직접 block으로 밀어
+   * 줘야 라벨 아래 제 줄에 큰 숫자로 선다(Stat Block 규율).
+   */
+  display: block;
   font-size: 2rem;
   font-weight: 700;
   margin: 0.25rem 0;
@@ -380,100 +369,24 @@ body {
 }
 
 /*
- * SafeLine: 최대 가격과 무리 없는 선을 **표 한 장**으로 요약한다(사용자
- * 지시: "실구매가능 산정 내용을 표로 요약해 보여주기"). 두 행이 같은
- * `<dl>` 안에서 같은 두 칸(라벨/금액) 규칙을 쓴다 — `.cost-breakdown dl`·
- * `.binding-limit-table`과 같은 표 관행이다. 안전선이 최대 가격 옆에
- * "동등한 무게"로 있다는 것이 이 제품의 핵심 주장이라, 두 행은 같은
- * font-size·font-weight를 쓴다.
+ * 헤드라인 카드의 summary 라벨("실구매 가능 가격"). `<h2>` 안에서
+ * `.affordable-price`(2rem/700/브랜드색)와 같은 줄에 서므로, 라벨
+ * 쪽은 Stat Block 규율대로 작게·회색으로 낮춘다 — 무엇이 크게 읽혀야
+ * 하는지 헷갈리지 않게 한다.
  */
-.safe-line-table {
-  margin: 0 0 1rem;
+.budget-card--headline > summary {
+  cursor: pointer;
 }
 
-.safe-line-table > div {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(7rem, max-content);
-  align-items: baseline;
-  column-gap: 0.75rem;
-  padding: 0.375rem 0;
-}
-
-/*
- * `.safe-line-item`은 이제 표의 한 행(`.safe-line-table > div`)에 그대로
- * 앉는다 — 칸 배치는 그 부모 규칙(grid)이 이미 정하므로 여기서는 색·
- * 배경만 다룬다.
- */
-.safe-line-label {
-  font-size: 0.875rem;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
-/* 값이 없거나(없음) 최대 가격과 같을 때 붙는 짧은 안내. */
-.safe-line-label .hint {
-  display: block;
-  margin: 0.15rem 0 0;
-  font-size: 0.75rem;
-  font-weight: 400;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
-.safe-line-table dd {
+.budget-card--headline > summary h2 {
   margin: 0;
-  text-align: right;
 }
 
-.safe-line-amount {
-  font-size: 1.375rem;
+.budget-card-label {
+  font-size: 0.8125rem;
   font-weight: 700;
-  font-variant-numeric: tabular-nums;
-}
-
-/* 안전선이 없을 때(없음) — 판단할 값 자체가 없다는 것을 색으로도 반복한다. */
-.safe-line-item--none .safe-line-amount {
-  color: var(--risk);
-}
-
-/*
- * 안전선(무리 없는 선)은 positive 계열로 배경·글자를 함께 입힌다 —
- * "이 가격까지는 무리 없다"는 판단을 색으로도 반복한다. 다만 이번
- * 작업은 색만 바꾸는 것이라 padding 등 여백은 그대로 둔다.
- */
-.safe-line-item--safe {
-  background: var(--seed-color-bg-positive-weak);
-}
-
-.safe-line-item--safe .safe-line-amount {
-  color: var(--safe);
-}
-
-/*
- * 리뷰 수정(Important 1): 이 값(affordablePrice)은 `.affordable-price`와
- * `PriceSlider`의 `.slider-price--max`가 이미 브랜드색으로 표시하는
- * 것과 같은 숫자다. 슬라이더가 처음엔 최댓값에 있으므로 색을 안 입히면
- * 한 화면에 같은 금액이 세 번(1단·SafeLine·슬라이더) 나타나는데 그중
- * 하나만 색이 다르게 된다. 더 나쁜 건 형제인 `.safe-line-item--safe`는
- * 색을 받는데 이쪽만 기본 검정으로 남으면, "안전선이 의미 있는 숫자고
- * 최대 가격은 장식"처럼 읽힌다는 점이다 — SafeLine이 두 숫자에 동등한
- * 무게를 준다는 컴포넌트 의도와 정반대다. 새 hex를 만들지 않고
- * `.affordable-price`·`.slider-price--max`와 같은 -contrast 토큰을
- * 그대로 재사용한다.
- *
- * 대비는 계산값으로 --brass-ink(#8a5f14) 기준 흰 배경(#ffffff)
- * 5.63:1, 이 화면 배경(bg-layer-default, #f3f6f8) 5.19:1이다(2026-08-26
- * 팔레트 교체 — 예전 cyan #3398e1은 흰 배경 3.13:1, 이 화면 배경
- * 2.99:1로 22px 굵게(1.375rem/700, WCAG 큰 글자 기준 3:1)도 아슬아슬하게
- * 못 넘었다). 지금 값은 본문 크기 기준(4.5:1)까지 넘기 때문에 "굵은
- * 큰 글자에만 쓴다"는 예전 제약이 더 이상 값 때문에 강제되지는 않지만,
- * 이 토큰을 쓰는 자리를 셋(`.affordable-price`·이 규칙·
- * `.slider-price--max`)으로 못박은 규칙은 그대로 둔다 — 색 체계를
- * 다시 고를 때 세 자리를 함께 처리한다는 원래 취지(같은 금액이 한
- * 화면에 여러 번 나올 때 색이 갈리지 않게 한다)는 값이 바뀌어도
- * 유효하다. `scripts/seed-semantic-tokens.test.ts`가 계산값과 사용
- * 자리를 함께 검사한다.
- */
-.safe-line-item--max .safe-line-amount {
-  color: var(--seed-color-fg-brand-contrast);
+  letter-spacing: 0.01em;
+  color: var(--result-gray);
 }
 
 /*
@@ -756,15 +669,10 @@ body {
  * - .safety-level: SafetyBadge의 data-level 속성이 바뀔 때(같은 <p>가
  *   유지된 채 색만 safe/caution/danger로 갈린다) — 이 태스크가 고치려는
  *   "등급이 바뀔 때 색이 튀는" 지점 그 자체다.
- * - .safe-line-item: SafeLine의 "무리 없는 선" 행은 언제나 같은
- *   <div>(둘째 행)를 재사용하고, 상태에 따라 --none/--safe 수식자만
- *   갈린다(색이 danger에서 safe로, 배경이 없음에서 positive-weak로
- *   바뀐다).
  * - .slider-price: 슬라이더가 최댓값에 닿으면 같은 <p>에 --max 클래스가
  *   붙어 브랜드색으로 바뀐다(값을 다시 내리면 원래 색으로 돌아간다).
  */
 .safety-level,
-.safe-line-item,
 .slider-price {
   transition:
     color var(--seed-duration-color-transition) var(--seed-timing-function-easing),
@@ -2170,7 +2078,7 @@ body {
  *
  * 이 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES`가 여럿 들어 있다
  * (`no-budget`, `binding-explainer`, `cost-breakdown`, `policy-loan-list`,
- * `slider-price`, `slider-warning`, `safe-line`). 패널의 기본 상태는
+ * `slider-price`, `slider-warning`). 패널의 기본 상태는
  * **닫힘**이고 `Cmd+P`는 어느 단계에서든 눌린다 — 닫힘 규칙
  * (`display: none`)이 인쇄에 닿는 순간 이들이 종이에서 통째로 사라진다.
  *
@@ -3274,7 +3182,6 @@ body.body-scroll-locked {
   .no-budget,
   .binding-explainer,
   .policy-loan-list li,
-  .safe-line-item,
   .binding-limit-table > div,
   .print-summary dl > div,
   .purchase-print-summary dl > div,

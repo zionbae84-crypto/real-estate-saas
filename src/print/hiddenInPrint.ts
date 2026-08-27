@@ -229,7 +229,10 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "print-summary", // 전제(입력값)·룰셋 기준·인쇄일 요약
   "slider-price", // 슬라이더가 가리키는 가격(아래 배지 계산의 전제)
   "slider-warning", // 그 가격이 한계라는 안내
-  "safe-line", // 안전선
+  // 예전에는 여기 "safe-line"(안전선, 구 `SafeLine`)이 있었다. 사용자
+  // 지시로 헤드라인 카드에서 그 비교 줄을 뺐다 — 최대 가격과 같을 때가
+  // 대부분이라 새 정보를 주지 못했다. 안전선 개념 자체는 `PriceSlider`의
+  // 눈금 마커·`SafetyBadge`의 등급으로 남아 있다.
   "binding-explainer", // 무엇이 한도를 막았는지 설명
   "cost-breakdown", // 부대비용 내역
   /*

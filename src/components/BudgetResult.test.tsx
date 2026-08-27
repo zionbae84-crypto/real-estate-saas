@@ -35,29 +35,15 @@ function result(overrides: Partial<AffordableResult> = {}): AffordableResult {
   };
 }
 
-/**
- * `safePrice`의 기본값을 `affordablePrice`와 같게 둔다(한 줄로 합쳐지는
- * 경로). safePrice와 관련 없는 테스트(실구매력 표시, 부대비용, 경고 등)가
- * `formatWon(affordablePrice)` 문자열이 SafeLine 안에 한 번 더 나타나
- * `getByText`가 "여러 개 발견"으로 실패하는 것을 피하기 위해서다. safePrice
- * 자체를 검증하는 테스트는 아래에서 명시적으로 다른 값을 넘긴다.
- */
 interface RenderResultOverrides {
   result?: AffordableResult;
-  safePrice?: number | null;
 }
 
 function renderResult(overrides: RenderResultOverrides = {}) {
   const r = overrides.result ?? result();
-  // safePrice: null을 명시적으로 넘긴 테스트가 있으므로 `??`는 못 쓴다
-  // (`??`는 null도 "값 없음"으로 취급해 기본값으로 되돌려 버린다 — 여기서
-  // null은 유효한 실제 값이다). "제공 안 됨"만 undefined로 구분한다.
-  const safePrice =
-    overrides.safePrice === undefined ? r.affordablePrice : overrides.safePrice;
   return render(
     <BudgetResult
       result={r}
-      safePrice={safePrice}
       householdCountNote={rules.acquisitionTax.householdCountNote}
     />,
   );
@@ -66,12 +52,31 @@ function renderResult(overrides: RenderResultOverrides = {}) {
 describe("BudgetResult", () => {
   it("실구매력을 크게 보여준다", () => {
     const { container } = renderResult();
-    // 같은 숫자가 SafeLine의 "최대 가격" 행에도 나온다(사용자 지시로
-    // 그 행이 산정 내용 표의 한 줄이 됐다) — 헤드라인의 큰 숫자로
-    // 범위를 좁힌다.
     expect(container.querySelector(".affordable-price")).toHaveTextContent(
       "6억 4,000만원",
     );
+  });
+
+  /**
+   * 사용자 지시: "부대비용 부분의 형식처럼 실구매 가능 가격 >> 얼마 라고
+   * 표시하고 토글로 실구매가능금액 산정 내역을 알려줘." — 헤드라인 카드도
+   * `CostBreakdown`과 같은 summary/토글 형태가 됐다. summary에는 항상
+   * 제목+금액이 보이고, "무엇이 막았는지"는 펼쳐야 보인다.
+   */
+  it("헤드라인이 부대비용과 같은 summary/토글 형식이다", () => {
+    const { container } = renderResult();
+    const details = container.querySelector(".budget-card--headline");
+    expect(details?.tagName).toBe("DETAILS");
+    expect(details?.hasAttribute("open")).toBe(false);
+
+    const summary = details?.querySelector("summary");
+    expect(summary?.textContent).toContain("실구매 가능 가격");
+    expect(summary?.textContent).toContain("6억 4,000만원");
+
+    // 무엇이 막았는지는 summary 밖, 접히는 본문에 있다.
+    const binding = screen.getByText("담보 가치(LTV)에 걸렸어요");
+    expect(details?.contains(binding)).toBe(true);
+    expect(summary?.contains(binding)).toBe(false);
   });
 
   it("부대비용 합계를 보여준다", () => {
@@ -232,50 +237,5 @@ describe("BudgetResult", () => {
       screen.queryByText("양도세가 반영되지 않았어요."),
     ).not.toBeInTheDocument();
     expect(container.querySelector(".warning-list")).toBeNull();
-  });
-
-  describe("안전선", () => {
-    it("최대 가격과 다르면 안전선을 나란히 보여준다", () => {
-      const r = result({ affordablePrice: 600_000_000 });
-      renderResult({ result: r, safePrice: 480_000_000 });
-      expect(screen.getByText(/4억 8,000만/)).toBeInTheDocument();
-    });
-
-    it("안전선이 null이면 문장으로 보여준다", () => {
-      renderResult({ safePrice: null });
-      expect(
-        screen.getByText(/지금 조건으론 무리 없는 가격대가 없어요/),
-      ).toBeInTheDocument();
-    });
-
-    it("안전선은 details 밖에 있다 — 접히지 않는다", () => {
-      const r = result({ affordablePrice: 600_000_000 });
-      renderResult({ result: r, safePrice: 480_000_000 });
-      const safeLineText = screen.getByText("무리 없는 선");
-      expect(safeLineText.closest("details")).toBeNull();
-    });
-
-    describe("리뷰 수정: 안전선이 없는 원인을 SafeLine에 그대로 전달한다 (Important 2)", () => {
-      it("실구매력은 있지만(0 아님) DSR이 0이면 소득·부채를 원인으로 짚는다", () => {
-        const r = result({
-          affordablePrice: 600_000_000,
-          loanLimit: {
-            amount: 420_000_000,
-            binding: "LTV",
-            breakdown: { LTV: 420_000_000, DSR: 0, CAP: 600_000_000, POLICY: 0 },
-          },
-        });
-        renderResult({ result: r, safePrice: null });
-        expect(
-          screen.getByText(/소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어/),
-        ).toBeInTheDocument();
-      });
-
-      it("DSR이 0이 아니면 소득 탓으로 단정하지 않는다", () => {
-        const r = result({ affordablePrice: 600_000_000 }); // 기본 DSR: 574_316_140
-        renderResult({ result: r, safePrice: null });
-        expect(screen.queryByText(/소득이 없거나 기존 부채가/)).not.toBeInTheDocument();
-      });
-    });
   });
 });

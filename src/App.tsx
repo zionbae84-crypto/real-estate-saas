@@ -1387,7 +1387,6 @@ export function App() {
                   />
                   <BudgetResult
                     result={affordability.result}
-                    safePrice={affordability.safePrice}
                     householdCountNote={ACQUISITION_TAX_SUMMARY_NOTE}
                   />
                   {affordability.result.affordablePrice > 0 && (

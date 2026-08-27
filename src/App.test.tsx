@@ -1432,12 +1432,12 @@ describe("App - 단지 상세(화면 4)", () => {
       /*
        * Task 5: 예산 상세 패널이 **열린** 상태도 지난다. 이 패널 안에는
        * 보호 대상 클래스가 여럿 들어 있고(no-budget·binding-explainer·
-       * cost-breakdown·policy-loan-list·slider-price·slider-warning·
-       * safe-line — 예전에 함께 있던 `assumption-line`·`assumption-notice`는
-       * 사용자 지시로 "계산 전제" 덩어리 자체가 삭제되며 함께 없어졌다),
-       * 그 위에 새 조상(`.budget-panel`)과 새 숨김 대상
-       * (`.budget-detail-close`)이 함께 생겼다 — 이 검사가 정확히 겨누는
-       * 배치다.
+       * cost-breakdown·policy-loan-list·slider-price·slider-warning —
+       * 예전에 함께 있던 `assumption-line`·`assumption-notice`는 "계산
+       * 전제" 덩어리가, `safe-line`은 헤드라인의 안전선 비교 줄이 사용자
+       * 지시로 각각 삭제되며 함께 없어졌다), 그 위에 새 조상
+       * (`.budget-panel`)과 새 숨김 대상(`.budget-detail-close`)이 함께
+       * 생겼다 — 이 검사가 정확히 겨누는 배치다.
        */
       await userEvent.click(
         screen.getByRole("button", { name: /실구매 가능 가격/ }),
@@ -2529,7 +2529,7 @@ describe("전체화면 결과 셸", () => {
       const open = panel(container)!;
       expect(open.querySelector(".budget-result")).not.toBeNull();
       expect(open.querySelector(".price-slider")).not.toBeNull();
-      expect(open.querySelector(".safe-line")).not.toBeNull();
+      expect(open.querySelector(".budget-card--headline")).not.toBeNull();
     });
 
     it("다시 누르면 닫힌다", async () => {

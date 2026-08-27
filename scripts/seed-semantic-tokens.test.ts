@@ -129,8 +129,8 @@ describe("지도 마커 대비율 — 채움 대비 흰 글자, 본문 크기 �
  * 더는 필요하지 않다.
  *
  * 그래도 이 토큰을 쓰는 자리를 셋(`.affordable-price`,
- * `.safe-line-item--max .safe-line-amount`, `.slider-price--max`)으로
- * 못박은 아래 소스 검사는 그대로 둔다 — "같은 금액이 여러 번 나올 때
+ * `.detail-stat-value`, `.slider-price--max`)으로 못박은 아래 소스
+ * 검사는 그대로 둔다 — "같은 금액이 여러 번 나올 때
  * 색이 갈리지 않게 한다"는 규칙의 목적은 대비 수치와 무관하고, 값이
  * 다시 바뀔 때(예: Task 2~5에서 브랜드색을 또 조정할 때) 이 자리 목록이
  * 계속 정확한 채로 남아야 회귀를 잡을 수 있다.
@@ -175,21 +175,23 @@ describe("fg-brand-contrast를 쓰는 자리", () => {
     (m) => m[1]!.trim().split("\n").pop()!.trim(),
   );
 
-  it("큰 굵은 글자 네 자리에서만 쓴다", () => {
+  it("큰 굵은 글자 세 자리에서만 쓴다", () => {
     // 늘리려면 그 자리가 정말 큰 굵은 글자인지 먼저 확인하고 여기에
     // 적어야 한다. (2026-08-26 팔레트 교체로 이 토큰은 이제 본문 크기
     // 기준도 넘지만, 이 제약은 "여러 자리에서 색이 갈리지 않게 한다"는
     // 목적이라 값과 무관하게 유지한다 — 위 describe 블록 참고.)
     //
-    // `.detail-stat-value`가 넷째로 들어왔다(단지 상세의 두 블록,
-    // design.md §6). 확인한 것: 28px/600으로 이 파일이 "큰 굵은 글자"로
-    // 인정해 온 크기(`.affordable-price` 32px/700, `.slider-price--max`
-    // 24px/700)와 같은 계열이고, 화면에 찍히는 값도 같은 종류다 —
-    // 금액이다. 대비는 아래 "단지 상세 Stat Block" describe가 실측한다.
+    // `.detail-stat-value`는 단지 상세의 두 블록(design.md §6)이다.
+    // 확인한 것: 28px/600으로 이 파일이 "큰 굵은 글자"로 인정해 온
+    // 크기(`.affordable-price` 32px/700, `.slider-price--max` 24px/700)와
+    // 같은 계열이고, 화면에 찍히는 값도 같은 종류다 — 금액이다. 대비는
+    // 아래 "단지 상세 Stat Block" describe가 실측한다.
+    //
+    // `.safe-line-item--max .safe-line-amount`(구 `SafeLine`)는 사용자
+    // 지시로 헤드라인 카드에서 그 비교 줄을 빼면서 함께 없어졌다.
     expect(users.sort()).toEqual([
       ".affordable-price",
       ".detail-stat-value",
-      ".safe-line-item--max .safe-line-amount",
       ".slider-price--max",
     ]);
   });

@@ -169,7 +169,7 @@ describe("예산 계산기 통합", () => {
     // 숫자를 함께 보여주므로(App.tsx의 ResultSummaryItem "실구매 가능
     // 가격"), 평문 검색은 둘을 구분하지 못한다.
     expect(
-      screen.getByRole("heading", { name: "실구매 가능 가격" }),
+      screen.getByRole("heading", { name: /실구매 가능 가격/ }),
     ).toBeInTheDocument();
 
     expect(printValueOf("기존 대출(연간 상환액)")).toBe("없음 (가정)");
@@ -222,7 +222,7 @@ describe("예산 계산기 통합", () => {
 
     // 위와 같은 이유로 제목으로 찾는다(상단바 요약이 같은 라벨을 쓴다).
     expect(
-      screen.getByRole("heading", { name: "실구매 가능 가격" }),
+      screen.getByRole("heading", { name: /실구매 가능 가격/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("slider")).toBeInTheDocument();
     // BudgetResult의 2단("무엇이 막았는지 한 줄")은 이제 <h2>가 아니라

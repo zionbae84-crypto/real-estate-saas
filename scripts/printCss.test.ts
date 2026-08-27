@@ -797,12 +797,11 @@ describe("인쇄 CSS", () => {
   /**
    * Task 5 — **접히는 예산 상세 패널 × 인쇄.**
    *
-   * 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES` 열 개가 들어 있다
+   * 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES`가 여럿 들어 있다
    * (`no-budget`, `binding-explainer`, `cost-breakdown`, `policy-loan-list`,
-   * `slider-price`, `slider-warning`, `safe-line`, `assumption-line`,
-   * `assumption-item`, `assumption-notice`). 패널이 **닫힌 채로** Cmd+P를
+   * `slider-price`, `slider-warning`). 패널이 **닫힌 채로** Cmd+P를
    * 누르는 것은 정상 경로다(패널은 기본이 닫힘이고, Cmd+P는 어느 단계에서든
-   * 눌린다) — 그때 이 열 개가 종이에서 통째로 사라지면 안 된다.
+   * 눌린다) — 그때 이들이 종이에서 통째로 사라지면 안 된다.
    *
    * **기존 가드가 잡아 주지 못하는 형태다.** 위 "숨김 목록 동기화"는
    * `@media print` 블록 안만 파싱하므로, 블록 **밖**에 있는
