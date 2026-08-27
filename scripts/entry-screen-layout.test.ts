@@ -1,0 +1,246 @@
+import { describe, expect, it } from "vitest";
+import { STYLES_CSS, stripComments } from "./colorSurfaces";
+
+/**
+ * ══════════════════════════════════════════════════════════════════
+ * 화면 1의 **구조 규칙**을 `prototype.html`에 잠근다
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * `prototype.html`(이 저장소에 커밋된 승인된 시각 디자인)은 화면 1을
+ * 만들며 실제로 겪은 버그 셋을 주석으로 남겼다. 재스킨이 그 버그를
+ * 그대로 물려받지 않도록, 세 규칙을 **CSS 텍스트에서** 검사한다:
+ *
+ * 1. 바닥 정렬은 `justify-content: flex-end`가 아니라 자식의
+ *    `margin-top: auto`로 한다(flex-end는 내용이 칸보다 길어지면
+ *    **위쪽이 잘리고 스크롤로도 닿지 못한다** — 프로토타입이 두 번
+ *    겪은 버그다).
+ * 2. 낮은 창(`max-height: 780px`)에서 활자·여백을 함께 줄인다(안 줄이면
+ *    제목 윗줄이 사라진다).
+ * 3. 화면 1의 활자는 **Pretendard 한 벌**이다 — 전역 `h1, h2`
+ *    규칙(`var(--font-serif)`, 나눔명조)이 이 화면까지 따라오면 안 된다.
+ *    화면 2는 아직 명조를 쓰므로 전역 규칙 자체는 건드리지 않는다.
+ *
+ * jsdom은 `styles.css`를 적용하지 않으므로 렌더 결과로는 확인할 수 없다.
+ * `scripts/area-band-chips.test.ts`·`scripts/printCss.test.ts`와 같은
+ * 방식으로 CSS 텍스트를 직접 읽는다 — 그래서 이 파일도 `src/`가 아니라
+ * `scripts/`에 있다(`src/no-network.test.ts`가 `src/` 안의 `node:`
+ * 임포트를 막는다. `colorSurfaces.ts`가 `node:fs`로 읽어 온 문자열을
+ * 그대로 쓴다).
+ */
+
+const DECLARATIONS = stripComments(STYLES_CSS);
+
+/**
+ * `@media` 블록을 통째로 걷어낸 소스.
+ *
+ * {@link ruleBody}가 "이 선택자의 규칙은 하나뿐"이라고 요구하는데, 같은
+ * 선택자가 조건부 블록 안에 한 번 더 나오는 것은 **정상**이다(낮은 창에서
+ * 활자를 줄이는 규칙이 바로 그것이다). 기본값을 물을 때는 조건부를 빼고
+ * 본다 — 조건부 쪽은 아래 "낮은 창" describe가 따로 검사한다.
+ */
+const TOP_LEVEL = (() => {
+  let out = "";
+  let i = 0;
+  while (i < DECLARATIONS.length) {
+    const at = DECLARATIONS.indexOf("@media", i);
+    if (at === -1) {
+      out += DECLARATIONS.slice(i);
+      break;
+    }
+    out += DECLARATIONS.slice(i, at);
+    let depth = 0;
+    let j = DECLARATIONS.indexOf("{", at);
+    for (; j < DECLARATIONS.length; j++) {
+      if (DECLARATIONS[j] === "{") depth++;
+      else if (DECLARATIONS[j] === "}") {
+        depth--;
+        if (depth === 0) break;
+      }
+    }
+    i = j + 1;
+  }
+  return out;
+})();
+
+/** 정규식 메타문자를 전부 이스케이프한다 */
+function escapeRegExp(literal: string): string {
+  return literal.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * 선택자 하나의 규칙 본문. **일치가 정확히 하나임을 요구한다** —
+ * 같은 선택자가 둘이면 어느 쪽을 봐야 하는지 이 파일이 정할 수 없으므로
+ * 깨뜨린다(`scripts/area-band-chips.test.ts`의 같은 주석 참고).
+ */
+function ruleBody(selector: string): string {
+  const matches = [
+    ...TOP_LEVEL.matchAll(
+      new RegExp(`(?:^|[{}])\\s*${escapeRegExp(selector)}\\s*{([^}]*)}`, "g"),
+    ),
+  ];
+  expect(matches.length, `${selector} 규칙이 하나가 아니다`).toBe(1);
+  return matches[0]![1]!;
+}
+
+describe("바닥 정렬 — flex-end가 아니라 margin-top: auto", () => {
+  /**
+   * `prototype.html`의 `.entry .col > .inner` 주석:
+   * "flex-end로 하면 내용이 칸보다 길어졌을 때 위쪽이 잘리고 스크롤로도
+   * 닿지 못한다 — 지난 프로토타입이 실제로 겪은 버그이고, 이번에도 처음엔
+   * 제목 윗줄이 사라졌다."
+   */
+  it("패널은 flex 열이고 스스로 스크롤한다", () => {
+    const body = ruleBody(".entry-screen-panel");
+    expect(body).toContain("flex-direction: column");
+    expect(body).toContain("overflow-y: auto");
+  });
+
+  it("패널이 flex-end로 바닥 정렬하지 않는다", () => {
+    expect(ruleBody(".entry-screen-panel")).not.toContain("flex-end");
+  });
+
+  it("바닥 정렬은 표제의 margin-top: auto가 한다", () => {
+    expect(ruleBody(".entry-screen .entry-headline")).toContain(
+      "margin-top: auto",
+    );
+  });
+
+  it("워드마크는 줄어들지 않고 맨 위에 남는다", () => {
+    expect(ruleBody(".entry-screen .entry-wordmark")).toContain("flex: none");
+  });
+});
+
+describe("낮은 창 — 활자와 여백을 함께 줄인다", () => {
+  /**
+   * `prototype.html`의 `@media (max-height: 780px)` 블록을 그대로 옮긴
+   * 자리. 안 옮기면 세로가 짧은 창에서 제목 윗줄이 잘리는 같은 버그가
+   * 재현된다.
+   */
+  const SHORT_WINDOW = DECLARATIONS.match(
+    /@media \(max-height: 780px\) {([\s\S]*?)\n}/,
+  );
+
+  it("규칙이 존재한다", () => {
+    expect(SHORT_WINDOW, "@media (max-height: 780px) 규칙이 없다").not.toBeNull();
+  });
+
+  it("표제·워드마크·입력 활자를 함께 줄인다", () => {
+    const body = SHORT_WINDOW![1]!;
+    expect(body).toContain(".entry-screen .entry-headline");
+    expect(body).toContain(".entry-screen .entry-wordmark");
+    expect(body).toContain(".seed-text-input__value");
+  });
+});
+
+describe("활자 한 벌 — 화면 1은 Pretendard다", () => {
+  /**
+   * 전역 `h1, h2 { font-family: var(--font-serif) }`(나눔명조)는 화면 2가
+   * 아직 쓰므로 그대로 둔다. 화면 1의 두 제목만 이 화면 스코프에서
+   * 되돌린다 — 되돌리는 선언이 사라지면 명조가 조용히 돌아온다.
+   */
+  it("워드마크와 표제가 각자 font-family를 다시 선언한다", () => {
+    expect(ruleBody(".entry-screen .entry-wordmark")).toContain("font-family:");
+    expect(ruleBody(".entry-screen .entry-headline")).toContain("font-family:");
+  });
+
+  it(".entry-screen 스코프 어디에서도 명조를 쓰지 않는다", () => {
+    const serifUsers: string[] = [];
+    for (const m of DECLARATIONS.matchAll(/([^{}]+){([^{}]*)}/g)) {
+      if (!m[2]!.includes("var(--font-serif)")) continue;
+      const selector = m[1]!.replace(/\s+/g, " ").trim();
+      if (selector.split(",").some((s) => s.trim().startsWith(".entry-screen"))) {
+        serifUsers.push(selector);
+      }
+    }
+    expect(serifUsers).toEqual([]);
+  });
+
+  it("전역 명조 규칙은 그대로 남는다 — 화면 2가 아직 쓴다", () => {
+    // 화면 2 재스킨은 별도 태스크다. 여기서 지우면 그 화면의 제목이
+    // 아무 예고 없이 바뀐다.
+    expect(DECLARATIONS).toMatch(/h1,\s*h2\s*{\s*font-family: var\(--font-serif\);/);
+    expect(DECLARATIONS).toContain(".result-topbar-brand");
+  });
+});
+
+describe("입력 밑줄 — 화면 1 전용 토큰을 쓴다", () => {
+  /**
+   * `prototype.html`은 입력 밑줄을 `rgba(238,241,244,.22)`로 뒀다.
+   * 그 값은 이 화면의 면(영상 위 스크림 바닥) 대비 **1.94:1**이라
+   * WCAG 1.4.11(비텍스트 대비 3:1)을 넘지 못한다 — 상자를 없앤 입력에서
+   * 밑줄은 그 컨트롤을 식별하는 **유일한 경계**라 그 기준이 그대로
+   * 걸린다. 그래서 프로토타입 값을 그대로 베끼지 않고 같은 방식(면 위에
+   * `--paper`를 얹는다)으로 불투명도만 올려 다시 계산했다 —
+   * 실측값은 `scripts/seed-semantic-tokens.test.ts`가 못박는다.
+   */
+  it("--entry-rule은 .entry-screen 스코프에만 있다 — 전역 팔레트를 건드리지 않는다", () => {
+    const defs = [
+      ...DECLARATIONS.matchAll(/([^{}]+){([^{}]*--entry-rule:[^{}]*)}/g),
+    ].map((m) => m[1]!.replace(/\s+/g, " ").trim());
+    expect(defs).toEqual([".entry-screen"]);
+  });
+
+  it("입력 밑줄이 --entry-rule을 쓴다", () => {
+    expect(DECLARATIONS).toContain("border-bottom: 1px solid var(--entry-rule)");
+  });
+
+  it("--rule(이 면에서 1.02:1, 사실상 보이지 않는다)을 화면 1의 경계에 쓰지 않는다", () => {
+    const users: string[] = [];
+    for (const m of DECLARATIONS.matchAll(/([^{}]+){([^{}]*)}/g)) {
+      if (!/border[^;:]*:[^;]*var\(--rule\)/.test(m[2]!)) continue;
+      const selector = m[1]!.replace(/\s+/g, " ").trim();
+      if (selector.split(",").some((s) => s.trim().startsWith(".entry-screen"))) {
+        users.push(selector);
+      }
+    }
+    expect(users).toEqual([]);
+  });
+});
+
+describe("평형대 칩 — 상자가 아니라 밑줄 토글", () => {
+  /**
+   * `prototype.html`의 `.band`: 상자를 없애고 고른 칩만 황동 밑줄이
+   * 붙는다. 색만으로 상태를 말하지 않는다는 기존 규율(styles.css의
+   * `.area-band-select` 주석)도 그대로 지켜진다 — 밑줄의 유무는 색이
+   * 아니라 모양이고, 네이티브 체크박스도 그 자리에 남는다.
+   */
+  it("고르지 않은 칩에 테두리 상자가 없다", () => {
+    const body = ruleBody(".entry-screen .area-band-select .area-band-option");
+    expect(body).toContain("border: none");
+    expect(body).toContain("border-bottom: 1.5px solid transparent");
+  });
+
+  it("고른 칩만 황동 밑줄이 붙는다", () => {
+    expect(
+      ruleBody(
+        ".entry-screen .area-band-select .area-band-option:has(input:checked)",
+      ),
+    ).toContain("border-bottom-color: var(--brass-lift)");
+  });
+
+  it("칩 배치는 그대로 3열이다 — area-band-chips.test.ts의 눈금 규칙을 덮지 않는다", () => {
+    // 이 화면이 칩이 실제로 그려지는 **유일한** 자리라, 여기서 배치를
+    // 덮으면 그쪽 가드가 아무것도 지키지 않게 된다.
+    expect(ruleBody(".entry-screen .area-band-options")).not.toContain(
+      "grid-template-columns",
+    );
+    expect(ruleBody(".entry-screen .area-band-options")).not.toContain("display:");
+  });
+});
+
+describe("조회 버튼 — 화살표가 자라는 텍스트 버튼", () => {
+  /** `prototype.html`의 `.go`: 채운 버튼이 아니라 글자 + 늘어나는 선. */
+  it("화살표는 ::after로 그린다 — RegionSelect의 마크업을 건드리지 않는다", () => {
+    const arrow = ruleBody(".entry-screen .region-select button::after");
+    expect(arrow).toContain('content: ""');
+    expect(arrow).toContain("background: currentColor");
+  });
+
+  it("호버에서 화살표가 길어진다", () => {
+    expect(
+      ruleBody(
+        ".entry-screen .region-select button:not(:disabled):hover::after",
+      ),
+    ).toContain("width:");
+  });
+});

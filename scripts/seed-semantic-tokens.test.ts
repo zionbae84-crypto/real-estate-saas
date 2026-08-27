@@ -5,6 +5,7 @@ import {
   BRAND_CSS as overrideCss,
   SCRIM_FLOOR,
   STYLES_CSS,
+  composite,
   contrastRatio,
   rawToken,
   resolveColor,
@@ -373,6 +374,93 @@ describe("평형대 칩 대비율 실측 — 본문 크기 기준 4.5:1", () => 
     const ratio = contrastRatio(rawToken("--on-sheet-soft"), paper);
     expect(ratio).toBeLessThan(BODY_TEXT_MIN_RATIO);
     expect(ratio.toFixed(2)).toBe("4.49");
+  });
+});
+
+/**
+ * 화면 1 재스킨(`prototype.html`) — **옮겨 온 글자 색을 전부 실측해
+ * 여기 못박는다.**
+ *
+ * 아래 "텍스트 색 사용처 전수 검사"가 `.entry-screen` 스코프의 모든
+ * `color` 규칙을 이미 스크림 바닥 대비로 훑지만, 그 검사는 통과하면
+ * 조용해져 **어느 값이 얼마였는지** 남지 않는다. 프로토타입에서 옮겨 온
+ * 역할마다 숫자를 남겨, 팔레트가 움직였을 때 어느 방향으로 움직였는지
+ * diff에서 보이게 한다(평형대 칩·단지 상세 블록과 같은 이유).
+ *
+ * ⚠ **프로토타입의 색을 그대로 베끼지 않은 자리가 둘 있다.** 그 두 값은
+ * 이 면에서 기준을 넘지 못한다 — 아래 마지막 두 테스트가 그 사실을
+ * 계산으로 남긴다. 디자인을 옮기는 일과 읽히지 않는 글자를 옮기는 일은
+ * 다르다.
+ */
+describe("화면 1 재스킨 대비율 실측 — 영상 위 스크림 바닥 기준", () => {
+  const floor = SCRIM_FLOOR;
+
+  it("표제(.entry-headline): --paper on 스크림 바닥 = 11.90:1", () => {
+    const ratio = contrastRatio(rawToken("--paper"), floor);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("11.90");
+  });
+
+  it("워드마크(.entry-wordmark): --paper-dim on 스크림 바닥 = 9.20:1", () => {
+    // 프로토타입은 `--paper`에 `opacity: .85`를 걸어 살짝 물러나게 했다.
+    // 불투명도는 **위 전수 검사가 보지 못하는 값**이라(그 검사는 규칙의
+    // `color`만 읽는다) 같은 효과를 토큰으로 낸다 — 검사와 화면이 같은
+    // 것을 보게 하려면 투명도가 아니라 색으로 말해야 한다.
+    const ratio = contrastRatio(rawToken("--paper-dim"), floor);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("9.20");
+  });
+
+  it("부제·라벨(.subtitle, 필드 라벨): --haze on 스크림 바닥 = 4.70:1", () => {
+    const ratio = contrastRatio(rawToken("--haze"), floor);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("4.70");
+  });
+
+  it("환산값·조회 버튼(.echo, .go): --brass-lift on 스크림 바닥 = 6.46:1", () => {
+    const ratio = contrastRatio(rawToken("--brass-lift"), floor);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("6.46");
+  });
+
+  /**
+   * 입력 밑줄 — **비텍스트 대비(WCAG 1.4.11)의 3:1이 걸리는 자리다.**
+   * 상자를 없앤 입력에서 밑줄은 그 컨트롤을 식별하는 유일한 경계다.
+   *
+   * 값은 프로토타입과 **같은 방식**으로 만든다(면 위에 `--paper`를
+   * 얹는다). 프로토타입의 불투명도 .22는 이 면에서 1.94:1이라 기준을
+   * 넘지 못해 .40으로 올려 다시 계산했고, 그 합성 결과를 화면 1
+   * 스코프의 `--entry-rule`에 hex로 박았다 — CSS의 `rgba()`는
+   * `resolveColor`가 풀지 못해 전수 검사에서 조용히 빠진다.
+   */
+  it("입력 밑줄(--entry-rule): 비텍스트 대비 3:1을 넘는다 = 3.24:1", () => {
+    const ratio = contrastRatio(rawToken("--entry-rule"), floor);
+    expect(ratio).toBeGreaterThanOrEqual(3);
+    expect(ratio.toFixed(2)).toBe("3.24");
+  });
+
+  it("--entry-rule은 --paper를 이 면에 40%로 얹은 값이다", () => {
+    // 토큰이 손으로 적은 hex라, 그 hex가 어디서 왔는지를 계산으로
+    // 남긴다. 면이나 팔레트가 움직이면 여기서 먼저 깨진다.
+    expect(rawToken("--entry-rule")).toBe(
+      composite(rawToken("--paper"), 0.4, floor),
+    );
+  });
+
+  it("프로토타입의 밑줄 값(--paper 22%)은 이 면에서 1.94:1이라 쓰지 않았다", () => {
+    const ratio = contrastRatio(composite(rawToken("--paper"), 0.22, floor), floor);
+    expect(ratio).toBeLessThan(3);
+    expect(ratio.toFixed(2)).toBe("1.94");
+  });
+
+  it("프로토타입의 --haze-dim(#66727e)은 이 면에서 2.75:1이라 쓰지 않았다", () => {
+    // 프로토타입은 힌트 줄(`.hintline`)에 이 색을 쓴다. 그 줄은 "무엇이
+    // 모자라서 조회가 안 되는지"를 말하는 본문이라 4.5:1이 그대로
+    // 걸린다 — 실제 앱에서는 `.entry-screen .prompt`가 그 역할이고
+    // `--paper-dim`(9.20:1)을 쓴다.
+    const ratio = contrastRatio("#66727e", floor);
+    expect(ratio).toBeLessThan(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("2.75");
   });
 });
 
