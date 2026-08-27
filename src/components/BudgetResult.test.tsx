@@ -65,11 +65,10 @@ describe("BudgetResult", () => {
     expect(section?.firstElementChild?.className).toBe("binding-explainer");
   });
 
-  it("부대비용 합계를 보여준다", () => {
+  it("부대비용 합계를 만원 단위로 반올림해 보여준다", () => {
     renderResult();
-    // Task 4에서 costs.total에 brokerageVat·housingBondCost가 더해지며
-    // 13,060,000 → 14,247,840으로 바뀌었다("1,306만원" → "1,424만 7,840원").
-    expect(screen.getByText("1,424만 7,840원")).toBeInTheDocument();
+    // 사용자 지시로 만원 단위까지만 보여준다 — 14,247,840원은 "1,425만원".
+    expect(screen.getByText("1,425만원")).toBeInTheDocument();
   });
 
   /**
@@ -98,7 +97,7 @@ describe("BudgetResult", () => {
   it("부대비용 합계와 대출 한도 금액이 각자 summary에 접히지 않고 보인다", () => {
     renderResult();
 
-    const costTotal = screen.getByText("1,424만 7,840원");
+    const costTotal = screen.getByText("1,425만원");
     expect(costTotal.closest("summary")).not.toBeNull();
     expect(costTotal.closest("details")).toHaveClass("cost-breakdown");
 

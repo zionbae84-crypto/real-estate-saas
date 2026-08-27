@@ -1,4 +1,4 @@
-import { formatWon } from "../format/won";
+import { formatWon, formatWonRoundedToMan } from "../format/won";
 import type { CostBreakdown as CostBreakdownData } from "../lib/finance";
 import { ChevronIcon } from "./ChevronIcon";
 
@@ -23,7 +23,7 @@ export interface CostBreakdownProps {
   brokerageFeeRate: number;
   /**
    * summary가 합계를 한 번 더 적을 것인가. 기본은 적는다
-   * ("부대비용 850만 5,278원").
+   * ("부대비용 850만원" — 사용자 지시로 만원 단위까지만 보여준다).
    *
    * `false`를 주는 자리는 하나뿐이다: 단지 상세의 ① 블록(design.md
    * §6). 그 화면은 바로 위에서 같은 합계를 "취득시 부대비용"으로
@@ -33,9 +33,10 @@ export interface CostBreakdownProps {
    * 작은 상세보기 버튼이고, 뜻은 `aria-label`이 진다.
    *
    * **계산은 어느 쪽에서도 달라지지 않는다.** 이 prop이 정하는 것은
-   * summary에 보이는 것 하나뿐이고, 표(`<dl>`) 안의 항목·금액은
-   * 그대로 **정확한 원 단위**다(상세 화면의 큰 숫자만 만원 단위로
-   * 반올림한다 — `formatWonRoundedToMan`).
+   * summary에 보이는 것 하나뿐이고, 표(`<dl>`) 안의 항목·금액은 그대로
+   * **정확한 원 단위**다 — 항목을 더하면 이 요약이 낸 합계와 맞아야
+   * 하는 감사 근거라, 여기서만 반올림을 걸지 않는다
+   * (`formatWonRoundedToMan` 참고).
    */
   repeatTotal?: boolean;
 }
@@ -121,7 +122,10 @@ export function CostBreakdown({
     <details className="cost-breakdown">
       {repeatTotal ? (
         <summary>
-          부대비용 <span className="cost-total">{formatWon(costs.total)}</span>
+          부대비용{" "}
+          <span className="cost-total">
+            {formatWonRoundedToMan(costs.total)}
+          </span>
         </summary>
       ) : (
         /*

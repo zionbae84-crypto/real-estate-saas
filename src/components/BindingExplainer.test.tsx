@@ -283,7 +283,7 @@ describe("BindingExplainer", () => {
       // 조언을 따라도 한도가 늘지 않는다는 정보이므로 숨기면 안 된다.
       const tied = container.querySelector(".runner-up-tied");
       expect(tied).toHaveTextContent("담보 가치(LTV)");
-      expect(tied).toHaveTextContent("늘어나지 않아요");
+      expect(tied).toHaveTextContent("여유가 없어요");
     });
 
     it("2순위 라인은 줄표로 라벨을 붙여 조사·계사 분기 없이 문장 전체를 정확히 렌더링한다", () => {
@@ -303,9 +303,10 @@ describe("BindingExplainer", () => {
       // 줄표(—)로만 이어지므로, 받침 유무와 무관하게 항상 문법적으로
       // 안전하다(리뷰 수정: 예전에는 "~입니다"라는 합니다체 계사에 기대던
       // 장치였는데, 해요체로 통일하면서 라벨별 이에요/예요 분기 없이 계사
-      // 자체를 뺐다).
+      // 자체를 뺐다 — 사용자 지시로 "다음으로 가까운 한도" 서두까지
+      // 걷어낸 뒤에도 같은 이유로 줄표만 남겼다).
       expect(runnerUp?.textContent).toBe(
-        "다음으로 가까운 한도 — 담보 가치(LTV). 1억 7,771만원 여유가 있어요.",
+        "담보 가치(LTV) — 1억 7,771만원 더 여유가 있어요.",
       );
     });
 

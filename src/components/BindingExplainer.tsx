@@ -166,23 +166,23 @@ export function BindingExplainer({
       </summary>
 
       {/*
-        리뷰 수정(가드 사각지대 Minor 1): "라벨은 조사 없이 이어 붙인다"는
-        원래 문법 장치가 "~입니다"라는 합니다체 계사에 기대고 있었다. 그걸
-        "~이에요/예요"로 해요체 전환하려면 라벨 받침 유무에 따라 이에요/예요를
-        분기해야 하는데, 그러면 LABELS 맵 자체를 두 벌로 늘려야 한다(리뷰어
-        판단, 확인 완료). 계사를 통째로 빼고 줄표로 라벨을 붙이면 조사·계사
-        분기 문제 자체가 사라지고, 뒤따르는 "여유가 있어요"와 같은 해요체로
-        한 문단 안에서 목소리가 갈리지 않는다.
+        사용자 지시로 "다음으로 가까운 한도 — …" 같은 설명조 서두를
+        걷어내고 결론만 남겼다("이건 결론 같은거니 더 쉽게고 간단하게").
+        라벨과 문장 사이에 여전히 조사를 붙이지 않는다 — "담보 가치(LTV)"
+        처럼 괄호로 끝나는 라벨에는 어떤 조사도 문법적으로 자연스럽게
+        못 붙는다(리뷰 수정 가드 사각지대 Minor 1의 그 이유가 그대로
+        남아 있다). 줄표(—)로만 이으면 받침 유무·표기 형태와 무관하게
+        항상 안전하다.
       */}
       {runnerUp && runnerUp.headroom === 0 && (
         <p className="runner-up-tied">
-          {`다음으로 가까운 한도 — ${LABELS[runnerUp.constraint]}. 같은 금액에서 다시 걸리므로 한도가 늘어나지 않아요.`}
+          {`${LABELS[runnerUp.constraint]} — 같은 금액이라 여유가 없어요.`}
         </p>
       )}
 
       {runnerUp && runnerUp.headroom > 0 && (
         <p className="runner-up">
-          {`다음으로 가까운 한도 — ${LABELS[runnerUp.constraint]}. ${formatWonRoundedToMan(runnerUp.headroom)} 여유가 있어요.`}
+          {`${LABELS[runnerUp.constraint]} — ${formatWonRoundedToMan(runnerUp.headroom)} 더 여유가 있어요.`}
         </p>
       )}
 

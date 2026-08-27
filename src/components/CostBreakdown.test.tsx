@@ -35,7 +35,13 @@ function costs(overrides: Partial<CostBreakdownData> = {}): CostBreakdownData {
 }
 
 describe("CostBreakdown", () => {
-  it("접힌 요약에 합계를 보여준다", () => {
+  /**
+   * 사용자 지시로 summary의 합계는 만원 단위로 반올림한다("부대비용도
+   * 만원까지만 표시해줘") — 14,247,840원은 "1,425만원"으로 보인다.
+   * 표(`<dl>`) 안의 항목별 금액은 그대로 정확한 원 단위다(아래
+   * "여섯 항목을 모두 표시한다" 참고).
+   */
+  it("접힌 요약에 합계를 만원 단위로 반올림해 보여준다", () => {
     render(
       <CostBreakdown
         costs={costs()}
@@ -43,7 +49,8 @@ describe("CostBreakdown", () => {
         brokerageFeeRate={요율}
       />,
     );
-    expect(screen.getByText("1,424만 7,840원")).toBeInTheDocument();
+    expect(screen.getByText("1,425만원")).toBeInTheDocument();
+    expect(screen.queryByText("1,424만 7,840원")).not.toBeInTheDocument();
   });
 
   /**
@@ -135,8 +142,9 @@ describe("CostBreakdown", () => {
   });
 
   it("합계는 total을 그대로 쓴다 — 항목을 다시 더하지 않는다", () => {
-    // 각 항목의 실제 합과 다른 total을 일부러 넣는다. 화면에 그 다른
-    // 값이 그대로 나오면 컴포넌트가 재계산하지 않는다는 뜻이다.
+    // 각 항목의 실제 합(14,247,840원 → "1,425만원")과 다른 total을
+    // 일부러 넣는다. 화면에 그 다른 값이(반올림한 모습으로) 그대로
+    // 나오면 컴포넌트가 재계산하지 않는다는 뜻이다.
     render(
       <CostBreakdown
         costs={costs({ total: 99_999_999 })}
@@ -144,7 +152,7 @@ describe("CostBreakdown", () => {
         brokerageFeeRate={요율}
       />,
     );
-    expect(screen.getByText("9,999만 9,999원")).toBeInTheDocument();
+    expect(screen.getByText("1억원")).toBeInTheDocument();
   });
 
   /**
@@ -306,7 +314,7 @@ describe("CostBreakdown", () => {
       );
       const summary = container.querySelector("summary");
       expect(summary?.textContent).toMatch(/부대비용/);
-      expect(summary?.textContent).toMatch(/1,424만 7,840원/);
+      expect(summary?.textContent).toMatch(/1,425만원/);
       expect(summary?.querySelector("svg")).toBeNull();
     });
   });
