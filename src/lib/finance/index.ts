@@ -18,7 +18,12 @@ export { calcAvailableCash } from "./available-cash";
 export { calcBurdenAt } from "./burden";
 export type { BurdenAtPrice } from "./burden";
 export type { AvailableCash } from "./available-cash";
-export { calcMaxLoan, calcPolicyLimit, NO_POLICY_LIMIT } from "./loan-limit";
+export {
+  calcMaxLoan,
+  calcPolicyLimit,
+  NO_ABSOLUTE_CAP,
+  NO_POLICY_LIMIT,
+} from "./loan-limit";
 export type { MatchedPolicyLoan } from "./loan-limit";
 export { matchPolicyLoans } from "./policy-loans";
 export { assertValidProfile } from "./profile";

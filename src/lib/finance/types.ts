@@ -65,6 +65,12 @@ export interface BuyerProfile {
    * LTV가 크게 갈린다. 규제지역 무주택자는 40%, 비규제 수도권은 70%다.
    * 생애최초는 규제지역에서도 70% 예외를 받는다. 잘못 켜고 끄면 한도가
    * 30%p 어긋나므로, 폼의 기본값은 과대평가를 피하는 쪽(규제지역=true)이다.
+   *
+   * **주택가격 구간별 절대캡(15억 이하 6억/15~25억 4억/25억 초과 2억)도
+   * 이 값이 가른다.** 10·15 대책의 절대캡은 "수도권"이 아니라
+   * "규제지역"에 붙는 규제라, 비수도권이라도 규제지역으로 지정되면 같은
+   * 캡이 걸리고 수도권이라도 비규제지역이면 캡 자체가 없다
+   * (`loan-limit.ts`의 `calcMaxLoan` 참고).
    */
   isRegulatedArea: boolean;
   /** 갈아타기일 때만 존재 */
@@ -108,7 +114,17 @@ export interface LoanLimit {
    * 자격이 되는 정책대출 상품이 아예 없을 때도 POLICY는 **0**이며, 이는
    * "정책대출이라는 선택지 자체가 없음"을 뜻한다(최대값 의미론에서 0은
    * 어떤 은행 한도도 이기지 못하므로 자연스러운 부재 표현이다).
-   * 모든 값은 유한한 정수이며 Infinity가 들어가지 않는다.
+   *
+   * LTV·DSR·POLICY는 항상 유한한 정수다. **CAP만 예외다** —
+   * `!profile.isRegulatedArea`이면 절대캡 자체가 적용되지 않으므로
+   * `NO_ABSOLUTE_CAP`(`loan-limit.ts`, = `Number.POSITIVE_INFINITY`)이
+   * 들어간다. POLICY와 반대 방향인 이유는 결합 방식이 다르기 때문이다:
+   * POLICY는 `max()`로 합쳐져 Infinity를 넣으면 "무조건 이긴다"는
+   * 오답이 되지만(그래서 0), CAP은 `min(LTV, DSR, CAP)`로 합쳐져 이
+   * 제약의 부재는 수학적으로 정확히 Infinity다(min(x, Infinity) = x).
+   * `amount`(= `breakdown[binding]`)는 CAP이 그 자체로 binding이 되는
+   * 경우가 구조적으로 없으므로(Infinity는 `<` 비교에서 결코 이기지
+   * 못한다) 이 예외의 영향을 받지 않고 항상 유한하다.
    */
   breakdown: Record<BindingConstraint, number>;
 }

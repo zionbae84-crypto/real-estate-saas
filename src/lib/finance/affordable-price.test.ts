@@ -114,9 +114,16 @@ describe("calcAffordablePrice", () => {
     expect(result.loanLimit.binding).toBe("DSR");
   });
 
-  it("현금과 소득이 모두 많으면 6억 캡에 걸린다", () => {
+  // isRegulatedArea: true를 명시한다 — 절대캡은 규제지역에만 걸리므로
+  // (loan-limit.ts의 calcMaxLoan 참고), 이 파일의 기본값(false)을 그대로
+  // 쓰면 캡이 아예 적용되지 않아 LTV(70%)가 대신 binding이 된다.
+  it("규제지역에서 현금과 소득이 모두 많으면 6억 캡에 걸린다", () => {
     const result = calcAffordablePrice(
-      profile({ cash: 2_000_000_000, annualIncome: 500_000_000 }),
+      profile({
+        cash: 2_000_000_000,
+        annualIncome: 500_000_000,
+        isRegulatedArea: true,
+      }),
       rules,
     );
     expect(result.loanLimit.binding).toBe("CAP");
@@ -626,15 +633,27 @@ describe("캡 구간 절벽을 넘나드는 탐색", () => {
   });
 
   // 절벽 근처에 답이 놓이도록 현금·소득을 크게 잡는다.
+  //
+  // isRegulatedArea: true다 — 절대캡은 규제지역에만 걸리므로(loan-limit.ts의
+  // calcMaxLoan 참고), 비규제지역 프로필로는 이 describe가 표적으로 삼는
+  // "캡 구간 절벽"이 애초에 존재하지 않는다(캡이 아예 안 걸려 LTV·DSR만
+  // 매끄럽게 움직인다).
+  //
+  // 값 재도출(같은 수정): 규제지역 LTV(40%)는 15억 지점에서 정확히
+  // 40%×15억=6억으로, 그 가격대의 캡(6억)과 우연히 일치한다 — 그래서
+  // 현금 1,100,000,000·소득 300,000,000이던 옛 픽스처는 이제 15억
+  // 문턱에 못 미쳐 캡 절벽 자체를 넘지 못한다(LTV가 이미 6억 아래에서
+  // 더 낮게 묶는다). 15~25억 구간(캡 4억)까지 실제로 넘어가도록 현금·
+  // 소득을 올렸다 — 브루트포스로 직접 확인한 값이다.
   const wealthy: BuyerProfile = {
     status: "무주택",
     ownedHomeCount: 0,
-    cash: 1_100_000_000,
-    annualIncome: 300_000_000,
+    cash: 1_500_000_000,
+    annualIncome: 500_000_000,
     existingDebtAnnualPayment: 0,
     isFirstTimeBuyer: false,
     exclusiveAreaSqm: 84,
-    isRegulatedArea: false,
+    isRegulatedArea: true,
   };
 
   it("엔진이 찾은 최대가가 브루트포스와 일치한다", () => {
@@ -644,8 +663,8 @@ describe("캡 구간 절벽을 넘나드는 탐색", () => {
       wealthy,
       tiered,
       cashAmount,
-      1_400_000_000,
       1_700_000_000,
+      2_000_000_000,
     );
     expect(result.affordablePrice).toBe(brute);
   });
@@ -684,37 +703,53 @@ describe("캡 구간 절벽을 넘나드는 탐색", () => {
 // 하지 않으면 "파싱이 이미 막잖아"라는 이유로 캡 절벽 분할 코드 자체가
 // 나중에 아무 검증 없이 삭제될 수 있다. 이 테스트는 buildSearchSegments가
 // absoluteCap.brackets[].upTo를 절벽으로 넣지 않으면 반드시 실패한다
-// (직접 확인함 — buildSearchSegments에서 capCliffs를 제거하고 돌려 보면
-// 아래 "브루트포스와 일치한다" 단언이 1,265,500,000 vs 1,515,000,000으로
-// 갈라지며 실패하는 것으로 확인했다).
+// (직접 확인함).
+//
+// 경계·픽스처 값(2026-08-17, isRegulatedArea 게이팅 도입으로 재도출):
+// 옛 값(경계 15억/캡 6억)은 규제지역 LTV(40%)가 15억 지점에서 정확히
+// 40%×15억=6억이 되어 캡과 우연히 일치했다 — 그 값 그대로 규제지역
+// 프로필을 쓰면 LTV가 이미 캡과 같은 값으로 묶여 있어 캡 절벽을 넘어도
+// 대출한도가 뛰지 않고, "구멍"이 사라진다. 경계·캡을 LTV(40%)와 어긋나게
+// 다시 골랐다(경계 10억/사전캡 3억 — 3억 < 40%×10억=4억). 아래
+// "브루트포스와 일치한다" 단언은 1,121,300,000이다.
 describe("캡이 올라가는 구간에서 분할이 실제로 안전망 역할을 한다", () => {
-  // 15억까지는 캡 6억, 15억 초과는 캡 30억(=사실상 무제한) — parseRules라면
-  // 거부할 룰셋이다. 값은 리뷰가 제시한 예시(1_500_000_000 / 600_000_000,
-  // null / 3_000_000_000) 그대로다.
+  // 10억까지는 캡 3억, 10억 초과는 캡 30억(=사실상 무제한) — parseRules라면
+  // 거부할 룰셋이다.
+  //
+  // 값 재도출(isRegulatedArea 게이팅 도입): 옛 픽스처(경계 1,500,000,000
+  // /캡 600,000,000)는 비규제지역 프로필로 "구멍"을 만들었다. 이제
+  // 비규제지역은 캡 자체가 안 걸리므로 그 구멍이 사라지고, 규제지역
+  // (LTV 40%)로 바꾸면 정확히 40%×15억=6억이 되어 캡(6억)과 우연히
+  // 일치해 버려 — LTV가 이미 캡과 같은 값으로 묶여 있어 캡 절벽을 넘어도
+  // 대출한도가 뛰지 않는다(구멍 자체가 안 생긴다). 그래서 경계·캡 값을
+  // LTV(40%)와 일부러 어긋나게 다시 골랐다(경계 10억, 사전캡 3억 —
+  // 3억 < 40%×10억=4억이라 캡이 LTV보다 먼저 걸린다). 나머지 로직은
+  // 옛 블록과 같다: 브루트포스로 직접 확인한 값이다.
   const ascendingCapRules: Rules = {
     ...rules,
     absoluteCap: {
       brackets: [
-        { upTo: 1_500_000_000, amount: 600_000_000 },
+        { upTo: 1_000_000_000, amount: 300_000_000 },
         { upTo: null, amount: 3_000_000_000 },
       ],
     },
   };
 
-  // 연소득 150,000,000 · 무주택 · 생애최초 아님 · 비규제지역.
-  // 15억에서: CAP(6억) < DSR(861,474,210)이라 CAP이 binding → 대출 6억.
-  // 15억 + 10만원(절벽 통과 직후): CAP이 30억으로 뛰어 더 이상 binding이
-  // 아니게 되고 DSR(861,474,210)이 binding → 대출이 6억에서 8.6억대로
-  // 불연속으로 뛴다. 즉 가격이 오르는데 대출한도가 더 크게 뛰어 ownFunds가
-  // 오히려 떨어진다("절벽에서 ownFunds가 떨어진다"는 리뷰 지적 그대로).
+  // 연소득 150,000,000 · 무주택 · 생애최초 아님 · 규제지역.
+  // 10억까지는 CAP(3억) < LTV(40%×price, 10억에서 4억) < DSR이라 CAP이
+  // binding → 대출 3억 고정. 10억 + 10만원(절벽 통과 직후): CAP이 30억으로
+  // 뛰어 더 이상 binding이 아니게 되고 LTV(40%×price, 4억 근방)가 binding
+  // → 대출이 3억에서 4억대로 불연속으로 뛴다. 즉 가격이 오르는데 대출한도가
+  // 더 크게 뛰어 ownFunds가 오히려 떨어진다("절벽에서 ownFunds가 떨어진다"는
+  // 리뷰 지적 그대로).
   //
-  // cash를 720,000,000으로 두면: 절벽 이전 구간(대출 6억 고정)에서 ownFunds가
-  // cash를 넘는 지점이 15억보다 한참 낮은 곳(~12.66억)에 생기고, 절벽
-  // 직후에는 대출이 커진 덕에 ownFunds가 다시 cash 밑으로 내려갔다가 가격이
-  // 더 오르면서 다시 올라 15.15억 부근에서 cash를 넘는다. 그 사이
-  // (~12.66억, 15억]는 감당 불가능한 "구멍"이다 — 감당 가능한 가격 집합이
-  // 두 덩어리로 갈라진 것이다. 진짜 최대는 구멍 너머의 15.15억 쪽인데,
-  // 분할 없는 단일 이분 탐색은 첫 덩어리(~12.66억)에 갇힌다.
+  // cash를 720,000,000으로 두면: 절벽 이전 구간(대출 3억 고정)에서 ownFunds가
+  // cash를 넘는 지점이 10억보다 낮은 곳(~9.785억)에 생기고, 절벽 직후에는
+  // 대출이 커진 덕에 ownFunds가 다시 cash 밑으로 내려갔다가 가격이 더
+  // 오르면서 다시 올라 약 11.21억 부근에서 cash를 넘는다. 그 사이
+  // (~9.785억, 10억]는 감당 불가능한 "구멍"이다 — 감당 가능한 가격 집합이
+  // 두 덩어리로 갈라진 것이다. 진짜 최대는 구멍 너머의 11.21억 쪽인데,
+  // 분할 없는 단일 이분 탐색은 첫 덩어리(~9.785억)에 갇힌다.
   const buyer: BuyerProfile = {
     status: "무주택",
     ownedHomeCount: 0,
@@ -723,23 +758,21 @@ describe("캡이 올라가는 구간에서 분할이 실제로 안전망 역할�
     existingDebtAnnualPayment: 0,
     isFirstTimeBuyer: false,
     exclusiveAreaSqm: 84,
-    isRegulatedArea: false,
+    isRegulatedArea: true,
   };
 
   it("엔진이 찾은 최대가가 브루트포스와 일치한다 — 구멍 너머(절벽 이후) 최대치를 놓치지 않는다", () => {
     const result = calcAffordablePrice(buyer, ascendingCapRules);
     const cashAmount = calcAvailableCash(buyer).amount;
-    // 절벽(15억)을 한참 넘는 범위까지 훑어야 구멍 너머의 진짜 최대를 잡는다.
+    // 절벽(10억)을 한참 넘는 범위까지 훑어야 구멍 너머의 진짜 최대를 잡는다.
     const brute = bruteForceMax(buyer, ascendingCapRules, cashAmount, 0, 2_000_000_000);
 
     expect(brute).toBeLessThan(2_000_000_000);
-    // 실측값(직접 확인함): 브루트포스(진짜 최대) 1,515,000,000. 분할 없는
-    // 이분 탐색은 구멍 앞쪽 덩어리에 갇혀 1,265,500,000을 낸다 —
-    // 249,500,000원(약 2.5억) 과소 계상. buildSearchSegments에서
-    // capCliffs를 빼면 이 두 단언이 1,265,500,000 vs 1,515,000,000으로
-    // 갈라지며 실패한다 — 즉 이 테스트가 그 회귀를 잠근다.
+    // 실측값(직접 확인함): 브루트포스(진짜 최대) 1,121,300,000. buildSearchSegments가
+    // capCliffs를 빼면 분할 없는 이분 탐색이 구멍 앞쪽 덩어리에 갇혀 이 값을
+    // 놓친다 — 즉 이 테스트가 그 회귀를 잠근다.
     expect(result.affordablePrice).toBe(brute);
-    expect(result.affordablePrice).toBe(1_515_000_000);
+    expect(result.affordablePrice).toBe(1_121_300_000);
   });
 
   it("찾은 가격이 실제로 감당 가능하다", () => {

@@ -1,5 +1,10 @@
 import { formatWon } from "../format/won";
-import { NO_POLICY_LIMIT, type BindingConstraint, type LoanLimit } from "../lib/finance";
+import {
+  NO_ABSOLUTE_CAP,
+  NO_POLICY_LIMIT,
+  type BindingConstraint,
+  type LoanLimit,
+} from "../lib/finance";
 
 export interface BindingExplainerProps {
   loanLimit: LoanLimit;
@@ -45,9 +50,9 @@ const EXPLANATIONS: Record<BindingConstraint, Explanation> = {
       "소득 대비 연간 상환액 한도에 막혔어요. 기존 부채를 갚으면 한도가 늘어나요.",
   },
   CAP: {
-    title: "수도권 대출 상한에 걸렸어요",
+    title: "규제지역 대출 상한에 걸렸어요",
     advice:
-      "수도권 주택구입 목적 주택담보대출은 금액 상한이 있어요. 대출로는 못 늘려요. 현금이 더 있어야 해요.",
+      "규제지역 주택구입 목적 주택담보대출은 금액 상한이 있어요. 대출로는 못 늘려요. 현금이 더 있어야 해요.",
   },
   POLICY: {
     title: "정책대출 한도가 최대치예요",
@@ -69,7 +74,7 @@ export function getBindingTitle(binding: BindingConstraint): string {
 const LABELS: Record<BindingConstraint, string> = {
   LTV: "담보 가치(LTV)",
   DSR: "상환 능력(DSR)",
-  CAP: "수도권 상한",
+  CAP: "규제지역 상한",
   POLICY: "정책대출",
 };
 
@@ -78,6 +83,14 @@ const ORDER: BindingConstraint[] = ["LTV", "DSR", "CAP", "POLICY"];
 /** 은행 주담대에 동시에 걸리는 제약. loan-limit.ts의 BANK_CONSTRAINTS와 동일한 개념이다 */
 const BANK_CONSTRAINTS = ["LTV", "DSR", "CAP"] as const;
 
+/**
+ * 비규제지역이면 `breakdown.CAP`이 `NO_ABSOLUTE_CAP`(Infinity)일 수
+ * 있다(loan-limit.ts 참고) — 이 함수는 그 값을 특별 취급하지 않아도
+ * 된다. `<` 비교에서 Infinity는 결코 이기지 못하므로 `smallest`로도,
+ * `binding`으로도 뽑히지 않는다. 즉 비규제지역 구매자에게는 CAP이
+ * runner-up으로도, "여기에 걸림"으로도 절대 나타나지 않는다 — 코드를
+ * 더 만지지 않아도 자연히 옳은 동작이다.
+ */
 function findRunnerUp(
   binding: BindingConstraint,
   breakdown: Record<BindingConstraint, number>,
@@ -180,7 +193,9 @@ export function BindingExplainer({
               <dd>
                 {key === "POLICY" && loanLimit.breakdown[key] === NO_POLICY_LIMIT
                   ? "선택지 없음"
-                  : formatWon(loanLimit.breakdown[key])}
+                  : key === "CAP" && loanLimit.breakdown[key] === NO_ABSOLUTE_CAP
+                    ? "적용 안 됨"
+                    : formatWon(loanLimit.breakdown[key])}
               </dd>
             </div>
           ))}

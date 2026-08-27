@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import rawRules from "../../../rules/2026-08.json";
 import { calcAcquisitionCosts, householdCountNoteFor } from "./acquisition-cost";
 import { calcAffordablePrice } from "./affordable-price";
+import { NO_ABSOLUTE_CAP } from "./loan-limit";
 import { calcSafePrice } from "./safe-price";
 import { calcSafetyScore } from "./safety";
 import { matchPolicyLoans } from "./policy-loans";
@@ -45,13 +46,20 @@ describe("무주택(0채) 구매자의 결과는 주택 수 축 도입 전과 �
     expect(calcSafePrice(무주택, rules)).toBe(478_300_000);
   });
 
-  it("대출 한도와 제약 내역이 그대로다", () => {
+  // CAP만 예외로 취급한다: 이 프로필은 isRegulatedArea: false(이 파일의
+  // profile() 기본값)라, 절대캡이 아예 적용되지 않는다(loan-limit.ts의
+  // calcMaxLoan 참고) — CAP이 이 가격에서 실제로 binding이 된 적은
+  // 없었으므로(제약은 여전히 DSR) 다른 세 값·amount·binding은 이 브랜치
+  // 전과 정확히 같다. CAP만 "적용 안 됨"을 뜻하는 NO_ABSOLUTE_CAP으로
+  // 바뀌는데, 이건 이번 수정이 고치려는 바로 그 결함(비규제지역에도
+  // 무조건 캡을 걸던 것)이 사라졌다는 증거이지 회귀가 아니다.
+  it("대출 한도와 제약 내역이 그대로다(CAP은 이번 수정으로 의도적으로 바뀐다)", () => {
     expect(result.loanLimit.amount).toBe(261_430_485);
     expect(result.loanLimit.binding).toBe("DSR");
     expect(result.loanLimit.breakdown).toEqual({
       LTV: 385_000_000,
       DSR: 261_430_485,
-      CAP: 600_000_000,
+      CAP: NO_ABSOLUTE_CAP,
       POLICY: 240_646_194,
     });
   });
@@ -98,13 +106,16 @@ describe("무주택(0채) 구매자의 결과는 주택 수 축 도입 전과 �
       expect(calcSafePrice(저소득무주택, rules)).toBe(127_600_000);
     });
 
-    it("정책대출이 한도를 만들고 그 금액이 그대로다", () => {
+    // CAP만 예외다 — 위 첫 번째 describe와 같은 이유(isRegulatedArea:
+    // false 기본값이면 절대캡이 아예 안 걸린다). 여기도 제약은 여전히
+    // POLICY이므로 나머지 값은 이 브랜치 전과 같다.
+    it("정책대출이 한도를 만들고 그 금액이 그대로다(CAP은 이번 수정으로 의도적으로 바뀐다)", () => {
       expect(저소득결과.loanLimit.binding).toBe("POLICY");
       expect(저소득결과.loanLimit.amount).toBe(102_261_222);
       expect(저소득결과.loanLimit.breakdown).toEqual({
         LTV: 103_250_000,
         DSR: 95_065_630,
-        CAP: 600_000_000,
+        CAP: NO_ABSOLUTE_CAP,
         POLICY: 102_261_222,
       });
     });

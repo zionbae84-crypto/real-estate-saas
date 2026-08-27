@@ -40,9 +40,17 @@ describe("골든 테스트 — 공식 수치 대조", () => {
   // 출처: 금융위원회 보도자료 "수도권 주택담보대출 6억까지···'갭투자' 제동"
   // (fsc.go.kr no010107/84834, 2025-06-28) — "금융회사가 수도권·규제지역
   // 내에서 취급하는 주택구입목적 주담대의 최대한도를 6억원으로 제한".
-  it("수도권 주택구입 목적 대출은 6억을 넘지 못한다", () => {
+  //
+  // 결함 수정(뒤늦은 정정, calcMaxLoan의 isRegulatedArea 게이팅 도입):
+  // 원문의 "수도권·규제지역"은 방아쇠가 "규제지역"이지 "수도권"이 아니다
+  // — 비수도권이라도 규제지역으로 지정되면 같은 캡이 걸리고, 수도권이라도
+  // 비규제지역이면 캡 자체가 없다. 예전에는 calcMaxLoan이 지역을 보지
+  // 않고 캡을 무조건 걸어, highEarner의 기본값(isRegulatedArea: false)
+  // 으로도 이 테스트가 통과했다 — 그게 바로 그 결함이었다. isRegulatedArea:
+  // true를 명시해야 실제로 캡이 걸리는 경로를 테스트한다.
+  it("규제지역의 주택구입 목적 대출은 6억을 넘지 못한다", () => {
     const result = calcMaxLoan(
-      { ...highEarner, annualIncome: 1_000_000_000 },
+      { ...highEarner, annualIncome: 1_000_000_000, isRegulatedArea: true },
       rules,
       3_000_000_000,
     );
@@ -50,21 +58,27 @@ describe("골든 테스트 — 공식 수치 대조", () => {
     expect(result.binding).toBe("CAP");
   });
 
-  // 출처: rules.ltv.unregulated.default(0.7)와 위 6억 절대상한(absoluteCap)
-  // 두 수치의 조합 검증. LTV만 적용하면 12억 × 70% = 8.4억이 나오지만,
-  // 절대상한 6억이 더 작으므로 최종 한도는 6억으로 잘려야 한다.
-  // 갱신(규제지역 LTV 분기 도입): highEarner는 isRegulatedArea: false라
-  // rules.ltv.unregulated.default(0.7)가 적용된다. 이 profile로
-  // isRegulatedArea: true를 넣으면 LTV가 40%(4.8억)로 바뀌어 절대상한이
-  // 아닌 LTV가 binding이 되므로, 이 테스트는 비규제 경로를 고정한다.
-  it("12억 아파트 · LTV 70%는 8.4억이 아니라 6억으로 잘린다", () => {
+  // 출처: rules.ltv.unregulated.default(0.7)와 절대상한(absoluteCap) 두
+  // 수치의 조합 검증.
+  //
+  // 결함 수정(뒤늦은 정정): 이 테스트는 원래 "비규제지역이라도 절대캡
+  // 6억에 잘린다"고 단언했다 — 그게 바로 calcMaxLoan이 지역을 보지 않고
+  // 캡을 무조건 걸던 결함 자체였다(위 테스트와 같은 정정). 비규제지역은
+  // 애초에 캡이 없으므로 LTV 70%(12억 × 0.7 = 8.4억)가 잘리지 않고
+  // 그대로 한도가 된다 — 이제는 그 사실을 고정한다.
+  it("비규제지역·12억 아파트는 LTV 70%(8.4억)가 절대캡에 잘리지 않는다", () => {
     const result = calcMaxLoan(
-      { ...highEarner, annualIncome: 1_000_000_000 },
+      {
+        ...highEarner,
+        annualIncome: 1_000_000_000,
+        isRegulatedArea: false,
+      },
       rules,
       1_200_000_000,
     );
     expect(result.breakdown.LTV).toBe(840_000_000);
-    expect(result.amount).toBe(600_000_000);
+    expect(result.binding).toBe("LTV");
+    expect(result.amount).toBe(840_000_000);
   });
 
   // 출처: 금융위원회 보도자료 「수도권 중심의 가계부채 관리 강화방안」

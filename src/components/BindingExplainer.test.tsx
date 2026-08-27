@@ -113,7 +113,7 @@ describe("BindingExplainer", () => {
       const runnerUp = container.querySelector(".runner-up");
       // 2순위는 CAP (150M) 이 DSR (200M) 보다 작음
       // 여유액 = 150,000,000 - 100,000,000 = 50,000,000 = "5,000만원"
-      expect(runnerUp).toHaveTextContent("수도권 상한");
+      expect(runnerUp).toHaveTextContent("규제지역 상한");
       expect(runnerUp).toHaveTextContent("5,000만원");
     });
 
