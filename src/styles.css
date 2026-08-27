@@ -1330,6 +1330,7 @@ h2 {
    * 라벨과 범례에 글자로도 적혀 있다(`ComplexMap.tsx`).
    */
   --result-paper: #ffffff;
+  --result-alt: #f3f8fe;
   --result-ink: #12294d;
   --result-gray: #4f6a8c;
   --result-rule: #dbe7f3;
@@ -1544,6 +1545,30 @@ h2 {
    */
   background: var(--result-paper);
   border-right: 1px solid var(--result-rule);
+}
+
+/*
+ * 매물 유형·행정동 좁히기 select 둘 — 화면 2 재스킨(prototype-results.html)
+ * 대상에 이 둘이 빠져 있어, 사이드바가 흰색이 된 뒤에도 옛 전역
+ * `.field select` 규칙(`var(--border)`, 화면 1의 어두운 면 대비로 잡힌 값)을
+ * 그대로 물려받아 흰 배경 위에 어긋난 회색 상자로 남아 있었다. `--result-*`
+ * 토큰으로 옮긴다 — 값·이유는 위 `.result-shell`의 토큰 정의 주석 참고.
+ */
+.region-results-sidebar .field select {
+  border-color: var(--result-rule);
+  border-radius: 0.5rem;
+  color: var(--result-ink);
+  background: var(--result-paper);
+}
+
+.region-results-sidebar .field select:focus-visible {
+  outline: 2px solid var(--result-signal);
+  outline-offset: 1px;
+}
+
+.region-results-sidebar .housing-type-select select:disabled {
+  color: var(--result-gray);
+  background: var(--result-alt);
 }
 
 .region-results-map {
