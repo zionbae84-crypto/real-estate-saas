@@ -3539,17 +3539,26 @@ body.body-scroll-locked {
  * 으로 옮기고 `scripts/seed-semantic-tokens.test.ts`의 대비 검사에도
  * 새 규칙을 추가해야 한다. 지금은 하드코딩한 rgba로만 남긴다.
  */
+/*
+ * 폭은 "어느 평형대요?" 카드(`.area-band-select`)에 맞춘다(사용자 지시).
+ * 넷 다 각자 콘텐츠에 맞춰 `fit-content`였을 때는 카드마다 폭이 달라
+ * 줄이 안 맞았다 — `.area-band-select`의 실측 렌더 폭(칩 3열 + 힌트
+ * 줄바꿈 기준, 1280px 뷰포트에서 422.5px ≈ 26.4rem)을 고정값으로 넷에
+ * 공용으로 건다. `.area-band-select`의 문구(칩 이름·힌트)가 크게
+ * 바뀌면 이 값도 다시 재야 한다 — 브라우저 실측값이라 계산으로
+ * 유도된 값이 아니다.
+ */
 .entry-screen .profile-form > .money-input,
 .entry-screen .profile-form > .household-select,
 .entry-screen .profile-form > .first-time-buyer-select,
 .entry-screen .profile-form > .area-band-select {
   position: relative;
-  width: fit-content;
-  max-width: min(26rem, 100%);
-  background: rgba(255, 255, 255, 0.05);
+  width: min(26.5rem, 100%);
+  /* 사용자 지시로 더 투명하게 — 흰 틴트·테두리 불투명도를 함께 낮췄다 */
+  background: rgba(255, 255, 255, 0.03);
   backdrop-filter: blur(20px) saturate(130%);
   -webkit-backdrop-filter: blur(20px) saturate(130%);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.07);
   border-radius: 0.875rem;
   padding: 1.375rem 1.125rem 0.875rem;
 }
@@ -3697,8 +3706,11 @@ body.body-scroll-locked {
   /*
    * 활자 한 벌로 위계를 만드는 규칙(prototype.html 머리주석): 큰 글자일수록
    * 굵게 + 자간을 좁게. 크기만 키우면 큰 글자가 흩어져 보인다.
+   *
+   * 사용자 지시로 20% 줄였다 — 원래 clamp(1.625rem, 3vw, 2.125rem)의
+   * 세 값(최소·가변·최대) 전부에 0.8을 곱했다.
    */
-  font-size: clamp(1.625rem, 3vw, 2.125rem);
+  font-size: clamp(1.3rem, 2.4vw, 1.7rem);
   font-weight: 600;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
@@ -3733,11 +3745,24 @@ body.body-scroll-locked {
   padding-bottom: 6px;
 }
 
-/* 입력 아래 즉시 환산값("20000" → "2억원") — 황동색으로 강조한다. */
+/*
+ * 즉시 환산값("20000" → "1억 5,000만원") — 황동색으로 강조한다.
+ *
+ * 사용자 지시로 입력 숫자 아래가 아니라 **같은 줄, 숫자 오른쪽의 빈
+ * 자리**로 옮겼다(첨부 스크린샷). `.money-input`이 카드 규칙에서 이미
+ * `position: relative`이므로 그 기준으로 절대 위치를 잡는다 — 입력
+ * 요소 자체의 폭은 건드리지 않는다(글자만큼만 차지하므로 짧은 숫자
+ * 뒤에는 원래도 빈 자리가 있었다). `top` 값은 카드 padding-top(1.375rem)
+ * 과 입력 줄 높이(line-height 1.25 × font-size)를 손으로 맞춘 값이라,
+ * 위 입력 font-size가 다시 바뀌면 이 값도 같이 봐야 한다.
+ */
 .entry-screen .echo {
-  margin: 7px 0 0;
-  font-size: 0.78125rem;
-  font-weight: 500;
+  position: absolute;
+  top: 2.125rem;
+  right: 1.125rem;
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
   font-variant-numeric: tabular-nums;
   color: var(--brass-lift);
 }
