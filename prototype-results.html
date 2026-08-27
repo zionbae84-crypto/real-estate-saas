@@ -3,24 +3,30 @@
   결과 화면(상단바 + 사이드바) 프로토타입 — 앱 코드가 아니다.
   http://localhost:4173/prototype-results.html
 
-  사용자가 시안 A(카드)를 골랐고, 두 가지를 요청했다:
-    ① 카드 안 글자를 지금보다 줄일 것
-    ② 전체 톤이 너무 어두우니 푸른색 계열의 밝은 톤으로
+  사용자가 시안 A(카드)를 골랐고, 이어서 요청한 것:
+    ① 카드 안 글자를 줄일 것
+    ② 코발트 블루 · 밝은 블루 계열로
+    ③ 왼쪽 사이드바 폭을 20%쯤 줄일 것 (372px → 298px)
 
-  그래서 DESIGN.md의 중성 회색 계열을 **푸른 기가 도는 밝은 계열**로
-  옮겼다. 구조(24px 반경 카드 · 18px 알약 · compact 밀도 · Stat Block)는
-  DESIGN.md 그대로다.
+  DESIGN.md의 구조(24px 반경 카드 · 18px 알약 · compact 밀도 · Stat Block)는
+  그대로 두고, 중성 회색 계열만 **코발트 계열**로 옮겼다.
 
-  ── 대비 실측 (직접 계산, 4.5:1 기준) ───────────────────────
-                    paper#fff  alt#f7fafc  canvas#eaf1f7
-    ink   #16303f     13.74      13.11       12.05
-    ink2  #234a63      9.41       8.98        8.26
-    gray  #547082      5.23       4.99        4.59
-    brass #8a5f14      5.63       5.37        4.94
-    blue  #1c5fa8      6.46       6.16        5.67
+  ── 대비 실측 (직접 계산, 본문 4.5:1 기준) ──────────────────
+                    paper#fff  alt#f3f8fe  canvas#e7f0fd
+    ink    #12294d    14.48      13.56       12.61
+    ink2   #1b3f78    10.35       9.69        9.01
+    gray   #4f6a8c     5.57       5.21        4.85
+    cobalt #0047ab     8.44       7.90        7.34
+    cobalt-bright #0b57d0
+                       6.39       5.98        5.56
+    흰 글자 on ink2   10.35   ·  흰 글자 on cobalt   8.44
 
-  보조 텍스트로 흔히 쓰는 #5a7488은 캔버스 위에서 4.30:1로 **미달**이라
-  #547082로 내렸다. 글자를 줄인 만큼 대비는 더 여유 있게 잡았다.
+  흔히 쓰는 #556f91은 캔버스 위에서 4.49:1로 **아슬하게 미달**이라
+  #4f6a8c로 내렸다. 글자를 줄인 만큼 대비는 더 여유 있게 잡는다.
+
+  **황동을 뺐다.** 금액도 코발트로 통일했다 — 강조가 둘이면 어느 쪽이
+  더 중요한지 화면이 말하지 못한다. 다만 화면 1(영상+황동)과는 색이
+  갈라지므로, 이어 붙일 때 둘 중 하나로 맞춰야 한다.
 -->
 <html lang="ko">
 <head>
@@ -32,23 +38,28 @@
 </script>
 <style>
   :root {
-    /* 표면 — 푸른 기가 도는 밝은 계열 */
-    --canvas: #eaf1f7;
-    --alt:    #f7fafc;
+    /* 표면 — 코발트 계열의 밝은 톤 */
+    --canvas: #e7f0fd;
+    --alt:    #f3f8fe;
     --paper:  #ffffff;
 
     /* 글자 */
-    --ink:    #16303f;   /* 본문·제목 */
-    --ink-2:  #234a63;   /* 채움 배지 바탕 */
-    --gray:   #547082;   /* 보조 — 캔버스 위 4.59:1 */
+    --ink:    #12294d;   /* 본문·제목 — paper 위 14.48:1 */
+    --ink-2:  #1b3f78;   /* 채움 배지 바탕 — 흰 글자 얹어 10.35:1 */
+    --gray:   #4f6a8c;   /* 보조 — 캔버스 위에서도 4.85:1 */
 
     /* 선 */
-    --rule:      #d7e3ed;
-    --rule-soft: #e4edf4;
+    --rule: #cfe0f7;
 
-    /* 강조 — 한 화면에 한 종류만 */
-    --brass: #8a5f14;    /* 금액. 화면 1(영상)과 이어 주는 실 */
-    --blue:  #1c5fa8;    /* 선택 상태 */
+    /* 강조 — 코발트 한 계열로 통일한다 */
+    --cobalt:        #0047ab;  /* 금액·선택 — paper 위 8.44:1 */
+    --cobalt-bright: #0b57d0;  /* 눌림·호버 — 6.39:1 */
+    /*
+      선택된 카드 바탕. #dbe8fb로 잡았더니 그 위의 보조 텍스트(--gray)가
+      4.49:1로 **아슬하게 미달**했다 — 선택은 잠깐 스치는 상태가 아니라
+      계속 보고 있는 상태라 여기서 대비를 깎으면 안 된다. 4.71:1로 올렸다.
+    */
+    --cobalt-wash:   #e3edfc;
 
     --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
   }
@@ -67,7 +78,7 @@
     display: grid;
     grid-template-rows: auto minmax(0, 1fr);  /* ⚠ auto면 지도 높이가 0이 된다 */
   }
-  .stage { display: grid; grid-template-columns: 372px minmax(0, 1fr); min-height: 0; }
+  .stage { display: grid; grid-template-columns: 298px minmax(0, 1fr); min-height: 0; }
   .side { overflow-y: auto; min-height: 0; }
   .mapwrap { position: relative; min-height: 0; }
   /* ⚠ 네이버 SDK가 position을 인라인으로 덮어써서 inset:0이 무력화된다 */
@@ -92,13 +103,13 @@
     font-size: 18px; font-weight: 600; letter-spacing: -.028em;
     white-space: nowrap;
   }
-  .stat .v.money { color: var(--brass); }
+  .stat .v.money { color: var(--cobalt); }
   .ghost {
     background: var(--canvas); border: 0; border-radius: 18px;
     padding: 8px 14px; font-size: 13px; font-weight: 500; color: var(--ink);
     cursor: pointer; flex: none;
   }
-  .ghost:hover { background: #dfe9f2; }
+  .ghost:hover { background: #d5e5fa; }
 
   /* ── 사이드바 ────────────────────────────────────────────── */
   .side { background: var(--canvas); padding: 14px 12px 22px; }
@@ -112,15 +123,16 @@
     background: var(--paper);
     border: 1px solid var(--rule);
     border-radius: 24px;
-    box-shadow: 0 1px 2px rgba(22,48,63,.05), 0 1px 3px rgba(22,48,63,.06);
+    box-shadow: 0 1px 2px rgba(18,41,77,.05), 0 1px 3px rgba(18,41,77,.06);
     padding: 13px 16px 14px;
     margin-bottom: 8px;
     transition: border-color .14s, box-shadow .14s;
   }
-  .row:hover { background: #fdfeff; border-color: #c6d8e6; }
+  .row:hover { background: var(--alt); border-color: var(--cobalt-bright); }
   .row[aria-current="true"] {
-    border-color: var(--blue);
-    box-shadow: 0 0 0 1px var(--blue);
+    border-color: var(--cobalt);
+    box-shadow: 0 0 0 1px var(--cobalt);
+    background: var(--cobalt-wash);
   }
 
   /* 카드 안 활자 — 요청대로 줄였다 */
@@ -159,11 +171,11 @@
     padding: 3px 9px; border-radius: 18px;
     border: 1px solid var(--ink-2); background: #fff; color: var(--ink);
     font-variant-numeric: tabular-nums;
-    box-shadow: 0 1px 4px rgba(22,48,63,.2); cursor: pointer;
+    box-shadow: 0 1px 4px rgba(18,41,77,.22); cursor: pointer;
   }
   .pin.cash { background: var(--ink-2); color: #fff; }
   /* 선택 표시에 빨강을 쓰지 않는다 — 빨강은 위험을 뜻하는 자리로 남긴다 */
-  .pin.on { background: var(--brass); border-color: var(--brass); color: #fff; }
+  .pin.on { background: var(--cobalt); border-color: var(--cobalt); color: #fff; }
 </style>
 </head>
 <body>
@@ -268,7 +280,7 @@ s.onload = () => {
 };
 s.onerror = () => {
   document.getElementById("map").innerHTML =
-    '<div style="height:100%;display:grid;place-items:center;color:#547082;font-size:13px">' +
+    '<div style="height:100%;display:grid;place-items:center;color:#4f6a8c;font-size:13px">' +
     '지도를 불러오지 못했어요 — 등록된 주소(포트 4173)에서 열어 주세요.</div>';
 };
 document.head.appendChild(s);
