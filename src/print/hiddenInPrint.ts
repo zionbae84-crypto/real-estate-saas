@@ -220,13 +220,12 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "safety-badge", // 등급 배지 섹션 전체
   "warning-list", // 엔진이 낸 경고
   "disclaimer", // 면책 문구(footer)
-  "assumption-line", // 가정 문구 목록(무엇을 가정했는지)
-  // 가정 문구 한 줄. 화면 1이 네 질문으로 줄면서 **없앤 입력 넷**
-  // (생애최초·기존 대출·주택 수·규제지역)의 가정이 전부 여기 남는다 —
-  // 종이를 건네받은 사람에게 이 줄들이 빠지면, 그 사람은 자기 사정이
-  // 반영된 숫자로 읽는다. 예전에 함께 있던 `assumption-item`(눌러서
-  // 고치는 버튼 갈래)은 고칠 입력란이 사라지면서 함께 없어졌다.
-  "assumption-notice", // 가정 문구(순수 정보 항목)
+  // 예전에는 여기 "assumption-line"·"assumption-notice"(가정 문구
+  // 목록, 구 `AssumptionLine`)가 있었다. 사용자 지시로 화면의 "계산
+  // 전제" 덩어리를 통째로 삭제했다 — 같은 사실(기존 대출·규제지역
+  // 판정 여부·전용면적 기준)은 `PrintSummary`(바로 아래, "print-summary")가
+  // 이미 같은 원본에서 라벨·값 쌍으로 종이에 적고 있어, 문장 형태의
+  // 별도 보호 대상을 남겨 둘 이유가 없다.
   "print-summary", // 전제(입력값)·룰셋 기준·인쇄일 요약
   "slider-price", // 슬라이더가 가리키는 가격(아래 배지 계산의 전제)
   "slider-warning", // 그 가격이 한계라는 안내

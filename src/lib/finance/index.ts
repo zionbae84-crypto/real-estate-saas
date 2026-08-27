@@ -5,6 +5,7 @@ export {
 } from "./amortization";
 export type { EqualPrincipalSchedule } from "./amortization";
 export {
+  brokerageFeeRateFor,
   calcAcquisitionCosts,
   householdCountNoteFor,
 } from "./acquisition-cost";

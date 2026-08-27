@@ -65,8 +65,13 @@ function renderResult(overrides: RenderResultOverrides = {}) {
 
 describe("BudgetResult", () => {
   it("실구매력을 크게 보여준다", () => {
-    renderResult();
-    expect(screen.getByText("6억 4,000만원")).toBeInTheDocument();
+    const { container } = renderResult();
+    // 같은 숫자가 SafeLine의 "최대 가격" 행에도 나온다(사용자 지시로
+    // 그 행이 산정 내용 표의 한 줄이 됐다) — 헤드라인의 큰 숫자로
+    // 범위를 좁힌다.
+    expect(container.querySelector(".affordable-price")).toHaveTextContent(
+      "6억 4,000만원",
+    );
   });
 
   it("부대비용 합계를 보여준다", () => {
@@ -82,7 +87,10 @@ describe("BudgetResult", () => {
    * 나오는 이 자리에도 그 사실과 방향을 알리는 고지가 반드시 함께
    * 나가야 한다. `CostBreakdown.test.tsx`가 이미 문구 자체와 방향을
    * 잠그므로, 여기서는 이 화면이 실제로 그 컴포넌트를 통해 고지를
-   * 보여주는지만 확인한다.
+   * 보여주는지만 확인한다. (실제 앱에서 이 prop에 무엇이 들어가는지는
+   * `App.tsx`가 정한다 — 지금은 사용자 지시로 짧은 고정 문구를 쓴다.
+   * `BudgetResult` 자신은 받은 문구를 그대로 낼 뿐이라 이 테스트는
+   * 여전히 임의의 문구로 그 계약만 확인한다.)
    */
   it("부대비용 옆에 주택 수 고지가 함께 나온다", () => {
     renderResult();
@@ -116,34 +124,22 @@ describe("BudgetResult", () => {
   });
 
   /**
-   * 요점만 펼치고 **근거는 여전히 접는다.** 껍질 하나를 없앤 것이지
-   * 근거를 없앤 것이 아니라는 것을 카드 안쪽의 `<details>`로 확인한다 —
-   * 네 가지 한도 표가 그것이다(인쇄에서는 강제로 펼쳐진다).
+   * 사용자 지시로 네 가지 한도 표도 항상 펼쳐진다("표로 정리해서 4가지
+   * 한도중 결정된 것 표시") — 예전의 `<details>` 접기는 걷어냈다. 결정된
+   * (binding) 한도 행에는 `data-active="true"`가 붙는다.
    */
-  it("한도 넷의 표는 카드 안에서 여전히 접혀 있다", () => {
-    renderResult();
-    const fourLimits = screen.getByText(/네 가지 한도/);
-    const details = fourLimits.closest("details");
-    expect(details).not.toBeNull();
-    expect(details?.closest(".binding-explainer")).not.toBeNull();
-  });
+  it("한도 넷의 표는 항상 펼쳐져 있고, 결정된 한도가 표시로 드러난다", () => {
+    const { container } = renderResult();
+    const table = container.querySelector(".binding-limit-table");
+    expect(table).not.toBeNull();
+    expect(table?.closest("details")).toBeNull();
+    expect(table?.closest(".binding-explainer")).not.toBeNull();
 
-  it("리뷰 수정(인쇄 결함 2): summary의 '모두 보기'만 별도 span으로 감싼다", () => {
-    // 인쇄에서 <details>가 강제로 펼쳐지면(styles.css의 ::details-content
-    // 규칙) "모두 보기"는 이미 펼쳐진 내용 바로 위에서 하라고 시키는 죽은
-    // 지시문이 된다 — .fold-more-hint만 인쇄에서 지운다.
-    //
-    // 겉껍질 details가 사라지면서(사용자 지시) 이 화면에서 그 장치가
-    // 남은 자리는 BindingExplainer의 "네 가지 한도 모두 보기" 하나다.
-    renderResult();
-    const summary = document.querySelector(".binding-explainer summary");
-    expect(summary).not.toBeNull();
-
-    const hint = summary?.querySelector(".fold-more-hint");
-    expect(hint).not.toBeNull();
-    expect(hint?.textContent).toBe(" 모두 보기");
-    // 제목 자체(펼쳐진 내용의 헤딩 구실)는 hint 바깥에 남는다.
-    expect(summary?.textContent).toBe("네 가지 한도 모두 보기");
+    // 픽스처의 binding은 LTV다.
+    const activeRow = table?.querySelector('[data-binding="LTV"]');
+    expect(activeRow).toHaveAttribute("data-active", "true");
+    const otherRow = table?.querySelector('[data-binding="DSR"]');
+    expect(otherRow).not.toHaveAttribute("data-active");
   });
 
   /**

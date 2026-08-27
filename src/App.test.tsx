@@ -966,16 +966,10 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
     await userEvent.click(screen.getByRole("button", { name: /강남단지/ }));
     expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
 
-    // 상단바의 "실구매 가능 가격"을 눌러 예산 상세 패널을 연다. 가정
-    // 문구는 그 안에 있고, 전부 누를 수 없는 정보 문구다.
+    // 상단바의 "실구매 가능 가격"을 눌러 예산 상세 패널을 연다.
     await userEvent.click(
       screen.getByRole("button", { name: /실구매 가능 가격/ }),
     );
-    expect(
-      screen.getAllByRole("button").filter((b) =>
-        b.className.includes("assumption-item"),
-      ),
-    ).toHaveLength(0);
     await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
 
     spy.mockResolvedValue({
@@ -1070,30 +1064,6 @@ describe("App - 단지 상세(화면 4)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("평형을 고르면 그 평형의 전용면적이 화면 계산에 반영돼 가정 문구에서 빠진다", async () => {
-    const { container } = render(<App />);
-    await fillProfile();
-
-    // 가정 문구만 본다 — "농특세"는 상세 화면의 취득세 항목 라벨에도
-    // 나오므로 화면 전체에서 찾으면 다른 것을 잡는다.
-    const assumptions = () =>
-      container.querySelector(".assumption-line")?.textContent ?? "";
-
-    // 아직 고르기 전에는 고른 평형대에서 유도한 전제를 말한다(기본
-    // 선택은 전체라 85㎡ 초과가 섞여 있다).
-    expect(assumptions()).toMatch(/85㎡ 초과가 있어/);
-
-    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-
-    // 이 평형(전용 90㎡)의 실제 면적을 반영했으므로 그 문구 자체가 더
-    // 이상 화면에 없다 — 상세가 열려 있는 동안 areaOverridden이 참이
-    // 되어 AssumptionLine이 전용면적 항목을 빼기 때문이다.
-    expect(assumptions()).not.toMatch(/85㎡ 초과가 있어/);
-    expect(assumptions()).not.toMatch(/농특세/);
-    // 진짜 가정(기존 대출·규제지역)은 그대로 남는다.
-    expect(assumptions()).toMatch(/기존 대출/);
-  });
-
   it("상세가 열린 동안에는 실구매 가능 가격이 그 평형 기준으로 바뀌고, 목록으로 돌아가면 원래 값으로 되돌아간다", async () => {
     const { container } = render(<App />);
     await fillProfile([NARROW_DETAIL_UNIT]);
@@ -1117,21 +1087,12 @@ describe("App - 단지 상세(화면 4)", () => {
     expect(priceAfter).toBe(priceBefore);
   });
 
-  it("상세를 열었다 목록으로 돌아오면 전용면적 가정 문구가 다시 나타나고, localStorage에는 상세에서 본 면적이 쓰이지 않는다", async () => {
+  it("상세를 열었다 목록으로 돌아오면 localStorage에는 상세에서 본 면적이 쓰이지 않는다", async () => {
     render(<App />);
     await fillProfile();
 
-    const assumptions = () =>
-      document.querySelector(".assumption-line")?.textContent ?? "";
-
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-    expect(assumptions()).not.toMatch(/농특세/);
-
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-
-    // 목록으로 돌아오면 다시 고른 평형대가 전제를 정하므로 문구도 다시
-    // 나타나야 한다.
-    expect(assumptions()).toMatch(/85㎡ 초과가 있어/);
 
     // 프로필(및 localStorage)에는 상세에서 본 90㎡가 전혀 쓰이지
     // 않았어야 한다 — touched에도 "area"가 없고, 전용면적은 아예 폼
@@ -1169,27 +1130,11 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(container.querySelector(".safety-badge-label")).toBeNull();
     });
 
-    /**
-     * 전용면적 입력란은 화면 1이 네 질문으로 줄면서 사라졌다. 남은 것은
-     * **문구**다: 상세가 열려 있는 동안에는 화면 계산이 그 평형의 실제
-     * 면적을 쓰므로 "85㎡ 초과 기준으로 계산했다"는 문구가 거짓말이 된다.
-     */
-    it("상세가 열려 있는 동안에는 전용면적 가정 문구를 내보내지 않는다", async () => {
-      const { container } = render(<App />);
+    /** 전용면적 입력란은 화면 1이 네 질문으로 줄면서 사라졌다. */
+    it("전용면적 입력란은 어떤 상태에서도 없다", async () => {
+      render(<App />);
       await fillProfile();
-      const assumptions = () =>
-        container.querySelector(".assumption-line")?.textContent ?? "";
-
-      // 어떤 상태에서도 입력란은 없다.
       expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
-      expect(assumptions()).toMatch(/85㎡ 초과가 있어/);
-
-      await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-      expect(assumptions()).not.toMatch(/85㎡ 초과가 있어/);
-
-      // 상세를 닫으면 다시 고른 평형대가 전제를 정하므로 문구도 돌아온다.
-      await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-      expect(assumptions()).toMatch(/85㎡ 초과가 있어/);
     });
 
     it("상세를 열면 포커스가 상세로 옮겨간다", async () => {
@@ -1385,54 +1330,6 @@ describe("App - 단지 상세(화면 4)", () => {
     });
   });
 
-  /**
-   * ⚠ **없앤 입력 넷의 가정이 결과 화면에 문장으로 남는지, 그리고 그
-   * 문장이 죽은 버튼이 아닌지를 함께 잠근다.**
-   *
-   * 예전에는 이 자리가 "가정 칩을 누르면 그 입력란이 열린다"였다. 입력란이
-   * 사라졌으므로 누를 곳도 사라졌고, 버튼 모양만 남기면 눌러도 아무 일도
-   * 일어나지 않는 죽은 컨트롤이 된다 — 이 저장소가 이미 두 번 낸 실패다.
-   * 그래서 검사 방향이 뒤집혔다: **문장은 있어야 하고, 버튼은 없어야
-   * 한다.**
-   */
-  describe("여전히 없앤 입력(기존 대출)·규제지역의 가정이 결과 화면에 남는다", () => {
-    it("두 문장이 전부 결과 화면에 있다", async () => {
-      render(<App />);
-      await fillProfile();
-
-      expect(
-        screen.getByText(/기존 대출이 없다고 보고 계산했어요/),
-      ).toBeInTheDocument();
-      // 규제지역은 값의 출처(지역 판정 여부)에 따라 문구가 갈린다. 이
-      // 하네스의 조회는 isRegulatedArea가 null(모르는 지역)이라 여전히
-      // 가정이고, 그 사실과 방향이 함께 적힌다.
-      expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
-      // 생애최초·주택 수는 더 이상 여기 없다 — 화면 1의 폼이 답을
-      // 직접 보여준다(사용자 지시).
-      expect(screen.queryByText(/생애최초 우대는 빼고 계산했어요/)).toBeNull();
-    });
-
-    it("가정 문구는 하나도 버튼이 아니다 — 눌러도 아무 일 없는 칩을 만들지 않는다", async () => {
-      const { container } = render(<App />);
-      await fillProfile();
-
-      const line = container.querySelector(".assumption-line");
-      expect(line).not.toBeNull();
-      expect(line!.querySelectorAll("button")).toHaveLength(0);
-      expect(container.querySelectorAll(".assumption-item")).toHaveLength(0);
-      expect(container.querySelectorAll(".assumption-action")).toHaveLength(0);
-    });
-
-    it("가정 문구는 예산 상세 패널 안에 있다 — 값의 근거와 같은 자리다", async () => {
-      const { container } = render(<App />);
-      await fillProfile();
-
-      const panel = container.querySelector(".budget-panel");
-      expect(panel).not.toBeNull();
-      expect(panel!.querySelector(".assumption-line")).not.toBeNull();
-    });
-  });
-
   describe("리뷰 수정: 인쇄(화면 5)", () => {
     /**
      * 리뷰 수정(Critical 1). 화면 1(`.entry-screen`)은 불투명한 전체화면
@@ -1534,10 +1431,10 @@ describe("App - 단지 상세(화면 4)", () => {
 
       /*
        * Task 5: 예산 상세 패널이 **열린** 상태도 지난다. 이 패널 안에는
-       * 보호 대상 클래스가 아홉 개 들어 있고(no-budget·binding-explainer·
+       * 보호 대상 클래스가 여럿 들어 있고(no-budget·binding-explainer·
        * cost-breakdown·policy-loan-list·slider-price·slider-warning·
-       * safe-line·assumption-line·assumption-notice — 함께 적혀 있던
-       * `assumption-item`은 버튼 갈래가 사라지며 함께 없어졌다),
+       * safe-line — 예전에 함께 있던 `assumption-line`·`assumption-notice`는
+       * 사용자 지시로 "계산 전제" 덩어리 자체가 삭제되며 함께 없어졌다),
        * 그 위에 새 조상(`.budget-panel`)과 새 숨김 대상
        * (`.budget-detail-close`)이 함께 생겼다 — 이 검사가 정확히 겨누는
        * 배치다.
@@ -2631,7 +2528,6 @@ describe("전체화면 결과 셸", () => {
       // 그대로이고 자리만 옮겼다.
       const open = panel(container)!;
       expect(open.querySelector(".budget-result")).not.toBeNull();
-      expect(open.querySelector(".assumption-line")).not.toBeNull();
       expect(open.querySelector(".price-slider")).not.toBeNull();
       expect(open.querySelector(".safe-line")).not.toBeNull();
     });
@@ -2669,10 +2565,9 @@ describe("전체화면 결과 셸", () => {
      * dispatch A — **0원일 때도 열린다.**
      *
      * 그때가 사용자가 "왜 0원인가"를 가장 알고 싶은 순간이고, 그 답
-     * (`ZeroBudgetMessage`·`BindingExplainer`·`AssumptionLine`)이 바로
-     * 이 패널 안에 있다. 0원일 때만 죽은 버튼으로 두면 Task 3이 리뷰에서
-     * 잡힌 실패(누르라고 적어 놓고 아무 일도 안 하던 가정 칩)를 그대로
-     * 재현한다.
+     * (`ZeroBudgetMessage`·`BindingExplainer`)이 바로 이 패널 안에 있다.
+     * 0원일 때만 죽은 버튼으로 두면 Task 3이 리뷰에서 잡힌 실패(누르라고
+     * 적어 놓고 아무 일도 안 하던 가정 칩)를 그대로 재현한다.
      */
     it("실구매 가능 가격이 0원이어도 버튼이고, 열면 그 원인이 들어 있다", async () => {
       const { container } = await renderResults([CASH_UNIT, LOAN_UNIT], {
@@ -2694,8 +2589,6 @@ describe("전체화면 결과 셸", () => {
       // (`binding-explainer`는 `affordablePrice > 0` 분기에만 있다.
       // `BudgetResult`의 구조는 이 태스크에서 손대지 않는다.)
       expect(open.querySelector(".no-budget")).not.toBeNull();
-      // 그리고 그 원인을 고칠 수 있는 자리(가정 칩)가 같은 패널 안에 있다.
-      expect(open.querySelector(".assumption-line")).not.toBeNull();
       /*
        * **경고는 이제 이 패널 안이 아니다**(followup-warnings-out).
        * 접히는 자리에 두면 상단바의 헤드라인 숫자만 보이고 그 숫자를

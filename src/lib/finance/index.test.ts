@@ -13,6 +13,7 @@ const EXPECTED_FUNCTIONS = [
   "assertNoHomeNoteRequired",
   "assertNoOptimisticCostDirection",
   "assertValidProfile",
+  "brokerageFeeRateFor",
   "calcAcquisitionCosts",
   "calcAffordablePrice",
   "calcAvailableCash",

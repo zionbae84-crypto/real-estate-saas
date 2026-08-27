@@ -177,30 +177,33 @@ export function BindingExplainer({
         </p>
       )}
 
-      <details>
-        {/* BudgetResult.tsx와 같은 이유(리뷰 수정, 인쇄 결함 2) — "모두
-            보기" 접미사만 인쇄에서 지운다. */}
-        <summary>
-          네 가지 한도<span className="fold-more-hint"> 모두 보기</span>
-        </summary>
-        <dl>
-          {ORDER.map((key) => (
-            <div key={key} data-binding={key}>
-              <dt>
-                {LABELS[key]}
-                {key === loanLimit.binding && " ← 여기에 걸림"}
-              </dt>
-              <dd>
-                {key === "POLICY" && loanLimit.breakdown[key] === NO_POLICY_LIMIT
-                  ? "선택지 없음"
-                  : key === "CAP" && loanLimit.breakdown[key] === NO_ABSOLUTE_CAP
-                    ? "적용 안 됨"
-                    : formatWon(loanLimit.breakdown[key])}
-              </dd>
-            </div>
-          ))}
-        </dl>
-      </details>
+      {/*
+        사용자 지시로 네 가지 한도를 **항상 펼쳐진 표**로 보여준다 — 예전
+        `<details>` 접기는 걷어냈다(펼쳐야만 "무엇이 결정됐는지" 보이던
+        것을, 표에서 바로 보이게 한다). `<details>`가 아니므로 인쇄에서
+        강제로 펼치는 규칙에 기댈 필요도 없다 — 애초에 접힌 적이 없다.
+      */}
+      <dl className="binding-limit-table">
+        {ORDER.map((key) => (
+          <div
+            key={key}
+            data-binding={key}
+            data-active={key === loanLimit.binding ? "true" : undefined}
+          >
+            <dt>
+              {LABELS[key]}
+              {key === loanLimit.binding && " ← 결정"}
+            </dt>
+            <dd>
+              {key === "POLICY" && loanLimit.breakdown[key] === NO_POLICY_LIMIT
+                ? "선택지 없음"
+                : key === "CAP" && loanLimit.breakdown[key] === NO_ABSOLUTE_CAP
+                  ? "적용 안 됨"
+                  : formatWon(loanLimit.breakdown[key])}
+            </dd>
+          </div>
+        ))}
+      </dl>
     </section>
   );
 }

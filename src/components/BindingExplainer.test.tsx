@@ -330,18 +330,22 @@ describe("BindingExplainer", () => {
     });
   });
 
-  it("리뷰 수정(인쇄 결함 2): 네 가지 한도 summary의 '모두 보기'만 별도 span으로 감싼다", () => {
-    // 인쇄에서 <details>가 강제로 펼쳐지면(styles.css의 ::details-content
-    // 규칙) "모두 보기"는 이미 펼쳐진 표 바로 위에서 하라고 시키는 죽은
-    // 지시문이 된다 — .fold-more-hint만 인쇄에서 지운다.
+  /**
+   * 사용자 지시로 네 가지 한도 표는 이제 항상 펼쳐져 있다("표로 정리해서
+   * 4가지 한도중 결정된 것 표시") — 예전의 `<details>` 접기는 걷어냈다.
+   * 결정된(binding) 한도 행에는 `data-active="true"`가 붙어, 표 안에서
+   * 바로 어느 것이 결정됐는지 드러난다.
+   */
+  it("네 가지 한도 표는 접혀 있지 않고, 결정된 한도가 data-active로 표시된다", () => {
     const { container } = render(<BindingExplainer loanLimit={limit("LTV")} />);
-    const summary = container.querySelector("details > summary");
-    expect(summary).not.toBeNull();
+    const table = container.querySelector(".binding-limit-table");
+    expect(table).not.toBeNull();
+    expect(table?.closest("details")).toBeNull();
 
-    const hint = summary?.querySelector(".fold-more-hint");
-    expect(hint).not.toBeNull();
-    expect(hint?.textContent).toBe(" 모두 보기");
-    expect(summary?.textContent).toBe("네 가지 한도 모두 보기");
+    const activeRow = table?.querySelector('[data-binding="LTV"]');
+    expect(activeRow).toHaveAttribute("data-active", "true");
+    const otherRow = table?.querySelector('[data-binding="DSR"]');
+    expect(otherRow).not.toHaveAttribute("data-active");
   });
 
   describe("getBindingTitle", () => {

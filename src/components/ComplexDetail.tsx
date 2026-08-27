@@ -7,6 +7,7 @@ import type {
   CostBreakdown as CostBreakdownData,
   LoanLimit,
 } from "../lib/finance";
+import { brokerageFeeRateFor } from "../lib/finance";
 import type { PriceBudgetInput } from "../lib/price";
 import { rules } from "../state/useAffordability";
 import { locationRules } from "../state/useLocationFacts";
@@ -270,6 +271,7 @@ export function ComplexDetail({
           <CostBreakdown
             costs={costs}
             householdCountNote={householdCountNote}
+            brokerageFeeRate={brokerageFeeRateFor(unit.maxPrice, rules)}
             repeatTotal={false}
           />
         </div>

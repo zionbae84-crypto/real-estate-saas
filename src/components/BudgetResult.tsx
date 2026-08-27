@@ -1,6 +1,8 @@
 import { Text } from "@seed-design/react";
 import type { AffordableResult } from "../lib/finance";
+import { brokerageFeeRateFor } from "../lib/finance";
 import { formatWon } from "../format/won";
+import { rules } from "../state/useAffordability";
 import { BindingExplainer, getBindingTitle } from "./BindingExplainer";
 import { CostBreakdown } from "./CostBreakdown";
 import { PolicyLoanList } from "./PolicyLoanList";
@@ -104,6 +106,7 @@ export function BudgetResult({
           <CostBreakdown
             costs={result.costs}
             householdCountNote={householdCountNote}
+            brokerageFeeRate={brokerageFeeRateFor(result.affordablePrice, rules)}
           />
           <PolicyLoanList matched={result.matchedPolicyLoans} />
         </>

@@ -16,6 +16,12 @@ export interface CostBreakdownProps {
    */
   householdCountNote: string;
   /**
+   * 중개보수 계산에 적용된 요율(예: 0.004 = 0.4%). 가격 구간에 따라
+   * 달라지므로 호출부가 `brokerageFeeRateFor(price, rules)`로 구해
+   * 넘긴다(`lib/finance`) — 이 컴포넌트는 가격도 룰셋도 받지 않는다.
+   */
+  brokerageFeeRate: number;
+  /**
    * summary가 합계를 한 번 더 적을 것인가. 기본은 적는다
    * ("부대비용 850만 5,278원").
    *
@@ -59,8 +65,12 @@ const ROW_META: Record<CostKey, RowMeta> = {
   // 취득세 줄의 note는 프로필(주택 수)에 따라 갈리므로 여기서 고정하지
   // 않고 렌더링 시점에 prop으로 덮어쓴다. 아래 ROW_NOTE_OVERRIDE 참고.
   acquisitionTax: { label: "취득세 (지방교육세·농특세 포함)" },
-  brokerageFee: { label: "중개보수" },
-  brokerageVat: { label: "중개보수 부가세 (10%)" },
+  // 사용자 지시로 부가세를 별도 줄로 보여주지 않는다 — 아래 렌더링에서
+  // brokerageFee 줄에 두 금액을 합쳐 보여주고, 이 줄 자체는 그리지 않는다
+  // (ROW_ORDER에서 뺐다). 타입(`Record<CostKey, RowMeta>`)이 `CostBreakdownData`의
+  // 모든 필드를 요구하므로 항목은 남겨 두되, label은 쓰이지 않는다.
+  brokerageFee: { label: "중개보수 (부가세 포함)" },
+  brokerageVat: { label: "중개보수 부가세" },
   legalFee: { label: "법무사 비용" },
   movingCost: { label: "이사 비용" },
   housingBondCost: {
@@ -73,22 +83,28 @@ const ROW_META: Record<CostKey, RowMeta> = {
 };
 
 /**
- * 화면에 보여줄 순서. ROW_META가 이미 완전성(모든 필드가 있는지)을
- * 타입으로 강제하므로, 여기서는 순서만 자유롭게 정할 수 있다 — 항목을
- * 빠뜨려도 ROW_META 쪽에서 먼저 컴파일 에러가 난다.
+ * 화면에 보여줄 순서. **`brokerageVat`은 없다** — 부가세는 중개보수
+ * 줄에 합쳐 보여준다(아래 렌더링). ROW_META가 완전성(모든 필드가
+ * 있는지)을 타입으로 강제하므로, 항목을 빠뜨려도 ROW_META 쪽에서 먼저
+ * 컴파일 에러가 난다 — 순서에서 뺀 것은 이 배열 하나뿐이다.
  */
 const ROW_ORDER: readonly CostKey[] = [
   "acquisitionTax",
   "brokerageFee",
-  "brokerageVat",
   "legalFee",
   "movingCost",
   "housingBondCost",
 ];
 
+/** 0.004 → "0.4%". 소수점은 있는 만큼만 남긴다(지금 룰셋 값은 전부 한 자리다). */
+function formatFeeRate(rate: number): string {
+  return `${Number((rate * 100).toFixed(2))}%`;
+}
+
 export function CostBreakdown({
   costs,
   householdCountNote,
+  brokerageFeeRate,
   repeatTotal = true,
 }: CostBreakdownProps) {
   /*
@@ -133,6 +149,27 @@ export function CostBreakdown({
       <dl>
         {ROW_ORDER.map((key) => {
           const { label } = ROW_META[key];
+
+          if (key === "brokerageFee") {
+            // 부가세(costs.brokerageVat)를 이 줄에 합쳐 보여준다 — 사용자
+            // 지시로 부가세는 별도 줄로 두지 않는다. 대신 이 줄의 note가
+            // 적용 요율과 "협의 가능"이라는 사실을 밝힌다: 표에 보이는
+            // 금액이 상한요율 기준 추정치일 뿐 확정 계약가가 아니라는
+            // 뜻이다.
+            const amount = costs.brokerageFee + costs.brokerageVat;
+            return (
+              <div key={key}>
+                <dt>
+                  {label}
+                  <p className="hint">
+                    {`적용 요율 ${formatFeeRate(brokerageFeeRate)}(상한) · 중개보수는 협의할 수 있어요.`}
+                  </p>
+                </dt>
+                <dd>{formatWon(amount)}</dd>
+              </div>
+            );
+          }
+
           // 취득세만 프로필에 따라 문구가 갈린다. 나머지는 고정 문구다.
           const note =
             key === "acquisitionTax" ? householdCountNote : ROW_META[key].note;

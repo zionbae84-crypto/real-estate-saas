@@ -1,4 +1,3 @@
-import { Text } from "@seed-design/react";
 import { formatWon } from "../format/won";
 
 export interface SafeLineProps {
@@ -31,64 +30,74 @@ export interface SafeLineProps {
 }
 
 /**
- * 최대 가격 옆에 "무리 없는 선"을 나란히 놓는다.
+ * 최대 가격과 "무리 없는 선"을 **표 한 장**으로 요약한다(사용자 지시:
+ * "최대 가격까지 부담률이 안전 범위 안에 있어요"는 값이 없는 문장이니
+ * 실구매가능 산정 내용을 표로 보여 달라).
  *
  * 이 제품이 다른 계산기와 갈리는 지점을 화면에 드러내는 자리다 — 다른
  * 앱은 최대치에서 멈추고 그 숫자를 크게 보여주지만, 이 컴포넌트는 그
- * 옆에 안전선을 **동등한 무게**로 둔다.
+ * 옆에 안전선을 **동등한 무게**(같은 표의 두 행)로 둔다.
  *
- * 두 특수 케이스를 각각 다른 문장으로 처리한다.
- *
- * 1. `safePrice`가 `null`이거나 `0`이면 — 숫자 대신 문장으로 말한다.
- *    `null`은 `calcSafePrice`의 계약상 "안전한 가격이 하나도 없음"이고,
- *    `0`은 그 함수 문서대로 "0원 자체가 안전 최대치로 검증됨"이라는
- *    별개의 뜻이지만, 화면에 "0원"을 그대로 내밀면 두 경우 모두
- *    "0원까지는 안전합니다"처럼 읽혀 사용자에게 실질적으로 도움이 되는
- *    정보가 아니다 — 살 수 있는 게 없다는 뜻을 "0"이라는 계산 결과로
- *    포장하는 셈이다. **0원을 결과로 내미는 것은 정보가 아니라 조롱이다.**
- *    그래서 이 컴포넌트는 둘을 같은 문장으로 묶어 보여준다. 다만
- *    원인까지 하나로(소득 탓으로) 단정하지는 않는다 — `noRepaymentCapacity`로
- *    소득·부채 문제인지, 그 외의 이유(예: 스트레스 금리에서도 부담률이
- *    임계값을 못 넘음)인지를 갈라 말한다(리뷰 수정 Important 2).
- * 2. `safePrice === affordablePrice`(0이 아닌 경우)이면 — 최대 가격
- *    자체가 이미 안전 범위 안에 있다는 뜻이다. 같은 숫자를 두 번 나란히
- *    보여주면 사용자에게는 계산 오류처럼 보이므로, 한 줄로 합쳐 그
- *    사실을 직접 말한다.
+ * 예전에는 세 경우(없음·같음·다름)가 각각 다른 마크업(문장 하나 / 문장
+ * 하나 / 두 상자)이었다. 지금은 **항상 같은 두 행짜리 표**다 — "최대
+ * 가격"·"무리 없는 선"이 항상 함께 보이고, 값이 없으면 그 이유를 행
+ * 아래 짧은 안내(`.hint`)로 붙인다. 값이 최대 가격과 같으면 같은
+ * 8자리 숫자를 두 번 찍는 대신 값 칸에 그 관계를 직접 말한다("최대
+ * 가격과 같아요") — 바로 위 헤드라인이 이미 그 숫자를 보여준 뒤라
+ * 세 번째 반복은 만들지 않는다. 문장으로 갈음하던 자리를 표로 바꿨을
+ * 뿐 원인 판단(`noRepaymentCapacity`)은 그대로다 — 소득·부채 문제인지,
+ * 그 외 이유인지를 여전히 갈라 말한다(리뷰 수정 Important 2).
  */
 export function SafeLine({
   affordablePrice,
   safePrice,
   noRepaymentCapacity,
 }: SafeLineProps) {
-  if (safePrice === null || safePrice === 0) {
-    return (
-      <p className="safe-line safe-line--none">
-        {noRepaymentCapacity
-          ? "소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어 " +
-            "무리 없는 가격대가 없어요."
-          : "지금 조건으론 무리 없는 가격대가 없어요."}
-      </p>
-    );
-  }
+  const hasSafePrice = safePrice !== null && safePrice !== 0;
 
-  if (safePrice === affordablePrice) {
-    return (
-      <p className="safe-line safe-line--merged">
-        최대 가격까지 부담률이 안전 범위 안에 있어요.
-      </p>
-    );
+  let safeModifier: string;
+  let safeValueText: string;
+  let safeNote: string | undefined;
+
+  if (!hasSafePrice) {
+    // `null`은 "안전한 가격이 하나도 없음", `0`은 "0원 자체가 안전
+    // 최대치로 검증됨"이라는 별개의 뜻이지만(calcSafePrice 문서 참고),
+    // 화면에 "0원"을 그대로 내밀면 두 경우 모두 "0원까지는 안전합니다"로
+    // 읽혀 도움이 되지 않는다 — **0원을 결과로 내미는 것은 정보가
+    // 아니라 조롱이다.** 그래서 숫자 대신 "없음"과 이유를 함께 낸다.
+    safeModifier = "safe-line-item--none";
+    safeValueText = "없음";
+    safeNote = noRepaymentCapacity
+      ? "소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어 무리 없는 가격대가 없어요."
+      : "지금 조건으론 무리 없는 가격대가 없어요.";
+  } else if (safePrice === affordablePrice) {
+    // 최대 가격 자체가 이미 안전 범위 안에 있다는 뜻이다. 같은 8자리
+    // 숫자를 두 줄에 그대로 반복하면 눈으로 다시 대조해야 같다는 걸
+    // 알 수 있다 — 대신 값 칸에 관계를 직접 말해 한눈에 읽히게 한다
+    // (바로 위 헤드라인이 이미 그 숫자를 보여줬으므로 세 번째 반복은
+    // 만들지 않는다).
+    safeModifier = "safe-line-item--safe";
+    safeValueText = "최대 가격과 같아요";
+    safeNote = undefined;
+  } else {
+    safeModifier = "safe-line-item--safe";
+    safeValueText = formatWon(safePrice);
+    safeNote = undefined;
   }
 
   return (
-    <div className="safe-line safe-line--split">
+    <dl className="safe-line safe-line-table">
       <div className="safe-line-item safe-line-item--max">
-        <span className="safe-line-label">최대 가격</span>
-        <Text className="safe-line-amount">{formatWon(affordablePrice)}</Text>
+        <dt className="safe-line-label">최대 가격</dt>
+        <dd className="safe-line-amount">{formatWon(affordablePrice)}</dd>
       </div>
-      <div className="safe-line-item safe-line-item--safe">
-        <span className="safe-line-label">무리 없는 선</span>
-        <Text className="safe-line-amount">{formatWon(safePrice)}</Text>
+      <div className={`safe-line-item ${safeModifier}`}>
+        <dt className="safe-line-label">
+          무리 없는 선
+          {safeNote !== undefined && <p className="hint">{safeNote}</p>}
+        </dt>
+        <dd className="safe-line-amount">{safeValueText}</dd>
       </div>
-    </div>
+    </dl>
   );
 }

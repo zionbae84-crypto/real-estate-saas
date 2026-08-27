@@ -13,6 +13,14 @@ import { CostBreakdown } from "./CostBreakdown";
 const 유주택문구 = rules.acquisitionTax.householdCountNote;
 const 무주택문구 = rules.acquisitionTax.householdCountNoteNoHome;
 
+/**
+ * 중개보수 요율. 실제 값은 호출부가 `brokerageFeeRateFor(price, rules)`로
+ * 구해 넘기지만, 이 컴포넌트는 가격도 룰셋도 받지 않으므로 여기서는
+ * 임의의 대표값을 그대로 prop으로 넣는다 — "받은 요율을 그대로 낸다"만
+ * 확인하면 된다.
+ */
+const 요율 = 0.004;
+
 function costs(overrides: Partial<CostBreakdownData> = {}): CostBreakdownData {
   return {
     acquisitionTax: 8_400_000,
@@ -28,23 +36,39 @@ function costs(overrides: Partial<CostBreakdownData> = {}): CostBreakdownData {
 
 describe("CostBreakdown", () => {
   it("접힌 요약에 합계를 보여준다", () => {
-    render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
+    render(
+      <CostBreakdown
+        costs={costs()}
+        householdCountNote={유주택문구}
+        brokerageFeeRate={요율}
+      />,
+    );
     expect(screen.getByText("1,424만 7,840원")).toBeInTheDocument();
   });
 
-  it("여섯 항목을 모두 표시한다", () => {
-    render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
+  /**
+   * 사용자 지시로 중개보수 부가세는 더 이상 별도 줄이 아니다 — 중개보수
+   * 줄에 합쳐 보여준다("부가세는 생략"). 그래서 화면에 보이는 항목은
+   * 다섯이다.
+   */
+  it("다섯 항목을 모두 표시한다", () => {
+    render(
+      <CostBreakdown
+        costs={costs()}
+        householdCountNote={유주택문구}
+        brokerageFeeRate={요율}
+      />,
+    );
 
     expect(
       screen.getByText("취득세 (지방교육세·농특세 포함)"),
     ).toBeInTheDocument();
     expect(screen.getByText("840만원")).toBeInTheDocument();
 
-    expect(screen.getByText("중개보수")).toBeInTheDocument();
-    expect(screen.getByText("256만원")).toBeInTheDocument();
-
-    expect(screen.getByText(/중개보수 부가세/)).toBeInTheDocument();
-    expect(screen.getByText("25만 6,000원")).toBeInTheDocument();
+    // 중개보수 + 부가세(2,560,000 + 256,000 = 2,816,000)를 한 줄로 합쳐 낸다.
+    expect(screen.getByText("중개보수 (부가세 포함)")).toBeInTheDocument();
+    expect(screen.getByText("281만 6,000원")).toBeInTheDocument();
+    expect(screen.queryByText(/중개보수 부가세/)).not.toBeInTheDocument();
 
     expect(screen.getByText("법무사 비용")).toBeInTheDocument();
     expect(screen.getByText("60만원")).toBeInTheDocument();
@@ -56,8 +80,31 @@ describe("CostBreakdown", () => {
     expect(screen.getByText("93만 1,840원")).toBeInTheDocument();
   });
 
+  /**
+   * 사용자 지시: 중개보수 줄에 적용 요율과 "협의 가능"이라는 사실을
+   * 함께 밝힌다. 표에 보이는 금액이 확정 계약가가 아니라 상한요율
+   * 기준 추정치라는 뜻이다.
+   */
+  it("중개보수 줄에 적용 요율과 협의 가능하다는 안내가 함께 나온다", () => {
+    render(
+      <CostBreakdown
+        costs={costs()}
+        householdCountNote={유주택문구}
+        brokerageFeeRate={0.005}
+      />,
+    );
+    expect(screen.getByText(/적용 요율 0.5%/)).toBeInTheDocument();
+    expect(screen.getByText(/협의할 수 있어요/)).toBeInTheDocument();
+  });
+
   it("국민주택채권 항목에 추정치임을 밝힌다", () => {
-    render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
+    render(
+      <CostBreakdown
+        costs={costs()}
+        householdCountNote={유주택문구}
+        brokerageFeeRate={요율}
+      />,
+    );
     // 라벨뿐 아니라 전체 추정치 취지의 문장이 나와야 한다 — 시가표준액
     // 비율과 할인율이 모두 검증되지 않은 가정치이기 때문에, 취득세처럼
     // 확정된 숫자와 같은 확신으로 보여주면 안 된다.
@@ -77,9 +124,10 @@ describe("CostBreakdown", () => {
           total: 11_431_840,
         })}
         householdCountNote={유주택문구}
+        brokerageFeeRate={요율}
       />,
     );
-    expect(screen.getByText("중개보수")).toBeInTheDocument();
+    expect(screen.getByText("중개보수 (부가세 포함)")).toBeInTheDocument();
     // dl 안의 0원 표기를 특정하기 위해 dd 요소로 좁힌다.
     const dds = container.querySelectorAll("dd");
     const texts = Array.from(dds).map((dd) => dd.textContent);
@@ -89,21 +137,14 @@ describe("CostBreakdown", () => {
   it("합계는 total을 그대로 쓴다 — 항목을 다시 더하지 않는다", () => {
     // 각 항목의 실제 합과 다른 total을 일부러 넣는다. 화면에 그 다른
     // 값이 그대로 나오면 컴포넌트가 재계산하지 않는다는 뜻이다.
-    render(<CostBreakdown
+    render(
+      <CostBreakdown
         costs={costs({ total: 99_999_999 })}
         householdCountNote={유주택문구}
-      />);
+        brokerageFeeRate={요율}
+      />,
+    );
     expect(screen.getByText("9,999만 9,999원")).toBeInTheDocument();
-  });
-
-  it("중개보수 부가세 비율이 규칙셋과 일치한다", () => {
-    render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
-
-    const vatPercent = Math.round(
-      rules.brokerageVatRate * 100,
-    ).toString();
-
-    expect(screen.getByText(`중개보수 부가세 (${vatPercent}%)`)).toBeInTheDocument();
   });
 
   /**
@@ -116,20 +157,38 @@ describe("CostBreakdown", () => {
    */
   describe("주택 수 고지", () => {
     it("받은 문구를 취득세 항목에 그대로 낸다", () => {
-      render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
+      render(
+        <CostBreakdown
+          costs={costs()}
+          householdCountNote={유주택문구}
+          brokerageFeeRate={요율}
+        />,
+      );
       expect(screen.getByText(유주택문구)).toBeInTheDocument();
     });
 
     it("무주택 문구를 받으면 그것을 낸다 — 유주택 경고를 섞지 않는다", () => {
       // 무주택이라고 답한 사람에게 "취득세가 더 나올 수 있어요"는
       // 거짓이고, 거짓 경고는 같은 자리의 진짜 경고까지 닳게 만든다.
-      render(<CostBreakdown costs={costs()} householdCountNote={무주택문구} />);
+      render(
+        <CostBreakdown
+          costs={costs()}
+          householdCountNote={무주택문구}
+          brokerageFeeRate={요율}
+        />,
+      );
       expect(screen.getByText(무주택문구)).toBeInTheDocument();
       expect(screen.queryByText(유주택문구)).not.toBeInTheDocument();
     });
 
     it("문구가 코드가 아니라 룰셋에서 온다 — 실제 값으로 방향을 확인한다", () => {
-      render(<CostBreakdown costs={costs()} householdCountNote={유주택문구} />);
+      render(
+        <CostBreakdown
+          costs={costs()}
+          householdCountNote={유주택문구}
+          brokerageFeeRate={요율}
+        />,
+      );
       const note = 유주택문구;
       // 코드에 박힌 문자열이 아니라 rules 싱글턴(rules/2026-08.json 파싱
       // 결과)에서 읽었다는 것을, 화면에 실제로 나온 문구가 그 값과
@@ -146,7 +205,11 @@ describe("CostBreakdown", () => {
 
     it("인쇄에서 살아남는다 — cost-breakdown(보호 클래스) 안에 있다", () => {
       const { container } = render(
-        <CostBreakdown costs={costs()} householdCountNote={유주택문구} />,
+        <CostBreakdown
+          costs={costs()}
+          householdCountNote={유주택문구}
+          brokerageFeeRate={요율}
+        />,
       );
       const details = container.querySelector(".cost-breakdown");
       expect(details).not.toBeNull();
@@ -181,6 +244,7 @@ describe("CostBreakdown", () => {
         <CostBreakdown
           costs={costs()}
           householdCountNote={유주택문구}
+          brokerageFeeRate={요율}
           repeatTotal={false}
         />,
       );
@@ -234,7 +298,11 @@ describe("CostBreakdown", () => {
 
     it("기본값(repeatTotal 생략)은 그대로 글자 summary다", () => {
       const { container } = render(
-        <CostBreakdown costs={costs()} householdCountNote={유주택문구} />,
+        <CostBreakdown
+          costs={costs()}
+          householdCountNote={유주택문구}
+          brokerageFeeRate={요율}
+        />,
       );
       const summary = container.querySelector("summary");
       expect(summary?.textContent).toMatch(/부대비용/);

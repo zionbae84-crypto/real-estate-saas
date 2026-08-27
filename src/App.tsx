@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { AssumptionLine } from "./components/AssumptionLine";
 import { BudgetPanel, BUDGET_PANEL_ID } from "./components/BudgetPanel";
 import { BudgetResult, ZERO_BUDGET_HEADLINE } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
@@ -28,7 +27,6 @@ import {
   calcAcquisitionCosts,
   calcBurdenAt,
   calcMaxLoan,
-  householdCountNoteFor,
 } from "./lib/finance";
 import { rules, useAffordability } from "./state/useAffordability";
 import { useComplexCoordinates } from "./state/useComplexCoordinates";
@@ -37,15 +35,22 @@ import { purchaseRules } from "./state/usePurchaseCheck";
 import { usePurchaseType } from "./state/usePurchaseType";
 import { useProfileForm } from "./state/useProfileForm";
 
+/**
+ * 부대비용 카드의 취득세 줄에 붙는 간단한 계산 기준 고지.
+ *
+ * `calcAcquisitionCosts`는 취득자의 주택 수를 읽지 않고 언제나 무주택
+ * 기준 세율로 계산한다(acquisition-cost.ts) — 사용자가 화면 1에서 무엇을
+ * 답했든 이 계산의 기준은 항상 같다. 그래서 문구도 답에 따라 갈릴 필요가
+ * 없다(사용자 지시: "무주택 기준, 다주택인 경우 달라질 수 있음 정도로
+ * 요약"). `householdCountNoteFor`가 돌려주는 두 긴 문구(rules.ts,
+ * `PriceCheck`가 여전히 쓴다)는 여기서는 쓰지 않는다 — 부대비용 카드는
+ * 요점만 보이게 한다는 것이 이번 지시의 핵심이다.
+ */
+const ACQUISITION_TAX_SUMMARY_NOTE =
+  "취득세는 무주택 기준으로 계산했어요. 다주택이면 세율이 달라질 수 있어요.";
+
 export function App() {
   const { state, setField, resetField, reset, profile } = useProfileForm();
-  /*
-   * 예전에는 여기 `openField`가 있었다 — `AssumptionLine`의 칩을 누르면
-   * `ProfileForm`이 그 입력란을 제자리에서 펼치는 배선이다. 화면 1이 네
-   * 질문으로 줄면서 그 입력란들(기존 대출·규제지역·전용면적)이 전부
-   * 사라졌으므로 펼칠 것도, 누를 것도 없다. 가정 문구는 이제 전부
-   * 순수 정보(`assumption-notice`)라 `onOpen` 자체를 받지 않는다.
-   */
   /**
    * 구매 유형. **언제나 실거주다** — 유형 선택은 사용자 지시로
    * 제거됐고, 이 앱은 실거주 전용이 됐다(usePurchaseType 문서 참고).
@@ -756,11 +761,11 @@ export function App() {
        */
       priceBudget: { profile: residentialProfile, financeRules: rules },
       /*
-       * 부대비용의 취득세 줄에 붙는 주택 수 고지. 위쪽
-       * `BudgetResult`와 **같은 프로필**에서 고르므로 한 화면이 두 말을
-       * 하지 않는다 — 고르는 규칙은 `householdCountNoteFor` 하나뿐이다.
+       * 부대비용의 취득세 줄에 붙는 계산 기준 고지. 위쪽 `BudgetResult`와
+       * **같은 상수**(`ACQUISITION_TAX_SUMMARY_NOTE`)를 써서 한 화면이
+       * 두 말을 하지 않는다.
        */
-      householdCountNote: householdCountNoteFor(residentialProfile, rules),
+      householdCountNote: ACQUISITION_TAX_SUMMARY_NOTE,
       /*
        * "매달 나가는 돈" 계산기의 입력 범위 상한(`ComplexDetail` →
        * `LoanCalculator`).
@@ -1365,38 +1370,25 @@ export function App() {
                     배우자·부모님처럼 화면을 보지 않은 사람에게 건네지므로,
                     계산의 전제(사용가능 현금 예산·연 소득·생애최초 여부·
                     기존 대출·규제지역 여부·전용면적)와 룰셋 기준·인쇄일을
-                    종이에도 남긴다.
+                    종이에도 남긴다 — 사용자 지시로 화면의 "계산 전제"
+                    문구 덩어리(구 `AssumptionLine`)는 삭제됐지만, 같은
+                    사실(기존 대출·규제지역 판정 여부·전용면적 기준)은
+                    이 요약의 각 항목에 여전히 남아 있다.
 
                     사이드바가 아니라 **이 패널 안**에 둔다. 화면에서는
                     어차피 `display: none`이라 어디 있든 같고, 종이에서는
-                    이 순서가 곧 지면 순서다 — 전제(이 요약) → 가정 →
-                    예산 → 목록/상세 → 면책이라는 Task 4까지의 지면
-                    순서를 그대로 유지한다.
+                    이 순서가 곧 지면 순서다 — 전제(이 요약) → 예산 →
+                    목록/상세 → 면책 순서를 유지한다.
                   */}
                   <PrintSummary
                     state={state}
                     areaBasis={areaBasis}
                     rules={rules}
                   />
-                  {/*
-                    ⚠ **없앤 입력 넷의 가정이 여기 자기 문장으로 남는다.**
-                    화면 1에서 입력란을 지우는 것과 여기서 문장을 남기는
-                    것은 한 쌍이다 — 한쪽만 하면 조용히 깔린 기본값이
-                    되고, 그게 이 저장소가 여섯 번 반복한 사고의
-                    시작점이다. 전부 순수 정보 문구다(고칠 입력란이
-                    없으므로 누를 곳도 없다).
-                  */}
-                  <AssumptionLine
-                    state={state}
-                    areaOverridden={selectedUnit !== null}
-                  />
                   <BudgetResult
                     result={affordability.result}
                     safePrice={affordability.safePrice}
-                    householdCountNote={householdCountNoteFor(
-                      residentialProfile,
-                      rules,
-                    )}
+                    householdCountNote={ACQUISITION_TAX_SUMMARY_NOTE}
                   />
                   {affordability.result.affordablePrice > 0 && (
                     <>

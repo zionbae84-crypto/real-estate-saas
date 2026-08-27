@@ -112,6 +112,25 @@ function readAffordablePrice(): number {
   return parseFormattedWon(text);
 }
 
+/**
+ * 인쇄 요약(`PrintSummary`, 화면에서는 숨어 있고 DOM에는 있다)의 한 줄을
+ * 읽는다.
+ *
+ * 사용자 지시로 화면의 "계산 전제" 문구 덩어리(구 `AssumptionLine`)가
+ * 삭제된 뒤로, 기존 대출·규제지역 판정 여부 같은 가정 사실을 확인할 수
+ * 있는 자리는 이 요약 하나뿐이다 — `PrintSummary`는 같은 원본(`state`)에서
+ * 읽으므로 지금도 사실 그대로다.
+ */
+function printValueOf(label: string): string | null {
+  const rows = document.querySelectorAll(".print-summary dl > div");
+  for (const row of rows) {
+    if (row.querySelector("dt")?.textContent === label) {
+      return row.querySelector("dd")?.textContent ?? null;
+    }
+  }
+  return null;
+}
+
 describe("예산 계산기 통합", () => {
   beforeEach(() => window.localStorage.clear());
   afterEach(() => vi.restoreAllMocks());
@@ -130,10 +149,12 @@ describe("예산 계산기 통합", () => {
    * 결과가 뜨지 않는다(`ProfileFormState.ownedHomeCount` 참고).
    *
    * 남은 진짜 가정은 기존 대출뿐이다. 그 가정은 낙관 방향이므로(기존
-   * 대출이 없으면 DSR 여력이 그대로 남아 한도가 커진다) 그 문장이
-   * 반드시 화면에 있어야 한다 — 이 테스트가 그 짝을 잠근다.
+   * 대출이 없으면 DSR 여력이 그대로 남아 한도가 커진다) 그 사실이
+   * 반드시 어딘가에 남아 있어야 한다 — 화면의 "계산 전제" 문구 덩어리
+   * (구 `AssumptionLine`)는 사용자 지시로 삭제됐지만, 같은 사실이
+   * `PrintSummary`(인쇄 요약, DOM에는 항상 있다)에 그대로 남는다.
    */
-  it("현금·소득·주택 수를 넣으면 결과가 나오고, 기존 대출 가정이 화면에 적힌다", async () => {
+  it("현금·소득·주택 수를 넣으면 결과가 나오고, 기존 대출 가정이 인쇄 요약에 남는다", async () => {
     render(<App />);
 
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
@@ -151,13 +172,7 @@ describe("예산 계산기 통합", () => {
       screen.getByRole("heading", { name: "실구매 가능 가격" }),
     ).toBeInTheDocument();
 
-    // 가정 문구는 예산 상세 패널 안에 있다(닫혀 있어도 DOM에는 있다).
-    // 주택 수·생애최초는 이제 답한 값이라 이 자리에 안 나온다 — 폼 자체가
-    // 그 답을 보여준다.
-    expect(
-      screen.getByText(/기존 대출이 없다고 보고 계산했어요/),
-    ).toBeInTheDocument();
-    expect(screen.queryByText(/생애최초 우대는 빼고 계산했어요/)).toBeNull();
+    expect(printValueOf("기존 대출(연간 상환액)")).toBe("없음 (가정)");
   });
 
   /**
@@ -174,21 +189,28 @@ describe("예산 계산기 통합", () => {
   });
 
   /**
-   * 취득세는 주택 수를 반영하지 못한다(중과세율을 확인하지 못했다).
-   * 무주택으로 가정하므로 유주택용 경고는 나가지 않는다 — 그 사람에게는
-   * 거짓이고, 거짓 경고는 진짜 경고까지 함께 닳게 만든다.
+   * 취득세는 주택 수를 반영하지 못한다 — `calcAcquisitionCosts`는
+   * 항상 무주택 기준 세율로 계산한다(acquisition-cost.ts). 사용자 지시로
+   * 부대비용 카드의 취득세 고지를 "무주택 기준, 다주택인 경우 달라질
+   * 수 있음" 정도로 짧게 요약했다 — 실제 계산이 답과 무관하게 항상
+   * 같으므로, 문구도 답에 따라 갈리지 않는 **고정 문구**가 됐다(예전의
+   * 두 긴 문구는 `PriceCheck`가 여전히 쓴다).
    */
-  it("취득세 고지는 무주택 가정에 맞는 쪽이 나온다", async () => {
-    const 유주택문구 = financeRules.acquisitionTax.householdCountNote;
-    const 무주택문구 = financeRules.acquisitionTax.householdCountNoteNoHome;
-
+  it("부대비용 카드의 취득세 고지는 짧은 계산 기준 문구다", async () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "5000");
     await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.getByText(무주택문구)).toBeInTheDocument();
-    expect(screen.queryByText(유주택문구)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/무주택 기준으로 계산했어요\. 다주택이면 세율이 달라질 수 있어요/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(financeRules.acquisitionTax.householdCountNote),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(financeRules.acquisitionTax.householdCountNoteNoHome),
+    ).not.toBeInTheDocument();
   });
 
   it("현금과 소득을 넣으면 결과와 슬라이더가 나타난다", async () => {
@@ -283,7 +305,7 @@ describe("예산 계산기 통합", () => {
     await screen.findByRole("region", { name: "살 수 있는 단지" });
     expect(spy).toHaveBeenCalled();
 
-    expect(screen.getByText(/비규제지역으로 판정했어요/)).toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("비규제지역 (지역 판정)");
     expect(readAffordablePrice()).toBeGreaterThan(priceBefore);
   });
 
@@ -294,7 +316,7 @@ describe("예산 계산기 통합", () => {
    * 근거가 "모르니까 안전하게 규제지역"에서 "당신이 고른 지역이라서
    * 규제지역"으로 바뀌는 순간, 그것은 더 이상 가정이 아니다.
    */
-  it("지역을 고르면 문구가 '가정했어요'에서 '판정했어요'로 바뀐다", async () => {
+  it("지역을 고르면 인쇄 요약이 '가정'에서 '지역 판정'으로 바뀐다", async () => {
     mockRegionQuery(cheapestIn("11680", 3), true);
 
     render(<App />);
@@ -302,15 +324,12 @@ describe("예산 계산기 통합", () => {
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
     await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    expect(screen.queryByText(/확인하지 못해/)).not.toBeInTheDocument();
-    expect(
-      screen.getByText(/고른 지역은 규제지역으로 판정했어요/),
-    ).toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (지역 판정)");
   });
 
   /**
@@ -334,15 +353,14 @@ describe("예산 계산기 통합", () => {
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
     await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
     // null이었으므로 프로필의 isRegulatedArea는 확정되지 않았다 —
-    // 가정 문구가 여전히 남아 있다.
-    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
-    expect(screen.queryByText(/판정했어요/)).not.toBeInTheDocument();
+    // 인쇄 요약이 여전히 "(가정)"이다.
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
   });
 
   /**
@@ -362,10 +380,10 @@ describe("예산 계산기 통합", () => {
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
     await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
+    // 아는 지역: 규제지역으로 확정되어 인쇄 요약이 "(지역 판정)"이 된다.
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
-    expect(screen.queryByText(/확인하지 못해/)).not.toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (지역 판정)");
 
     // 모르는 지역: 확정할 근거가 없다.
     spy.mockResolvedValue({
@@ -377,9 +395,9 @@ describe("예산 계산기 통합", () => {
     await selectRegion("서울특별시", "서초구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    // 가정 고지가 되살아나야 한다 — 앞 지역의 확정이 이 지역까지
-    // 따라오면 안 된다.
-    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
+    // 가정으로 되살아나야 한다 — 앞 지역의 확정이 이 지역까지 따라오면
+    // 안 된다.
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
   });
 
   /**
@@ -400,10 +418,10 @@ describe("예산 계산기 통합", () => {
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
     await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
+    // 아는 지역: 규제지역으로 확정되어 인쇄 요약이 "(지역 판정)"이 된다.
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
-    expect(screen.queryByText(/확인하지 못해/)).not.toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (지역 판정)");
 
     // 다음 지역 조회는 실패한다 — 이 지역에 대해 아무것도 알아내지 못했다.
     spy.mockRejectedValueOnce(new Error("네트워크 오류"));
@@ -411,9 +429,9 @@ describe("예산 계산기 통합", () => {
     await selectRegion("서울특별시", "서초구");
     await screen.findByText(/불러오지 못했어요/);
 
-    // 가정 고지가 되살아나야 한다 — 앞 지역의 확정이 실패한 조회까지
-    // 그대로 따라오면 안 된다.
-    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
+    // 가정으로 되살아나야 한다 — 앞 지역의 확정이 실패한 조회까지 그대로
+    // 따라오면 안 된다.
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
   });
 
   /**
@@ -494,17 +512,6 @@ describe("저장본에서 시작하는 세션", () => {
     );
   }
 
-  /** 인쇄 요약(화면에서는 숨어 있고 DOM에는 있다)의 한 줄을 읽는다. */
-  function printValueOf(label: string): string | null {
-    const rows = document.querySelectorAll(".print-summary dl > div");
-    for (const row of rows) {
-      if (row.querySelector("dt")?.textContent === label) {
-        return row.querySelector("dd")?.textContent ?? null;
-      }
-    }
-    return null;
-  }
-
   /**
    * 마운트 시점에는 **불러온 지역이 없다**(상단바에 지역 줄조차 없다).
    * 판정은 불러온 지역에 매인 사실이므로, 지역이 없는 세션에서 그 판정을
@@ -514,8 +521,7 @@ describe("저장본에서 시작하는 세션", () => {
     seedStoredState();
     render(<App />);
 
-    expect(screen.queryByText(/판정했어요/)).not.toBeInTheDocument();
-    expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
   });
 
   it("종이도 저장된 판정을 '(지역 판정)'으로 찍지 않는다", () => {

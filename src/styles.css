@@ -295,7 +295,7 @@ body {
 .budget-card--headline .result-step--price h2 {
   margin: 0;
   font-size: 0.8125rem;
-  font-weight: 600;
+  font-weight: 700;
   letter-spacing: 0.01em;
   color: var(--result-gray);
 }
@@ -375,57 +375,63 @@ body {
 .budget-result > .cost-breakdown > summary {
   cursor: pointer;
   font-size: 0.9375rem;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--result-ink);
 }
 
 /*
- * 계산 전제 접기(`AssumptionLine`). 사용자 지시로 화면에서는 접어 두고
- * 요약 한 줄만 남긴다 — 카드 셋(대출 한도·부대비용·정책대출)보다 한 단
- * 낮은 무게라 테두리 없이 옅은 글자만으로 둔다.
- *
- * ⚠ 인쇄에서는 `@media print`가 모든 `<details>`를 강제로 펼치므로
- * 종이에는 세 문장이 그대로 나간다(AssumptionLine.tsx 참고).
+ * SafeLine: 최대 가격과 무리 없는 선을 **표 한 장**으로 요약한다(사용자
+ * 지시: "실구매가능 산정 내용을 표로 요약해 보여주기"). 두 행이 같은
+ * `<dl>` 안에서 같은 두 칸(라벨/금액) 규칙을 쓴다 — `.cost-breakdown dl`·
+ * `.binding-limit-table`과 같은 표 관행이다. 안전선이 최대 가격 옆에
+ * "동등한 무게"로 있다는 것이 이 제품의 핵심 주장이라, 두 행은 같은
+ * font-size·font-weight를 쓴다.
  */
-.assumption-fold {
-  margin: 0 0 0.75rem;
-}
-
-/* 색에 폴백을 쓰지 않는 이유는 위 부대비용 summary 규칙의 주석과 같다. */
-.assumption-fold > summary {
-  cursor: pointer;
-  padding: 0.25rem 0;
-  font-size: 0.8125rem;
-  color: var(--result-gray);
-}
-
-/*
- * SafeLine: 안전선을 최대 가격 옆에 "동등한 무게"로 둔다는 것이 이
- * 제품의 핵심 주장이다. 그래서 두 항목을 나란히(flex) 놓고, 같은
- * font-size·font-weight로 맞춘다 — 한쪽이 시각적으로 더 작거나 옅으면
- * "여기까지가 무리 없는 선"이라는 말이 힘을 잃는다.
- */
-.safe-line--split {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
+.safe-line-table {
   margin: 0 0 1rem;
 }
 
-.safe-line-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
+.safe-line-table > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, max-content);
+  align-items: baseline;
+  column-gap: 0.75rem;
+  padding: 0.375rem 0;
 }
 
+/*
+ * `.safe-line-item`은 이제 표의 한 행(`.safe-line-table > div`)에 그대로
+ * 앉는다 — 칸 배치는 그 부모 규칙(grid)이 이미 정하므로 여기서는 색·
+ * 배경만 다룬다.
+ */
 .safe-line-label {
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
   color: var(--seed-color-fg-neutral-muted);
+}
+
+/* 값이 없거나(없음) 최대 가격과 같을 때 붙는 짧은 안내. */
+.safe-line-label .hint {
+  display: block;
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.safe-line-table dd {
+  margin: 0;
+  text-align: right;
 }
 
 .safe-line-amount {
   font-size: 1.375rem;
   font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 안전선이 없을 때(없음) — 판단할 값 자체가 없다는 것을 색으로도 반복한다. */
+.safe-line-item--none .safe-line-amount {
+  color: var(--risk);
 }
 
 /*
@@ -468,18 +474,6 @@ body {
  */
 .safe-line-item--max .safe-line-amount {
   color: var(--seed-color-fg-brand-contrast);
-}
-
-.safe-line--none {
-  color: var(--risk);
-  margin: 0 0 1rem;
-}
-
-.safe-line--merged {
-  background: var(--seed-color-bg-positive-weak);
-  color: var(--safe);
-  font-weight: 600;
-  margin: 0 0 1rem;
 }
 
 /*
@@ -615,7 +609,54 @@ body {
 .binding-amount-label {
   display: block;
   font-size: 0.8125rem;
+  font-weight: 700;
   color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
+ * 대출 한도 네 가지 표(사용자 지시: "표로 정리해서 4가지 한도중 결정된
+ * 것 표시"). 예전에는 `<details>` 안에 접혀 있었다 — 이제 항상 펼쳐진
+ * 두 칸 표다. `.cost-breakdown dl`과 같은 표 관행(라벨 왼쪽, 금액
+ * 오른쪽, tabular-nums)을 따른다.
+ */
+.binding-limit-table {
+  margin: 0.75rem 0 0;
+}
+
+.binding-limit-table > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7rem, max-content);
+  align-items: baseline;
+  column-gap: 0.75rem;
+  padding: 0.375rem 0.375rem;
+  border-radius: 0.25rem;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.binding-limit-table > div:last-child {
+  border-bottom: none;
+}
+
+.binding-limit-table dt {
+  font-size: 0.875rem;
+}
+
+.binding-limit-table dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 결정된(binding) 한도 — 네 줄 중 어느 것이 실제로 상한을 정했는지 표에서 바로 짚는다. */
+.binding-limit-table > div[data-active="true"] {
+  background: var(--seed-color-bg-neutral-weak);
+}
+
+.binding-limit-table > div[data-active="true"] dt,
+.binding-limit-table > div[data-active="true"] dd {
+  font-weight: 700;
 }
 
 /*
@@ -701,41 +742,6 @@ body {
 }
 
 /*
- * AssumptionLine: 숨긴 가정을 결과 옆에 문장으로 드러내고, 각 항목을
- * 눌러서 고칠 수 있게 한다. 목록이지만 시각적으로는 안내 카드처럼
- * 보이게 한다 — 사용자에게 중요한 것은 "항목 목록"이 아니라 "이 조건은
- * 내가 정하지 않았다"는 사실이다.
- */
-.assumption-line {
-  display: grid;
-  gap: 0.5rem;
-  margin: 1rem 0;
-  padding: 0;
-  list-style: none;
-}
-
-/*
- * assumption-notice: **가정 문구는 전부 이것 하나가 됐다.**
- *
- * 예전에는 눌러서 고칠 수 있는 항목(`.assumption-item`, 대시 테두리에
- * 호버 배경이 있는 버튼)과 순수 정보 문구 둘로 갈렸다. 화면 1이 네
- * 질문으로 줄면서 고칠 입력란이 전부 사라졌으므로 누를 곳도 사라졌고,
- * 버튼 겉모양만 남기면 눌러도 아무 일도 일어나지 않는 죽은 컨트롤이
- * 된다 — 그래서 그 갈래를 통째로 지웠다(AssumptionLine.tsx 참고).
- *
- * 테두리가 실선인 것이 그 사실을 시각적으로도 말한다: 대시 테두리는
- * 이 저장소에서 "눌러서 고칠 수 있다"는 신호였다.
- */
-.assumption-notice {
-  margin: 0;
-  padding: 0.625rem 0.875rem;
-  background: var(--seed-color-bg-neutral-weak);
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
-/*
  * 모션은 상태가 바뀔 때만 쓴다. 가만히 있는 것은 움직이지 않는다.
  *
  * 값은 SEED 토큰을 쓴다 — 직접 정하면 이 저장소만의 감각이 되고,
@@ -750,15 +756,15 @@ body {
  * - .safety-level: SafetyBadge의 data-level 속성이 바뀔 때(같은 <p>가
  *   유지된 채 색만 safe/caution/danger로 갈린다) — 이 태스크가 고치려는
  *   "등급이 바뀔 때 색이 튀는" 지점 그 자체다.
- * - .safe-line: SafeLine이 안전선 없음(--none)에서 안전선=최대가
- *   병합(--merged)으로 바뀔 때 둘 다 <p>라 같은 노드를 재사용한다(색이
- *   danger에서 safe로, 배경이 없음에서 positive-weak로 바뀐다). --split은
- *   <div>라 이 두 상태와는 다른 노드로 갈리지만, 셀렉터 자체는 안전하다.
+ * - .safe-line-item: SafeLine의 "무리 없는 선" 행은 언제나 같은
+ *   <div>(둘째 행)를 재사용하고, 상태에 따라 --none/--safe 수식자만
+ *   갈린다(색이 danger에서 safe로, 배경이 없음에서 positive-weak로
+ *   바뀐다).
  * - .slider-price: 슬라이더가 최댓값에 닿으면 같은 <p>에 --max 클래스가
  *   붙어 브랜드색으로 바뀐다(값을 다시 내리면 원래 색으로 돌아간다).
  */
 .safety-level,
-.safe-line,
+.safe-line-item,
 .slider-price {
   transition:
     color var(--seed-duration-color-transition) var(--seed-timing-function-easing),
@@ -2162,12 +2168,11 @@ body {
  *
  * ⚠ **이 블록 전체가 `@media screen`이다. 밖으로 옮기지 마라.**
  *
- * 이 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES` 열 개가 들어 있다
+ * 이 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES`가 여럿 들어 있다
  * (`no-budget`, `binding-explainer`, `cost-breakdown`, `policy-loan-list`,
- * `slider-price`, `slider-warning`, `safe-line`, `assumption-line`,
- * `assumption-notice`). 패널의 기본 상태는 **닫힘**이고
- * `Cmd+P`는 어느 단계에서든 눌린다 — 닫힘 규칙(`display: none`)이 인쇄에
- * 닿는 순간 그 열 개가 종이에서 통째로 사라진다.
+ * `slider-price`, `slider-warning`, `safe-line`). 패널의 기본 상태는
+ * **닫힘**이고 `Cmd+P`는 어느 단계에서든 눌린다 — 닫힘 규칙
+ * (`display: none`)이 인쇄에 닿는 순간 이들이 종이에서 통째로 사라진다.
  *
  * **그리고 기존 가드는 그 형태를 잡지 못한다.** `scripts/printCss.test.ts`
  * 의 동기화 검사는 `@media print` 블록 **안**만 파싱하므로, 블록 밖의
@@ -3245,10 +3250,11 @@ body.body-scroll-locked {
    * 요소로, 접힌 <details>에서는 `content-visibility: hidden`과
    * `block-size: 0`이 걸려 있다(직접 확인: getComputedStyle(el,
    * '::details-content')). 이 둘을 뒤집으면 중첩된 <details>
-   * (CostBreakdown, BindingExplainer의 "네 가지 한도 모두 보기")까지
-   * 각 단계마다 그대로 펼쳐진다 — 실측: 이 규칙을 넣은 뒤
-   * `document.body.innerText`에 "부대비용 907만 7,341원"과 그 내역,
-   * "네 가지 한도 모두 보기" 안의 네 항목이 모두 나타난다.
+   * (CostBreakdown의 부대비용 내역 등)까지 각 단계마다 그대로
+   * 펼쳐진다 — 실측: 이 규칙을 넣은 뒤 `document.body.innerText`에
+   * "부대비용 907만 7,341원"과 그 내역이 모두 나타난다. 대출 한도의
+   * "네 가지 한도"는 이제 `<details>`가 아니라 언제나 펼쳐진 표라
+   * (BindingExplainer.tsx) 이 규칙에 기대지 않는다.
    */
   details:not([open])::details-content {
     content-visibility: visible !important;
@@ -3268,8 +3274,8 @@ body.body-scroll-locked {
   .no-budget,
   .binding-explainer,
   .policy-loan-list li,
-  .assumption-notice,
   .safe-line-item,
+  .binding-limit-table > div,
   .print-summary dl > div,
   .purchase-print-summary dl > div,
   .purchase-metric,

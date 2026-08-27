@@ -43,16 +43,24 @@ describe("SafeLine", () => {
     ).toBeInTheDocument();
   });
 
-  it("안전선이 최대 가격과 같으면 한 줄로 합친다", () => {
+  /**
+   * 사용자 지시로 판단 섞인 문장("최대 가격까지 부담률이 안전 범위 안에
+   * 있어요")을 없앴다. 같은 8자리 숫자를 표 두 줄에 그대로 반복하는
+   * 대신(위 헤드라인이 이미 한 번 보여준 값이다), 값 칸에 관계를 직접
+   * 말한다.
+   */
+  it("안전선이 최대 가격과 같으면 값 칸에 그 관계를 직접 말한다 — 숫자를 반복하지 않는다", () => {
     renderSafeLine({ affordablePrice: 500_000_000, safePrice: 500_000_000 });
-    expect(screen.getByText(/최대 가격까지 부담률이 안전 범위/)).toBeInTheDocument();
-  });
-
-  it("최대 가격과 다르면 두 숫자를 각각 보여준다 — 합쳐 말하지 않는다", () => {
-    renderSafeLine({ affordablePrice: 600_000_000, safePrice: 480_000_000 });
     expect(
       screen.queryByText(/최대 가격까지 부담률이 안전 범위/),
     ).not.toBeInTheDocument();
+    expect(screen.getAllByText("5억원")).toHaveLength(1);
+    expect(screen.getByText("최대 가격과 같아요")).toBeInTheDocument();
+  });
+
+  it("최대 가격과 다르면 두 숫자를 각각 보여준다 — 관계 문구를 붙이지 않는다", () => {
+    renderSafeLine({ affordablePrice: 600_000_000, safePrice: 480_000_000 });
+    expect(screen.queryByText(/최대 가격과 같아요/)).not.toBeInTheDocument();
   });
 
   describe("리뷰 수정: 안전한 가격이 없는 원인을 소득으로 단정하지 않는다 (Important 2)", () => {
