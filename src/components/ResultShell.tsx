@@ -162,6 +162,13 @@ export interface ResultSummaryItemProps {
   controls?: string;
   /** 패널을 닫을 때 포커스를 되돌릴 자리(BudgetPanel이 이 ref를 쓴다) */
   buttonRef?: Ref<HTMLButtonElement>;
+  /**
+   * 값 옆에 붙는 작은 배지(지금은 "지역" 칸의 {@link RegulationBadge}
+   * 하나뿐이다). **여기서 무엇을 배지로 보여줄지 계산하지 않는다** —
+   * 이 컴포넌트 자체의 원칙("값을 여기서 계산하지 않는다")과 같은
+   * 이유로, 호출부가 다 만든 것을 그대로 받는다.
+   */
+  badge?: ReactNode;
 }
 
 /**
@@ -194,6 +201,7 @@ export function ResultSummaryItem({
   expanded = false,
   controls,
   buttonRef,
+  badge,
 }: ResultSummaryItemProps) {
   const valueClass = notice
     ? "result-topbar-item-value result-topbar-item-value--notice"
@@ -201,10 +209,21 @@ export function ResultSummaryItem({
       ? "result-topbar-item-value result-topbar-item-value--money"
       : "result-topbar-item-value";
 
+  /*
+   * 값과 배지를 한 줄에 나란히 둔다. `.result-topbar-item`은 세로
+   * 그리드(라벨 행 → 값 행)라, 배지를 형제로 그냥 넣으면 자기 행을
+   * 새로 얻어 값 **아래**로 떨어진다(사용자 요청은 값 **옆**이다) —
+   * 그래서 값 행 안에 배지를 함께 묶는 감싸개를 하나 더 둔다. `badge`가
+   * 없는 다른 칸(현금·소득·실구매 가능 가격)에서는 감싸개가 자식을
+   * 하나만 가지므로 시각적으로 전과 같다.
+   */
   const body = (
     <>
       <span className="result-topbar-item-label">{label}</span>
-      <span className={valueClass}>{value}</span>
+      <span className="result-topbar-item-value-row">
+        <span className={valueClass}>{value}</span>
+        {badge}
+      </span>
     </>
   );
 

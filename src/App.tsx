@@ -10,6 +10,7 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaBasis } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
+import { RegulationBadge } from "./components/RegulationBadge";
 import { ResultShell, ResultSummaryItem } from "./components/ResultShell";
 import { RegionSelect } from "./components/RegionSelect";
 import { SafetyBadge } from "./components/SafetyBadge";
@@ -1120,7 +1121,16 @@ export function App() {
                     `currentRegionName` 주석 참고).
                   */}
                   {currentRegionName !== null && (
-                    <ResultSummaryItem label="지역" value={currentRegionName} />
+                    <ResultSummaryItem
+                      label="지역"
+                      value={currentRegionName}
+                      badge={
+                        <RegulationBadge
+                          determined={state.touched.includes("regulatedArea")}
+                          isRegulatedArea={state.isRegulatedArea}
+                        />
+                      }
+                    />
                   )}
                 </>
               }

@@ -1681,6 +1681,13 @@ body {
   --result-signal-ink: #1f6ea9;
   --result-signal-wash: #e8f4fe;
   --result-warn: #e8663c;
+  /*
+   * `--result-warn`은 흰 글자를 얹는 **채움** 전용이다(2.65:1 — 사용자
+   * 지시로 채택, LoanCalculator.tsx 참고). 규제 배지처럼 옅은 바탕 위
+   * **글자**로 주황을 써야 하는 자리는 이 어두운 변형을 쓴다 —
+   * `#fdf0ea` 위 5.46:1.
+   */
+  --result-warn-ink: #b23713;
 
   position: fixed;
   inset: 0;
@@ -1758,11 +1765,64 @@ body {
   color: var(--result-gray);
 }
 
+.result-topbar-item-value-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .result-topbar-item-value {
   font-size: 1.125rem;
   font-weight: 600;
   letter-spacing: -0.028em;
   font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 규제 여부 배지("지역" 칸에서만 쓰인다 — RegulationBadge.tsx).
+ * 아이콘·글자를 함께 넣어 색으로만 뜻을 전하지 않는다. 세 상태
+ * (확정 규제/확정 비규제/가정)를 배경색이 아니라 **테두리 실선·점선**
+ * 으로도 가른다 — 확정과 가정을 색맹이라도 구분할 수 있게 한다.
+ */
+.regulation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 2px 7px 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--result-rule);
+  color: var(--result-ink);
+  background: var(--result-alt);
+  white-space: nowrap;
+}
+
+.regulation-badge--regulated {
+  border-color: var(--result-warn);
+  /*
+   * `--result-warn`(#e8663c) 자체는 이 배경 위 글자로 2.94:1이라
+   * 못 넘는다 — 어두운 변형을 쓴다(정의부 주석 참고).
+   */
+  color: var(--result-warn-ink);
+  background: #fdf0ea;
+}
+
+.regulation-badge--unregulated {
+  border-color: var(--result-signal-ink);
+  color: var(--result-signal-ink);
+  background: var(--result-signal-wash);
+}
+
+.regulation-badge--assumed {
+  border-style: dashed;
+  color: var(--result-gray);
+}
+
+.regulation-badge-qualifier {
+  color: inherit;
+  opacity: 0.85;
 }
 
 /*
