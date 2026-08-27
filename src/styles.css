@@ -703,7 +703,22 @@ h2 {
 }
 
 .complex-list {
-  margin-top: 2rem;
+  margin-top: 0;
+}
+
+/*
+ * 사이드바 머리(prototype-results.html의 `.sideHead h2`). 카드 안 활자를
+ * 줄인 것과 같은 이유로 제목도 15px이다 — 298px 열에서 그보다 크면
+ * 두 줄로 접힌다. 좌우 8px은 카드의 24px 반경 안쪽 글자와 세로선을
+ * 맞추기 위한 값이다.
+ */
+.complex-list > h2 {
+  margin: 4px 0 12px;
+  padding: 0 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--result-ink);
 }
 
 /*
@@ -711,8 +726,11 @@ h2 {
  * 자체가 "무리 없이" / "부담이 커요"를 이미 말하고, 색은 그것을 반복한다.
  */
 .complex-group {
-  margin: 1rem 0 0.5rem;
-  font-size: 0.9375rem;
+  margin: 14px 0 6px;
+  padding: 0 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .complex-group--safe {
@@ -739,20 +757,58 @@ h2 {
 }
 
 /*
- * 320px 사이드바 폭에서 각 행에 카드 표면을 준다(bg-layer-floating,
- * 2026-08-26 팔레트 교체 후 --sheet-2 #ffffff) — 예전 `border-top`
- * 구분선 대신 카드 하나하나가 자기 테두리를 가진다.
+ * 카드(prototype-results.html의 `.row`) — DESIGN.md의 24px 반경 +
+ * 헤어라인 + 얕은 그림자.
+ *
+ * ⚠ **테두리와 그림자를 함께 가진다.** 사이드바가 흰색이 되면서
+ * (사용자 지시 ③) 흰 카드가 바탕에 묻히는데, DESIGN.md는 "그림자만으로는
+ * 카드 가장자리가 서지 않는다"고 못박는다. 프로토타입 머리주석이 같은
+ * 이유를 적어 두었고, `scripts/result-screen-layout.test.ts`가 둘이 함께
+ * 있는지 검사한다.
+ *
+ * ⚠ **높이 상한도 `overflow`도 걸지 않는다.** 이 카드는 목업보다 정보가
+ * 많다 — 준공년·월 상환액·부담률·등급 글자·**등급이 멈춘 이유**
+ * (`.complex-grade-note`)·**토지임대부 표시**(`.land-lease-note`)가 붙고,
+ * 뒤 둘은 `MUST_SURVIVE_PRINT_CLASSES`다. 상자에 가두면 화면에서 잘리고,
+ * 그러면 "확인 필요"만 읽고 무엇이 부족한지 모른 채 지나간다.
  */
 .complex-row {
-  background: var(--seed-color-bg-layer-floating);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 24px;
+  box-shadow:
+    0 1px 2px rgb(18 41 77 / 5%),
+    0 1px 3px rgb(18 41 77 / 6%);
+  padding: 13px 16px 14px;
+  margin-bottom: 8px;
+  transition:
+    border-color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    box-shadow var(--seed-duration-d3) var(--seed-timing-function-easing);
 }
 
 .complex-rows > .complex-row:last-child {
   margin-bottom: 0;
+}
+
+.complex-row:hover {
+  background: #fbfdff;
+  border-color: var(--result-signal);
+}
+
+/*
+ * 지도에서 고른 단지의 행. 채움색이 아니라 **테두리 + 옅은 바탕**으로
+ * 표시한다 — 그 위에 앉는 가장 옅은 글자(`--result-gray`)가 이 바탕에서
+ * 4.98:1이다(seed-semantic-tokens.test.ts가 계산으로 못박는다).
+ *
+ * `:hover` 짝을 함께 적는다. 위 `.complex-row:hover`가 (0,2,0)으로 이
+ * 규칙(0,1,0)보다 특정도가 높아, 고른 카드에 마우스를 얹으면 표시가
+ * 사라져 버린다.
+ */
+.complex-row--focused,
+.complex-row--focused:hover {
+  border-color: var(--result-signal);
+  box-shadow: 0 0 0 1px var(--result-signal);
+  background: var(--result-signal-wash);
 }
 
 /*
@@ -764,33 +820,70 @@ h2 {
 .complex-row .complex-name,
 .complex-row .complex-range,
 .complex-row .complex-burden {
+  /*
+   * `margin`은 여기서 주지 않는다 — 이 선택자는 (0,2,0)이라 아래 각
+   * 줄의 자기 규칙(0,1,0)을 이겨, 여기서 여백을 정하면 프로토타입의
+   * 줄 간격(6px·3px·9px)이 조용히 0이 된다.
+   */
   display: block;
-  margin: 0.15rem 0;
 }
 
 /*
- * 320px 사이드바 폭에서 기본 본문 크기(1rem)는 두 줄에 걸치기
- * 쉽다 — 이름·가격 줄을 한 단계 줄인다. 부가 정보(준공년·거래건수)는
- * `white-space`를 따로 건드리지 않는다 — span은 원래 `white-space:
- * normal`이라 좁은 폭에서 이미 자연스럽게 줄바꿈된다.
+ * 카드 안 활자(사용자 지시 ①: "카드 안 글자를 줄일 것"). 298px 열에서
+ * 기본 본문 크기(1rem)는 두 줄에 걸치기 쉽다.
+ *
+ * 이름 줄은 프로토타입의 `.nm`과 같은 구조다 — 단지 이름(`<strong>`)만
+ * 진하고, 그 뒤 면적·법정동은 한 단계 물러난 보조색이다. 부가 정보의
+ * `white-space`는 따로 건드리지 않는다 — span은 원래 `normal`이라 좁은
+ * 폭에서 이미 자연스럽게 줄바꿈된다.
  */
 .complex-name {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--result-gray);
 }
 
-.complex-range {
-  font-size: 0.9375rem;
+.complex-name strong {
   font-weight: 600;
+  color: var(--result-ink);
 }
 
-.complex-trades,
+/* 카드에서 가장 큰 숫자 — 프로토타입의 `.pr` */
+.complex-range {
+  margin-top: 6px;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--result-ink);
+}
+
+/*
+ * 거래 건수는 가격 **아랫줄**로 내린다(프로토타입의 `.mt`). 마크업에서는
+ * 가격 범위 안에 들어 있지만(`ComplexList.tsx` — 같은 문장이라 그 자리가
+ * 맞다), 화면에서는 17px 가격 옆에 붙어 있으면 줄이 길어져 298px 열에서
+ * 접힌다.
+ */
+.complex-trades {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  color: var(--result-gray);
+}
+
 .complex-built {
   font-weight: 400;
-  color: var(--seed-color-fg-neutral-muted);
+  color: var(--result-gray);
 }
 
 .complex-burden {
-  font-size: 0.85rem;
+  margin-top: 9px;
+  font-size: 0.71875rem;
+  line-height: 1.65;
+  color: var(--result-gray);
 }
 
 .complex-burden[data-level="safe"] .complex-level { color: var(--safe); }
@@ -804,7 +897,7 @@ h2 {
 .complex-burden[data-level="unverified"] .complex-level { color: var(--warn); }
 
 .complex-level {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /*
@@ -812,19 +905,32 @@ h2 {
  * 문장이 지고 색은 거들지 않는다(중립색).
  */
 .complex-grade-note {
-  color: var(--seed-color-fg-neutral);
+  color: var(--result-gray);
 }
 
+/*
+ * "N개 더 보기". 색은 `--result-signal`이 아니라 글자용 어두운 변형이다
+ * (흰 면 5.44:1) — 채움 위가 아니라 흰 면 위의 **글자**다.
+ */
 .complex-more {
-  margin-top: 1rem;
+  margin: 12px 8px 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--result-signal-ink);
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .complex-empty,
 .complex-list-note,
 .complex-freshness,
 .complex-map-caveat {
-  color: var(--seed-color-fg-neutral-muted);
-  font-size: 0.9rem;
+  color: var(--result-gray);
+  font-size: 0.75rem;
+  line-height: 1.65;
 }
 
 .complex-map-caveat {
@@ -837,13 +943,13 @@ h2 {
  * 실패하지 않았다.
  */
 .complex-map-empty {
-  color: var(--seed-color-fg-neutral-muted);
+  color: var(--result-gray);
   font-size: 0.9rem;
   margin: 0;
 }
 
 .complex-list-note {
-  margin: 0 0 0.5rem;
+  margin: 0 8px 8px;
 }
 
 /*
@@ -1126,7 +1232,7 @@ h2 {
   height: 100%;
   min-height: 0;
   overflow: hidden;
-  border-left: 1px solid var(--border);
+  border-left: 1px solid var(--result-rule);
 }
 
 /*
@@ -1148,28 +1254,36 @@ h2 {
    */
   pointer-events: none;
   margin: 0;
-  padding: 0.5rem 0.75rem;
+  padding: 8px 12px;
   list-style: none;
   display: grid;
   gap: 0.25rem;
-  font-size: 0.75rem;
-  background: var(--seed-color-bg-layer-floating);
-  border: 1px solid var(--border);
-  border-radius: 0.25rem;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+  font-size: 0.6875rem;
+  line-height: 1.95;
+  color: var(--result-gray);
+  /*
+   * 프로토타입은 `rgba(255,255,255,.95)`지만 여기서는 불투명한 흰색을
+   * 쓴다. 반투명 값은 `resolveColor`가 hex로 풀지 못해 대비 전수 검사에서
+   * **조용히 빠지고**(seed-semantic-tokens.test.ts), 이 상자는 위에 글자가
+   * 앉는 자리다 — 검사에서 빠지는 면을 만들지 않는다.
+   */
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 12px;
+  box-shadow: 0 1px 4px rgb(18 41 77 / 15%);
 }
 
 .complex-map-legend-item {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 7px;
 }
 
 .complex-map-legend-swatch {
-  width: 0.875rem;
-  height: 0.875rem;
-  border-radius: 0.1875rem;
-  border: 1px solid rgba(0, 0, 0, 0.12);
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 2px;
 }
 
 /*
@@ -1187,12 +1301,50 @@ h2 {
  * 있어야 한다(그 트리는 통째로 `inert`다, App.tsx 참고).
  */
 .result-shell {
+  /*
+   * ── 결과 화면 전용 색 토큰(prototype-results.html의 `:root`) ──────
+   *
+   * **이름을 `--result-*`로 새로 짓는다.** 프로토타입은 이 값들을
+   * `--paper`·`--ink`·`--gray`·`--rule`이라 부르지만, 그 이름들은
+   * `src/seed-brand.css`에서 **어두운 면(화면 1)의 값**으로 이미 쓰이고
+   * 있다. 같은 이름을 여기서 다른 값으로 다시 선언하면 한 이름이 화면에
+   * 따라 다른 색을 뜻하게 되고, `scripts/colorSurfaces.ts`의 토큰
+   * 해석기는 **먼저 정의된 쪽**만 보므로 대비 검사가 화면과 다른 색을
+   * 재게 된다(조용히 통과하는 검사가 이 저장소가 가장 여러 번 겪은
+   * 실패다). `scripts/result-screen-layout.test.ts`가 그 겹침을 잠근다.
+   *
+   * 대비 실측은 `scripts/seed-semantic-tokens.test.ts`의 "화면 2 재스킨
+   * 대비율 실측"이 전부 다시 계산해 못박는다. 요약하면:
+   *   흰 면 위 글자 — ink 14.48 / gray 5.57 / signal-ink 5.44
+   *   채움 위 굵은 흰 글자 — 파랑 2.65, 주황 3.28 (**둘 다 기준 미달,
+   *   사용자 지시**. 굵기로는 메워지지 않는다 — 3:1 완화는 18.66px부터인데
+   *   이 자리들은 11~13px이다. 통과시키려면 채움을 어둡게 하는 것이고
+   *   그만큼 지정하신 색에서 멀어진다.)
+   *
+   * 그래서 **색이 글자로 나가야 하는 자리는 어두운 변형을 쓴다**:
+   * 금액(`--result-signal-ink`)이 그것이다. 화면에서 가장 중요한 숫자를
+   * 2.65:1로 둘 수는 없다.
+   *
+   * **두 색이 뜻을 나눠 갖는다**: 파랑 = 대출 없이 살 수 있다,
+   * 주황 = 대출이 필요하다. 색만으로 말하지 않는다 — 같은 뜻이 마커
+   * 라벨과 범례에 글자로도 적혀 있다(`ComplexMap.tsx`).
+   */
+  --result-paper: #ffffff;
+  --result-ink: #12294d;
+  --result-gray: #4f6a8c;
+  --result-rule: #dbe7f3;
+  --result-signal: #3ba6f1;
+  --result-signal-ink: #1f6ea9;
+  --result-signal-wash: #e8f4fe;
+  --result-warn: #e8663c;
+
   position: fixed;
   inset: 0;
   z-index: 1;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
-  background: var(--seed-color-bg-layer-default);
+  background: var(--result-paper);
+  color: var(--result-ink);
 }
 
 .result-topbar {
@@ -1207,10 +1359,18 @@ h2 {
    * 줄어들 뿐 잘리지 않는다).
    */
   flex-wrap: wrap;
-  gap: 0.5rem 1.5rem;
-  padding: 0.75rem 1.25rem;
-  background: var(--seed-color-bg-layer-floating);
-  border-bottom: 1px solid var(--border);
+  gap: 0.5rem 30px;
+  /*
+   * 프로토타입은 `height: 68px`에 `padding: 0 22px`다. 여기서는
+   * `min-height`로 둔다 — 위 `flex-wrap: wrap`이 좁은 화면에서 실제로
+   * 걸리는데, 고정 높이면 그때 접힌 줄이 상단바 밖으로 잘린다(요약 칸이
+   * 0px까지 눌리던 실측 결함을 wrap으로 고쳤던 그 자리다). 세로 여백도
+   * 0이 아니라 조금 둔다: 줄이 접혔을 때 글자가 테두리에 붙는다.
+   */
+  min-height: 68px;
+  padding: 0.5rem 22px;
+  background: var(--result-paper);
+  border-bottom: 1px solid var(--result-rule);
   /*
    * 요약 항목이 좁은 화면에서 넘칠 수 있다. 상단바가 세로로 자라
    * 무대를 밀어내지 않게 가로로만 흐르게 한다 — **이 `overflow`는
@@ -1222,8 +1382,15 @@ h2 {
 .result-topbar-brand {
   margin: 0;
   flex-shrink: 0;
+  /*
+   * 글자체는 그대로 둔다(전역 `h1, h2` 명조 규칙과 이 `--font-serif`는
+   * 이번 재스킨의 범위 밖이다 — 옮기는 것은 색·크기·반경·그림자다).
+   * 크기·굵기·자간만 프로토타입의 `.brand`에서 가져온다.
+   */
   font-family: var(--font-serif);
-  font-size: 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
   white-space: nowrap;
 }
 
@@ -1231,29 +1398,37 @@ h2 {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 0.5rem 1.25rem;
+  gap: 0.5rem 30px;
   min-width: 0;
 }
 
 .result-topbar-item {
   display: grid;
-  gap: 0.125rem;
+  gap: 3px;
   white-space: nowrap;
 }
 
 .result-topbar-item-label {
   font-size: 0.6875rem;
   letter-spacing: 0.06em;
-  color: var(--seed-color-fg-neutral-subtle);
+  color: var(--result-gray);
 }
 
 .result-topbar-item-value {
-  font-weight: 700;
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.028em;
   font-variant-numeric: tabular-nums;
 }
 
+/*
+ * 실구매 가능 가격 — **화면에서 가장 중요한 숫자다.** 그래서 채움색
+ * (`--result-signal`, 흰 글자 2.65:1)이 아니라 글자용 어두운 변형을 쓴다
+ * (흰 면 대비 5.44:1). prototype-results.html의 `.stat .v.money`와 같은
+ * 값이고, 그 파일의 `:root` 주석이 이 갈림의 이유를 적어 두었다.
+ */
 .result-topbar-item-value--money {
-  color: var(--seed-color-fg-brand);
+  color: var(--result-signal-ink);
 }
 
 /*
@@ -1263,9 +1438,15 @@ h2 {
  * 좁은 화면에서 상단바가 통째로 가로 스크롤 상자가 된다.
  */
 .result-topbar-item-value--notice {
+  /*
+   * 금액이 아니라 문장이다 — 강조색(`--result-signal-ink`)을 쓰지 않고,
+   * 18px짜리 문장이 상단바를 밀지 않게 한 단계 줄인다.
+   */
+  font-size: 0.9375rem;
   font-weight: 600;
+  letter-spacing: -0.012em;
   white-space: normal;
-  color: var(--seed-color-fg-neutral);
+  color: var(--result-ink);
 }
 
 .result-topbar-actions {
@@ -1276,16 +1457,41 @@ h2 {
   flex-shrink: 0;
 }
 
+/*
+ * 상단바 오른쪽 버튼(prototype-results.html의 `.ghost`).
+ *
+ * ⚠ **파랑 채움 위 굵은 흰 글자는 2.65:1로 본문 기준(4.5:1)에 못
+ * 미친다.** 사용자가 명시적으로 지시한 조합이고(커밋 `1c47333`),
+ * 굵기로는 메워지지 않는다 — 3:1 완화는 18.66px부터인데 이 글자는
+ * 13px이다. `scripts/seed-semantic-tokens.test.ts`의 예외 목록이 이
+ * 선택자를 이름으로 적고 실측값을 다시 잰다: 채움이 움직이면 거기서
+ * 먼저 깨진다. 통과시키는 방법은 채움을 `--result-signal-ink`로
+ * 내리는 것이고(흰 글자 5.44:1), 그만큼 지정하신 색에서 멀어진다.
+ */
 .back-to-entry-button {
-  padding: 0.5rem 0.875rem;
+  padding: 8px 14px;
   font: inherit;
-  font-weight: 600;
-  color: var(--seed-color-fg-neutral);
-  background: var(--seed-color-bg-layer-default);
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--result-signal);
+  border: 0;
+  border-radius: 18px;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.back-to-entry-button:hover {
+  background: #59b4f4;
+}
+
+/*
+ * 채움이 옅어 기본 포커스 링이 그 위에서 잘 보이지 않는다 — 어두운
+ * 링을 바깥에 따로 그린다.
+ */
+.back-to-entry-button:focus-visible {
+  outline: 2px solid var(--result-ink);
+  outline-offset: 2px;
 }
 
 /*
@@ -1298,7 +1504,13 @@ h2 {
  */
 .region-results-grid {
   display: grid;
-  grid-template-columns: 372px minmax(0, 1fr);
+  /*
+   * 사이드바 열 **298px**(사용자 지시 ②: "사이드바 폭을 20%쯤 줄일 것",
+   * 372 → 298). 예산 상세 패널(`.budget-panel`)이 이 열을 정확히 덮는
+   * 오버레이라 **같은 값이어야 한다** — `scripts/result-screen-layout.test.ts`
+   * 가 두 값을 함께 잠근다.
+   */
+  grid-template-columns: 298px minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   /*
@@ -1324,8 +1536,14 @@ h2 {
 .region-results-sidebar {
   min-height: 0;
   overflow-y: auto;
-  padding: 1.25rem 1rem 3rem;
-  background: var(--seed-color-bg-layer-default);
+  padding: 14px 12px 22px;
+  /*
+   * **흰색**(사용자 지시 ③). 그래서 그 위의 흰 카드는 그림자만으로
+   * 가장자리가 서지 않는다 — `.complex-row`가 헤어라인 테두리를 함께
+   * 가지는 이유다(프로토타입 머리주석).
+   */
+  background: var(--result-paper);
+  border-right: 1px solid var(--result-rule);
 }
 
 .region-results-map {
@@ -1358,9 +1576,14 @@ h2 {
     order: -1; /* 지도를 목록보다 먼저 보여준다 */
   }
 
+  /* 1열이면 사이드바 오른쪽에 지도가 없다 — 세로 경계선만 남긴다. */
+  .region-results-sidebar {
+    border-right: none;
+  }
+
   .complex-map-frame {
     border-left: none;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--result-rule);
   }
 }
 
@@ -1412,14 +1635,23 @@ h2 {
      * 브라우저에서 `getBoundingClientRect()`로 잡은 실제 값이다.
      */
     box-sizing: border-box;
-    width: 372px;
+    /*
+     * 사이드바 열과 **같은 값**이어야 한다(`.region-results-grid`의
+     * `grid-template-columns` 첫 항, 사용자 지시 ②로 298px). 어긋나면
+     * 지도 왼쪽을 덮거나 열이 삐져나온다 — 예전에 실측으로 잡은 결함이다.
+     */
+    width: 298px;
     max-width: 100%;
     max-height: 100%;
     overflow-y: auto;
-    padding: 1.25rem 1rem 3rem;
-    background: var(--seed-color-bg-layer-floating);
-    border-right: 1px solid var(--border);
-    box-shadow: 0 8px 24px rgb(0 0 0 / 12%);
+    padding: 14px 12px 22px;
+    /*
+     * 구조·레이아웃은 그대로 두고 **색만** 결과 화면의 새 팔레트로
+     * 맞춘다 — 이 패널은 프로토타입에 없는 요소라 새로 디자인하지 않는다.
+     */
+    background: var(--result-paper);
+    border-right: 1px solid var(--result-rule);
+    box-shadow: 0 8px 24px rgb(18 41 77 / 12%);
   }
 
   /* 접힌 상태. **언마운트가 아니다** — 위 블록 주석 참고. */
@@ -1431,6 +1663,7 @@ h2 {
     margin: 0 0 0.75rem;
     font-family: var(--font-serif);
     font-size: 1.0625rem;
+    color: var(--result-ink);
   }
 
   .budget-detail-close {
@@ -1440,10 +1673,10 @@ h2 {
     padding: 0.25rem 0.625rem;
     font: inherit;
     font-size: 0.8125rem;
-    color: var(--seed-color-fg-neutral);
-    background: var(--seed-color-bg-layer-default);
-    border: 1px solid var(--border);
-    border-radius: 0.375rem;
+    color: var(--result-ink);
+    background: var(--result-paper);
+    border: 1px solid var(--result-rule);
+    border-radius: 18px;
     cursor: pointer;
   }
 
@@ -1477,7 +1710,7 @@ h2 {
 .result-topbar-item--button .fold-more-hint {
   font-size: 0.6875rem;
   letter-spacing: 0.06em;
-  color: var(--seed-color-fg-brand);
+  color: var(--result-signal-ink);
 }
 
 .result-topbar-item--button:hover .result-topbar-item-value {
@@ -1528,12 +1761,16 @@ h2 {
  * 대비율은 scripts/seed-semantic-tokens.test.ts가 검증한다.
  */
 .complex-map-marker {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.375rem;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  padding: 3px 9px;
+  border-radius: 18px;
+  border: 1px solid transparent;
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 4px rgb(18 41 77 / 22%);
+  cursor: pointer;
 }
 
 /*
@@ -1544,35 +1781,78 @@ h2 {
  * 같은 줄이 아니라 아랫줄에 둔다 — 마커 폭이 늘면 서로 겹친다. 부담
  * 수준 글자도 (첫 줄이 아니라) 여기 붙는 이유가 그것이다.
  */
+/*
+ * 마커 라벨 둘째 줄. **`opacity`를 걸지 않는다** — 이미 기준에 못 미치는
+ * 채움(2.65:1 / 3.28:1) 위에서 흰 글자를 더 흐리게 하면 그만큼 더
+ * 떨어지고, 불투명도는 대비 전수 검사가 보지 못하는 값이라(그 검사는
+ * 규칙의 `color`만 읽는다) 화면만 조용히 나빠진다. 위계는 크기·굵기가
+ * 진다.
+ */
 .complex-map-marker-trades {
   display: block;
-  font-weight: 400;
-  font-size: 0.6875rem;
-  opacity: 0.85;
-}
-
-/* 대출 없이 살 수 있는 단지 — design.md §1의 "안전" 태그 짝 */
-.complex-map-marker--no-loan,
-.complex-map-legend-swatch--no-loan {
-  background: var(--seed-color-bg-positive-weak);
-  color: var(--seed-color-fg-positive-contrast);
-}
-
-/* 대출이 필요한 단지 — design.md §1의 "주의" 태그 짝 */
-.complex-map-marker--loan,
-.complex-map-legend-swatch--loan {
-  background: var(--seed-color-bg-warning-weak);
-  color: var(--seed-color-fg-warning-contrast);
+  font-weight: 600;
+  font-size: 0.625rem;
+  letter-spacing: 0;
 }
 
 /*
- * 목록에서 고른(또는 방금 누른) 단지의 마커. 색이 아니라 **테두리와
- * 층위**로 구분한다 — 색은 이미 부담 수준이라는 다른 뜻을 지고 있어서,
- * 선택까지 색으로 말하면 두 뜻이 한 채널에서 부딪힌다.
+ * ⚠ **두 티어 다 채움 위 굵은 흰 글자다 — 각각 2.65:1 / 3.28:1로 본문
+ * 기준(4.5:1)에 못 미친다.** 사용자가 명시적으로 지시한 조합이고(커밋
+ * `1c47333`·`ce41eda`), `scripts/seed-semantic-tokens.test.ts`의 예외
+ * 목록이 이 두 선택자를 이름으로 적고 실측값을 다시 잰다.
+ *
+ * **색만으로 말하지 않는다.** 같은 뜻("대출 없이"/"대출 필요")이 마커
+ * 라벨 둘째 줄과 범례에 글자로 적혀 있다(`ComplexMap.tsx`의
+ * `BURDEN_TIER_MARKER_LABEL`·`BURDEN_TIER_LEGEND`) — 색이 하나도
+ * 전달되지 않아도 뜻은 남는다.
+ *
+ * `color`를 채움과 **같은 규칙에** 선언한다. 기본 규칙 쪽으로 올리면 그
+ * 검사가 "흰 글자가 흰 면 위에 앉는다"로 읽어(배경이 같은 규칙에 없으면
+ * 밝은 면으로 잰다) 엉뚱한 자리에서 깨진다.
+ */
+
+/* 대출 없이 살 수 있는 단지 — 파랑 */
+.complex-map-marker--no-loan {
+  background: var(--result-signal);
+  border-color: var(--result-signal);
+  color: #ffffff;
+}
+
+/* 대출이 필요한 단지 — 주황 */
+.complex-map-marker--loan {
+  background: var(--result-warn);
+  border-color: var(--result-warn);
+  color: #ffffff;
+}
+
+/*
+ * 범례 견본은 마커와 **같은 토큰**을 쓴다 — 두 자리가 각자 색을 들면
+ * 한쪽만 바뀌는 날 범례가 지도에 없는 색을 설명한다. 견본에는 글자가
+ * 앉지 않으므로 `color`를 주지 않는다.
+ */
+.complex-map-legend-swatch--no-loan {
+  background: var(--result-signal);
+}
+
+.complex-map-legend-swatch--loan {
+  background: var(--result-warn);
+}
+
+/*
+ * 목록에서 고른(또는 방금 누른) 단지의 마커.
+ *
+ * ⚠ **채움색을 바꾸지 않는다.** 채움이 곧 분류(파랑=대출 없이,
+ * 주황=대출 필요)라, 고른 순간 색이 바뀌면 그 마커가 어느 분류였는지
+ * 사라진다 — 사용자 요청으로 프로토타입에서 바꿔 둔 규칙이고,
+ * `scripts/result-screen-layout.test.ts`가 이 규칙에 `background`·`color`가
+ * 없는지 검사한다. 대신 바깥에 흰 테 + 진한 테를 두른다(`outline`이
+ * 아니라 `box-shadow`인 이유: 18px 알약의 곡률을 그대로 따라간다).
  */
 .complex-map-marker--focused {
-  outline: 2px solid var(--seed-color-stroke-brand-solid);
-  outline-offset: 1px;
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px var(--result-ink),
+    0 1px 4px rgb(18 41 77 / 22%);
   z-index: 1;
 }
 
@@ -2379,7 +2659,7 @@ body.body-scroll-locked {
    * `printCss.test.ts`가 그 해제를 구조로 잠그고 있다.
    *
    * `.region-results-grid`를 `display: block`으로 바꾸는 것은 별개
-   * 문제다 — 두 컬럼 그리드(372px 사이드바 + 지도 컬럼)는 위에서
+   * 문제다 — 두 컬럼 그리드(298px 사이드바 + 지도 컬럼)는 위에서
    * `.complex-map`을 지워도 그리드 자체는 남아, 인쇄 여백을 "없음"으로
    * 두면(Letter/A4 모두) 인쇄 가능 영역이 넓어져 화면 쪽 1열 전환
    * (`@media (max-width: 900px)`)이 인쇄 중엔 걸리지 않는다 — 빈 오른쪽
