@@ -2496,6 +2496,29 @@ body.body-scroll-locked {
   overflow: hidden;
   background: var(--ink);
   color: var(--paper);
+
+  /*
+   * 화면 1 전용 값 — **전역 팔레트를 건드리지 않는다.**
+   *
+   * `prototype.html`의 `:root` 값 대부분은 이 저장소의 토큰과 이미 같은
+   * 값이거나(`--haze` #8d9aa7, `--paper` #eef1f4는 글자 하나까지 같다)
+   * 대비를 위해 이미 한 칸 조정된 짝이 있다(프로토타입의 황동 #d9a84e ↔
+   * `--brass-lift` #e0aa54). 같은 값을 이름만 바꿔 한 벌 더 두면 색의
+   * 출처가 둘이 되어 한쪽만 움직이는 날이 온다 — 그래서 새 이름은
+   * **여기 없는 값에만** 준다.
+   *
+   * `--entry-rule`이 그 하나다. 프로토타입은 입력 밑줄을
+   * `rgba(238,241,244,.22)`로 뒀는데 그 값은 이 화면의 면(영상 위 스크림
+   * 바닥 #2a2f35) 대비 **1.94:1**이라 WCAG 1.4.11(비텍스트 3:1)을 넘지
+   * 못한다. 상자를 없앤 입력에서 밑줄은 그 컨트롤을 식별하는 유일한
+   * 경계라 그 기준이 그대로 걸린다 — 같은 방식(면 위에 `--paper`를
+   * 얹는다)으로 불투명도만 .40으로 올려 다시 합성한 값이 이 hex(3.24:1)
+   * 이다. `rgba()`로 적지 않고 hex로 박는 이유는
+   * `scripts/colorSurfaces.ts`의 `resolveColor`가 `rgba()`를 풀지 못해
+   * 검사에서 조용히 빠지기 때문이다. 근거 계산은
+   * `scripts/seed-semantic-tokens.test.ts`가 못박는다.
+   */
+  --entry-rule: #787d81;
 }
 
 .entry-screen--hidden {
@@ -2583,53 +2606,126 @@ body.body-scroll-locked {
 }
 
 /*
- * 입력 패널. 여기서 세로로 넘치는 문제를 프로토타입에서 실제로 겪었다
- * (design.md §3 경고) — `overflow-y: auto`로 칸 자체가 스크롤하게 하고,
- * `justify-content: safe center`로 중앙 정렬을 시도하되 내용이 칸보다
- * 커지면 안전하게 위쪽 정렬로 물러나 상단이 잘리지 않게 한다(`center`
- * 단독은 넘칠 때 위쪽이 화면 밖으로 잘린다 — MDN "safe" 키워드 문서
- * 참고).
+ * 입력 패널 — `prototype.html`의 `.col`이다.
+ *
+ * **바닥 정렬은 `justify-content: flex-end`가 아니라 자식(표제)의
+ * `margin-top: auto`로 한다.** 프로토타입의 같은 자리 주석이 그 이유를
+ * 적어 뒀다: flex-end로 하면 내용이 칸보다 길어졌을 때 **위쪽이 잘리고
+ * 스크롤로도 닿지 못한다**(지난 프로토타입이 겪은 버그이고, 이번에도
+ * 처음엔 제목 윗줄이 사라졌다). `margin-top: auto`는 남는 자리가 있을
+ * 때만 밀어내므로 넘칠 때는 저절로 0이 되어 위가 잘리지 않는다.
+ *
+ * 예전에는 `justify-content: safe center`였다 — `safe`가 잘림은 막아
+ * 줬지만 프로토타입이 정한 비대칭(아래 왼쪽에 붙인다)이 아니었다.
+ *
+ * `max-width`는 스크림 계산을 **안전한 방향으로만** 움직인다. 이 열의
+ * 폭은 `.entry-screen-scrim`의 그리드(`minmax(420px, 44%)`)가 정하고
+ * 그 44%에 맞춰 그라디언트 정지점이 잡혀 있다(아래 `--scrim-panel-alpha`
+ * 주석) — 여기서 폭을 **줄이기만** 하므로 글자는 늘 더 어두운 쪽으로
+ * 물러난다. 늘리면 그 계산이 깨진다.
  */
 .entry-screen-panel {
   height: 100%;
+  max-width: 40rem;
+  min-height: 0;
   overflow-y: auto;
+  /* 프로토타입과 같이 스크롤 막대를 숨긴다 — 영상 위 화면이다 */
+  scrollbar-width: none;
   display: flex;
   flex-direction: column;
-  justify-content: safe center;
-  gap: 0.875rem;
-  padding: 3rem 2.5rem;
+  padding: clamp(1.75rem, 5vh, 3.5rem) clamp(1.75rem, 5vw, 4.5rem);
   box-sizing: border-box;
+}
+
+.entry-screen-panel::-webkit-scrollbar {
+  display: none;
 }
 
 @media (max-width: 900px) {
   .entry-screen-panel {
+    max-width: none;
     padding: 2.5rem 1.5rem;
   }
 }
 
 /*
- * h1은 전역 규칙(`h1, h2 { font-family: var(--font-serif) }`)을 그대로
- * 물려받는다 — 여기서는 이 화면 전용 크기·색·여백만 준다.
+ * 워드마크 — 서비스 이름. **이것이 이 문서의 `<h1>`이다.**
+ *
+ * 프로토타입에서는 장식용 `<div>`였지만, 이 앱에서 문서의 제목은 서비스
+ * 이름이고 그 계약을 검사하는 테스트가 이미 있다(App.test.tsx "서비스
+ * 제목을 표시한다"). 그래서 태그는 `<h1>`으로 두고 **모양만** 프로토타입의
+ * 워드마크로 만든다 — 크게 보이는 문장(아래 `.entry-headline`)은 문서
+ * 제목이 아니라 이 폼이 묻는 질문이라 `<h2>`다.
+ *
+ * `flex: none` — 패널이 flex 열이라, 이것이 없으면 내용이 넘칠 때 이
+ * 줄이 먼저 눌린다.
+ *
+ * 프로토타입은 `--paper`에 `opacity: .85`를 걸었다. 여기서는 같은 효과를
+ * **토큰으로** 낸다(`--paper-dim`, 9.20:1) — 불투명도는
+ * `scripts/seed-semantic-tokens.test.ts`의 전수 검사가 보지 못하는
+ * 값이라, 투명도로 물러나게 하면 검사와 화면이 서로 다른 것을 보게 된다.
  */
-.entry-screen h1 {
-  margin: 0;
-  font-size: clamp(1.75rem, 3.4vw, 2.5rem);
-  line-height: 1.25;
+.entry-screen .entry-wordmark {
+  flex: none;
+  margin: 0 0 clamp(1rem, 4vh, 2.5rem);
+  /*
+   * 전역 `h1, h2 { font-family: var(--font-serif) }`(나눔명조)를 이
+   * 화면에서만 되돌린다. 화면 1의 활자는 **Pretendard 한 벌**이고,
+   * 위계는 크기가 아니라 굵기와 자간이 만든다(prototype.html 머리주석).
+   * 전역 규칙 자체는 건드리지 않는다 — 화면 2가 아직 명조를 쓴다.
+   */
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  color: var(--paper-dim);
+}
+
+/* 워드마크 아래 짧은 황동 선. 장식이라 텍스트 대비 기준 밖이다. */
+.entry-screen .entry-wordmark::after {
+  content: "";
+  display: block;
+  width: 34px;
+  height: 1px;
+  margin-top: 9px;
+  background: var(--brass);
+}
+
+/*
+ * 큰 질문 한 줄. 이 화면에서 가장 큰 활자다.
+ *
+ * **바닥 정렬을 만드는 자리가 여기다** — 워드마크 다음의 첫 형제에
+ * `margin-top: auto`를 걸면 그 아래 전부가 함께 바닥으로 내려간다.
+ */
+.entry-screen .entry-headline {
+  margin: 0 0 0.75rem;
+  margin-top: auto;
+  font-family: inherit;
+  font-size: clamp(1.75rem, 3.4vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.035em;
   color: var(--paper);
 }
 
 .entry-screen .subtitle {
-  margin: 0 0 0.5rem;
-  color: var(--paper-dim);
+  margin: 0 0 clamp(1.125rem, 3.4vh, 2.125rem);
+  max-width: 44ch;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--haze);
+}
+
+/* 프로토타입의 `.field` 리듬. 폼 자체의 여백은 패널이 정한다. */
+.entry-screen .profile-form {
+  gap: clamp(1rem, 2.6vh, 1.625rem);
+  margin: 0;
 }
 
 /*
- * design.md §3: "입력은 상자가 아니라 밑줄이다." SEED `TextField`를
- * 재구현하지 않는다(design.md Global Constraints) — 그 컴포넌트가 실제로
- * 그리는 네이티브 `<input>`(`.money-input input`)과 이 화면의 커스텀
- * `<select>`만 밑줄 모양으로 다시 칠한다.
- */
-/*
+ * 라벨 — 작고 자간을 넓게(prototype.html의 `.label` 한 규칙).
+ *
  * **SEED 클래스 이름을 직접 적는다**(`.seed-field-label__root`).
  * 요소 이름(`label`)에만 기대면 두 가지로 진다:
  *
@@ -2649,8 +2745,13 @@ body.body-scroll-locked {
 .entry-screen .field label,
 .entry-screen .seed-field-label__root,
 .entry-screen .area-band-select legend {
-  color: var(--haze-lift);
+  color: var(--haze);
   font-family: inherit;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.14em;
+  line-height: 1.5;
+  margin: 0 0 0.25rem;
 }
 
 /*
@@ -2664,51 +2765,124 @@ body.body-scroll-locked {
   color: var(--risk-lift);
 }
 
-.entry-screen .money-input input,
-.entry-screen .seed-text-input__value,
+/*
+ * "상자를 없앤다. 밑줄만 남긴다"(prototype.html `.field .line`).
+ *
+ * SEED `TextField`를 재구현하지 않는다(design.md Global Constraints) —
+ * 그 컴포넌트가 실제로 그리는 입력 상자(`.seed-text-input__root`)와 이
+ * 화면의 커스텀 `<select>`만 밑줄 모양으로 다시 칠한다.
+ *
+ * ⚠ **밑줄 색으로 `--rule`을 쓰지 않는다.** `--rule`(#26313c)은 불투명한
+ * `--ink` 면 위에서 쓰라고 고른 값이라, 이 화면이 실제로 앉는 면(영상 위
+ * 스크림 바닥 #2a2f35) 위에서는 **1.02:1**로 사실상 보이지 않는다.
+ * 상자를 없앤 입력에서 밑줄은 그 컨트롤을 식별하는 **유일한 경계**라
+ * WCAG 1.4.11의 3:1이 그대로 걸린다 — 그래서 아래 `--entry-rule`을
+ * 따로 계산했다(`.entry-screen` 규칙의 주석 참고).
+ */
+.entry-screen .seed-text-input__root,
 .entry-screen .field input[type="number"],
 .entry-screen .field select,
 .entry-screen .region-select select {
   background: transparent;
   border: none;
-  border-bottom: 1px solid var(--rule);
+  border-bottom: 1px solid var(--entry-rule);
   border-radius: 0;
-  color: var(--paper);
-  padding: 0.5rem 0.125rem;
-}
-
-.entry-screen .money-input input::placeholder,
-.entry-screen .seed-text-input__value::placeholder {
-  color: var(--haze);
+  padding: 0 0 7px;
+  transition: border-color var(--seed-duration-d3) var(--seed-timing-function-easing);
+  /*
+   * 벤더 `.seed-text-input__root`는 `overflow: hidden`이다 — 입력 활자가
+   * 26~34px로 커지면 그 상자가 아래쪽(밑줄 자리)을 잘라 낸다.
+   */
+  overflow: visible;
 }
 
 /*
- * 포커스 표시. design.md §3이 요구한 "포커스 시 밑줄이 황동색"을
- * 지키되, 리뷰 수정(Minor 8)으로 **두께도 함께** 바꾼다 — 색만 바꾼
- * 1px 밑줄은 WCAG 2.4.11(포커스 표시의 최소 크기·대비) 기준으로 너무
- * 얇고, 색 대비만으로 상태 변화를 알리는 셈이 된다. `outline: none`을
- * 쓰는 자리라 이 밑줄이 유일한 표시다.
+ * ⚠ **`border`를 지우는 것만으로는 상자가 사라지지 않는다.** SEED가 실제로
+ * 그리는 테두리는 `border`가 아니라 두 가지다(브라우저 `getComputedStyle`
+ * 로 확인했다 — 이 규칙을 적기 전 화면에는 밑줄이 아니라 둥근 상자가
+ * 그려져 있었다):
+ *
+ * 1. `.seed-text-input__root--variant_outline`의
+ *    `box-shadow: inset 0 0 0 1px …`(#dde4ea — 밝은 면 전용 값이라 이
+ *    어두운 화면에서 흰 상자로 보였다),
+ * 2. 같은 변형의 `::after`에 걸린 2px `border`(평소 투명, 포커스에서
+ *    `--seed-color-stroke-neutral-contrast`로 켜진다).
+ *
+ * 높이도 벤더가 정한다(`--variant_outline-size_large`의
+ * `min-height: 52px`) — 그대로 두면 밑줄이 활자에서 한참 떨어진다.
+ * 렌더되는 변형 클래스 이름에 기대지 않고 **기본 클래스에 걸어** 덮는다:
+ * SEED가 변형 이름을 바꿔도 이쪽이 그대로 이긴다.
+ */
+.entry-screen .seed-text-input__root {
+  box-shadow: none;
+  min-height: 0;
+}
+
+.entry-screen .seed-text-input__root::after {
+  border: none;
+}
+
+.entry-screen .money-input input,
+.entry-screen .money-input .seed-text-input__value,
+.entry-screen .field input[type="number"] {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  color: var(--paper);
+  font-family: inherit;
+  /*
+   * 활자 한 벌로 위계를 만드는 규칙(prototype.html 머리주석): 큰 글자일수록
+   * 굵게 + 자간을 좁게. 크기만 키우면 큰 글자가 흩어져 보인다.
+   */
+  font-size: clamp(1.625rem, 3vw, 2.125rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.entry-screen .money-input input::placeholder,
+.entry-screen .money-input .seed-text-input__value::placeholder {
+  color: var(--haze);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+/*
+ * 포커스 표시. 프로토타입의 "포커스 시 밑줄이 황동색"을 지키되,
+ * 리뷰 수정(Minor 8)으로 **두께도 함께** 바꾼다 — 색만 바꾼 1px 밑줄은
+ * WCAG 2.4.11(포커스 표시의 최소 크기·대비) 기준으로 너무 얇고, 색
+ * 대비만으로 상태 변화를 알리는 셈이 된다. `outline: none`을 쓰는
+ * 자리라 이 밑줄이 유일한 표시다.
  *
  * 늘어난 1px만큼 아래 여백에서 덜어내, 포커스가 옮겨 다닐 때 줄이
- * 흔들리지 않게 한다(입력들의 기본 padding은 `0.5rem 0.125rem`이다).
+ * 흔들리지 않게 한다(위 규칙의 `padding: 0 0 7px`).
  */
-.entry-screen .money-input input:focus-visible,
-.entry-screen .field input[type="number"]:focus-visible,
+.entry-screen .seed-text-input__root:focus-within,
 .entry-screen .field select:focus-visible,
-.entry-screen .region-select select:focus-visible {
+.entry-screen .region-select select:focus-visible,
+.entry-screen .field input[type="number"]:focus-visible {
   outline: none;
   border-bottom-color: var(--brass-lift);
   border-bottom-width: 2px;
-  padding-bottom: calc(0.5rem - 1px);
+  padding-bottom: 6px;
 }
 
 /* 입력 아래 즉시 환산값("20000" → "2억원") — 황동색으로 강조한다. */
 .entry-screen .echo {
+  margin: 7px 0 0;
+  font-size: 0.78125rem;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
   color: var(--brass-lift);
 }
 
 .entry-screen .hint {
   color: var(--haze);
+  font-size: 0.75rem;
+  line-height: 1.6;
 }
 
 /*
@@ -2724,78 +2898,106 @@ body.body-scroll-locked {
  */
 .entry-screen .seed-field__description {
   color: var(--haze);
+  font-size: 0.75rem;
+  line-height: 1.6;
 }
 
 /*
- * 무엇이 모자라서 조회 버튼이 안 나오는지 말하는 한 줄(App.tsx의
- * Important 5 주석). 기본 `.prompt` 색은 밝은 면 기준이라 이 어두운
- * 패널 위에서 묻힌다 — 힌트보다 한 단계 밝은 본문 색으로 둔다.
+ * 무엇이 모자라서 조회가 안 되는지 말하는 한 줄(App.tsx의 Important 5
+ * 주석) — 프로토타입의 `.hintline` 자리다.
+ *
+ * 프로토타입은 이 줄에 `--haze-dim`(#66727e)을 쓴다. 이 면에서 **2.75:1**
+ * 이라 본문 기준을 넘지 못해 그대로 옮기지 않았다(계산은
+ * `scripts/seed-semantic-tokens.test.ts`에 남겼다). 무엇이 모자란지
+ * 말하는 유일한 줄이라, 안 읽히면 사용자는 화면이 고장 났다고 읽는다.
  */
 .entry-screen .prompt {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
   color: var(--paper-dim);
-  margin: 0;
 }
 
 /*
- * 평형대 — 칩 넷(design.md §3의 세그먼트 규율을 그대로 잇는다).
- * 체크박스 자체는 남기되(접근성·로직 불변), 시각적으로는 테두리를 두른
- * 칸으로 보이게 한다. 고른 쪽만 밝은 바탕(--paper)에 어두운 글자
- * (--ink)다 — 색 말고 체크박스와 글자가 이미 상태를 말하므로, 색은
- * 그것을 반복할 뿐이다.
+ * 평형대 — 프로토타입의 `.band`. **상자가 아니라 밑줄 토글이다.**
+ *
+ * 배치(3열)는 위 `.area-band-options` 기본 규칙이 그대로 정한다 —
+ * 여기서 덮지 않는다. 그 열 수는 구간 수에 잠겨 있고
+ * (`scripts/area-band-chips.test.ts`), 이 화면이 칩이 그려지는 유일한
+ * 자리라 여기서 배치를 덮으면 그 가드가 아무것도 지키지 않게 된다.
+ * 간격만 프로토타입의 값으로 벌린다.
  */
 .entry-screen .area-band-options {
-  gap: 0.5rem;
+  /*
+   * 가로 간격만 프로토타입의 값(26px)으로 벌린다. 세로는 좁게 둔다 —
+   * 좁은 화면에서는 이 칸이 한 열로 서므로(`@media (max-width: 480px)`
+   * 의 기본 규칙) 가로 간격이 그대로 세로로 쌓이면 칩 셋이 한 눈금이
+   * 아니라 따로 선 항목 셋으로 읽힌다.
+   */
+  column-gap: 1.625rem;
+  row-gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.entry-screen .area-band-select {
+  border: none;
+  padding: 0;
 }
 
 /*
- * 색을 여기서 정하지 않는다. 이 요소는 `<label>`이고 `.field` 안에 있어,
- * 이 화면의 라벨 색 규칙(`.entry-screen .field label`, 명시도 0-2-1)이
- * 이미 `--haze-lift`를 건다 — 여기(0-2-0)에 색을 적으면 캐스케이드에서
- * 지는 **죽은 선언**이 된다(브라우저 `getComputedStyle`로 확인했다. 옛
- * 주택 보유 세그먼트의 `color: var(--paper-dim)`이 실제로 그 상태였다).
- * 고른 칩만 `:has(input:checked)`(0-3-0)로 그 규칙을 이겨 색을 바꾼다.
+ * 칩 자체. 명시도를 `.area-band-select`까지 적어 (0,3,0)으로 올린다 —
+ * 위 라벨 규칙(`.entry-screen .field label`)도 (0,2,1)로 이 `<label>`에
+ * 닿으므로, 같은 자리에서 소스 순서에 기대지 않고 확실히 이겨야 한다.
  */
-.entry-screen .area-band-option {
-  border: 1px solid var(--rule);
-  padding: 0.5rem 0.625rem;
+.entry-screen .area-band-select .area-band-option {
+  position: relative;
+  display: block;
+  padding: 4px 0 8px;
+  border: none;
+  border-bottom: 1.5px solid transparent;
+  color: var(--haze-lift);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  transition:
+    color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    border-color var(--seed-duration-d3) var(--seed-timing-function-easing);
 }
 
 /*
- * 고른 칩. 밝은 면이 되므로 안의 범위 라벨도 어두운 면 색
- * (`--haze`)에서 밝은 면 색으로 함께 넘어가야 한다 — 안 넘기면 흰
- * 바탕 위에 어두운 면 전용 회색이 남아 대비가 무너진다.
+ * 네이티브 체크박스는 **지우지 않고 시각적으로만 감춘다** — 키보드
+ * 조작·포커스 순서·스크린 리더의 선택 상태 안내를 브라우저가 그대로
+ * 담당한다(AreaBandSelect.tsx의 설계 그대로다). 눈에 보이는 상태는
+ * 아래 밑줄이 말한다: 색이 아니라 **모양**이라 색이 보이지 않아도 뜻이
+ * 남는다.
  */
-.entry-screen .area-band-option:has(input:checked) {
-  background: var(--paper);
-  color: var(--ink);
+.entry-screen .area-band-select .area-band-option input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
 }
 
-.entry-screen .area-band-option:has(input:checked) .area-band-range {
-  /*
-   * 배경을 여기서도 한 번 더 적는다. 부모 칩이 이미 `--paper`를 깔지만,
-   * `scripts/seed-semantic-tokens.test.ts`의 전수 검사는 **규칙 하나**를
-   * 단위로 "이 글자가 어느 면에 앉는가"를 판단한다 — 배경 선언이 없는
-   * 규칙은 그 선택자가 `.entry-screen`으로 시작한다는 이유로 영상 위
-   * 스크림 바닥을 면으로 잡고, 그러면 밝은 면 전용 색이 어두운 면에
-   * 앉은 것으로 계산돼 2.65:1로 떨어진다. 실제로 앉는 면을 규칙에
-   * 적어 두면 검사와 화면이 같은 것을 본다.
-   */
-  background: var(--paper);
-  /*
-   * 밝은 면 보조색(`--on-sheet-soft`, #61707e)은 이 면(`--paper`,
-   * #eef1f4) 위에서 **4.49:1**로 본문 기준에 0.01 모자란다(실측).
-   * 흰 바탕(#ffffff)이었다면 통과하지만 이 칩의 면은 `--paper`다 —
-   * 아슬아슬하게 통과하는 값을 골라 두면 팔레트가 한 칸만 움직여도
-   * 조용히 무너진다. 그래서 밝은 면 본문색을 그대로 쓴다. 위계는 색이
-   * 아니라 **크기와 굵기**가 진다(범위 13px 보통, 이름 16px 600 —
-   * 브라우저 `getComputedStyle` 실측).
-   */
-  color: var(--on-sheet);
+.entry-screen .area-band-select .area-band-option:has(input:checked) {
+  color: var(--paper);
+  border-bottom-color: var(--brass-lift);
+}
+
+.entry-screen .area-band-name {
+  font-size: 0.875rem;
+  font-weight: 500;
 }
 
 /* 고르지 않은 칩의 범위 라벨. 어두운 면의 보조 색이다. */
 .entry-screen .area-band-range {
   color: var(--haze);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+}
+
+.entry-screen .area-band-select .area-band-option:has(input:checked) .area-band-range {
+  color: var(--paper-dim);
 }
 
 /*
@@ -2805,38 +3007,143 @@ body.body-scroll-locked {
  */
 .entry-screen .area-band-option:has(input:focus-visible) {
   outline: 2px solid var(--brass-lift);
-  outline-offset: 2px;
+  outline-offset: 3px;
 }
 
-.entry-screen .area-band-select {
-  border: none;
-  padding: 0;
+/* 지역 — 두 단 select(prototype.html `.region`). */
+.entry-screen .region-select {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem;
+  align-items: end;
+  margin-top: clamp(1rem, 2.6vh, 1.625rem);
 }
 
-/* "이 지역으로 조회하기"/"다시 시도" — 이 화면의 유일한 강조 버튼. */
-.entry-screen button[type="button"] {
-  background: var(--brass);
-  color: var(--ink);
-  border: none;
+.entry-screen .region-select .field {
+  margin: 0;
+  min-width: 0;
+}
+
+/*
+ * 어두운 드롭다운. `<option>`은 OS가 그리는 목록이라 부모의 색을 물려받지
+ * 않는 플랫폼이 있다 — 배경을 적지 않으면 흰 목록 위에 `--paper` 글자가
+ * 얹혀 읽히지 않는다.
+ */
+.entry-screen .region-select select {
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 0.9375rem;
+}
+
+.entry-screen .region-select select option {
+  background: var(--ink-2);
+  color: var(--paper);
+}
+
+/*
+ * "이 지역으로 조회하기" — 프로토타입의 `.go`. 채운 버튼이 아니라
+ * **글자 + 자라는 선**이다.
+ *
+ * 화살표를 `::after`로 그린다 — `RegionSelect`의 마크업을 건드리지
+ * 않는다는 제약(로직·prop 불변)을 지키면서 같은 모양을 낸다.
+ */
+.entry-screen .region-select button {
+  grid-column: 1 / -1;
+  justify-self: start;
+  margin-top: clamp(0.5rem, 1.6vh, 1rem);
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: none;
+  border: 0;
   border-radius: 0;
-  padding: 0.625rem 1.25rem;
+  padding: 0;
+  color: var(--brass-lift);
+  font-family: inherit;
+  font-size: 1rem;
   font-weight: 600;
+  letter-spacing: -0.015em;
   cursor: pointer;
-  align-self: flex-start;
 }
 
-.entry-screen button[type="button"]:disabled {
-  background: var(--rule);
+.entry-screen .region-select button::after {
+  content: "";
+  width: 46px;
+  height: 1px;
+  background: currentColor;
+  transition: width var(--seed-duration-d4) var(--seed-timing-function-easing);
+}
+
+.entry-screen .region-select button:not(:disabled):hover::after {
+  width: 66px;
+}
+
+/*
+ * 비활성은 WCAG 1.4.3의 명시적 예외지만, 그래도 읽히는 값을 쓴다 —
+ * 이 버튼은 "아직 고르지 않았다"를 말하는 자리라 안 보이면 그 사실도
+ * 전달되지 않는다. 프로토타입의 `--haze-dim`(2.75:1) 대신 `--haze`
+ * (4.70:1)다.
+ */
+.entry-screen .region-select button:disabled {
   color: var(--haze);
-  cursor: not-allowed;
+  cursor: default;
 }
 
-.entry-screen button[type="button"]:focus-visible {
+.entry-screen .region-select button:focus-visible {
   outline: 2px solid var(--brass-lift);
-  outline-offset: 2px;
+  outline-offset: 4px;
 }
 
 .entry-screen .region-query-error p {
   color: var(--paper-dim);
   margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+}
+
+/* "다시 시도" — 조회 실패에서 빠져나오는 유일한 길이다. */
+.entry-screen .region-query-error button {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--brass-lift);
+  border-radius: 0;
+  padding: 0 0 2px;
+  color: var(--brass-lift);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.entry-screen .region-query-error button:focus-visible {
+  outline: 2px solid var(--brass-lift);
+  outline-offset: 3px;
+}
+
+/*
+ * 낮은 창에서는 활자와 여백을 함께 줄인다.
+ *
+ * `prototype.html`의 `@media (max-height: 780px)`를 그대로 옮긴 규칙이다
+ * — 프로토타입이 제목 윗줄이 잘리던 버그를 고치며 추가했다. 안 옮기면
+ * 세로가 짧은 창에서 같은 버그가 재현된다.
+ */
+@media (max-height: 780px) {
+  .entry-screen .entry-wordmark {
+    margin-bottom: 0.875rem;
+  }
+
+  .entry-screen .entry-headline {
+    font-size: clamp(1.625rem, 2.8vw, 2.125rem);
+  }
+
+  .entry-screen .subtitle {
+    margin-bottom: 1.125rem;
+  }
+
+  .entry-screen .profile-form {
+    gap: 0.875rem;
+  }
+
+  .entry-screen .money-input .seed-text-input__value {
+    font-size: 1.5rem;
+  }
 }
