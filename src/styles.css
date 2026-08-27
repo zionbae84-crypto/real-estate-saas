@@ -2173,15 +2173,21 @@ body {
 }
 
 /*
- * ⚠ **글자 크기를 `rem`이 아니라 px로 적는다.** 이 다섯 값(위/아래
- * 패딩, 두 줄 line-height, 꼬리 높이)의 합이 `ComplexMap.tsx`의
+ * ⚠ **글자 크기를 `rem`이 아니라 px로 적는다.** 이 여섯 값(위/아래
+ * 패딩, 세 줄 line-height, 꼬리 높이)의 합이 `ComplexMap.tsx`의
  * `MARKER_ANCHOR.y`다. `rem`으로 두면 루트 글꼴 크기가 바뀌는 순간
  * 앵커와 실제 높이가 갈라지고, 마커가 가리키는 자리가 조용히 틀어진다.
- * `ComplexMap.test.tsx`의 "앵커 y가 styles.css의 실제 박스 모델 높이와
- * 같다"가 이 값들을 여기서 직접 읽어 합을 다시 잰다.
+ * `scripts/result-screen-layout.test.ts`의 "앵커 y가 styles.css의 실제
+ * 박스 모델 높이와 같다"가 이 값들을 여기서 직접 읽어 합을 다시 잰다.
  *
  * 테두리를 두지 않는다 — 그림자로만 면을 띄운다. 테두리를 더하면 위
  * 합에 2px이 붙어 앵커를 함께 고쳐야 한다.
+ *
+ * **채움·글자색은 여기 없다.** 부담 수준(대출 없이/대출 필요)이
+ * 돌아오면서 그 둘은 다시 티어의 몫이다(`.complex-map-pin--no-loan
+ * .complex-map-marker`/`--loan` 아래) — 기본 규칙에 색을 두면 스코프
+ * 규칙 없이도 "이 마커는 이 색"을 주장하게 되어, 티어를 매기지 못한
+ * 자리(있어서는 안 되지만)가 조용히 통과한다.
  */
 .complex-map-marker {
   display: flex;
@@ -2189,8 +2195,6 @@ body {
   align-items: center;
   padding: 4px 10px;
   border-radius: 18px;
-  background: var(--result-ink);
-  color: #ffffff;
   letter-spacing: -0.02em;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
@@ -2198,10 +2202,16 @@ body {
   cursor: pointer;
 }
 
-/* 첫 줄 — 단지명. 가격보다 한 단계 작고 덜 굵다(가격이 이 라벨의 값이다). */
+/*
+ * 첫 줄 — 단지명. 사용자 지시: "마커속에 단지명의 크기를 지금보다
+ * 50%크게 해줘." 11px → 16.5px(정확히 1.5배). line-height는 앵커
+ * 산수에 들어가므로 **정수 px**여야 한다(위 경고 참고) — 옛 비율
+ * (line-height ÷ font-size ≈ 1.27)을 그대로 적용해 21px로 올렸다
+ * (16.5 × 1.27 ≈ 21).
+ */
 .complex-map-marker-name {
-  font-size: 11px;
-  line-height: 14px;
+  font-size: 16.5px;
+  line-height: 21px;
   font-weight: 600;
 }
 
@@ -2217,26 +2227,78 @@ body {
 }
 
 /*
+ * 셋째 줄(아래쪽) — 부담 수준 글자("대출 없이"/"대출 필요"). 사용자
+ * 지시: "마커는 기존처럼 대출없음/대출있음으로 구분해주고 … 아래쪽에
+ * 표시해줘." 채움색이 이미 분류를 지지만, **색만으로 말하지 않는다**
+ * (이 앱 전역 규칙) — 같은 뜻을 여기 글자로도 적어 색각 이상이거나
+ * 흑백으로 봐도 뜻이 남는다.
+ */
+.complex-map-marker-tier {
+  font-size: 10px;
+  line-height: 13px;
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+/*
  * 말풍선 꼬리. **이 삼각형의 꼭짓점이 좌표에 앉는 점이다** — 마커가
  * "정확히 여기"를 가리키게 하는 유일한 부분이라 장식이 아니다.
  * 채움은 `fill="currentColor"`(ComplexMap.tsx)라 여기 `color`가 곧
- * 삼각형 색이다 — 알약과 **같은 토큰**을 써서 둘이 갈라지지 않게 한다.
+ * 삼각형 색이다. **기본값을 두지 않는다** — 알약과 같은 티어 스코프
+ * 규칙에서만 색을 받아, 알약 색이 바뀌는데 꼬리만 안 바뀌는 사고를
+ * 구조적으로 막는다(`.complex-map-pin--no-loan
+ * .complex-map-marker-tail`/`--loan` 참고).
+ *
+ * ⚠ **알약과 정확히 같은 토큰을 쓰지 않는다.** `--result-signal`/
+ * `--result-warn`을 `color`로 쓰면
+ * "--result-signal을 글자색으로 쓰지 않는다" 검사가 막는다(흰 배경
+ * 2.65:1) — 그 검사는 예외를 두지 않는 하드 룰이다. 그래서 꼬리는
+ * 같은 색 계열의 **어두운 변형**(`-ink`, 글자로도 안전한 값)을 쓴다.
+ * 알약과 색상이 완전히 같지는 않지만 같은 계열이라 눈으로는 갈라지지
+ * 않는다.
  */
 .complex-map-marker-tail {
   display: block;
   height: 7px;
-  color: var(--result-ink);
+}
+
+/*
+ * 부담 수준 2분류 — 채움과 꼬리 색을 함께 정한다. `.complex-map-pin`
+ * (바깥 상자, 앵커 산수를 지키는 폭 0 flex 컨테이너)에 티어 클래스를
+ * 붙이고 자손 선택자로 두 자식(알약·꼬리)을 함께 물들인다 — 둘이
+ * 형제 요소라 CSS 상속만으로는 안 닿는다.
+ *
+ * ⚠ 흰 글자 + 밝은 채움은 대비 기준(4.5:1)에 못 미친다(2.65:1 /
+ * 3.28:1) — **사용자가 명시적으로 지시한 색**이다(`scripts/
+ * seed-semantic-tokens.test.ts`의 `USER_MANDATED_LOW_CONTRAST_FILLS`에
+ * 실측값과 함께 예외로 올랐다). 같은 뜻이 `.complex-map-marker-tier`
+ * 글자로도 있어 색이 하나도 전달되지 않아도 뜻은 남는다.
+ */
+.complex-map-pin--no-loan .complex-map-marker {
+  background: var(--result-signal);
+  color: #ffffff;
+}
+
+.complex-map-pin--no-loan .complex-map-marker-tail {
+  color: var(--result-signal-ink);
+}
+
+.complex-map-pin--loan .complex-map-marker {
+  background: var(--result-warn);
+  color: #ffffff;
+}
+
+.complex-map-pin--loan .complex-map-marker-tail {
+  color: var(--result-warn-ink);
 }
 
 /*
  * 목록에서 고른(또는 방금 누른) 단지의 마커.
  *
- * ⚠ **채움색을 바꾸지 않는다.** 예전 이유는 "채움이 곧 분류라 고른 순간
- * 색이 바뀌면 어느 분류였는지 사라진다"였고, 분류가 없어진 지금 그
- * 이유는 사라졌다. 그래도 **결과는 그대로 둔다** — 마커가 전부 같은
- * 색인 지금, 하나만 채움을 달리하면 그 마커가 다른 **종류**로 읽힌다
- * (없어진 색 구분을 되살리는 셈이다). 선택은 종류가 아니라 상태이므로
- * 바깥 테로 말한다. `scripts/result-screen-layout.test.ts`가 이 규칙에
+ * ⚠ **채움색을 바꾸지 않는다.** 채움이 곧 분류다(파랑=대출 없이,
+ * 주황=대출 필요) — 고른 순간 색이 바뀌면 그 마커가 어느 분류였는지
+ * 사라진다. 선택은 종류가 아니라 상태이므로 바깥 테로 말한다.
+ * `scripts/result-screen-layout.test.ts`가 이 규칙에
  * `background`·`color`가 없는지 검사한다(`outline`이 아니라 `box-shadow`인
  * 이유: 18px 알약의 곡률을 그대로 따라간다).
  *

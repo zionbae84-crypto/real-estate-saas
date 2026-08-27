@@ -2277,7 +2277,7 @@ describe("전체화면 결과 셸", () => {
    * `ComplexList`가 계속 쓴다 — 이번 변경은 지도만의 일이다. 그 사실을
    * 아래에서 함께 못박는다(목록에서도 사라지면 이 검사가 깨진다).
    */
-  it("마커 라벨이 단지명과 가격 범위만 내고, 목록 행과 같은 단지를 가리킨다", async () => {
+  it("마커 라벨이 단지명·가격 범위·부담 수준을 내고, 목록 행과 같은 단지를 가리킨다", async () => {
     const { container } = await renderResults();
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() =>
@@ -2299,15 +2299,18 @@ describe("전체화면 결과 셸", () => {
     expect(cash.textContent).toContain("현금단지");
     expect(loan.textContent).toContain("대출단지");
 
-    // 뺀 셋은 어느 마커에도 없다.
+    // 면적·거래건수는 여전히 뺀 채다.
     for (const marker of [cash, loan]) {
       expect(marker.textContent).not.toContain("㎡");
       expect(marker.textContent).not.toContain("거래");
-      expect(marker.textContent).not.toContain("대출 없이");
-      expect(marker.textContent).not.toContain("대출 필요");
     }
-    // 색 구분도 남아 있지 않다 — 두 마커의 클래스 목록이 글자 그대로 같다.
-    expect(cash.className).toBe(loan.className);
+    // 부담 수준은 아래쪽 글자로도 보인다 — 색만으로 말하지 않는다.
+    expect(cash.textContent).toContain("대출 없이");
+    expect(loan.textContent).toContain("대출 필요");
+    // 색 구분도 살아 있다 — 감싸는 핀(.complex-map-pin)의 티어 클래스가 서로 다르다.
+    expect(cash.parentElement?.className).not.toBe(loan.parentElement?.className);
+    expect(cash.parentElement?.className).toContain("complex-map-pin--no-loan");
+    expect(loan.parentElement?.className).toContain("complex-map-pin--loan");
 
     // **목록 행의 부담 배지는 그대로다** — `burdenTierOf`는 지도가 아니라
     // 목록의 함수다. 지도에서 뺀 것을 목록에서까지 빼지 않았다.

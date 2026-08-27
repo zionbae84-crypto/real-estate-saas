@@ -177,14 +177,10 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
  * 부담 수준 2분류 — **대출 없이 살 수 있는가, 대출이 필요한가.**
  *
  * 목록 행이 이 값으로 "대출 없이 살 수 있어요"와 "월 …· 부담률 …"을
- * 가른다.
- *
- * ⚠ **예전에는 지도 마커 색도 이 값을 썼다**(design.md §4). 사용자가
- * "면적·거래건·대출없이(색 구분)를 지우고 단지명·가격만 보여 달라"고
- * 해서 지도는 이제 이 값을 전혀 안 본다 — 마커가 전부 한 색이다
- * (`ComplexMap.tsx`, `git log` 기준 "지도 마커를 단지명·가격만 담은
- * 말풍선 핀으로 바꾸고 부담 수준 색 구분을 걷어낸다"). 이 타입·함수는
- * 이제 **목록 전용**이다.
+ * 가른다. 지도 마커도 대표 평형 기준으로 같은 값을 읽어 채움 색(밝은
+ * 블루/주황)과 아래쪽 "대출 없이"/"대출 필요" 글자로 낸다 —
+ * `ComplexMap.tsx`의 `burdenTiers`가 `App.tsx`에서 넘어온
+ * `burdenByUnit: Map<unitKey, BurdenTier>`를 단지별로 접어 쓴다.
  */
 export type BurdenTier = "no-loan" | "loan";
 

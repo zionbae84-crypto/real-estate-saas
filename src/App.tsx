@@ -3,7 +3,7 @@ import { AssumptionLine } from "./components/AssumptionLine";
 import { BudgetPanel, BUDGET_PANEL_ID } from "./components/BudgetPanel";
 import { BudgetResult, ZERO_BUDGET_HEADLINE } from "./components/BudgetResult";
 import { ComplexDetail } from "./components/ComplexDetail";
-import { ComplexList } from "./components/ComplexList";
+import { ComplexList, unitKey } from "./components/ComplexList";
 import { ComplexMap, groupWithCoords } from "./components/ComplexMap";
 import { EntryScreen } from "./components/EntryScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
@@ -20,7 +20,7 @@ import {
   type ComplexUnit,
 } from "./data/complexes";
 import { matchesAreaBands, mixesAreaAcrossThreshold } from "./lib/area-band";
-import { buildComplexList } from "./lib/complex-list";
+import { buildComplexList, burdenTierOf } from "./lib/complex-list";
 import { regionNameByCode } from "./data/regions";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { formatWon } from "./format/won";
@@ -535,6 +535,30 @@ export function App() {
 
   const mappedUnits = useMemo(
     () => mappedEntries.map((entry) => entry.unit),
+    [mappedEntries],
+  );
+
+  /**
+   * 평형(`unitKey`) → 부담 수준. 지도 마커 색·아래쪽 글자가 이 값을 쓴다
+   * (`ComplexMap`의 `burdenByUnit` prop 문서 참고).
+   *
+   * 사용자 지시로 부담 수준 구분이 지도에 되돌아왔다: "마커는 기존처럼
+   * 대출없음/대출있음으로 구분해주고, 색상도 기존처럼 밝은블루/주황으로
+   * 수정하고, 아래쪽에 표시해줘."
+   *
+   * 목록 행과 **같은 값**을 준다 — `burdenTierOf`가 이미 목록의 각
+   * 행이 "대출 없이 살 수 있어요"와 "월 …· 부담률 …"을 가르는 데
+   * 쓰는 그 함수다. 지도가 새 계산을 하면 두 창이 같은 단지를 두고
+   * 다른 말을 하게 된다 — 이 저장소가 여섯 번 겪은 버그 형태다.
+   *
+   * 키는 평형 단위(`unitKey`)다 — 부담은 평형마다 다르고, 마커는 그중
+   * 대표 평형의 숫자를 라벨에 낸다(`ComplexMap`의 `burdenTiers`).
+   */
+  const burdenByUnit = useMemo(
+    () =>
+      new Map(
+        mappedEntries.map((entry) => [unitKey(entry.unit), burdenTierOf(entry)]),
+      ),
     [mappedEntries],
   );
 
@@ -1257,6 +1281,12 @@ export function App() {
                             */
                             units={mappedUnits}
                             coordinates={complexCoordinates.coordinates}
+                            /*
+                              마커 색·아래쪽 글자가 쓸 부담 수준.
+                              목록과 같은 값이다(`burdenByUnit` 정의의
+                              주석 참고).
+                            */
+                            burdenByUnit={burdenByUnit}
                             /*
                               선택은 App이 한 벌만 든다 — 목록 행 표시와
                               이 마커 강조가 같은 값을 본다.

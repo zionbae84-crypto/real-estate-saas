@@ -340,34 +340,42 @@ describe("단지 카드", () => {
 
 /*
  * ══════════════════════════════════════════════════════════════════
- * 4. 지도 마커 — 한 색의 말풍선, 앵커는 꼬리 끝
+ * 4. 지도 마커 — 부담 수준 2색 말풍선, 앵커는 꼬리 끝
  * ══════════════════════════════════════════════════════════════════
  *
- * 예전 이 자리는 "채움이 분류(부담 수준)를 진다"를 잠갔다. 사용자
- * 지시로 그 분류가 사라져(마커에서 면적·거래건·색 구분을 뺐다) 마커는
- * 한 색이 됐고, 범례도 함께 없어졌다. 지금 잠그는 것은 다른 두 가지다:
- * **모든 마커가 한 색인가**, 그리고 **앵커가 실제 아이콘 높이를
- * 가리키는가**.
+ * 사용자 지시로 한때 마커가 한 색이 된 적이 있었다(면적·거래건·색
+ * 구분을 뺐던 태스크). 이번엔 다시 사용자 지시로 되돌아왔다: "마커는
+ * 기존처럼 대출없음/대출있음으로 구분해주고, 색상도 기존처럼
+ * 밝은블루/주황으로 수정하고, 아래쪽에 표시해줘." 그래서 여기가
+ * 잠그는 것은 세 가지다: **분류가 색+글자로 함께 드러나는가**,
+ * **글자는 색만으로 말하지 않는가**, 그리고 **앵커가 실제 아이콘
+ * 높이를 가리키는가**(이 부분은 이름 줄이 50% 커지며 높이 산수가
+ * 통째로 바뀌었다).
  */
 
 describe("지도 마커", () => {
-  it("채움이 한 색이고, 부담 수준 티어 클래스가 남아 있지 않다", () => {
-    expect(declared(".complex-map-marker", "background")).toBe("var(--result-ink)");
+  it("두 티어가 각자 채움·꼬리 색을 갖고, 색만으로 말하지 않는다", () => {
+    // 채움은 티어 스코프 규칙에만 있다 — 기본 규칙에 색을 두면 "이
+    // 마커가 어느 티어인지"를 스코프 없이도 주장하게 되어, 스코프
+    // 규칙과 값이 갈라져도 기본값이 조용히 눈가림한다.
+    expect(declared(".complex-map-marker", "background")).toBeUndefined();
+    expect(declared(".complex-map-marker", "color")).toBeUndefined();
+
+    expect(declared(".complex-map-pin--no-loan .complex-map-marker", "background")).toBe(
+      "var(--result-signal)",
+    );
     expect(
-      declared(".complex-map-marker", "color"),
+      declared(".complex-map-pin--no-loan .complex-map-marker", "color"),
       "채움과 글자색을 **같은 규칙**에 함께 선언해야 대비 검사가 그 " +
         "짝을 실제로 잽니다(seed-semantic-tokens.test.ts).",
     ).toBe("#ffffff");
 
-    for (const dead of [
-      ".complex-map-marker--no-loan",
-      ".complex-map-marker--loan",
-      ".complex-map-legend",
-      ".complex-map-legend-swatch",
-      ".complex-map-legend-swatch--no-loan",
-      ".complex-map-legend-swatch--loan",
-      ".complex-map-marker-trades",
-    ]) {
+    expect(declared(".complex-map-pin--loan .complex-map-marker", "background")).toBe(
+      "var(--result-warn)",
+    );
+    expect(declared(".complex-map-pin--loan .complex-map-marker", "color")).toBe("#ffffff");
+
+    for (const dead of [".complex-map-legend", ".complex-map-marker-trades"]) {
       expect(
         rulesFor(dead),
         `${dead} 규칙이 남아 있습니다 — 지도에 없는 것을 꾸미는 죽은 CSS입니다.`,
@@ -375,27 +383,44 @@ describe("지도 마커", () => {
     }
   });
 
-  it("꼬리가 알약과 같은 토큰을 쓴다 — 둘이 갈라지면 삼각형만 다른 색이 된다", () => {
-    expect(declared(".complex-map-marker-tail", "color")).toBe("var(--result-ink)");
+  it("꼬리가 같은 티어 색 계열의 어두운(-ink) 변형을 쓴다 — 밝은 값은 하드 룰이 막는다", () => {
+    // `--result-signal`/`--result-warn` 자체를 색으로 쓰면 아래
+    // "--result-signal을 글자색으로 쓰지 않는다" 검사가 막는다(예외
+    // 없는 하드 룰). 같은 계열의 -ink 변형을 쓴다 — 알약과 정확히
+    // 같은 색은 아니지만 눈으로 갈라지지 않는다.
+    expect(declared(".complex-map-pin--no-loan .complex-map-marker-tail", "color")).toBe(
+      "var(--result-signal-ink)",
+    );
+    expect(declared(".complex-map-pin--loan .complex-map-marker-tail", "color")).toBe(
+      "var(--result-warn-ink)",
+    );
   });
 
   it("마커가 18px 알약이다", () => {
     expect(declared(".complex-map-marker", "border-radius")).toBe("18px");
   });
 
+  it("아래쪽 줄이 '대출 없이'/'대출 필요' 글자를 낸다 — 색만으로 말하지 않는다", () => {
+    // 셀렉터가 존재하고 높이가 px로 못박혀 있는지만 CSS에서 잰다.
+    // 실제 글자 내용("대출 없이"/"대출 필요")은 ComplexMap.tsx가
+    // markerLabel의 문자열로 넣고, ComplexMap.test.tsx가 렌더 결과에서
+    // 확인한다 — 여기서는 앵커 산수가 참조하는 자리라는 것만 확인한다.
+    expect(declared(".complex-map-marker-tier", "line-height")).toMatch(/^\d+px$/);
+  });
+
   /**
-   * ⚠ **이 검사가 이번 수정의 알맹이를 지킨다.**
+   * ⚠ **이 검사가 앵커 정확도의 알맹이를 지킨다.**
    *
    * 예전 앵커는 `naver.maps.Point(0, 0)` — 떠 있는 라벨 상자의 **왼쪽 위
    * 모서리**를 좌표에 앉혔고, 상자는 거기서 오른쪽 아래로 자라날 뿐이라
    * "정확히 이 지점"을 가리키는 자리가 아예 없었다. 지금은 말풍선
-   * 꼬리 끝이 좌표에 앉는다.
+   * 꼬리 끝이 좌표에 앉는다 — 이름 줄이 50% 커지고 티어 줄이 새로
+   * 생기며 높이 산수의 항이 늘었지만, 방식은 그대로다.
    *
    * jsdom은 레이아웃을 계산하지 않아 마커의 실제 렌더 높이를 물어볼 수
    * 없다. 그래서 `styles.css`가 px로 못박아 둔 박스 모델 성분을 읽어
    * **같은 산수를 다시 해서** `MARKER_ANCHOR.y`와 대조한다 — CSS와 상수
-   * 중 하나만 움직이면 여기서 깨진다. (실제 브라우저 실측은 별도로
-   * 확인했다: 렌더된 `.complex-map-pin`의 높이가 이 값과 같다.)
+   * 중 하나만 움직이면 여기서 깨진다.
    */
   it("앵커 y가 styles.css의 실제 박스 모델 높이와 같다", () => {
     const px = (selector: string, property: string) => {
@@ -417,6 +442,7 @@ describe("지도 마커", () => {
       verticalPadding +
         px(".complex-map-marker-name", "line-height") +
         px(".complex-map-marker-price", "line-height") +
+        px(".complex-map-marker-tier", "line-height") +
         px(".complex-map-marker-tail", "height"),
       "앵커 y와 마커의 실제 높이가 갈라졌습니다 — 마커가 가리키는 자리가 " +
         "틀어집니다(ComplexMap.tsx의 MARKER_ANCHOR 주석 참고).",
@@ -441,11 +467,10 @@ describe("지도 마커", () => {
   });
 
   /**
-   * 예전 이유는 "채움이 곧 분류라, 고른 순간 색이 바뀌면 그 마커가 어느
-   * 분류였는지 사라진다"였다. 분류가 없어진 지금 그 이유는 사라졌지만
-   * **결과는 그대로 둔다** — 마커가 전부 같은 색인 지금 하나만 채움을
-   * 달리하면 그 마커가 다른 **종류**로 읽힌다(없앤 색 구분을 되살리는
-   * 셈이다). 선택은 종류가 아니라 상태이므로 바깥 테로 말한다.
+   * 채움이 곧 분류다(파랑=대출 없이, 주황=대출 필요). 고른 순간 색이
+   * 바뀌면 그 마커가 어느 분류였는지 사라진다 — 선택은 종류가 아니라
+   * 상태이므로 바깥 테로 말한다. (한때 마커가 한 색이던 시기에도 같은
+   * 결과를 그대로 지켰던 규칙이 분류가 돌아오며 원래 이유를 되찾았다.)
    */
   it("선택 표시가 채움색·글자색을 건드리지 않는다", () => {
     const rules = rulesFor(".complex-map-marker--focused");

@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComplexUnit } from "../data/complexes";
+import type { BurdenTier } from "../lib/complex-list";
 import { loadNaverMaps } from "../lib/loadNaverMaps";
-import { formatRange } from "./ComplexList";
+import { formatRange, unitKey } from "./ComplexList";
 
 export interface ComplexMapProps {
   /**
@@ -23,6 +24,19 @@ export interface ComplexMapProps {
    * 만들지 않는다. 참조 안정성은 위 `units`와 같은 이유로 필요하다.
    */
   coordinates: ReadonlyMap<string, { lat: number; lon: number }>;
+  /**
+   * 평형(`unitKey`) → 부담 수준. **이 지도는 부담 수준을 스스로 계산하지
+   * 않는다** — 목록을 만든 `buildComplexList`의 항목에서 `burdenTierOf`로
+   * 뽑아 온 값을 그대로 받는다(App.tsx의 `burdenByUnit`).
+   *
+   * 지도가 자기 계산을 새로 하면 목록과 지도가 같은 단지를 두고 다른
+   * 말을 하게 된다 — 이 저장소가 여섯 번 겪은 버그 형태다. 그래서 이
+   * 값은 계산이 아니라 배선이다.
+   *
+   * ⚠ **참조가 안정적이어야 한다** — 위 `units`·`coordinates`와 같은
+   * 이유로 호출부가 메모이즈해 넘긴다.
+   */
+  burdenByUnit: ReadonlyMap<string, BurdenTier>;
   /** 지금 고른 단지(complexKey). 그 마커를 강조하고 지도를 그리로 옮긴다 */
   focusedComplexKey?: string | null;
   /** 마커를 눌렀다. 선택 상태는 App이 한 벌만 들고 있다(목록과 공유) */
@@ -143,15 +157,20 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * `styles.css`가 그 성분을 전부 px로 못박아 둔다:
  *
  *     라벨 위/아래 패딩   4 + 4 = 8   (.complex-map-marker padding)
- *     단지명 줄          14          (.complex-map-marker-name line-height)
+ *     단지명 줄          21          (.complex-map-marker-name line-height)
  *     가격 줄            15          (.complex-map-marker-price line-height)
+ *     부담 수준 줄        13          (.complex-map-marker-tier line-height)
  *     꼬리                7          (.complex-map-marker-tail height)
  *     ─────────────────────────
- *     합                 44
+ *     합                 64
  *
  * (테두리는 두지 않았다 — 그림자로만 면을 띄운다.) `rem`이 아니라 px로
  * 적은 것도 이 산수를 위해서다: 루트 글꼴 크기가 바뀌어도 앵커와 실제
  * 높이가 갈라지지 않는다.
+ *
+ * 단지명 줄이 14→21(사용자 지시로 글자 크기를 50% 키웠다)로,
+ * 부담 수준 줄이 새로 생기며(색 구분을 되살렸다) 합이 44→64로 늘었다 —
+ * 어느 쪽이든 이 상수를 CSS와 **함께** 고쳐야 한다.
  *
  * `scripts/result-screen-layout.test.ts`의 "앵커 y가 styles.css의 실제
  * 박스 모델 높이와 같다"가 위 값들을 CSS에서 직접 읽어 이 합을 다시
@@ -159,38 +178,46 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * `src/`가 아니라 `scripts/`에 있는 이유: `src/` 트리는 파일 시스템
  * 모듈을 임포트할 수 없다 — `src/no-network.test.ts`가 그 금지를
  * 전수로 잡고, 이 검사는 styles.css를 읽어야 한다.)
- *
- * 실제 브라우저에서도 실측했다: 렌더된 `.complex-map-pin`의 높이가
- * 정확히 44px이고, 꼬리 삼각형의 꼭짓점 좌표가 `pin.x + 0`·`pin.y + 44`와
- * 소수점까지 일치했다(라벨 폭이 93px이든 133px이든 x는 그대로였다).
  */
-export const MARKER_ANCHOR = { x: 0, y: 44 } as const;
+export const MARKER_ANCHOR = { x: 0, y: 64 } as const;
 
 /**
- * 마커 위에 항상 보이는 라벨. **단지명과 가격 범위, 둘뿐이다.**
+ * 마커 라벨 아래쪽 줄에 적는 부담 수준 문구.
+ *
+ * **색만으로 뜻을 지지 않게 하는 자리다.** 채움이 이미 분류(파랑=대출
+ * 없이/주황=대출 필요)를 나르지만, 색이 하나도 전달되지 않는 경우(색각
+ * 이상·흑백 인쇄)에도 뜻이 남아야 한다.
+ */
+const BURDEN_TIER_MARKER_LABEL: Record<BurdenTier, string> = {
+  "no-loan": "대출 없이",
+  loan: "대출 필요",
+};
+
+/**
+ * 마커 위에 항상 보이는 라벨. **단지명·가격 범위·부담 수준, 셋이다.**
  *
  * 사용자 지시: "지금의 마커에서는 면적, 거래건, 대출없이(색으로 구분)는
- * 제거하고, 단지명과 금액 레인지만 표시하게 해줘."
- *
- * **여기 이름을 넣지 않던 옛 판단을 뒤집는다.** 예전 주석은 "단지 이름은
- * 여기 넣지 않는다(클릭 팝업에만) — 라벨이 길어지면 지도가 어지러워진다"
- * 였다. 그 대가로 마커는 **어느 단지인지 말하지 않는 가격표**가 됐고,
- * 이름을 알려면 눌러야 했다. 면적·거래 건수·부담 수준 문구를 빼면서
- * 생긴 자리에 이름을 넣는다 — 라벨이 오히려 짧아지므로 어지러워진다는
- * 대가도 실제로 치르지 않는다. 지도에서 단지를 못 찾는 문제가 이름 없는
- * 가격표보다 크다는 것이 지금의 판단이다.
+ * 제거하고, 단지명과 금액 레인지만 표시하게 해줘." 그다음: "마커는
+ * 기존처럼 대출없음/대출있음으로 구분해주고, 색상도 기존처럼
+ * 밝은블루/주황으로 수정하고, 아래쪽에 표시해줘." — 면적·거래건은
+ * 그대로 뺀 채, 부담 수준만 색(채움)과 글자(아래쪽 줄) 둘 다로 돌아왔다.
  *
  * **단일 "적정가" 숫자를 내지 않는다는 원칙은 그대로다** — 언제나
  * `formatRange`(범위) 결과만 쓴다. `formatRange`는 min===max일 때 숫자
- * 하나로 접히는데("23억 5,000만원"), 예전에는 그 단서를 거래 건수가
- * 졌다. 지금은 **바로 위에 붙은 단지명**이 진다 — 아무 이름 없는 숫자
- * 하나는 감정평가로 읽히지만, 이름이 붙은 가격 범위는 그 단지의 거래가를
- * 가리키는 말이다(부모 스펙 §6).
+ * 하나로 접히는데("23억 5,000만원"), **바로 위에 붙은 단지명**이 그
+ * 단서를 진다 — 아무 이름 없는 숫자 하나는 감정평가로 읽히지만, 이름이
+ * 붙은 가격 범위는 그 단지의 거래가를 가리키는 말이다(부모 스펙 §6).
  *
  * 여기 들어가는 단지 유래 값은 전부 {@link escapeHtml}을 거친다 —
- * 이 파일은 이 앱에서 유일하게 React를 거치지 않는 HTML 문자열 자리이고,
- * 이제 `complexName`(국토부 API의 `aptNm`, 우리가 검증하지 않는 값)이
- * 실제로 이 문자열에 들어간다(위 escapeHtml 주석 참고).
+ * 이 파일은 이 앱에서 유일하게 React를 거치지 않는 HTML 문자열 자리다
+ * (`complexName`은 국토부 API의 `aptNm`, 우리가 검증하지 않는 값이다).
+ * 부담 수준 문구(`BURDEN_TIER_MARKER_LABEL`)는 우리 자신이 정한 고정
+ * 문자열이라 이스케이프가 필요 없다.
+ *
+ * `.complex-map-pin`에 티어 클래스(`--no-loan`/`--loan`)를 붙인다 —
+ * 알약·꼬리 둘 다 그 자손 선택자로 색을 받는다(styles.css). 알약
+ * 안이 아니라 바깥 상자에 붙이는 이유는, 알약과 꼬리가 형제 요소라
+ * 한쪽에 붙이면 다른 쪽에 CSS 상속으로 안 닿기 때문이다.
  *
  * 꼬리(삼각형)는 CSS 가상 요소가 아니라 **인라인 SVG**다. `position:
  * absolute`를 쓰지 않고 세로 flex로 쌓아야 위 {@link MARKER_ANCHOR}의
@@ -198,20 +225,49 @@ export const MARKER_ANCHOR = { x: 0, y: 44 } as const;
  * "지도 위 절대 배치 상자는 클릭을 통과시킨다" 규칙에 마커가 걸리지도
  * 않는다(마커는 눌려야 하는 것이다).
  */
-function markerLabel(complexKey: string, representative: ComplexUnit): string {
+function markerLabel(
+  complexKey: string,
+  representative: ComplexUnit,
+  tier: BurdenTier,
+): string {
   const name = escapeHtml(representative.complexName);
   const range = escapeHtml(formatRange(representative.minPrice, representative.maxPrice));
   return (
-    `<div class="complex-map-pin">` +
+    `<div class="complex-map-pin complex-map-pin--${tier}">` +
     `<div class="complex-map-marker" data-complex-key="${escapeHtml(complexKey)}">` +
     `<span class="complex-map-marker-name">${name}</span>` +
     `<span class="complex-map-marker-price">${range}</span>` +
+    `<span class="complex-map-marker-tier">${BURDEN_TIER_MARKER_LABEL[tier]}</span>` +
     `</div>` +
     `<svg class="complex-map-marker-tail" width="14" height="7" viewBox="0 0 14 7" ` +
     `aria-hidden="true" focusable="false">` +
     `<path d="M0 0 L7 7 L14 0 Z" fill="currentColor" />` +
     `</svg>` +
     `</div>`
+  );
+}
+
+/**
+ * 단지 그룹마다 마커에 쓸 부담 수준을 정한다.
+ *
+ * **여기서 판정하지 않는다.** `burdenByUnit`(호출부가 `burdenTierOf`로
+ * 뽑아 넘긴 값)에서 그 그룹의 대표 평형(`representativeUnit`) 키로
+ * 찾아 오기만 한다 — 지도가 자기 계산을 새로 하면 목록과 다른 말을
+ * 하게 된다(`ComplexMapProps.burdenByUnit` 문서 참고).
+ *
+ * 값이 없으면(대표 평형이 `burdenByUnit`에 없는 경우 — 정상 배선에서는
+ * 일어나지 않지만) **보수적으로 "대출 필요"로 접는다** — 부담이 없다고
+ * 잘못 말하는 쪽보다 있다고 잘못 말하는 쪽이 안전한 방향이다.
+ */
+export function burdenTiers(
+  groups: readonly { complexKey: string; representative: ComplexUnit }[],
+  burdenByUnit: ReadonlyMap<string, BurdenTier>,
+): ReadonlyMap<string, BurdenTier> {
+  return new Map(
+    groups.map(({ complexKey, representative }) => [
+      complexKey,
+      burdenByUnit.get(unitKey(representative)) ?? "loan",
+    ]),
   );
 }
 
@@ -252,6 +308,7 @@ const MARKER_LIMIT = 30;
 export function ComplexMap({
   units,
   coordinates,
+  burdenByUnit,
   focusedComplexKey = null,
   onFocusComplex,
   naverMapClientId,
@@ -417,10 +474,12 @@ export function ComplexMap({
           ...g,
           representative: representativeUnit(g.units),
         }));
+        const tiers = burdenTiers(groupsWithRepresentative, burdenByUnit);
 
         for (const group of groupsWithRepresentative) {
           const coord = coordinates.get(group.complexKey)!;
-          const labelHtml = markerLabel(group.complexKey, group.representative);
+          const tier = tiers.get(group.complexKey) ?? "loan";
+          const labelHtml = markerLabel(group.complexKey, group.representative, tier);
           const marker = new naverGlobal.maps.Marker({
             position: new naverGlobal.maps.LatLng(coord.lat, coord.lon),
             map,
@@ -473,7 +532,7 @@ export function ComplexMap({
       cancelled = true;
       for (const fn of cleanupFns) fn();
     };
-  }, [units, coordinates, naverMapClientId, applyFocus]);
+  }, [units, coordinates, burdenByUnit, naverMapClientId, applyFocus]);
 
   return (
     <>

@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as loadNaverMapsModule from "../lib/loadNaverMaps";
-import { ComplexMap, MARKER_ANCHOR } from "./ComplexMap";
+import { ComplexMap, MARKER_ANCHOR, burdenTiers } from "./ComplexMap";
+import { unitKey } from "./ComplexList";
 import type { ComplexUnit } from "../data/complexes";
 
 function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
@@ -169,6 +170,57 @@ function fakeNaverMaps() {
   };
 }
 
+/** burdenTiers 테스트용 최소 그룹 — complexKey와 대표 평형만 채운다. */
+function tierGroup(complexKey: string, representativeOverride: Partial<ComplexUnit> = {}) {
+  return {
+    complexKey,
+    representative: unit({ complexKey, ...representativeOverride }),
+  };
+}
+
+const NO_BURDEN = new Map<string, "no-loan" | "loan">();
+
+describe("burdenTiers", () => {
+  it("빈 그룹이면 빈 Map을 낸다", () => {
+    expect(burdenTiers([], NO_BURDEN).size).toBe(0);
+  });
+
+  it("burdenByUnit에서 대표 평형 키로 값을 찾아 온다", () => {
+    const group = tierGroup("a");
+    const burden = new Map([[unitKey(group.representative), "no-loan" as const]]);
+
+    expect(burdenTiers([group], burden).get("a")).toBe("no-loan");
+  });
+
+  it("burdenByUnit에 대표 평형이 없으면 보수적으로 'loan'으로 접는다", () => {
+    expect(burdenTiers([tierGroup("a")], NO_BURDEN).get("a")).toBe("loan");
+  });
+
+  it("여러 그룹을 각자의 값으로 독립적으로 매핑한다", () => {
+    const groups = [tierGroup("a"), tierGroup("b"), tierGroup("c")];
+    const burden = new Map([
+      [unitKey(groups[0]!.representative), "no-loan" as const],
+      [unitKey(groups[1]!.representative), "loan" as const],
+      // groups[2]는 배선하지 않는다 — 보수적 기본값을 확인한다.
+    ]);
+
+    const tiers = burdenTiers(groups, burden);
+    expect(tiers.get("a")).toBe("no-loan");
+    expect(tiers.get("b")).toBe("loan");
+    expect(tiers.get("c")).toBe("loan");
+  });
+
+  it.each([
+    ["no-loan" as const, "no-loan"],
+    ["loan" as const, "loan"],
+  ])("대표 평형의 값이 %s면 그대로 옮긴다", (value, expected) => {
+    const group = tierGroup("x");
+    const burden = new Map([[unitKey(group.representative), value]]);
+
+    expect(burdenTiers([group], burden).get("x")).toBe(expected);
+  });
+});
+
 describe("ComplexMap", () => {
   beforeEach(() => {
     vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockImplementation(async () => {
@@ -185,7 +237,7 @@ describe("ComplexMap", () => {
     const units = [unit(), unit({ complexKey: "11680-2", complexName: "좌표없는아파트" })];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     // 실제 마커 개수는 naver.maps 모의 안에 있으므로, 컴포넌트가
@@ -194,7 +246,7 @@ describe("ComplexMap", () => {
   });
 
   it("그릴 좌표가 하나도 없으면 로드 실패와 **다른** 문구로 그 사실을 말한다", async () => {
-    render(<ComplexMap units={[unit()]} coordinates={new Map()} naverMapClientId="test-id" />);
+    render(<ComplexMap units={[unit()]} coordinates={new Map()} burdenByUnit={new Map()} naverMapClientId="test-id" />);
     const region = await screen.findByRole("region", { name: "단지 지도" });
 
     // 예산에 맞는 단지만 그리게 되면서(App.tsx의 mappedUnits) 이 경우가
@@ -218,7 +270,7 @@ describe("ComplexMap", () => {
    * (부모 스펙 §6), "테스트아파트 23억 5,000만원"은 그 단지 거래가를
    * 가리키는 말이지 평가액이 아니다.
    */
-  it("마커 라벨은 단지명과 가격 범위만 낸다 — 면적·거래건수·부담 수준 문구가 없다", async () => {
+  it("마커 라벨은 단지명·가격 범위·부담 수준을 낸다 — 면적·거래건수 문구는 없다", async () => {
     const units = [
       unit({
         complexKey: "1",
@@ -230,18 +282,81 @@ describe("ComplexMap", () => {
       }),
     ];
     const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
+    const burdenByUnit = new Map([[unitKey(units[0]!), "no-loan" as const]]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+    render(
+      <ComplexMap
+        units={units}
+        coordinates={coordinates}
+        burdenByUnit={burdenByUnit}
+        naverMapClientId="test"
+      />,
+    );
 
     await screen.findByText("라벨아파트");
     const marker = document.querySelector(".complex-map-marker");
     expect(marker?.textContent).toContain("라벨아파트");
     expect(marker?.textContent).toContain("23억 5,000만원");
-    // 빠진 셋 — 하나라도 남으면 이 변경이 절반만 된 것이다.
+    // 사용자 지시: "마커는 기존처럼 대출없음/대출있음으로 구분해주고
+    // … 아래쪽에 표시해줘." — 색만이 아니라 글자로도 남는다.
+    expect(marker?.textContent).toContain("대출 없이");
+    // 빠진 둘 — 하나라도 남으면 이 변경이 절반만 된 것이다.
     expect(marker?.textContent).not.toContain("84㎡");
     expect(marker?.textContent).not.toContain("㎡");
     expect(marker?.textContent).not.toContain("거래");
-    expect(marker?.textContent).not.toContain("대출");
+  });
+
+  it("부담 수준에 따라 마커가 파랑/주황 티어 클래스를 받는다", async () => {
+    const units = [
+      unit({ complexKey: "a", complexName: "무리없는집" }),
+      unit({ complexKey: "b", complexName: "대출필요집" }),
+    ];
+    const coordinates = new Map([
+      ["a", { lat: 37.5, lon: 127.0 }],
+      ["b", { lat: 37.6, lon: 127.1 }],
+    ]);
+    const burdenByUnit = new Map<string, "no-loan" | "loan">([
+      [unitKey(units[0]!), "no-loan"],
+      [unitKey(units[1]!), "loan"],
+    ]);
+
+    render(
+      <ComplexMap
+        units={units}
+        coordinates={coordinates}
+        burdenByUnit={burdenByUnit}
+        naverMapClientId="test"
+      />,
+    );
+
+    await screen.findByText("무리없는집");
+    const pins = [...document.querySelectorAll(".complex-map-pin")];
+    const noLoanPin = pins.find((p) => p.textContent?.includes("무리없는집"));
+    const loanPin = pins.find((p) => p.textContent?.includes("대출필요집"));
+
+    expect(noLoanPin?.className).toContain("complex-map-pin--no-loan");
+    expect(noLoanPin?.textContent).toContain("대출 없이");
+    expect(loanPin?.className).toContain("complex-map-pin--loan");
+    expect(loanPin?.textContent).toContain("대출 필요");
+  });
+
+  it("대표 평형이 burdenByUnit에 없으면 보수적으로 '대출 필요'로 접는다", async () => {
+    const units = [unit({ complexKey: "1", complexName: "미배선집" })];
+    const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
+
+    render(
+      <ComplexMap
+        units={units}
+        coordinates={coordinates}
+        burdenByUnit={new Map()}
+        naverMapClientId="test"
+      />,
+    );
+
+    await screen.findByText("미배선집");
+    const pin = document.querySelector(".complex-map-pin");
+    expect(pin?.className).toContain("complex-map-pin--loan");
+    expect(pin?.textContent).toContain("대출 필요");
   });
 
   /**
@@ -261,6 +376,7 @@ describe("ComplexMap", () => {
       <ComplexMap
         units={[unit({ complexKey: "a" })]}
         coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={new Map()}
         naverMapClientId="test"
       />,
     );
@@ -285,7 +401,7 @@ describe("ComplexMap", () => {
       ["b", { lat: 37.4, lon: 127.4 }],
     ]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
     await vi.waitFor(() => expect(fitBoundsCalls).toHaveLength(1));
 
     // 예전에는 그룹핑 순서상 첫 단지 하나를 그대로 중심으로 썼다 — 그리는
@@ -306,6 +422,7 @@ describe("ComplexMap", () => {
       <ComplexMap
         units={[unit({ complexKey: "a" })]}
         coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={new Map()}
         naverMapClientId="test"
       />,
     );
@@ -319,7 +436,7 @@ describe("ComplexMap", () => {
 
     const units = [unit()];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => expect(markers).toHaveLength(1));
@@ -342,7 +459,7 @@ describe("ComplexMap", () => {
       unit({ areaBucket: 59, minPrice: 700_000_000, maxPrice: 750_000_000, tradeCount: 2 }),
     ];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => expect(infoWindows).toHaveLength(1));
@@ -368,7 +485,7 @@ describe("ComplexMap", () => {
     // 않으면 이 앱의 유일한 스크립트 주입 지점이 된다.
     const units = [unit({ complexName: '<img src=x onerror=alert(1)>' })];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => expect(infoWindows).toHaveLength(1));
@@ -389,7 +506,7 @@ describe("ComplexMap", () => {
 
     const units = [unit()];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
 
     const region = await screen.findByRole("region", { name: "단지 지도" });
     // "아무 일도 안 일어남"이 아니라, 실제로 보이는 실패 안내가 있는지
@@ -407,8 +524,9 @@ describe("ComplexMap", () => {
     const unitB = unit({ complexKey: "11680-2", complexName: "B아파트" });
     const coordsA = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
     const coordsB = new Map([["11680-2", { lat: 37.2, lon: 127.2 }]]);
+    const burdenByUnit = new Map();
 
-    const { rerender } = render(<ComplexMap units={[unitA]} coordinates={coordsA} naverMapClientId="test-id" />);
+    const { rerender } = render(<ComplexMap units={[unitA]} coordinates={coordsA} burdenByUnit={burdenByUnit} naverMapClientId="test-id" />);
     await vi.waitFor(() => expect(markers).toHaveLength(1));
     const firstMarker = markers[0]!;
     expect(firstMarker.removed).toBe(false);
@@ -416,7 +534,7 @@ describe("ComplexMap", () => {
 
     // Task 8이 App.tsx에 연결하면 이런 props 변화(동 좁히기, 좌표 지연 도착 등)가
     // 실제로 일어난다 — 그때 이전 마커/지도가 안 치워지면 DOM에 겹쳐 쌓인다.
-    rerender(<ComplexMap units={[unitB]} coordinates={coordsB} naverMapClientId="test-id" />);
+    rerender(<ComplexMap units={[unitB]} coordinates={coordsB} burdenByUnit={burdenByUnit} naverMapClientId="test-id" />);
     await vi.waitFor(() => expect(markers).toHaveLength(2));
 
     expect(firstMarker.removed).toBe(true);
@@ -431,7 +549,7 @@ describe("ComplexMap", () => {
     ];
     const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
 
     // 대표 평형은 거래건수 최다인 84㎡ — 면적은 라벨에 적지 않지만,
     // **그 평형의** 가격 범위가 보여야 한다(59㎡의 5억대가 아니다).
@@ -452,7 +570,7 @@ describe("ComplexMap", () => {
     ];
     const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
 
     await screen.findByText("<img src=x onerror=alert(1)>");
     const markerHtml = document.querySelector(".complex-map-marker")?.innerHTML ?? "";
@@ -470,7 +588,7 @@ describe("ComplexMap", () => {
     );
     const coordinates = new Map(units.map((u, i) => [u.complexKey, { lat: 37 + i * 0.001, lon: 127 + i * 0.001 }]));
 
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() =>
@@ -485,7 +603,7 @@ describe("ComplexMap", () => {
     const units = Array.from({ length: 5 }, (_, i) => unit({ complexKey: `k${i}` }));
     const coordinates = new Map(units.map((u, i) => [u.complexKey, { lat: 37 + i * 0.01, lon: 127 + i * 0.01 }]));
 
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
 
     await vi.waitFor(() =>
       expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(5),
@@ -509,7 +627,7 @@ describe("ComplexMap", () => {
       ["loan-key", { lat: 37.2, lon: 127.2 }],
     ]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() =>
@@ -537,6 +655,7 @@ describe("ComplexMap", () => {
       <ComplexMap
         units={[unit({ complexKey: "a" })]}
         coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={new Map()}
         naverMapClientId="test-id"
       />,
     );
@@ -561,6 +680,7 @@ describe("ComplexMap", () => {
       <ComplexMap
         units={units}
         coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={new Map()}
         onFocusComplex={onFocusComplex}
         naverMapClientId="test-id"
       />,
@@ -582,17 +702,19 @@ describe("ComplexMap", () => {
       ["a", { lat: 37.1, lon: 127.1 }],
       ["b", { lat: 37.2, lon: 127.2 }],
     ]);
+    const burdenByUnit = new Map();
     /*
-     * **참조를 고정해 둔다.** `units`·`coordinates`를 인라인으로 새로
-     * 만들어 넘기면 리렌더마다 그리기 effect가 다시 돌고(둘 다 그
-     * effect의 의존성이다), 지도가 destroy → 재생성되며 `panTo`가
-     * 아니라 새 지도가 뜬다. App도 같은 이유로 이 값들을 메모이즈해
-     * 넘긴다.
+     * **참조를 고정해 둔다.** `units`·`coordinates`·`burdenByUnit`을
+     * 인라인으로 새로 만들어 넘기면 리렌더마다 그리기 effect가 다시
+     * 돌고(셋 다 그 effect의 의존성이다), 지도가 destroy → 재생성되며
+     * `panTo`가 아니라 새 지도가 뜬다. App도 같은 이유로 이 값들을
+     * 메모이즈해 넘긴다.
      */
     const { rerender } = render(
       <ComplexMap
         units={units}
         coordinates={coordinates}
+        burdenByUnit={burdenByUnit}
         focusedComplexKey={null}
         naverMapClientId="test-id"
       />,
@@ -607,6 +729,7 @@ describe("ComplexMap", () => {
       <ComplexMap
         units={units}
         coordinates={coordinates}
+        burdenByUnit={burdenByUnit}
         focusedComplexKey="b"
         naverMapClientId="test-id"
       />,

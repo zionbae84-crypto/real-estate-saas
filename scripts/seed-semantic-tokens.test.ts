@@ -728,6 +728,12 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
   }> = [
     // 상단바 "조건 다시 넣기"(프로토타입의 `.ghost`)
     { selector: ".back-to-entry-button", ratio: "2.65" },
+    // 지도 마커 — "대출 없이" 티어(밝은 블루). 사용자 지시: "색상도
+    // 기존처럼 밝은블루/주황으로 수정하고" — 처음 지시(커밋 `1c47337`)와
+    // 같은 값이다.
+    { selector: ".complex-map-pin--no-loan .complex-map-marker", ratio: "2.65" },
+    // 지도 마커 — "대출 필요" 티어(주황). 커밋 `ce41eda`와 같은 값.
+    { selector: ".complex-map-pin--loan .complex-map-marker", ratio: "3.28" },
   ];
 
   const isUserMandatedFill = (selector: string) =>
