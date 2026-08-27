@@ -50,33 +50,15 @@ function renderResult(overrides: RenderResultOverrides = {}) {
 }
 
 describe("BudgetResult", () => {
-  it("실구매력을 크게 보여준다", () => {
-    const { container } = renderResult();
-    expect(container.querySelector(".affordable-price")).toHaveTextContent(
-      "6억 4,000만원",
-    );
-  });
-
   /**
-   * 사용자 지시: "부대비용 부분의 형식처럼 실구매 가능 가격 >> 얼마 라고
-   * 표시하고 토글로 실구매가능금액 산정 내역을 알려줘." — 헤드라인 카드도
-   * `CostBreakdown`과 같은 summary/토글 형태가 됐다. summary에는 항상
-   * 제목+금액이 보이고, "무엇이 막았는지"는 펼쳐야 보인다.
+   * 사용자 지시로 헤드라인 카드("실구매 가능 가격")를 없앴다 — 상단바가
+   * 이미 같은 라벨·같은 값을 보여주는 자리라 중복이었다. 이 카드는 이제
+   * 대출 한도·부대비용·정책대출, 카드 셋으로 시작한다.
    */
-  it("헤드라인이 부대비용과 같은 summary/토글 형식이다", () => {
+  it("대출 한도 카드로 시작한다 — 헤드라인 카드는 더 이상 없다", () => {
     const { container } = renderResult();
-    const details = container.querySelector(".budget-card--headline");
-    expect(details?.tagName).toBe("DETAILS");
-    expect(details?.hasAttribute("open")).toBe(false);
-
-    const summary = details?.querySelector("summary");
-    expect(summary?.textContent).toContain("실구매 가능 가격");
-    expect(summary?.textContent).toContain("6억 4,000만원");
-
-    // 무엇이 막았는지는 summary 밖, 접히는 본문에 있다.
-    const binding = screen.getByText("담보 가치(LTV)에 걸렸어요");
-    expect(details?.contains(binding)).toBe(true);
-    expect(summary?.contains(binding)).toBe(false);
+    const section = container.querySelector(".budget-result");
+    expect(section?.firstElementChild?.className).toBe("binding-explainer");
   });
 
   it("부대비용 합계를 보여준다", () => {
@@ -104,68 +86,26 @@ describe("BudgetResult", () => {
     ).toBeInTheDocument();
   });
 
-  it("무엇이 막았는지 한 줄로 보여준다", () => {
-    renderResult();
-    expect(
-      screen.getByText("담보 가치(LTV)에 걸렸어요"),
-    ).toBeInTheDocument();
-  });
-
   /**
-   * 사용자 지시로 겉껍질 `<details>`("부대비용·정책대출·상세 설명 더
-   * 보기")를 걷어냈다 — 대출 한도·부대비용·정책대출이 각자 카드로
-   * 서면서 **요점은 펼쳐진 채**가 됐다.
-   *
-   * 이 테스트가 잠그는 것은 그 뒤집힌 계약이다: 조언은 이제 접혀 있지
-   * **않아야** 한다. 옛 테스트("접힌 채로 들어 있다")를 그대로 두면
-   * 걷어낸 껍질이 다시 들어와도 통과한다.
+   * 사용자 지시: "대출한도 부분 >> 부대비용 형식과 동일하게 표시." 두
+   * 카드가 같은 summary/토글 형식이고, summary만으로도 요점(제목+금액)이
+   * 보인다 — 펼치지 않아도 된다.
    */
-  it("걸린 제약의 조언은 카드에 펼쳐진 채로 보인다 — 접혀 있지 않다", () => {
-    renderResult();
-    const advice = screen.getByText(/현금을 더 모으면/);
-    expect(advice.closest("details")).toBeNull();
-    // 그 조언이 앉는 곳은 대출 한도 카드다.
-    expect(advice.closest(".binding-explainer")).not.toBeNull();
-  });
-
-  /**
-   * 사용자 지시로 네 가지 한도 표도 항상 펼쳐진다("표로 정리해서 4가지
-   * 한도중 결정된 것 표시") — 예전의 `<details>` 접기는 걷어냈다. 결정된
-   * (binding) 한도 행에는 `data-active="true"`가 붙는다.
-   */
-  it("한도 넷의 표는 항상 펼쳐져 있고, 결정된 한도가 표시로 드러난다", () => {
-    const { container } = renderResult();
-    const table = container.querySelector(".binding-limit-table");
-    expect(table).not.toBeNull();
-    expect(table?.closest("details")).toBeNull();
-    expect(table?.closest(".binding-explainer")).not.toBeNull();
-
-    // 픽스처의 binding은 LTV다.
-    const activeRow = table?.querySelector('[data-binding="LTV"]');
-    expect(activeRow).toHaveAttribute("data-active", "true");
-    const otherRow = table?.querySelector('[data-binding="DSR"]');
-    expect(otherRow).not.toHaveAttribute("data-active");
-  });
-
-  /**
-   * 부대비용·대출 한도의 **요점(금액)이 펼치지 않아도 보인다**는 것이
-   * 이번 사용자 지시의 핵심이다. 옛 구조에서는 둘 다 겉껍질 details
-   * 안에 있어 한 번 펼쳐야 나왔다.
-   */
-  it("부대비용 합계와 대출 한도 금액이 접히지 않은 자리에 있다", () => {
+  it("부대비용 합계와 대출 한도 금액이 각자 summary에 접히지 않고 보인다", () => {
     renderResult();
 
     const costTotal = screen.getByText("1,424만 7,840원");
-    expect(costTotal.closest("details[open]")).toBeNull();
-    // 부대비용은 자기 details의 summary 안이다 — 접혀 있어도 보이는 자리다.
     expect(costTotal.closest("summary")).not.toBeNull();
+    expect(costTotal.closest("details")).toHaveClass("cost-breakdown");
 
-    // 같은 금액이 접힌 "네 가지 한도" 표의 LTV 줄에도 있으므로
-    // (breakdown.LTV === amount) 카드 머리의 금액으로 범위를 좁힌다.
-    const loanAmount = screen.getByText("4억 2,000만원", {
-      selector: ".binding-amount",
+    // amount(420,000,000)와 breakdown.LTV가 엔진 불변식상 같은 값이라
+    // 표의 LTV 줄에도 "4억 2,000만원"이 나온다 — summary 안의 금액으로
+    // 범위를 좁힌다.
+    const loanTotal = screen.getByText("4억 2,000만원", {
+      selector: ".binding-total",
     });
-    expect(loanAmount.closest("details")).toBeNull();
+    expect(loanTotal.closest("summary")).not.toBeNull();
+    expect(loanTotal.closest("details")).toHaveClass("binding-explainer");
   });
 
   it("실구매력이 0이면 숫자 대신 안내를 보여준다", () => {

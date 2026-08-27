@@ -1068,17 +1068,17 @@ describe("App - 단지 상세(화면 4)", () => {
     const { container } = render(<App />);
     await fillProfile([NARROW_DETAIL_UNIT]);
 
-    const priceBefore = container.querySelector(".affordable-price")?.textContent;
+    const priceBefore = container.querySelector(".result-topbar-item-value--money")?.textContent;
 
     await userEvent.click(screen.getByRole("button", { name: /좁은단지/ }));
-    const priceWhileOpen = container.querySelector(".affordable-price")?.textContent;
+    const priceWhileOpen = container.querySelector(".result-topbar-item-value--money")?.textContent;
     // 상세가 열려 있는 동안에는 이 평형(전용 59㎡)의 실제 면적 기준으로
     // 다시 계산된다 — 헤드라인은 고른 평형대(전체)에 85㎡ 초과가 있어
     // 농특세가 붙는 기준이었으므로 값이 달라야 한다.
     expect(priceWhileOpen).not.toBe(priceBefore);
 
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-    const priceAfter = container.querySelector(".affordable-price")?.textContent;
+    const priceAfter = container.querySelector(".result-topbar-item-value--money")?.textContent;
 
     // 결함이었던 지점: 프로필에 영구히 저장하면 목록으로 돌아와도
     // priceAfter가 priceWhileOpen에 머물러 있어(원래 값으로 돌아오지
@@ -2529,7 +2529,7 @@ describe("전체화면 결과 셸", () => {
       const open = panel(container)!;
       expect(open.querySelector(".budget-result")).not.toBeNull();
       expect(open.querySelector(".price-slider")).not.toBeNull();
-      expect(open.querySelector(".budget-card--headline")).not.toBeNull();
+      expect(open.querySelector(".binding-explainer")).not.toBeNull();
     });
 
     it("다시 누르면 닫힌다", async () => {

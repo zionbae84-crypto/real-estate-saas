@@ -1,4 +1,4 @@
-import { formatWon } from "../format/won";
+import { formatWonRoundedToMan } from "../format/won";
 import {
   NO_ABSOLUTE_CAP,
   NO_POLICY_LIMIT,
@@ -8,67 +8,6 @@ import {
 
 export interface BindingExplainerProps {
   loanLimit: LoanLimit;
-  /**
-   * `<h3>` 제목 줄을 함께 그릴지. 기본값 `true`.
-   *
-   * `BudgetResult`는 같은 문구(`getBindingTitle`)를 결과 계단의 2단
-   * ("무엇이 막았는지 한 줄")에서 먼저 보여준 뒤, 이 컴포넌트를 접힌
-   * 4단(부대비용·정책대출·상세 설명) 안에 다시 배치한다. 그때
-   * `showTitle={false}`로 넘겨 같은 문구가 화면에 두 번(한 번은 굵은
-   * 한 줄로, 한 번은 접힌 details 안 제목으로) 찍히지 않게 한다.
-   */
-  showTitle?: boolean;
-}
-
-interface Explanation {
-  title: string;
-  advice: string;
-}
-
-const EXPLANATIONS: Record<BindingConstraint, Explanation> = {
-  LTV: {
-    title: "담보 가치(LTV)에 걸렸어요",
-    advice:
-      "집값의 일정 비율까지만 빌려줘요. 현금을 더 모으면 살 수 있는 가격이 올라가요.",
-  },
-  DSR: {
-    /*
-     * 리뷰 수정(Critical): 예전 문구 "소득이 한도를 정했어요"는 두 가지를
-     * 동시에 잃었다. (1) 이 title은 BudgetResult가 접히지 않은 결과
-     * 계단의 2단("무엇이 막았는지 한 줄")에서 그대로 렌더링하는 유일한
-     * 자리라, 여기서 "DSR"이 사라지면 그 용어는 <details> 두 겹 안(4단
-     * 안의 "네 가지 한도 모두 보기")에 들어가야만 다시 보인다 — 형제인
-     * LTV·CAP은 최상위에서 "(LTV)"·"수도권 대출 상한"으로 용어/명칭을
-     * 유지하는데 DSR만 잃었다. (2) LTV·CAP은 "걸렸어요"(막혔다)인데
-     * DSR만 중립 서술("정했어요")로 바뀌어, 한국 실구매자 대부분을
-     * 실제로 묶는(가장 많이 읽힐) 제약 문장에서만 "막혔다"는 말이
-     * 빠졌다. 형제들과 나란한 형태로 되돌린다 — 용어(DSR)와 동사(걸렸다)
-     * 둘 다 유지한 채 어미만 해요체로 바꾸는 최소 톤 변환이다.
-     */
-    title: "상환 능력(DSR)에 걸렸어요",
-    advice:
-      "소득 대비 연간 상환액 한도에 막혔어요. 기존 부채를 갚으면 한도가 늘어나요.",
-  },
-  CAP: {
-    title: "규제지역 대출 상한에 걸렸어요",
-    advice:
-      "규제지역 주택구입 목적 주택담보대출은 금액 상한이 있어요. 대출로는 못 늘려요. 현금이 더 있어야 해요.",
-  },
-  POLICY: {
-    title: "정책대출 한도가 최대치예요",
-    advice:
-      "정책대출을 택했을 때 받을 수 있는 금액이 은행 대출보다 커요. 금리 조건을 함께 비교해 보세요.",
-  },
-};
-
-/**
- * 걸린 제약을 한 줄로 요약한 문구. `BudgetResult`가 결과 계단의 2단
- * ("무엇이 막았는지 한 줄")에서 쓴다 — 이 컴포넌트 자신의 `<h3>`와 같은
- * 문구를 별도로 하드코딩하지 않고 이 맵 하나에서 함께 가져오게 해,
- * 두 자리의 문구가 갈라질 일이 없게 한다.
- */
-export function getBindingTitle(binding: BindingConstraint): string {
-  return EXPLANATIONS[binding].title;
 }
 
 const LABELS: Record<BindingConstraint, string> = {
@@ -136,25 +75,49 @@ function findRunnerUp(
   return { constraint: smallest, headroom };
 }
 
-export function BindingExplainer({
-  loanLimit,
-  showTitle = true,
-}: BindingExplainerProps) {
-  const explanation = EXPLANATIONS[loanLimit.binding];
+/** 특수값(선택지 없음/적용 안 됨)을 가려 표시용 문자열을 만든다. 정상값은 만원 단위로 반올림한다(사용자 지시). */
+function formatLimitAmount(key: BindingConstraint, amount: number): string {
+  if (key === "POLICY" && amount === NO_POLICY_LIMIT) return "선택지 없음";
+  if (key === "CAP" && amount === NO_ABSOLUTE_CAP) return "적용 안 됨";
+  return formatWonRoundedToMan(amount);
+}
+
+/**
+ * 대출 한도 카드. 사용자 지시로 `CostBreakdown`과 같은 summary/토글
+ * 형식이다 — summary에는 "대출 한도 [금액]"이 항상 보이고, 무엇이
+ * 결정됐는지는 표를 펼쳐야 보인다.
+ *
+ * ⚠ **예전에는 여기 제약별 제목("담보 가치(LTV)에 걸렸어요")과 조언
+ * 문단이 따로 있었다.** 사용자 지시로 둘 다 걷어냈다 — 제목은
+ * `BudgetResult`의 헤드라인 카드(상단바와 중복이라 통째로 삭제됐다)
+ * 와 함께 설 자리를 잃었고, 조언 문단("규제지역 주택구입 목적…")은
+ * "멘트는 삭제"로 명시됐다. 남은 것은 네 가지 한도 표뿐이다 — 어느
+ * 것이 결정됐는지는 그 행의 `data-active`·"← 결정" 표시가 말한다.
+ *
+ * 대신 **LTV 기준**만 간단히 남긴다(사용자 지시: "LTV기준에 대한
+ * 간단 언급. 작은글씨로 설명") — LTV가 대부분의 실거주 구매자를
+ * 실제로 묶는 제약이라, 그 표의 숫자가 어떤 조건에 따라 갈리는지
+ * 한 줄은 필요하다. 프로필별 정확한 요율(40%/70%)까지는 넣지 않는다
+ * — 그러려면 이 컴포넌트가 `profile`·`rules`까지 받아야 하는데, 지금은
+ * `loanLimit` 하나로 충분한 "간단 언급" 수준을 넘는 결합이다.
+ *
+ * 금액은 전부 **만원 단위로 반올림**해 보여준다(사용자 지시) —
+ * `CostBreakdown`의 항목별 표는 계산 검증용이라 정확한 원 단위를
+ * 지키지만, 이 표는 네 한도를 서로 견주어 읽는 자리라 원 단위
+ * 잔돈이 오히려 비교를 방해한다(`formatWonRoundedToMan` 참고,
+ * "화면 표시 전용" — 실제 계산은 그대로 원 단위 정수를 쓴다).
+ */
+export function BindingExplainer({ loanLimit }: BindingExplainerProps) {
   const runnerUp = findRunnerUp(loanLimit.binding, loanLimit.breakdown);
 
   return (
-    <section className="binding-explainer">
-      {showTitle && <h3>{explanation.title}</h3>}
-      {/*
-        리뷰 수정(Minor 5): 라벨 없이 숫자만 두면, 이 컴포넌트가 4단(접힌
-        상세 설명)에 다시 배치될 때 바로 위 CostBreakdown의 부대비용
-        숫자와 나란히 놓여 어느 금액인지 구분이 안 된다 — 순수 대출
-        가능액(loanLimit.amount)이지 1단의 실구매 가능 가격이 아니다.
-      */}
-      <span className="binding-amount-label">대출 한도</span>
-      <p className="binding-amount">{formatWon(loanLimit.amount)}</p>
-      <p className="binding-advice">{explanation.advice}</p>
+    <details className="binding-explainer">
+      <summary>
+        대출 한도{" "}
+        <span className="binding-total">
+          {formatWonRoundedToMan(loanLimit.amount)}
+        </span>
+      </summary>
 
       {/*
         리뷰 수정(가드 사각지대 Minor 1): "라벨은 조사 없이 이어 붙인다"는
@@ -173,16 +136,10 @@ export function BindingExplainer({
 
       {runnerUp && runnerUp.headroom > 0 && (
         <p className="runner-up">
-          {`다음으로 가까운 한도 — ${LABELS[runnerUp.constraint]}. ${formatWon(runnerUp.headroom)} 여유가 있어요.`}
+          {`다음으로 가까운 한도 — ${LABELS[runnerUp.constraint]}. ${formatWonRoundedToMan(runnerUp.headroom)} 여유가 있어요.`}
         </p>
       )}
 
-      {/*
-        사용자 지시로 네 가지 한도를 **항상 펼쳐진 표**로 보여준다 — 예전
-        `<details>` 접기는 걷어냈다(펼쳐야만 "무엇이 결정됐는지" 보이던
-        것을, 표에서 바로 보이게 한다). `<details>`가 아니므로 인쇄에서
-        강제로 펼치는 규칙에 기댈 필요도 없다 — 애초에 접힌 적이 없다.
-      */}
       <dl className="binding-limit-table">
         {ORDER.map((key) => (
           <div
@@ -193,17 +150,17 @@ export function BindingExplainer({
             <dt>
               {LABELS[key]}
               {key === loanLimit.binding && " ← 결정"}
+              {key === "LTV" && (
+                <p className="hint">
+                  규제지역 여부와 생애최초 여부에 따라 담보인정비율이
+                  달라져요.
+                </p>
+              )}
             </dt>
-            <dd>
-              {key === "POLICY" && loanLimit.breakdown[key] === NO_POLICY_LIMIT
-                ? "선택지 없음"
-                : key === "CAP" && loanLimit.breakdown[key] === NO_ABSOLUTE_CAP
-                  ? "적용 안 됨"
-                  : formatWon(loanLimit.breakdown[key])}
-            </dd>
+            <dd>{formatLimitAmount(key, loanLimit.breakdown[key])}</dd>
           </div>
         ))}
       </dl>
-    </section>
+    </details>
   );
 }

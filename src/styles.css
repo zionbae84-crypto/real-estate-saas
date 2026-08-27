@@ -260,7 +260,6 @@ body {
  * 것과 같은 규율을 이름이 다른 이 카드에도 손으로 지킨다. 여기서 하는
  * 것은 배경·테두리·여백뿐이다.
  */
-.budget-card,
 .budget-result > .binding-explainer,
 .budget-result > .cost-breakdown,
 .budget-result > .policy-loan-list,
@@ -274,119 +273,50 @@ body {
 }
 
 /*
- * 헤드라인 카드만 옅은 바탕으로 한 단 올린다 — 이 패널에서 답에 해당하는
- * 숫자가 여기 하나뿐이라, 나머지 카드(근거)와 같은 무게로 서면 무엇을
- * 먼저 읽어야 하는지가 사라진다.
- */
-.budget-card--headline {
-  background: var(--result-alt, var(--seed-color-bg-neutral-weak));
-}
-
-/*
  * 카드 안에서 마지막 요소의 아래 여백을 지운다 — 안 지우면 카드마다
  * 바닥에 빈 줄이 하나씩 생겨 카드 높이가 내용과 무관하게 들쭉날쭉해진다.
  */
-.budget-card > :last-child,
 .budget-result > .binding-explainer > :last-child,
 .budget-result > .policy-loan-list > :last-child {
   margin-bottom: 0;
 }
 
 /*
- * 대출 한도 카드. 위 공용 카드 규칙이 테두리·여백을 이미 주므로, 예전
- * `.binding-explainer` 자신의 규칙(margin: 1rem 0; padding: 1rem;
- * border …)은 그 규칙에 흡수됐다 — 여기서는 카드 **안쪽** 배치만 한다.
- * `<h3>` 제목은 이 자리에서 `showTitle={false}`라 그려지지 않고, 카드의
- * 제목 구실은 `.binding-amount-label`("대출 한도")이 한다.
- */
-.budget-result > .binding-explainer > h3 {
-  margin: 0 0 0.5rem;
-  font-size: 0.9375rem;
-}
-
-/*
- * 정책대출 카드의 제목. 다른 카드의 제목(부대비용 summary·대출 한도
- * 라벨)과 같은 크기로 맞춘다 — 카드 셋이 나란히 서는데 제목만 한 단
- * 크면 그 카드가 더 중요한 것처럼 읽힌다.
+ * 정책대출 카드의 제목. 다른 카드의 제목(부대비용·대출 한도의 summary)과
+ * 같은 크기로 맞춘다 — 카드 셋이 나란히 서는데 제목만 한 단 크면 그
+ * 카드가 더 중요한 것처럼 읽힌다.
  */
 .budget-result > .policy-loan-list > h3 {
   margin: 0 0 0.25rem;
   font-size: 0.9375rem;
 }
 
-.affordable-price {
-  /*
-   * 예전엔 `<p className="affordable-price">`가 블록이라 자동으로
-   * 다음 줄에 섰다. 지금은 `<summary><h2>` 안에서 라벨 span 바로
-   * 옆에 오는 `<Text>`(기본 inline span)라 직접 block으로 밀어
-   * 줘야 라벨 아래 제 줄에 큰 숫자로 선다(Stat Block 규율).
-   */
-  display: block;
-  font-size: 2rem;
-  font-weight: 700;
-  margin: 0.25rem 0;
-  /*
-   * 팔레트를 영상에서 뽑은 청회색·황동으로 바꾸면서 fg-brand와
-   * fg-brand-contrast가 같은 값(--brass-ink, #8a5f14)을 가리키게
-   * 됐다 — 이 화면 배경(bg-layer-default, 이제 #f3f6f8) 대비
-   * 5.19:1, 흰 배경 기준 5.63:1(계산값)로 본문 크기 기준(4.5:1)까지
-   * 넉넉히 넘는다. 예전 cyan(#3ba6f1)은 2.54~2.65:1로 큰 글자
-   * 기준(3:1)에도 못 미쳐 -contrast를 따로 써야 했지만, 지금은 그
-   * 구분이 더 이상 필요하지 않다 — 다만 이 토큰을 쓰는 자리를 셋으로
-   * 못박아 둔 기존 규칙(scripts/seed-semantic-tokens.test.ts)은
-   * 그대로 유지한다. 숫자는 계산값이며 그 테스트가 같은 계산을
-   * 검사한다.
-   */
-  color: var(--seed-color-fg-brand-contrast);
-}
-
-.result-step--binding {
-  color: var(--seed-color-fg-neutral);
-  margin: 0 0 1rem;
-}
-
 /*
- * 부대비용 카드의 제목 줄("부대비용 850만 5,278원"). 카드 바깥 껍질
- * (`<details className="result-step--fold">`)이 사라지면서 이 summary가
- * 카드의 제목이 됐다 — 다른 카드 제목과 같은 크기·굵기로 맞추고,
- * 누를 수 있다는 것은 커서가 말한다.
+ * 부대비용·대출 한도 카드의 제목 줄("부대비용 850만 5,278원",
+ * "대출 한도 1억 2,836만원"). 카드 바깥 껍질(`<details className=
+ * "result-step--fold">`)이 사라지면서 이 summary가 카드의 제목이 됐다 —
+ * 두 카드가 같은 크기·굵기로 맞추고, 누를 수 있다는 것은 커서가 말한다.
  *
  * `.detail-stat-line` 쪽(단지 상세)은 summary가 아이콘 하나짜리 다른
  * 갈래(`repeatTotal={false}`)라 이 규칙에 닿지 않는다 — 선택자를
  * `.budget-result >`로 좁혀 둔 이유다.
- */
-/*
+ *
  * ⚠ 색은 **폴백 없는 `var()` 하나**로 적는다. `scripts/seed-semantic-tokens.test.ts`
  * 의 대비 전수 검사는 `var(--a, --b)` 형태를 hex로 풀지 못해 "못 푸는 값"으로
  * 걸린다 — 검사에서 빠지는 색을 만들지 않는다. 이 자리는 결과 셸 안이라
  * `--result-ink`가 언제나 정의돼 있다(`.budget-panel-title`이 같은 방식이다).
  */
-.budget-result > .cost-breakdown > summary {
+.budget-result > .cost-breakdown > summary,
+.budget-result > .binding-explainer > summary {
   cursor: pointer;
   font-size: 0.9375rem;
   font-weight: 700;
   color: var(--result-ink);
 }
 
-/*
- * 헤드라인 카드의 summary 라벨("실구매 가능 가격"). `<h2>` 안에서
- * `.affordable-price`(2rem/700/브랜드색)와 같은 줄에 서므로, 라벨
- * 쪽은 Stat Block 규율대로 작게·회색으로 낮춘다 — 무엇이 크게 읽혀야
- * 하는지 헷갈리지 않게 한다.
- */
-.budget-card--headline > summary {
-  cursor: pointer;
-}
-
-.budget-card--headline > summary h2 {
-  margin: 0;
-}
-
-.budget-card-label {
-  font-size: 0.8125rem;
+.binding-total {
   font-weight: 700;
-  letter-spacing: 0.01em;
-  color: var(--result-gray);
+  margin-left: 0.375rem;
 }
 
 /*
@@ -400,8 +330,8 @@ body {
   list-style: none;
   /*
    * 아래 여백은 이 상자 **자신이** 든다. 예전에는 `BudgetResult` 안
-   * 첫 자식이라 바로 뒤에 오는 `.no-budget`·`.result-step--binding`의
-   * `margin: 1rem 0`이 대신 벌려 줬는데, 이제 이 상자는 사이드바 맨
+   * 첫 자식이라 바로 뒤에 오는 형제 요소의 `margin: 1rem 0`이 대신
+   * 벌려 줬는데, 이제 이 상자는 사이드바 맨
    * 위(패널 밖)에 서고 그 뒤에 오는 것은 `.housing-type-select`
    * (위쪽 여백이 없다)나 단지 상세다 — 남의 여백에 기대면 옮기자마자
    * 붉은 경고 상자가 "매물 유형" 라벨에 그대로 들러붙는다.
@@ -456,10 +386,10 @@ body {
 }
 
 /*
- * 리뷰 수정(색 일관성): 슬라이더가 최대값에 있을 때 이 숫자는
- * `.affordable-price`가 보여준 것과 같은 "실구매 가능 가격" 데이터다.
- * 같은 의미이므로 같은 브랜드 색을 반복한다(hex 새로 만들지 않고
- * 같은 -contrast 토큰을 그대로 재사용). 슬라이더를 내려 값이 최대치가
+ * 리뷰 수정(색 일관성): 슬라이더가 최대값에 있을 때 이 숫자는 상단바가
+ * 이미 보여준 것과 같은 "실구매 가능 가격" 데이터다. 같은 의미이므로
+ * 같은 브랜드 색을 반복한다(hex 새로 만들지 않고 같은 -contrast 토큰을
+ * 그대로 재사용). 슬라이더를 내려 값이 최대치가
  * 아니게 되면 임의로 탐색 중인 값일 뿐 더는 그 데이터가 아니므로
  * 기본색으로 되돌린다. 이 조건(price === max)은 바로 아래
  * `.slider-warning` 문구와 같은 조건이라 색만으로 의미를 전달하지
@@ -509,28 +439,16 @@ body {
 
 /*
  * 예전에는 여기 `.binding-explainer`가 자기 상자(margin·padding·border·
- * radius)를 직접 그렸다. 사용자 지시로 이 컴포넌트가 예산 상세 패널의
- * **대출 한도 카드**가 되면서 그 상자는 위 공용 카드 규칙
+ * radius)를 직접 그렸다. 이 컴포넌트가 예산 상세 패널의 **대출 한도
+ * 카드**가 되면서 그 상자는 위 공용 카드 규칙
  * (`.budget-result > .binding-explainer`)이 진다 — 같은 상자를 두 자리에
  * 적어 두면 한쪽만 바뀌는 날 카드 하나만 다른 테두리를 갖는다.
  */
 
 /*
- * 리뷰 수정(Minor 5): 라벨 없이 숫자만 두면 접힌 4단 안에서 바로 위
- * CostBreakdown의 부대비용 금액과 나란히 놓여 구분이 안 된다.
- */
-.binding-amount-label {
-  display: block;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
-/*
  * 대출 한도 네 가지 표(사용자 지시: "표로 정리해서 4가지 한도중 결정된
- * 것 표시"). 예전에는 `<details>` 안에 접혀 있었다 — 이제 항상 펼쳐진
- * 두 칸 표다. `.cost-breakdown dl`과 같은 표 관행(라벨 왼쪽, 금액
- * 오른쪽, tabular-nums)을 따른다.
+ * 것 표시"). `.cost-breakdown dl`과 같은 표 관행(라벨 왼쪽, 금액 오른쪽,
+ * tabular-nums)을 따른다.
  */
 .binding-limit-table {
   margin: 0.75rem 0 0;
@@ -552,6 +470,20 @@ body {
 
 .binding-limit-table dt {
   font-size: 0.875rem;
+}
+
+/*
+ * LTV 기준에 대한 간단 언급(사용자 지시) — `.cost-breakdown dt .hint`와
+ * 같은 자리·같은 역할이다. LTV 행에만 붙는다: 대부분의 실거주 구매자를
+ * 실제로 묶는 제약이라 이 표에서 유일하게 "왜 이 숫자인지"를 짧게라도
+ * 밝힐 필요가 있다.
+ */
+.binding-limit-table dt .hint {
+  display: block;
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--seed-color-fg-neutral-muted);
 }
 
 .binding-limit-table dd {

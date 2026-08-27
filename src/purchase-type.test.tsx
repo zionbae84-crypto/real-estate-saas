@@ -188,7 +188,11 @@ describe("저장소에 남은 옛 투자 유형", () => {
     // 새로고침과 같은 상태: 저장된 프로필만 남아 있다.
     render(<App />);
     expect(document.querySelector(".purchase-check")).toBeNull();
-    expect(document.querySelector(".affordable-price")).not.toBeNull();
+    // 실구매 가능 가격은 이제 상단바가 유일한 출처다(헤드라인 카드는
+    // 사용자 지시로 없앴다 — 상단바와 중복이었다).
+    expect(
+      document.querySelector(".result-topbar-item-value--money"),
+    ).not.toBeNull();
   });
 });
 
@@ -199,9 +203,9 @@ describe("실거주 경로는 그대로다", () => {
 
     const expected = calcAffordablePrice(PROFILE, rules).affordablePrice;
     expect(expected).toBeGreaterThan(0);
-    expect(document.querySelector(".affordable-price")?.textContent).toBe(
-      formatWon(expected),
-    );
+    expect(
+      document.querySelector(".result-topbar-item-value--money")?.textContent,
+    ).toBe(formatWon(expected));
   });
 
   it("실거주 룰셋 기준이 부제에 남는다", () => {

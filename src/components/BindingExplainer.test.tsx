@@ -1,9 +1,9 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { BindingConstraint, LoanLimit } from "../lib/finance";
-import { BindingExplainer, getBindingTitle } from "./BindingExplainer";
+import type { LoanLimit } from "../lib/finance";
+import { BindingExplainer } from "./BindingExplainer";
 
-function limit(binding: BindingConstraint): LoanLimit {
+function limit(binding: LoanLimit["binding"]): LoanLimit {
   return {
     amount: 420_000_000,
     binding,
@@ -17,43 +17,37 @@ function limit(binding: BindingConstraint): LoanLimit {
 }
 
 describe("BindingExplainer", () => {
-  it("LTV면 현금을 더 모으라고 안내한다", () => {
-    render(<BindingExplainer loanLimit={limit("LTV")} />);
-    expect(screen.getByText(/현금을 더 모으면/)).toBeInTheDocument();
-  });
-
-  it("DSR이면 기존 부채를 갚으라고 안내한다", () => {
-    render(<BindingExplainer loanLimit={limit("DSR")} />);
-    expect(screen.getByText(/기존 부채를 갚으면/)).toBeInTheDocument();
-  });
-
-  it("CAP이면 대출로는 못 늘린다고 못박는다", () => {
-    render(<BindingExplainer loanLimit={limit("CAP")} />);
-    expect(screen.getByText(/대출로는 못 늘려요/)).toBeInTheDocument();
-  });
-
-  it("POLICY면 정책대출을 택했을 때의 한도임을 밝힌다", () => {
-    render(<BindingExplainer loanLimit={limit("POLICY")} />);
-    expect(screen.getByText(/정책대출을 택했을 때/)).toBeInTheDocument();
-  });
-
-  it("걸린 한도 금액을 보여준다", () => {
-    // amount와 breakdown.LTV는 엔진 불변식상 같은 값이므로 텍스트가 두 곳에
-    // 나온다. getByText는 복수 매칭에서 예외를 던지므로 요소를 특정한다.
+  /**
+   * 사용자 지시: "대출한도 부분 >> 부대비용 형식과 동일하게 표시" —
+   * `CostBreakdown`처럼 summary에 제목+금액이 항상 보이고, 근거(네 가지
+   * 한도 표)는 펼쳐야 보인다.
+   */
+  it("summary에 '대출 한도'와 금액이 항상 보이고, 표는 접힌 채로 시작한다", () => {
     const { container } = render(<BindingExplainer loanLimit={limit("LTV")} />);
-    expect(container.querySelector(".binding-amount")).toHaveTextContent(
+    const details = container.querySelector(".binding-explainer");
+    expect(details?.tagName).toBe("DETAILS");
+    expect(details?.hasAttribute("open")).toBe(false);
+
+    const summary = details?.querySelector("summary");
+    expect(summary?.textContent).toContain("대출 한도");
+    expect(summary?.querySelector(".binding-total")).toHaveTextContent(
       "4억 2,000만원",
     );
+
+    // 표는 summary 밖, 접히는 본문에 있다.
+    const table = container.querySelector(".binding-limit-table");
+    expect(summary?.contains(table)).toBe(false);
+    expect(details?.contains(table)).toBe(true);
   });
 
-  it("리뷰 수정(Minor 5): 한도 금액에 '대출 한도' 라벨이 붙는다 — 접힌 영역에서 부대비용 옆 맨 숫자로 보이지 않는다", () => {
+  /**
+   * 사용자 지시로 금액은 전부 만원 단위로 반올림한다 — DSR
+   * (574,316,140원)처럼 잔돈이 있는 값도 "5억 7,432만원"으로 깔끔하게
+   * 보인다.
+   */
+  it("네 제약의 한도를 모두 만원 단위로 반올림해 표에 보여준다", () => {
     render(<BindingExplainer loanLimit={limit("LTV")} />);
-    expect(screen.getByText("대출 한도")).toBeInTheDocument();
-  });
-
-  it("네 제약의 한도를 모두 펼쳐 보여준다", () => {
-    render(<BindingExplainer loanLimit={limit("LTV")} />);
-    expect(screen.getByText("5억 7,431만 6,140원")).toBeInTheDocument();
+    expect(screen.getByText("5억 7,432만원")).toBeInTheDocument();
     expect(screen.getByText("6억원")).toBeInTheDocument();
     // POLICY: 0은 NO_POLICY_LIMIT — "0원 받을 수 있다"가 아니라 "정책대출
     // 이라는 선택지 자체가 없다"는 뜻이므로 그렇게 표시해야 한다.
@@ -76,6 +70,43 @@ describe("BindingExplainer", () => {
     const policyRow = container.querySelector('[data-binding="POLICY"]');
     expect(policyRow).toHaveTextContent("2억원");
     expect(policyRow).not.toHaveTextContent("선택지 없음");
+  });
+
+  /**
+   * 사용자 지시: "LTV기준에 대한 간단 언급. 작은글씨로 설명." LTV 행에만
+   * 붙는다 — 나머지 세 행은 이 힌트가 없다.
+   */
+  it("LTV 행에만 담보인정비율 기준에 대한 짧은 안내가 붙는다", () => {
+    const { container } = render(<BindingExplainer loanLimit={limit("LTV")} />);
+    const ltvRow = container.querySelector('[data-binding="LTV"]');
+    expect(ltvRow?.querySelector(".hint")).toHaveTextContent(
+      "규제지역 여부와 생애최초 여부에 따라 담보인정비율이 달라져요.",
+    );
+
+    const dsrRow = container.querySelector('[data-binding="DSR"]');
+    expect(dsrRow?.querySelector(".hint")).toBeNull();
+  });
+
+  /**
+   * 사용자 지시: "규제지역 주택구입 목적 주택담보대출은 금액 상한이
+   * 있어요 … 멘트는 삭제." — 제약별 조언 문단을 전부 없앴다. 어느
+   * binding이든 이런 문장은 더 이상 나오지 않는다.
+   */
+  it("제약별 조언 문단을 더 이상 그리지 않는다", () => {
+    const bindings: LoanLimit["binding"][] = ["LTV", "DSR", "CAP", "POLICY"];
+    for (const binding of bindings) {
+      const { container, unmount } = render(
+        <BindingExplainer loanLimit={limit(binding)} />,
+      );
+      expect(container.querySelector(".binding-advice")).toBeNull();
+      unmount();
+    }
+    expect(screen.queryByText(/현금을 더 모으면/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/기존 부채를 갚으면/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/규제지역 주택구입 목적/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/정책대출을 택했을 때/)).not.toBeInTheDocument();
   });
 
   describe("2순위 제약 인라인 표시", () => {
@@ -265,8 +296,8 @@ describe("BindingExplainer", () => {
       const runnerUp = container.querySelector(".runner-up");
       expect(runnerUp).toHaveTextContent("상환 능력(DSR)");
       expect(runnerUp).not.toHaveTextContent("정책대출");
-      // 여유액 = 373,305,491 - 217,490,000 = 155,815,491
-      expect(runnerUp).toHaveTextContent("1억 5,581만 5,491원");
+      // 여유액 = 373,305,491 - 217,490,000 = 155,815,491 → 만원 단위로 반올림하면 1억 5,582만원
+      expect(runnerUp).toHaveTextContent("1억 5,582만원");
     });
 
     it("POLICY가 은행 제약 전부보다 커도(엔진상 불가능한 방어 케이스) 은행 2순위를 그대로 가리킨다", () => {
@@ -306,57 +337,23 @@ describe("BindingExplainer", () => {
       expect(runnerUp).not.toBeNull();
       expect(runnerUp).toHaveTextContent("담보 가치(LTV)");
       expect(runnerUp).not.toHaveTextContent("정책대출");
-      // 여유액 = 393,890,000 - 373,305,491 = 20,584,509
-      expect(runnerUp).toHaveTextContent("2,058만 4,509원");
+      // 여유액 = 393,890,000 - 373,305,491 = 20,584,509 → 만원 단위로 반올림하면 2,058만원
+      expect(runnerUp).toHaveTextContent("2,058만원");
       expect(container.querySelector(".runner-up-tied")).not.toBeInTheDocument();
     });
   });
 
-  describe("showTitle", () => {
-    it("기본값은 제목을 보여준다", () => {
-      render(<BindingExplainer loanLimit={limit("LTV")} />);
-      expect(
-        screen.getByRole("heading", { name: "담보 가치(LTV)에 걸렸어요" }),
-      ).toBeInTheDocument();
-    });
-
-    it("false면 제목 줄을 그리지 않는다 — BudgetResult가 같은 문구를 이미 밖에서 보여줄 때 쓴다", () => {
-      render(<BindingExplainer loanLimit={limit("LTV")} showTitle={false} />);
-      expect(
-        screen.queryByRole("heading", { name: "담보 가치(LTV)에 걸렸어요" }),
-      ).not.toBeInTheDocument();
-      // 나머지 내용(금액·조언)은 그대로 남아 있다 — 제목만 빠진다.
-      expect(screen.getByText(/현금을 더 모으면/)).toBeInTheDocument();
-    });
-  });
-
   /**
-   * 사용자 지시로 네 가지 한도 표는 이제 항상 펼쳐져 있다("표로 정리해서
-   * 4가지 한도중 결정된 것 표시") — 예전의 `<details>` 접기는 걷어냈다.
    * 결정된(binding) 한도 행에는 `data-active="true"`가 붙어, 표 안에서
    * 바로 어느 것이 결정됐는지 드러난다.
    */
-  it("네 가지 한도 표는 접혀 있지 않고, 결정된 한도가 data-active로 표시된다", () => {
+  it("결정된 한도가 data-active로 표시된다", () => {
     const { container } = render(<BindingExplainer loanLimit={limit("LTV")} />);
     const table = container.querySelector(".binding-limit-table");
-    expect(table).not.toBeNull();
-    expect(table?.closest("details")).toBeNull();
 
     const activeRow = table?.querySelector('[data-binding="LTV"]');
     expect(activeRow).toHaveAttribute("data-active", "true");
     const otherRow = table?.querySelector('[data-binding="DSR"]');
     expect(otherRow).not.toHaveAttribute("data-active");
-  });
-
-  describe("getBindingTitle", () => {
-    it("각 제약의 한 줄 제목을 컴포넌트가 그리는 것과 똑같이 돌려준다", () => {
-      const bindings: BindingConstraint[] = ["LTV", "DSR", "CAP", "POLICY"];
-      for (const binding of bindings) {
-        render(<BindingExplainer loanLimit={limit(binding)} />);
-        expect(
-          screen.getByRole("heading", { name: getBindingTitle(binding) }),
-        ).toBeInTheDocument();
-      }
-    });
   });
 });

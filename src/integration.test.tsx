@@ -106,9 +106,19 @@ function readPayment(): number {
   return parseFormattedWon(text);
 }
 
-/** 화면에 그려진 실구매 가능 가격(.affordable-price)을 원 단위 숫자로 읽는다. */
+/**
+ * 화면에 그려진 실구매 가능 가격을 원 단위 숫자로 읽는다.
+ *
+ * 예전엔 예산 상세 패널 안의 헤드라인 카드(`.affordable-price`)를
+ * 읽었다 — 사용자 지시로 그 카드가 없어졌다(상단바와 중복이었다).
+ * 이제 이 값을 보여주는 유일한 자리는 상단바다
+ * (`.result-topbar-item-value--money`, 이 앱에서 `emphasis`를 쓰는
+ * 유일한 요약 항목이라 선택자가 겹칠 일이 없다).
+ */
 function readAffordablePrice(): number {
-  const text = document.querySelector(".affordable-price")?.textContent ?? "";
+  const text =
+    document.querySelector(".result-topbar-item-value--money")?.textContent ??
+    "";
   return parseFormattedWon(text);
 }
 
@@ -165,11 +175,11 @@ describe("예산 계산기 통합", () => {
       screen.queryByText(/현금·연 소득·주택 수를 알려주면/),
     ).not.toBeInTheDocument();
 
-    // 제목으로 찾는다 — 전체화면 셸의 상단바 요약이 **같은 라벨**로 같은
-    // 숫자를 함께 보여주므로(App.tsx의 ResultSummaryItem "실구매 가능
-    // 가격"), 평문 검색은 둘을 구분하지 못한다.
+    // 상단바의 트리거 버튼으로 찾는다 — 예산 상세 패널을 여는 그
+    // 자리가 "실구매 가능 가격"의 유일한 출처다(헤드라인 카드는
+    // 사용자 지시로 없앴다 — 상단바와 중복이었다).
     expect(
-      screen.getByRole("heading", { name: /실구매 가능 가격/ }),
+      screen.getByRole("button", { name: /실구매 가능 가격/ }),
     ).toBeInTheDocument();
 
     expect(printValueOf("기존 대출(연간 상환액)")).toBe("없음 (가정)");
@@ -214,26 +224,23 @@ describe("예산 계산기 통합", () => {
   });
 
   it("현금과 소득을 넣으면 결과와 슬라이더가 나타난다", async () => {
-    render(<App />);
+    const { container } = render(<App />);
 
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
     await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    // 위와 같은 이유로 제목으로 찾는다(상단바 요약이 같은 라벨을 쓴다).
+    // 위와 같은 이유로 트리거 버튼으로 찾는다(상단바 요약이 같은 라벨을 쓴다).
     expect(
-      screen.getByRole("heading", { name: /실구매 가능 가격/ }),
+      screen.getByRole("button", { name: /실구매 가능 가격/ }),
     ).toBeInTheDocument();
     expect(screen.getByRole("slider")).toBeInTheDocument();
-    // BudgetResult의 2단("무엇이 막았는지 한 줄")은 이제 <h2>가 아니라
-    // 평범한 문단이다 — 제목 계층은 "실구매 가능 가격"(1단) 하나로
-    // 좁혔다. BindingExplainer 자신의 <h3>는 접힌 4단 안에서
-    // showTitle={false}로 꺼져 있으므로, 이 문구는 화면에 정확히 한
-    // 번만 나타난다.
-    // 리뷰 수정(Critical): DSR title을 형제들과 나란한 "…걸렸어요" 형태로
-    // 되돌렸으므로("소득이 한도를 정했어요"는 더 이상 어떤 title도 아니다),
-    // 대안 목록에서 그 표현을 뺀다 — 넓히지 않고 좁힌다.
-    expect(screen.getByText(/걸렸어요|최대치예요/)).toBeInTheDocument();
+    // 대출 한도 카드의 네 가지 한도 표에 "무엇이 결정됐는지"가
+    // `data-active`로 표시된다 — 제약별 제목 문장(구 "…걸렸어요")은
+    // 사용자 지시로 없앴다.
+    expect(
+      container.querySelector('.binding-limit-table [data-active="true"]'),
+    ).not.toBeNull();
   });
 
   it("슬라이더를 내리면 월 상환액과 부담률이 줄어든다", async () => {

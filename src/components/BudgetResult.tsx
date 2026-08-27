@@ -1,9 +1,7 @@
-import { Text } from "@seed-design/react";
 import type { AffordableResult } from "../lib/finance";
 import { brokerageFeeRateFor } from "../lib/finance";
-import { formatWon } from "../format/won";
 import { rules } from "../state/useAffordability";
-import { BindingExplainer, getBindingTitle } from "./BindingExplainer";
+import { BindingExplainer } from "./BindingExplainer";
 import { CostBreakdown } from "./CostBreakdown";
 import { PolicyLoanList } from "./PolicyLoanList";
 
@@ -30,34 +28,24 @@ export interface BudgetResultProps {
 }
 
 /**
- * 결과를 **카드 넉 장**으로 나눈다(사용자 지시).
+ * 결과를 **카드 셋**으로 나눈다(사용자 지시).
  *
- * 1. 헤드라인 카드 — 최대 가격(요약) + 무엇이 막았는지 한 줄(산정 내역,
- *    접힘)
- * 2. 대출 한도 카드 — `BindingExplainer`
- * 3. 부대비용 카드 — `CostBreakdown`
- * 4. 정책대출 카드 — `PolicyLoanList`(자격이 없으면 스스로 `null`)
+ * 1. 대출 한도 카드 — `BindingExplainer`
+ * 2. 부대비용 카드 — `CostBreakdown`
+ * 3. 정책대출 카드 — `PolicyLoanList`(자격이 없으면 스스로 `null`)
  *
- * ⚠ **예전에는 2~4가 `<details>` 한 겹 안에 함께 접혀 있었다**
- * ("부대비용·정책대출·상세 설명 더 보기"). 사용자 지시로 그 겉껍질을
- * 걷어내 셋을 각자 카드로 세웠다 — 부대비용 합계와 대출 한도 금액이
- * 화면에서 **한 번에 보이는 요점**이 됐다.
+ * ⚠ **예전에는 헤드라인 카드("실구매 가능 가격" + 무엇이 막았는지 한
+ * 줄)가 이 목록 맨 앞에 따로 있었다.** 사용자 지시로 없앴다 — 그 숫자는
+ * 상단바(`ResultSummaryItem`, App.tsx)가 이미 같은 라벨·같은 값으로
+ * 보여주는 값이고, 이 패널을 여는 트리거가 바로 그 상단바 칸이다
+ * ("상단 사이드바와 동일 중복"). 실구매 가능 가격이 이제 이 패널
+ * 안에서는 아무 데도 안 보인다고 걱정할 필요는 없다 — 패널을 여는
+ * 손가락 바로 위에 그 숫자가 이미 있다.
  *
- * 대신 각 카드는 자기 안에서 다시 접는다: 부대비용의 항목별 표
- * (`CostBreakdown`의 `<dl>`), 대출 한도의 "네 가지 한도", 그리고
- * **헤드라인 카드 자신도**(사용자 지시: "부대비용 부분의 형식처럼" —
- * 제목+금액을 summary로, 무엇이 막았는지는 산정 내역으로 접는다).
- * 요점은 펼쳐 두고 근거는 접어 둔다 — 겉껍질 하나를 없앤 것이지 근거를
- * 없앤 것이 아니다(인쇄에서는 `<details>`가 전부 강제로 펼쳐진다).
- *
- * ⚠ **"무리 없는 선"(안전선) 비교는 이제 이 카드에 없다.** 사용자
- * 지시로 뺐다 — 최대 가격과 같을 때가 대부분이라 그 줄이 새 정보를
- * 주지 못했고("최대 가격과 같아요"), 최대 가격 자체도 바로 위 summary와
- * 중복이었다. 안전선의 **개념**은 사라지지 않았다 — `PriceSlider`의
- * "무리 없는 선" 눈금 마커와 `SafetyBadge`의 부담률 등급이 여전히
- * 그 정보를 낸다. 잃는 것은 종이에 남던 안전선 **금액** 한 줄뿐이다
- * (구 `SafeLine`, `safe-line`은 더 이상 `MUST_SURVIVE_PRINT_CLASSES`가
- * 아니다 — `hiddenInPrint.ts` 참고).
+ * 각 카드는 자기 안에서 접는다: 부대비용의 항목별 표(`CostBreakdown`의
+ * `<dl>`)와 대출 한도의 네 가지 한도 표(`BindingExplainer`의 `<dl>`)가
+ * 그것이다. summary에는 제목+금액이 항상 보이고, 근거는 펼쳐야 보인다
+ * (인쇄에서는 `<details>`가 전부 강제로 펼쳐진다).
  *
  * **경고(`WarningList`)는 이 컴포넌트가 그리지 않는다.** 이 계단 전체가
  * 접히는 예산 상세 패널 안으로 들어갔기 때문이다(Task 5) — 여기서 그리면
@@ -74,42 +62,7 @@ export function BudgetResult({ result, householdCountNote }: BudgetResultProps) 
         <ZeroBudgetMessage result={result} />
       ) : (
         <>
-          {/*
-            `<details>`/`<summary>`는 CostBreakdown과 같은 이유로 그대로
-            둔다 — 인쇄에서 내용을 강제로 펼치는 `::details-content`
-            규칙이 그 태그에만 걸린다.
-          */}
-          <details className="budget-card budget-card--headline">
-            <summary>
-              {/*
-                SEED `Text`는 공식 문서에 `as` prop이 없다 — 있어도 제목
-                계층이 필요한 자리에는 쓰지 않는다. 라벨은 평범한
-                `<span>`이 맡고, `Text`는(기본 `<span>`) 금액에만 SEED
-                타이포 토큰을 입힌다. 문서 구조상 여기가 이 패널의 제목
-                자리이므로 태그는 `<h2>`다 — 종이에서도 덩어리의 시작으로
-                읽혀야 한다. `<summary>`는 phrasing content이거나 heading
-                content 하나만 담을 수 있는데, 자식이 `<h2>` 하나뿐이라
-                두 조건 모두를 만족한다.
-              */}
-              <h2>
-                <span className="budget-card-label">실구매 가능 가격</span>{" "}
-                <Text className="affordable-price">
-                  {formatWon(result.affordablePrice)}
-                </Text>
-              </h2>
-            </summary>
-            {/*
-              사용자 지시: "규제지역 대출 상한은 산정내역으로 보여줘" —
-              무엇이 이 가격을 막았는지는 이제 펼쳐야 보인다. 문구
-              자체는 `BindingExplainer`와 같은 원본(`getBindingTitle`)
-              에서 온다 — 두 자리가 다른 말을 하지 않는다.
-            */}
-            <p className="result-step--binding">
-              {getBindingTitle(result.loanLimit.binding)}
-            </p>
-          </details>
-
-          <BindingExplainer loanLimit={result.loanLimit} showTitle={false} />
+          <BindingExplainer loanLimit={result.loanLimit} />
           <CostBreakdown
             costs={result.costs}
             householdCountNote={householdCountNote}
