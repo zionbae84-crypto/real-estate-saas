@@ -309,7 +309,9 @@ describe("ComplexDetail", () => {
  * 계산도 팔레트도 그대로 두고, 무엇을 얼마나 보여줄지만 줄인다.
  *
  * 아래 검사들이 지키는 것은 셋이다.
- * 1. 두 블록(살 때 드는 비용 · 매달 나가는 돈)이 Stat Block 배치로 선다.
+ * 1. 두 블록(취득시 부대비용 · 매달 나가는 돈)이 Stat Block 배치로 선다.
+ *    (그 카드 모양 자체는 CSS라 `scripts/result-screen-layout.test.ts`가
+ *    목록 카드와 같은 값을 쓰는지 따로 잠근다.)
  * 2. **접는 것과 지우는 것은 다르다** — 접힌 영역의 고지 문구는 DOM에
  *    그대로 남고, 인쇄에서 펼쳐진다(CSS 쪽은 scripts/printCss.test.ts).
  * 3. 대출이 필요 없을 때 **맨숫자 0을 크게 찍지 않는다.**
@@ -344,26 +346,47 @@ describe("두 블록으로 줄인 상세", () => {
     };
   }
 
-  describe("① 살 때 드는 비용", () => {
+  describe("① 취득시 부대비용", () => {
     it("라벨 위·값 아래의 Stat Block으로 낸다", () => {
       const { container } = renderDetail({
         costs: costs({ total: 8_505_278 }),
       });
       const block = statBlock(container, ".detail-block--costs");
-      expect(block.label).toBe("살 때 드는 비용");
-      expect(block.value).toBe("850만 5,278원");
+      // 사용자 지시: "살때 드는 비용 >> 취득시 부대비용 으로 수정".
+      expect(block.label).toBe("취득시 부대비용");
+      // 사용자 지시: "살때드는비용, 매달나가는 비용은 반올림해서
+      // 만원단위로 보여줘" — 850만 5,278원이 아니라 851만원이다.
+      expect(block.value).toBe("851만원");
     });
 
-    it("내역은 접혀 있고, 합계를 두 번 적지 않는다", () => {
+    it("내역 트리거는 글자가 아니라 아이콘이고, 합계를 두 번 적지 않는다", () => {
       const { container } = renderDetail({ costs: costs({ total: 8_505_278 }) });
       const fold = container.querySelector(".detail-block--costs details");
       expect(fold).not.toBeNull();
       expect(fold?.hasAttribute("open")).toBe(false);
-      // summary는 "내역"만 말한다 — 바로 위에서 이미 크게 적은 합계를
-      // 되풀이하면 같은 숫자가 한 화면에 두 번 박힌다.
+      /*
+       * 사용자 지시: "안에 내용은 … 옆에 상세보기 아이콘 으로 누르면
+       * 볼수있게 해줘". 글자("내역 보기")가 아이콘으로 바뀌었으므로
+       * summary에는 보이는 글자가 없다 — 뜻은 `aria-label`이 진다.
+       * 합계를 되풀이하지 않는 것은 그대로다(바로 위에서 크게 적었다).
+       */
       const summary = fold?.querySelector("summary");
-      expect(summary?.textContent).not.toMatch(/850만/);
-      expect(summary?.textContent).toMatch(/내역/);
+      expect(summary?.textContent?.trim()).toBe("");
+      expect(summary?.querySelector("svg")).not.toBeNull();
+      expect(summary?.getAttribute("aria-label")).toMatch(/부대비용 내역/);
+    });
+
+    /**
+     * ⚠ 반올림은 **큰 숫자 하나에만** 건다. 내역의 항목별 금액까지
+     * 반올림하면 항목의 합과 위의 값이 서로 다른 계산처럼 읽히고,
+     * 인쇄물(`PrintSummary`)·목록이 쓰는 정확한 원 단위와도 어긋난다.
+     */
+    it("내역의 항목별 금액은 반올림하지 않는다 — 정확한 원 단위 그대로다", () => {
+      const { container } = renderDetail({
+        costs: costs({ acquisitionTax: 3_204_720, total: 8_505_278 }),
+      });
+      const fold = container.querySelector(".detail-block--costs details");
+      expect(fold?.textContent).toMatch(/320만 4,720원/);
     });
 
     it("접혀 있어도 항목별 금액과 주택 수 고지는 DOM에 남는다", () => {
@@ -398,6 +421,31 @@ describe("두 블록으로 줄인 상세", () => {
       const block = statBlock(container, ".detail-block--monthly");
       expect(block.label).toBe("매달 나가는 돈");
       expect(block.value).toBe("120만원");
+    });
+
+    it("큰 숫자는 만원 단위로 반올림해 보여준다", () => {
+      const { container } = renderDetail({
+        burden: burden({
+          safety: {
+            monthlyPayment: 1_234_567,
+            burdenRatio: 0.22,
+            stressedMonthlyPayment: 1_500_000,
+            stressedBurdenRatio: 0.29,
+            level: "safe",
+          },
+        }),
+      });
+      expect(statBlock(container, ".detail-block--monthly").value).toBe("123만원");
+    });
+
+    it("대출액 줄은 반올림하지 않는다 — 가정은 정확한 원 단위로 적는다", () => {
+      // 반올림은 이 화면의 **큰 숫자 둘**에만 건다. 대출액은 그 숫자가
+      // 무엇을 전제로 나왔는지 말하는 줄이라 계산에 들어간 값 그대로다.
+      const { container } = renderDetail({
+        burden: burden({ neededLoan: 250_004_720 }),
+      });
+      const note = statBlock(container, ".detail-block--monthly").note ?? "";
+      expect(note).toMatch(/2억 5,000만 4,720원/);
     });
 
     it("대출액·기간·금리를 가정으로 화면에 적는다", () => {
@@ -561,6 +609,32 @@ describe("두 블록으로 줄인 상세", () => {
       expect(container.querySelector(".location-state")?.textContent).toMatch(
         /아직 위치를 몰라요/,
       );
+    });
+
+    /**
+     * 아이콘 트리거도 같은 계약 안에 있다. **겉모양만 바꾼 것이지
+     * `<details>`를 다른 것으로 갈아엎은 것이 아니다** — 갈아엎으면
+     * `@media print`의 `::details-content` 규칙이 닿지 않아 부대비용
+     * 내역이 종이에서 통째로 사라진다.
+     */
+    it("부대비용 내역도 진짜 <details>이고 기본이 닫힘이다", () => {
+      const { container } = renderDetail();
+      const fold = container.querySelector(".cost-breakdown");
+      expect(fold?.tagName).toBe("DETAILS");
+      expect(fold?.hasAttribute("open")).toBe(false);
+      expect(fold?.querySelector("summary")).not.toBeNull();
+      // <dl>/<dt>/<dd> 시맨틱도 그대로다 — 표처럼 보이는 것은 CSS다.
+      expect(fold?.querySelector("dl > div > dt")).not.toBeNull();
+      expect(fold?.querySelector("dl > div > dd")).not.toBeNull();
+    });
+
+    it("아이콘 트리거는 인쇄에서 지워진다 — 종이에서는 누를 수 없다", () => {
+      // `.fold-more-hint`가 인쇄에서 지워지는 유일한 출처다
+      // (src/print/hiddenInPrint.ts). 텍스트 접미사("보기")를 감싸던
+      // 그 관행을 아이콘 트리거가 그대로 잇는다.
+      const { container } = renderDetail();
+      const summary = container.querySelector(".cost-breakdown > summary");
+      expect(summary?.classList.contains("fold-more-hint")).toBe(true);
     });
 
     it("새 summary도 '더 보기' 접미사 관행을 따른다", () => {

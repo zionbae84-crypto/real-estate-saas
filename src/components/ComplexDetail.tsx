@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react";
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
-import { formatWon } from "../format/won";
+import { formatWon, formatWonRoundedToMan } from "../format/won";
 import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
 import type { PriceBudgetInput } from "../lib/price";
 import { rules } from "../state/useAffordability";
@@ -58,16 +58,25 @@ function ratePercentLabel(rate: number): string {
  * 단지 상세: 고른 평형을 **두 블록**으로 줄인 화면(design.md §6).
  *
  * ```
- * 살 때 드는 비용        ← 라벨(작게, 위)
- * 850만 5,278원          ← 값(크게, 아래, 왼쪽 정렬)
- *   ▶ 내역               ← 접힘
- *
- * 매달 나가는 돈
- * 120만원
- * 대출 2억원 · 30년 · 연 4.53% 가정
- * 소득 대비 22.0%
- *   ▶ 금리가 2%p 오르면   ← 접힘
+ * ┌───────────────────────────────┐  ← 카드(목록 행 `.complex-row`와
+ * │ 취득시 부대비용                │     같은 바탕·테두리·반경·그림자)
+ * │ 851만원                    ⌄  │  ← 값(크게) + 내역 아이콘(접힘 트리거)
+ * └───────────────────────────────┘
+ * ┌───────────────────────────────┐
+ * │ 매달 나가는 돈                 │
+ * │ 120만원                        │
+ * │ 대출 2억원 · 30년 · 연 4.53% 가정│
+ * │ 소득 대비 22.0%                │
+ * │   ▶ 금리가 2%p 오르면          │  ← 접힘
+ * └───────────────────────────────┘
  * ```
+ *
+ * **큰 숫자 둘은 만원 단위로 반올림해 보여준다**(사용자 지시:
+ * "살때드는비용, 매달나가는 비용은 반올림해서 만원단위로 보여줘").
+ * 반올림은 `formatWonRoundedToMan`이 **표시할 때만** 하고, 같은 값을
+ * 쓰는 다른 자리(내역의 항목별 금액·가정 줄의 대출액·`PrintSummary`·
+ * 목록 행의 가격)는 그대로 정확한 원 단위다 — 계산은 어디서도 바뀌지
+ * 않는다.
  *
  * 사용자가 "지금은 너무 복잡해졌어"라고 했다. **이 화면은 빼는
  * 작업이었다** — 계산(`src/lib/finance/`)도 팔레트도 영상도 그대로 두고,
@@ -213,13 +222,40 @@ export function ComplexDetail({
       <LandLeaseNote landLeasehold={unit.landLeasehold} />
 
       {/*
-        ① 살 때 드는 비용. **계산은 그대로다**(`CostBreakdown`이 받는
-        `costs`는 호출부가 `calcAcquisitionCosts`로 낸 값 그대로) —
-        바뀐 것은 합계를 크게 앞으로 꺼내고 항목별 내역을 접은 배치뿐이다.
+        ① 취득시 부대비용(예전 이름: "살 때 드는 비용" — 사용자 지시로
+        바꿨다). **계산은 그대로다**(`CostBreakdown`이 받는 `costs`는
+        호출부가 `calcAcquisitionCosts`로 낸 값 그대로) — 바뀐 것은
+        합계를 크게 앞으로 꺼내고 항목별 내역을 접은 배치, 그리고 그
+        합계를 만원 단위로 반올림해 **보여주는** 것뿐이다.
       */}
       <section className="detail-block detail-block--costs">
-        <h3 className="detail-stat-label">살 때 드는 비용</h3>
-        <p className="detail-stat-value">{formatWon(costs.total)}</p>
+        <h3 className="detail-stat-label">취득시 부대비용</h3>
+        {/*
+          값과 내역 트리거를 **한 줄**에 둔다. 사용자 지시가 "살때드는
+          비용 의 옆에 상세보기 아이콘"이라 트리거는 큰 금액 옆에 붙어야
+          하고, `<summary>`는 `<details>` 안에서만 살 수 있으므로 이
+          래퍼가 둘을 같은 줄에 앉힌다(배치는 styles.css의
+          `.detail-stat-line` — 두 요소를 같은 그리드 행에 겹쳐 두고,
+          펼친 표는 그 아래로 전체 폭을 쓴다).
+
+          ⚠ **`<details>` 자체를 옮기거나 갈아엎지 않는다** — 인쇄에서
+          내역을 펼치는 규칙이 그 태그에 걸린다(CostBreakdown 주석).
+        */}
+        <div className="detail-stat-line">
+          {/*
+            ⚠ **표시만 반올림한다.** 사용자 지시 ④("반올림해서 만원단위로
+            보여줘")는 이 화면의 큰 숫자 둘에만 걸린다 — 아래 내역의
+            항목별 금액도, `PrintSummary`도, 목록 행의 가격도 계속
+            `formatWon`의 정확한 원 단위를 쓴다. 두 표기가 같은
+            `costs.total` 하나에서 나온다는 것은 변하지 않는다.
+          */}
+          <p className="detail-stat-value">{formatWonRoundedToMan(costs.total)}</p>
+          <CostBreakdown
+            costs={costs}
+            householdCountNote={householdCountNote}
+            repeatTotal={false}
+          />
+        </div>
         {ruralTaxApplies && (
           /*
             85㎡ 초과분에 붙는 농어촌특별세는 위 합계에 **이미 들어
@@ -234,11 +270,6 @@ export function ComplexDetail({
             평형이라 농어촌특별세가 붙어 있어요.
           </p>
         )}
-        <CostBreakdown
-          costs={costs}
-          householdCountNote={householdCountNote}
-          repeatTotal={false}
-        />
       </section>
 
       {/*
@@ -260,8 +291,14 @@ export function ComplexDetail({
           </p>
         ) : (
           <>
+            {/*
+              여기도 **표시만** 만원 단위로 반올림한다(사용자 지시 ④).
+              바로 아래 가정 줄의 대출액은 그대로 정확한 원 단위다 —
+              그 줄은 이 숫자가 무엇을 전제로 나왔는지 말하는 자리라
+              계산에 들어간 값 그대로여야 한다.
+            */}
             <p className="detail-stat-value">
-              {formatWon(burden.safety.monthlyPayment)}
+              {formatWonRoundedToMan(burden.safety.monthlyPayment)}
             </p>
             {/*
               금리·기간은 **가정이고 화면에 적는다.** 값은 룰셋에서

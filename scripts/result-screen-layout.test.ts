@@ -397,3 +397,83 @@ describe("지도 마커와 범례", () => {
     expect(declared(".complex-map-legend", "pointer-events")).toBe("none");
   });
 });
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 6. 상세 화면의 두 블록도 **같은 카드 언어**를 쓴다
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 사용자 지시: "카드를 선택했을때의 내용도 카드형식의 표로 만들어줘."
+ * 단지를 골라 상세가 열렸을 때의 두 블록(취득시 부대비용 · 매달 나가는
+ * 돈)은 배경도 테두리도 없는 흐르는 텍스트였다.
+ *
+ * **새로 디자인하지 않는다.** 사이드바 목록 카드(`.complex-row`)가 이미
+ * 이 저장소의 카드 언어이고, 상세는 그 카드를 눌러서 여는 화면이다 —
+ * 같은 열 안에서 두 카드 문법이 갈리면 그 자체가 결함이다. 그래서 값을
+ * **그대로 재사용**하고, 그 사실을 여기서 잠근다: 어느 한쪽이 움직이면
+ * 나머지도 함께 움직여야 한다.
+ */
+describe("상세 블록 카드 — 목록 카드와 같은 값을 쓴다", () => {
+  it("바탕·테두리·반경이 .complex-row와 정확히 같다", () => {
+    for (const property of ["background", "border", "border-radius"]) {
+      expect(
+        declared(".detail-block", property),
+        `.detail-block의 ${property}가 .complex-row와 다릅니다 — 한 열 ` +
+          "안에서 카드 문법이 갈립니다.",
+      ).toBe(declared(".complex-row", property));
+    }
+  });
+
+  it("그림자도 같은 값이다", () => {
+    const shadow = declared(".detail-block", "box-shadow");
+    expect(shadow).toBeDefined();
+    expect(shadow!.replace(/\s+/g, " ")).toBe(
+      declared(".complex-row", "box-shadow")!.replace(/\s+/g, " "),
+    );
+  });
+
+  /**
+   * `.complex-row`와 **같은 이유**로 상자에 가두지 않는다(위 §5). 이
+   * 블록 안에는 접히는 `<details>`가 둘(부대비용 내역 · 금리 시나리오)
+   * 있고, 그 안의 문구 여럿이 `MUST_SURVIVE_PRINT_CLASSES`다 — 상자에
+   * 가두는 규칙 하나면 화면에서 잘리고 종이에서 사라진다.
+   */
+  it("블록과 그 안쪽을 상자에 가두지 않는다", () => {
+    const CONFINED =
+      /(?:^|[;\s])(overflow(?:-[xy])?|height|max-height|position)\s*:/i;
+    const offenders: string[] = [];
+    for (const selector of [
+      ".detail-block",
+      ".detail-block--costs",
+      ".detail-block--monthly",
+      ".detail-stat-line",
+      ".detail-stat-value",
+      ".cost-breakdown",
+    ]) {
+      for (const rule of rulesFor(selector)) {
+        if (CONFINED.test(rule.body)) offenders.push(rule.selector);
+      }
+    }
+    expect(
+      offenders,
+      "상세 블록에 높이 상한·overflow·고정 배치를 걸었습니다 — 접힌 " +
+        "고지들이 화면에서 잘리고 종이에서 사라집니다.",
+    ).toEqual([]);
+  });
+
+  /**
+   * 부대비용 내역(`<dl>`)은 **두 칸 표**다 — 라벨 왼쪽, 금액 오른쪽.
+   * `<table>`로 바꾸지 않았다: `<dl>`이 이미 이 정보에 맞는 시맨틱이고,
+   * 태그를 갈아엎으면 인쇄 계약(`::details-content`)과 기존 검사가 함께
+   * 흔들린다. 표처럼 보이게 하는 것은 CSS의 일이다.
+   */
+  it("내역이 두 칸 표로 정렬된다 — 금액은 오른쪽·tabular-nums", () => {
+    expect(declared(".cost-breakdown dl > div", "display")).toMatch(
+      /grid|flex/,
+    );
+    expect(declared(".cost-breakdown dd", "text-align")).toBe("right");
+    expect(declared(".cost-breakdown dd", "font-variant-numeric")).toBe(
+      "tabular-nums",
+    );
+  });
+});

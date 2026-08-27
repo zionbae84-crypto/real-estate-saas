@@ -218,7 +218,11 @@ export const MUST_SURVIVE_PRINT_CLASSES: readonly string[] = [
   "cost-breakdown", // 부대비용 내역
   /*
    * 단지 상세의 두 블록(design.md §6). 이 종이에서 사람이 가장 먼저
-   * 보는 두 숫자가 여기 있다 — "살 때 드는 비용"과 "매달 나가는 돈".
+   * 보는 두 숫자가 여기 있다 — "취득시 부대비용"과 "매달 나가는 돈".
+   * (화면에서 그 둘은 만원 단위로 반올림해 보인다 —
+   * `formatWonRoundedToMan`. 표시만 반올림이고 아래 `cost-breakdown`
+   * 내역과 `print-summary`는 그대로 정확한 원 단위라, 종이에도 두
+   * 표기가 나란히 남는다.)
    *
    * `detail-stat-note`가 특히 무겁다: 그 줄이 **금리·기간 가정**을
    * 진다("대출 1억 2,744만원 · 30년 · 연 4.53% 가정")와 85㎡ 초과

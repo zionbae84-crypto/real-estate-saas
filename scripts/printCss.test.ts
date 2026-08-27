@@ -991,4 +991,50 @@ describe("인쇄 CSS", () => {
       expect(confiningRuleIndexes(fine, ".detail-fold")).toEqual([]);
     });
   });
+
+  /**
+   * **부대비용 내역의 아이콘 트리거 × 인쇄**(사용자 지시 ③).
+   *
+   * 그 트리거는 `<summary class="fold-more-hint cost-breakdown-toggle">`
+   * 하나다 — 인쇄에서 `<details>`가 강제로 펼쳐지면 트리거는 죽은
+   * 장치가 되므로(종이에서는 누를 수 없다) `.fold-more-hint`가 지운다.
+   *
+   * ⚠ **두 클래스가 같은 요소에 함께 붙어 있고 특정도가 (0,1,0)으로
+   * 같다.** 화면 쪽 `.cost-breakdown-toggle { display: flex }`와 인쇄
+   * 쪽 `.fold-more-hint { display: none }`이 그대로 부딪히므로, 순서가
+   * 승패를 가른다 — 인쇄 규칙이 **뒤에** 와야 `!important` 없이 이긴다.
+   * `body.body-scroll-locked`가 같은 이유로 이미 순서를 잠그고 있고,
+   * 여기도 같은 함정이다: 누가 이 규칙을 파일 아래쪽으로 옮기면
+   * 종이에 뜻 없는 화살표 버튼이 찍힌다.
+   */
+  describe("내역 아이콘 트리거가 인쇄에서 실제로 지워진다", () => {
+    const TOGGLE = ".cost-breakdown-toggle";
+
+    it("트리거가 화면에서 display를 다시 선언한다(전제)", () => {
+      // 이 선언이 없으면 아래 순서 검사는 아무 의미가 없다.
+      const screenRule = new RegExp(
+        `\\${TOGGLE}\\s*{[^}]*display\\s*:`,
+      );
+      expect(DECLARATIONS).toMatch(screenRule);
+    });
+
+    it("그 선언이 @media print 블록보다 앞에 있다 — 특정도가 같아 순서가 가른다", () => {
+      const screenRuleIndex = DECLARATIONS.indexOf(`${TOGGLE} {`);
+      const printBlockIndex = DECLARATIONS.search(PRINT_MEDIA_START);
+      expect(screenRuleIndex).toBeGreaterThan(-1);
+      expect(printBlockIndex).toBeGreaterThan(-1);
+      expect(
+        screenRuleIndex,
+        `${TOGGLE}의 display 규칙이 @media print 블록보다 뒤에 있습니다 — ` +
+          ".fold-more-hint(display:none)와 특정도가 같아 나중 규칙이 " +
+          "이기므로, 종이에 누를 수 없는 아이콘 버튼이 그대로 찍힙니다.",
+      ).toBeLessThan(printBlockIndex);
+    });
+
+    it(".fold-more-hint가 여전히 인쇄 숨김 목록에 있다", () => {
+      // 트리거가 기대는 유일한 장치다. 목록에서 빠지면 위 순서를
+      // 지켜도 아무것도 지워지지 않는다.
+      expect(PRINT_HIDDEN_SELECTORS).toContain(".fold-more-hint");
+    });
+  });
 });

@@ -1077,21 +1077,207 @@ body {
  *
  * **색은 빌리지 않는다.** 금액에 쓰는 황동은 이 파일이 이미 세 자리에서
  * 쓰던 `--seed-color-fg-brand-contrast`(--brass-ink #8a5f14) 그대로이며,
- * 새 hex를 만들지 않았다. 사이드바 바탕(`--sheet` #f3f6f8) 대비 **5.19:1**
- * 로 본문 기준(4.5:1)까지 넘는다 — `scripts/seed-semantic-tokens.test.ts`가
- * 그 계산과 "이 토큰을 쓰는 자리 목록"을 함께 잠근다.
+ * 새 hex를 만들지 않았다. 이 블록이 앉는 면은 이제 **흰 카드 면**
+ * (`--result-paper` #ffffff)이고 그 위에서 **5.63:1**이다 —
+ * `scripts/seed-semantic-tokens.test.ts`가 그 계산과 "이 토큰을 쓰는
+ * 자리 목록"을 함께 잠근다.
  *
  * ⚠ `overflow`·`max-height`·`position`을 걸지 않는다. 이 화면에는 접히는
  * `<details>`가 넷 있고(부대비용 내역 · 금리 시나리오 · 호가의 위치 ·
  * 주변에 무엇이 있는지), 그 안에 `MUST_SURVIVE_PRINT_CLASSES`가
  * 열 개 넘게 들어 있다 — 상자에 가두는 규칙 하나면 종이에서 그것들이
  * 통째로 잘린다(`.budget-panel`이 이미 한 번 막은 사고). 그래서 애초에
- * 걸지 않고, `scripts/printCss.test.ts`가 `.detail-fold`에 대해 그
- * 사실을 검사한다.
+ * 걸지 않고, `scripts/printCss.test.ts`가 `.detail-fold`에 대해,
+ * `scripts/result-screen-layout.test.ts`가 이 블록에 대해 그 사실을
+ * 검사한다.
  * ══════════════════════════════════════════════════════════════════
  */
+
+/*
+ * **카드다**(사용자 지시: "카드를 선택했을때의 내용도 카드형식의 표로
+ * 만들어줘"). 예전에는 배경도 테두리도 없는 흐르는 텍스트였다.
+ *
+ * 값은 **위 `.complex-row`(사이드바 목록 카드)에서 그대로 가져왔다** —
+ * 새로 디자인하지 않는다. 상세는 그 카드를 눌러서 여는 화면이고 같은
+ * 열 안에 그려지므로, 두 카드 문법이 갈리면 그 자체가 결함이다.
+ * 흰 바탕 위의 흰 카드라 **테두리와 그림자를 함께** 가진다(DESIGN.md:
+ * "그림자만으로는 카드 가장자리가 서지 않는다").
+ * `scripts/result-screen-layout.test.ts`가 두 카드의 값이 같은지
+ * 검사하므로, 한쪽을 움직이면 나머지도 함께 움직여야 한다.
+ */
 .detail-block {
-  margin: 1.5rem 0;
+  margin: 1rem 0;
+  padding: 14px 16px 16px;
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 24px;
+  box-shadow:
+    0 1px 2px rgb(18 41 77 / 5%),
+    0 1px 3px rgb(18 41 77 / 6%);
+}
+
+/*
+ * 값 한 줄 + 그 옆의 내역 아이콘(`.detail-block--costs`에만 있다).
+ *
+ * 두 항목을 **같은 그리드 행에 겹쳐** 둔다: 값은 1열, `<details>`는
+ * 1~2열 전체를 지난다. 그래서 닫혔을 때는 아이콘(summary)이 값의
+ * 오른쪽 끝에 서고, 열었을 때 `<dl>`은 값 아래에서 **카드 전체 폭**을
+ * 쓴다 — `<summary>`는 `<details>` 안에서만 살 수 있어서, 트리거를
+ * 값 옆에 두면서 표를 넓게 펴려면 이 겹침이 필요하다.
+ *
+ * `<details>`를 좁은 2열 안에 가두는 방법도 있었지만 그러면 펼친 표가
+ * 100px 남짓한 열에 눌린다.
+ */
+.detail-stat-line {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: start;
+}
+
+.detail-stat-line > .detail-stat-value {
+  grid-area: 1 / 1;
+}
+
+.detail-stat-line > .cost-breakdown {
+  grid-area: 1 / 1 / auto / 3;
+}
+
+/*
+ * 내역을 펼치는 **아이콘 버튼**(`CostBreakdown`의 summary,
+ * `repeatTotal={false}`인 자리 — 단지 상세의 ① 블록뿐이다).
+ *
+ * 사용자 지시 ③: "안에 내용은 … 옆에 상세보기 아이콘 으로 누르면
+ * 볼수있게 해줘." 예전에는 "내역 보기"라는 텍스트 링크였다.
+ *
+ * ⚠ **클릭 가능 영역은 `<summary>` 그대로다.** 버튼처럼 보이게만
+ * 만들고 `<button>`으로 바꾸지 않는다 — 네이티브 `<details>`의 토글이
+ * 이미 그 일을 하고, 인쇄에서 내용을 펼치는 규칙이 그 태그에 걸린다.
+ *
+ * `width: fit-content`가 아니라 고정 크기 알약인 이유: 이 summary는
+ * 그리드에서 `<details>`의 첫 줄이고, 값(`.detail-stat-value`)과 같은
+ * 줄에 겹쳐 앉는다. 값의 한 줄 높이(1.75rem × 1.2)와 같은 높이를 줘야
+ * 펼친 `<dl>`이 값 **아래**에서 시작한다.
+ *
+ * `margin-left: auto`가 아이콘을 카드 오른쪽 끝으로 민다 — 그래야
+ * summary 상자가 큰 금액 위를 덮지 않는다(덮으면 숫자를 누를 때마다
+ * 표가 열린다).
+ */
+.cost-breakdown-toggle {
+  /* 기본 삼각형 마커를 지운다 — 보이는 것은 아이콘 하나여야 한다 */
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  margin: 0.15rem 0 0 auto;
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 999px;
+  color: var(--result-signal-ink);
+  background: var(--result-paper);
+  cursor: pointer;
+  transition:
+    border-color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    background var(--seed-duration-d3) var(--seed-timing-function-easing);
+}
+
+/* Safari/구 Chromium은 마커를 이 의사 요소로 그린다 */
+.cost-breakdown-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.cost-breakdown-toggle:hover {
+  border-color: var(--result-signal);
+  background: var(--result-signal-wash);
+}
+
+/*
+ * 열림·닫힘을 화살표 방향으로 말한다. 색이나 글자를 쓰지 않고도
+ * 상태가 보이는 유일한 신호라 회전은 장식이 아니다 — 그래도 모션은
+ * `prefers-reduced-motion` 블록이 전역으로 끄고(그때는 회전이 즉시
+ * 일어난다), 방향 자체는 남는다.
+ */
+.cost-breakdown-toggle svg {
+  transition: transform var(--seed-duration-d3) var(--seed-timing-function-easing);
+}
+
+.cost-breakdown[open] > .cost-breakdown-toggle svg {
+  transform: rotate(180deg);
+}
+
+/*
+ * 부대비용 내역을 **두 칸 표**로 세운다(사용자 지시 ②: "카드형식의 표").
+ *
+ * `<dl>`을 `<table>`로 바꾸지 않았다 — 이 정보(이름 하나에 값 하나)에는
+ * `<dl>`이 이미 맞는 시맨틱이고, 태그를 갈아엎으면 인쇄 계약과 기존
+ * 검사가 함께 흔들린다. 표처럼 보이게 하는 것은 여기서 한다: 라벨
+ * 왼쪽, 금액 오른쪽(`tabular-nums`로 자릿수를 세로로 맞춘다).
+ *
+ * 이 규칙은 `BudgetResult`의 같은 컴포넌트에도 걸린다 — 같은 표를 두
+ * 화면이 다르게 그릴 이유가 없다. 그 화면은 `--result-*` 스코프 밖일
+ * 수 있어 선 색에 전역 `--border` 폴백을 함께 적는다.
+ */
+.cost-breakdown dl {
+  margin: 0.5rem 0 0;
+}
+
+.cost-breakdown dl > div {
+  /*
+   * 금액 칸에 **최소 폭**을 준다. 그래야 항목마다 자릿수가 달라도
+   * 숫자의 오른쪽 끝이 한 줄로 선다(그게 "표"의 실제 효용이다).
+   * `max-content`를 상한으로 둬서 억 단위가 들어오는 날에는 칸이
+   * 늘어나고, 그때도 왼쪽 칸이 `minmax(0, 1fr)`이라 라벨 쪽이
+   * 줄바꿈을 진다.
+   */
+  --cost-amount-col: 7.5rem;
+  --cost-col-gap: 0.75rem;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(var(--cost-amount-col), max-content);
+  align-items: baseline;
+  column-gap: var(--cost-col-gap);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.cost-breakdown dl > div:last-child {
+  border-bottom: none;
+}
+
+.cost-breakdown dt {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.cost-breakdown dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  /*
+   * 금액은 줄바꿈하지 않는다 — "1,424만 / 7,840원"으로 끊기면 두 값을
+   * 적은 것처럼 읽힌다. 대신 왼쪽 칸이 `minmax(0, 1fr)`이라 긴 라벨
+   * 쪽이 줄바꿈을 진다.
+   */
+  white-space: nowrap;
+}
+
+/*
+ * 항목 아래 붙는 고지(취득세의 주택 수 고지·국민주택채권 추정치 안내).
+ *
+ * **줄 전체 폭을 쓴다.** 이 고지들은 문장이고 사이드바는 298px다 —
+ * 라벨 칸(금액 칸을 뺀 나머지)에 가두면 한 줄에 두세 글자만 들어가
+ * 세로로 길게 흘러 읽히지 않는다(브라우저로 실측해서 고친 자리다).
+ * `<p>`가 `<dt>` 안에 있어야 하는 것은 `<dl>`의 콘텐츠 모델 때문이라
+ * (dt/dd 말고는 못 넣는다) 칸 밖으로 꺼낼 수 없다 — 대신 폭으로
+ * 금액 칸과 칸 사이 간격만큼을 되찾는다.
+ *
+ * 금액 칸이 `max-content`로 늘어난 경우에는 이 폭이 조금 모자라게
+ * 되지만, 그건 문장이 오른쪽 끝까지 못 닿는 것뿐이라 안전한 쪽이다.
+ */
+.cost-breakdown dt .hint {
+  width: calc(100% + var(--cost-amount-col) + var(--cost-col-gap));
+  margin: 0.15rem 0 0;
 }
 
 .detail-stat-label {

@@ -568,42 +568,67 @@ describe("화면 2 재스킨 대비율 실측 — 흰 면 기준", () => {
  * 남지 않는다. 팔레트가 움직였을 때 **어느 방향으로** 움직였는지 diff에서
  * 보이게 한다.
  *
- * 이 블록이 앉는 면은 사이드바 바탕(`--sheet`, `.region-results-sidebar`가
- * `--seed-color-bg-layer-default`로 칠한다) 하나다 — 상세 화면은 그
- * 사이드바 열 안에서만 그려진다.
+ * **이 블록이 앉는 면이 바뀌었다.** 예전에는 사이드바 바탕(`--sheet`
+ * #f3f6f8)이었다. 사용자 지시("카드를 선택했을때의 내용도 카드형식의
+ * 표로 만들어줘")로 두 블록이 **흰 카드**(`--result-paper` #ffffff,
+ * `.complex-row`와 같은 값)가 되면서, 이제 글자가 실제로 앉는 면은
+ * 흰색이다 — 사이드바 자체도 화면 2 재스킨에서 이미 흰색이 됐다.
+ * 대비는 세 자리 모두 **올라갔다**(면이 밝아졌고 글자는 어둡다).
+ *
+ * 흰색은 `--sheet-2`와 같은 값이라 아래는 그 토큰으로 잰다 — 카드 면을
+ * 뜻하는 전역 이름이 이미 그것이고, `--result-paper`는 `.result-shell`
+ * 스코프 이름이라 여기서 다시 부르면 같은 색에 이름이 둘이 된다.
  */
 describe("단지 상세 Stat Block 대비율 실측 — 본문 크기 기준 4.5:1", () => {
-  const sheet = rawToken("--sheet");
+  /** 카드 면(흰색). `--result-paper`(#ffffff)와 같은 값이다. */
+  const card = rawToken("--sheet-2");
 
-  it("값(.detail-stat-value): --brass-ink on --sheet = 5.19:1", () => {
-    const ratio = contrastRatio(rawToken("--brass-ink"), sheet);
+  it("카드 면이 결과 화면의 --result-paper와 같은 색이다(전제)", () => {
+    // 두 이름이 갈리면 아래 숫자들이 화면과 다른 면을 재게 된다.
+    expect(card).toBe("#ffffff");
+  });
+
+  it("값(.detail-stat-value): --brass-ink on 카드 면 = 5.63:1", () => {
+    const ratio = contrastRatio(rawToken("--brass-ink"), card);
     // 28px/600은 WCAG의 "큰 글자"(18.66px 이상 굵은 글자)라 3:1이면
     // 되지만, 이 값은 본문 기준까지 넘는다 — 여유를 숫자로 남긴다.
     expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
-    expect(ratio.toFixed(2)).toBe("5.19");
+    expect(ratio.toFixed(2)).toBe("5.63");
   });
 
-  it("라벨(.detail-stat-label): --on-sheet-soft on --sheet = 4.69:1", () => {
+  it("라벨(.detail-stat-label): --on-sheet-soft on 카드 면 = 5.09:1", () => {
     // 12px짜리 본문이라 4.5:1이 그대로 요구된다.
-    const ratio = contrastRatio(rawToken("--on-sheet-soft"), sheet);
+    const ratio = contrastRatio(rawToken("--on-sheet-soft"), card);
     expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
-    expect(ratio.toFixed(2)).toBe("4.69");
+    expect(ratio.toFixed(2)).toBe("5.09");
   });
 
-  it("가정 한 줄(.detail-stat-note): --on-sheet-soft on --sheet = 4.69:1", () => {
+  it("가정 한 줄(.detail-stat-note): --on-sheet-soft on 카드 면 = 5.09:1", () => {
     // 금리·기간 가정과 농특세 고지가 이 색으로 나간다. 라벨과 같은
     // 토큰이라 값도 같다 — 여기서 따로 재는 이유는 이 줄이 "가정"이라는
     // 무게를 지기 때문이다: 대비가 무너지면 가장 먼저 안 읽히는 줄이다.
-    const ratio = contrastRatio(rawToken("--on-sheet-soft"), sheet);
+    const ratio = contrastRatio(rawToken("--on-sheet-soft"), card);
     expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
-    expect(ratio.toFixed(2)).toBe("4.69");
+    expect(ratio.toFixed(2)).toBe("5.09");
   });
 
-  it("부담률 한 줄(.detail-burden-ratio): --on-sheet on --sheet = 15.19:1", () => {
+  it("부담률 한 줄(.detail-burden-ratio): --on-sheet on 카드 면 = 16.49:1", () => {
     // 자기 color 규칙이 없어 본문 색을 그대로 물려받는다.
-    const ratio = contrastRatio(rawToken("--on-sheet"), sheet);
+    const ratio = contrastRatio(rawToken("--on-sheet"), card);
     expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
-    expect(ratio.toFixed(2)).toBe("15.19");
+    expect(ratio.toFixed(2)).toBe("16.49");
+  });
+
+  /**
+   * 내역을 펼치는 아이콘 버튼(`.cost-breakdown-toggle`). 화살표는
+   * 글자가 아니라 **비텍스트 콘텐츠**라 WCAG 1.4.11의 3:1이 기준이지만,
+   * 이 자리도 본문 기준을 넘긴다 — 이 버튼이 부대비용 내역으로 가는
+   * 유일한 길이라 여유를 남겼다.
+   */
+  it("내역 아이콘(.cost-breakdown-toggle): --result-signal-ink on 카드 면 = 5.44:1", () => {
+    const ratio = contrastRatio(rawToken("--result-signal-ink"), card);
+    expect(ratio).toBeGreaterThanOrEqual(BODY_TEXT_MIN_RATIO);
+    expect(ratio.toFixed(2)).toBe("5.44");
   });
 });
 

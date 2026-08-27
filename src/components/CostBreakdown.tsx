@@ -19,15 +19,50 @@ export interface CostBreakdownProps {
    * ("부대비용 850만 5,278원").
    *
    * `false`를 주는 자리는 하나뿐이다: 단지 상세의 ① 블록(design.md
-   * §6). 그 화면은 바로 위에서 같은 합계를 "살 때 드는 비용"으로
+   * §6). 그 화면은 바로 위에서 같은 합계를 "취득시 부대비용"으로
    * 크게 내므로, summary가 같은 숫자를 되풀이하면 한 화면에 같은
-   * 금액이 두 번 박힌다. 그때 summary는 "내역"만 말한다 — 접힌 것이
-   * 무엇인지는 여전히 글자로 남는다.
+   * 금액이 두 번 박힌다. 그때 summary는 **아이콘 하나**가 된다
+   * (사용자 지시 ③, 아래 렌더링 주석 참고) — 큰 금액 옆에 붙는
+   * 작은 상세보기 버튼이고, 뜻은 `aria-label`이 진다.
    *
    * **계산은 어느 쪽에서도 달라지지 않는다.** 이 prop이 정하는 것은
-   * summary 문구 하나뿐이고, 표(`<dl>`) 안의 항목·금액은 그대로다.
+   * summary에 보이는 것 하나뿐이고, 표(`<dl>`) 안의 항목·금액은
+   * 그대로 **정확한 원 단위**다(상세 화면의 큰 숫자만 만원 단위로
+   * 반올림한다 — `formatWonRoundedToMan`).
    */
   repeatTotal?: boolean;
+}
+
+/**
+ * 내역을 펼치는 아이콘. 이 저장소에 아이콘 컴포넌트 선례가 없어
+ * 인라인 SVG로 둔다(아이콘 하나 때문에 라이브러리를 들이지 않는다).
+ *
+ * 모양은 **아래를 가리키는 홑화살괄호(chevron)**다. 정보(ⓘ)가 아니라
+ * 화살표를 고른 이유: 이 버튼이 여는 것은 설명이 아니라 **이 자리에서
+ * 아래로 펼쳐지는 표**이고, 열림·닫힘 상태를 회전 하나로 그대로 보일
+ * 수 있다(`.cost-breakdown[open]`에서 180° 돈다 — styles.css).
+ *
+ * `aria-hidden`인 이유는 접근 가능한 이름을 `<summary>`가 지기
+ * 때문이다. 이름을 둘 다 주면 스크린리더가 같은 말을 두 번 읽는다.
+ * `stroke="currentColor"`라 색은 버튼 규칙 하나만 정하면 된다.
+ */
+function ChevronIcon() {
+  return (
+    <svg
+      aria-hidden="true"
+      focusable="false"
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.75"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M4 6.5 8 10.5 12 6.5" />
+    </svg>
+  );
 }
 
 type CostKey = keyof Omit<CostBreakdownData, "total">;
@@ -81,25 +116,45 @@ export function CostBreakdown({
   householdCountNote,
   repeatTotal = true,
 }: CostBreakdownProps) {
+  /*
+    ⚠ **`<details>`/`<summary>`는 그대로 둔다.** 인쇄에서 접힌 내용을
+    강제로 펼치는 규칙(`details:not([open])::details-content`,
+    styles.css의 @media print)이 이 태그에만 걸리므로, 커스텀 토글
+    (useState·모달)로 갈아엎으면 부대비용 내역이 종이에서 통째로
+    사라진다. 아래에서 바뀌는 것은 **summary 안에 보이는 것**뿐이고,
+    새 상태도 이벤트 핸들러도 만들지 않는다 — 네이티브 토글이 이미 그
+    일을 한다(`scripts/printCss.test.ts`·`ComplexDetail.test.tsx`가 이
+    형태를 잠근다).
+  */
   return (
     <details className="cost-breakdown">
-      <summary>
-        {repeatTotal ? (
-          <>
-            부대비용 <span className="cost-total">{formatWon(costs.total)}</span>
-          </>
-        ) : (
-          /*
-            합계는 바로 위에서 이미 크게 적혔다. 여기서는 접힌 것이
-            무엇인지만 말한다 — "더 보기"는 인쇄에서 <details>가 강제로
-            펼쳐지면 죽은 지시문이 되므로 접미사만 따로 감싼다
-            (hiddenInPrint.ts의 `.fold-more-hint`).
-          */
-          <>
-            내역<span className="fold-more-hint"> 보기</span>
-          </>
-        )}
-      </summary>
+      {repeatTotal ? (
+        <summary>
+          부대비용 <span className="cost-total">{formatWon(costs.total)}</span>
+        </summary>
+      ) : (
+        /*
+          합계는 바로 위에서 이미 크게 적혔다. 그래서 이 자리는 글자
+          없이 **아이콘 하나**다(사용자 지시: "옆에 상세보기 아이콘
+          으로 누르면 볼수있게 해줘"). 뜻은 `aria-label`이 진다 —
+          아이콘만 남기고 이름을 주지 않으면 스크린리더에서는 이름
+          없는 버튼이 된다.
+
+          **summary 자체가 `.fold-more-hint`다.** 인쇄에서 <details>는
+          강제로 펼쳐지므로 트리거는 죽은 장치가 된다(종이에서는 누를
+          수 없다) — 텍스트였을 때 접미사("보기")만 이 클래스로 감쌌던
+          것과 같은 이유이고, 지금은 보이는 것이 트리거뿐이라 감싸는
+          범위가 summary 전체다. `.fold-more-hint`는 인쇄에서 지워지는
+          유일한 출처(`src/print/hiddenInPrint.ts`)이며, 그 규칙은
+          summary만 지우고 <dl>은 건드리지 않는다.
+        */
+        <summary
+          className="fold-more-hint cost-breakdown-toggle"
+          aria-label="취득시 부대비용 내역 보기"
+        >
+          <ChevronIcon />
+        </summary>
+      )}
       <dl>
         {ROW_ORDER.map((key) => {
           const { label } = ROW_META[key];

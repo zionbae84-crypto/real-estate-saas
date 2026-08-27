@@ -155,4 +155,91 @@ describe("CostBreakdown", () => {
       );
     });
   });
+
+  /**
+   * ══════════════════════════════════════════════════════════════════
+   * 아이콘 트리거 — `repeatTotal={false}`인 자리(단지 상세의 ① 블록)
+   * ══════════════════════════════════════════════════════════════════
+   *
+   * 사용자 지시: "안에 내용은 살때드는 비용 의 옆에 상세보기 아이콘 으로
+   * 누르면 볼수있게 해줘." 예전에는 `내역<span class="fold-more-hint">
+   * 보기</span>`라는 텍스트 링크였다.
+   *
+   * ⚠ **바뀌는 것은 `<summary>` 안에 보이는 것뿐이다.** `<details>`/
+   * `<summary>` 자체는 그대로 둔다 — 인쇄에서 내용을 강제로 펼치는
+   * `::details-content` 규칙이 그 태그에만 걸리기 때문이다
+   * (`scripts/printCss.test.ts`). 새 상태(`useState`)도 이벤트 핸들러도
+   * 만들지 않는다: 네이티브 토글이 이미 그 일을 한다.
+   *
+   * `repeatTotal`이 기본값(`true`)인 자리(`BudgetResult`)는 **그대로
+   * 글자다** — 그 화면에는 옆에 크게 적힌 합계가 없어서, 아이콘만 남기면
+   * 접힌 것이 무엇인지 말하는 것이 하나도 없어진다.
+   */
+  describe("아이콘 트리거", () => {
+    function 아이콘트리거() {
+      const { container } = render(
+        <CostBreakdown
+          costs={costs()}
+          householdCountNote={유주택문구}
+          repeatTotal={false}
+        />,
+      );
+      return container;
+    }
+
+    it("summary에 보이는 글자가 없다 — 아이콘 하나뿐이다", () => {
+      const summary = 아이콘트리거().querySelector("summary");
+      expect(summary?.textContent?.trim()).toBe("");
+      expect(summary?.querySelector("svg")).not.toBeNull();
+    });
+
+    it("스크린리더에서 뜻이 있게 aria-label을 단다", () => {
+      const summary = 아이콘트리거().querySelector("summary");
+      expect(summary?.getAttribute("aria-label")).toBe("취득시 부대비용 내역 보기");
+    });
+
+    it("아이콘은 장식이라 접근성 트리에서 뺀다 — 이름은 summary가 진다", () => {
+      const svg = 아이콘트리거().querySelector("summary svg");
+      expect(svg?.getAttribute("aria-hidden")).toBe("true");
+    });
+
+    it("인쇄에서는 트리거가 지워진다(.fold-more-hint 관행)", () => {
+      // 인쇄에서 <details>는 강제로 펼쳐지므로 트리거는 죽은 장치가
+      // 된다 — 종이에서는 누를 수 없다. 텍스트 접미사("보기")를 감싸던
+      // 그 클래스를 아이콘 트리거가 그대로 잇는다.
+      const summary = 아이콘트리거().querySelector("summary");
+      expect(summary?.classList.contains("fold-more-hint")).toBe(true);
+    });
+
+    it("<details>/<summary> 구조와 닫힘 기본값은 그대로다", () => {
+      const container = 아이콘트리거();
+      const details = container.querySelector(".cost-breakdown");
+      expect(details?.tagName).toBe("DETAILS");
+      expect(details?.hasAttribute("open")).toBe(false);
+      expect(details?.firstElementChild?.tagName).toBe("SUMMARY");
+    });
+
+    it("접혀 있어도 항목·금액·고지는 DOM에 그대로 있다", () => {
+      const container = 아이콘트리거();
+      expect(container.textContent).toContain("취득세 (지방교육세·농특세 포함)");
+      expect(container.textContent).toContain("840만원");
+      expect(container.textContent).toContain(유주택문구);
+    });
+
+    it("합계를 되풀이하지 않는다 — 바로 위에서 이미 크게 적었다", () => {
+      expect(아이콘트리거().querySelector("summary")?.textContent).not.toMatch(
+        /1,424만/,
+      );
+    });
+
+    it("기본값(repeatTotal 생략)은 그대로 글자 summary다", () => {
+      const { container } = render(
+        <CostBreakdown costs={costs()} householdCountNote={유주택문구} />,
+      );
+      const summary = container.querySelector("summary");
+      expect(summary?.textContent).toMatch(/부대비용/);
+      expect(summary?.textContent).toMatch(/1,424만 7,840원/);
+      expect(summary?.querySelector("svg")).toBeNull();
+    });
+  });
 });
