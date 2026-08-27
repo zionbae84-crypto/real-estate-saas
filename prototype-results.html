@@ -5,28 +5,36 @@
 
   사용자가 시안 A(카드)를 골랐고, 이어서 요청한 것:
     ① 카드 안 글자를 줄일 것
-    ② 코발트 블루 · 밝은 블루 계열로
-    ③ 왼쪽 사이드바 폭을 20%쯤 줄일 것 (372px → 298px)
+    ② 사이드바 폭을 20%쯤 줄일 것 (372px → 298px)
+    ③ 사이드바 배경을 흰색으로
+    ④ 버튼·포인트 색을 Cyan Signal #3ba6f1로
 
   DESIGN.md의 구조(24px 반경 카드 · 18px 알약 · compact 밀도 · Stat Block)는
-  그대로 두고, 중성 회색 계열만 **코발트 계열**로 옮겼다.
+  그대로다.
 
   ── 대비 실측 (직접 계산, 본문 4.5:1 기준) ──────────────────
-                    paper#fff  alt#f3f8fe  canvas#e7f0fd
-    ink    #12294d    14.48      13.56       12.61
-    ink2   #1b3f78    10.35       9.69        9.01
-    gray   #4f6a8c     5.57       5.21        4.85
-    cobalt #0047ab     8.44       7.90        7.34
-    cobalt-bright #0b57d0
-                       6.39       5.98        5.56
-    흰 글자 on ink2   10.35   ·  흰 글자 on cobalt   8.44
+    흰 배경 위 글자
+      ink        #12294d   14.48
+      gray       #4f6a8c    5.57
+      signal-ink #1f6ea9    5.44
 
-  흔히 쓰는 #556f91은 캔버스 위에서 4.49:1로 **아슬하게 미달**이라
-  #4f6a8c로 내렸다. 글자를 줄인 만큼 대비는 더 여유 있게 잡는다.
+    ⚠ **Cyan Signal은 글자로 쓸 수 없다**
+      #3ba6f1 on #ffffff   2.65   ← 본문 4.5:1도, 큰 글자 3:1도 미달
+      #ffffff on #3ba6f1   2.65   ← 흰 글자를 얹는 것도 안 된다
+      #12294d on #3ba6f1   5.46   ← 어두운 글자를 얹으면 된다
 
-  **황동을 뺐다.** 금액도 코발트로 통일했다 — 강조가 둘이면 어느 쪽이
-  더 중요한지 화면이 말하지 못한다. 다만 화면 1(영상+황동)과는 색이
-  갈라지므로, 이어 붙일 때 둘 중 하나로 맞춰야 한다.
+    그래서 이 색은 **채움·테두리**로만 쓰고(버튼 바탕·마커 채움·선택
+    테두리·범례 견본), 색이 글자로 나가야 하는 자리(금액)는 같은 색상을
+    어둡게 한 #1f6ea9를 쓴다. 요청한 색을 눈에 보이는 자리에는 그대로
+    쓰면서, 읽을 수 없는 자리에만 변형을 쓰는 방식이다.
+
+    선택된 카드 바탕 #e8f4fe 위 gray = 4.98
+
+  사이드바가 흰색이 되면서 흰 카드가 바탕에 묻히므로, 카드는 헤어라인
+  테두리 + 얕은 그림자로 경계를 세운다(DESIGN.md도 "그림자만으로는 카드
+  가장자리가 서지 않는다"고 못박는다).
+
+  화면 1(영상)은 아직 황동을 쓴다 — 이어 붙일 때 한쪽으로 맞춰야 한다.
 -->
 <html lang="ko">
 <head>
@@ -38,28 +46,33 @@
 </script>
 <style>
   :root {
-    /* 표면 — 코발트 계열의 밝은 톤 */
-    --canvas: #e7f0fd;
-    --alt:    #f3f8fe;
+    /* 표면 — 사이드바까지 전부 흰색 */
     --paper:  #ffffff;
+    --tint:   #eaf4fd;   /* 배지·버튼 바탕용 아주 옅은 신호색 */
 
     /* 글자 */
-    --ink:    #12294d;   /* 본문·제목 — paper 위 14.48:1 */
-    --ink-2:  #1b3f78;   /* 채움 배지 바탕 — 흰 글자 얹어 10.35:1 */
-    --gray:   #4f6a8c;   /* 보조 — 캔버스 위에서도 4.85:1 */
+    --ink:   #12294d;   /* 본문·제목 — 흰 배경 14.48:1 */
+    --gray:  #4f6a8c;   /* 보조 — 흰 배경 5.57:1 */
 
     /* 선 */
-    --rule: #cfe0f7;
+    --rule: #dbe7f3;
 
-    /* 강조 — 코발트 한 계열로 통일한다 */
-    --cobalt:        #0047ab;  /* 금액·선택 — paper 위 8.44:1 */
-    --cobalt-bright: #0b57d0;  /* 눌림·호버 — 6.39:1 */
     /*
-      선택된 카드 바탕. #dbe8fb로 잡았더니 그 위의 보조 텍스트(--gray)가
-      4.49:1로 **아슬하게 미달**했다 — 선택은 잠깐 스치는 상태가 아니라
-      계속 보고 있는 상태라 여기서 대비를 깎으면 안 된다. 4.71:1로 올렸다.
+      포인트 색 — Cyan Signal #3ba6f1.
+
+      ⚠ **이 색은 글자로 쓸 수 없다.** 실측:
+         #3ba6f1 on #ffffff = 2.65:1   (본문 4.5:1은 물론 큰 글자 3:1도 미달)
+         #ffffff on #3ba6f1 = 2.65:1   (흰 글자를 얹는 것도 안 된다)
+      대신 어두운 글자를 얹으면 잘 나온다:
+         #12294d on #3ba6f1 = 5.46:1
+         #0a1b2e on #3ba6f1 = 6.54:1
+
+      그래서 --signal은 **채움과 테두리**로만 쓰고, 색이 글자로 나가야 하는
+      자리(금액)는 같은 색상을 어둡게 한 --signal-ink를 쓴다.
     */
-    --cobalt-wash:   #e3edfc;
+    --signal:      #3ba6f1;  /* 채움·테두리 — 그 위 글자는 --ink */
+    --signal-ink:  #1f6ea9;  /* 글자용 — 흰 배경 5.44:1 */
+    --signal-wash: #e8f4fe;  /* 선택된 카드 바탕 — 그 위 --gray 4.98:1 */
 
     --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
   }
@@ -67,7 +80,7 @@
   html, body { height: 100%; }
   body {
     margin: 0; font-family: var(--font); color: var(--ink);
-    background: var(--canvas); overflow: hidden;
+    background: var(--paper); overflow: hidden;
     -webkit-font-smoothing: antialiased;
   }
   button { font-family: inherit; }
@@ -103,16 +116,16 @@
     font-size: 18px; font-weight: 600; letter-spacing: -.028em;
     white-space: nowrap;
   }
-  .stat .v.money { color: var(--cobalt); }
+  .stat .v.money { color: var(--signal-ink); }
   .ghost {
-    background: var(--canvas); border: 0; border-radius: 18px;
-    padding: 8px 14px; font-size: 13px; font-weight: 500; color: var(--ink);
+    background: var(--signal); border: 0; border-radius: 18px;
+    padding: 8px 14px; font-size: 13px; font-weight: 600; color: var(--ink);
     cursor: pointer; flex: none;
   }
-  .ghost:hover { background: #d5e5fa; }
+  .ghost:hover { background: #59b4f4; }
 
   /* ── 사이드바 ────────────────────────────────────────────── */
-  .side { background: var(--canvas); padding: 14px 12px 22px; }
+  .side { background: var(--paper); border-right: 1px solid var(--rule); padding: 14px 12px 22px; }
   .sideHead { padding: 4px 8px 12px; }
   .sideHead h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; letter-spacing: -.025em; }
   .sideHead p { margin: 0; font-size: 11.5px; color: var(--gray); line-height: 1.6; }
@@ -128,11 +141,11 @@
     margin-bottom: 8px;
     transition: border-color .14s, box-shadow .14s;
   }
-  .row:hover { background: var(--alt); border-color: var(--cobalt-bright); }
+  .row:hover { background: #fbfdff; border-color: var(--signal); }
   .row[aria-current="true"] {
-    border-color: var(--cobalt);
-    box-shadow: 0 0 0 1px var(--cobalt);
-    background: var(--cobalt-wash);
+    border-color: var(--signal);
+    box-shadow: 0 0 0 1px var(--signal);
+    background: var(--signal-wash);
   }
 
   /* 카드 안 활자 — 요청대로 줄였다 */
@@ -146,9 +159,9 @@
   .tg {
     display: inline-block; margin-top: 9px; border-radius: 18px;
     padding: 2px 9px; font-size: 11px; font-weight: 500;
-    background: var(--canvas); color: var(--ink-2);
+    background: var(--tint); color: var(--ink);
   }
-  .tg.cash { background: var(--ink-2); color: #f7fafc; }
+  .tg.cash { background: var(--signal); color: var(--ink); }
 
   /* ── 지도 위 ─────────────────────────────────────────────── */
   .legend {
@@ -162,20 +175,20 @@
     display: inline-block; width: 8px; height: 8px; border-radius: 2px;
     margin-right: 7px; vertical-align: 1px;
   }
-  .legend .a { background: var(--ink-2); }
-  .legend .b { background: #fff; border: 1px solid var(--gray); }
+  .legend .a { background: var(--signal); }
+  .legend .b { background: #fff; border: 1px solid var(--signal); }
 
   .pin {
     font-family: var(--font); font-size: 11px; font-weight: 600;
     letter-spacing: -.02em; white-space: nowrap;
     padding: 3px 9px; border-radius: 18px;
-    border: 1px solid var(--ink-2); background: #fff; color: var(--ink);
+    border: 1px solid var(--signal); background: #fff; color: var(--ink);
     font-variant-numeric: tabular-nums;
     box-shadow: 0 1px 4px rgba(18,41,77,.22); cursor: pointer;
   }
-  .pin.cash { background: var(--ink-2); color: #fff; }
+  .pin.cash { background: var(--signal); color: var(--ink); }
   /* 선택 표시에 빨강을 쓰지 않는다 — 빨강은 위험을 뜻하는 자리로 남긴다 */
-  .pin.on { background: var(--cobalt); border-color: var(--cobalt); color: #fff; }
+  .pin.on { background: var(--signal-ink); border-color: var(--signal-ink); color: #fff; }
 </style>
 </head>
 <body>
