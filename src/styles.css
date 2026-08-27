@@ -3551,7 +3551,8 @@ body.body-scroll-locked {
 .entry-screen .profile-form > .money-input,
 .entry-screen .profile-form > .household-select,
 .entry-screen .profile-form > .first-time-buyer-select,
-.entry-screen .profile-form > .area-band-select {
+.entry-screen .profile-form > .area-band-select,
+.entry-screen .profile-form > .region-select {
   position: relative;
   width: min(26.5rem, 100%);
   /* 사용자 지시로 더 투명하게 — 흰 틴트·테두리 불투명도를 함께 낮췄다 */
@@ -3603,7 +3604,8 @@ body.body-scroll-locked {
 .entry-screen .seed-field-label__root,
 .entry-screen .area-band-select legend,
 .entry-screen .household-select legend,
-.entry-screen .first-time-buyer-select legend {
+.entry-screen .first-time-buyer-select legend,
+.entry-screen .region-select legend {
   position: absolute;
   top: 0;
   left: 1rem;
@@ -3969,13 +3971,22 @@ body.body-scroll-locked {
   outline-offset: 3px;
 }
 
-/* 지역 — 두 단 select(prototype.html `.region`). */
+/*
+ * 지역 — 두 단 select(prototype.html `.region`). 이제 다른 질문
+ * 카드(`.household-select` 등)와 같은 `<fieldset>` 카드다(사용자 지시로
+ * 3번째 자리로 옮기며 카드 모양도 맞췄다) — 카드 테두리·패딩은 위 공용
+ * 카드 규칙(`.entry-screen .profile-form > .region-select`)이 이미 주므로
+ * 여기서는 UA 기본 fieldset 테두리·패딩만 지운다.
+ */
 .entry-screen .region-select {
+  border: none;
+  padding: 0;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
   align-items: end;
-  margin-top: clamp(1rem, 2.6vh, 1.625rem);
+  /* 다른 카드의 라디오·칩 줄과 같은 간격(0.25rem) — 제목은 이미 테두리에 뜬다 */
+  margin-top: 0.25rem;
 }
 
 .entry-screen .region-select .field {
@@ -4003,8 +4014,8 @@ body.body-scroll-locked {
  * "이 지역으로 조회하기" — 프로토타입의 `.go`. 채운 버튼이 아니라
  * **글자 + 자라는 선**이다.
  *
- * 화살표를 `::after`로 그린다 — `RegionSelect`의 마크업을 건드리지
- * 않는다는 제약(로직·prop 불변)을 지키면서 같은 모양을 낸다.
+ * 화살표는 `::after`로 그린다 — 마크업에 아이콘 요소를 더하지 않고
+ * 같은 모양을 낸다.
  */
 .entry-screen .region-select button {
   grid-column: 1 / -1;
@@ -4051,6 +4062,11 @@ body.body-scroll-locked {
 .entry-screen .region-select button:focus-visible {
   outline: 2px solid var(--brass-lift);
   outline-offset: 4px;
+}
+
+/* 예산이 덜 찼을 때만 뜨는 이유 문구 — 버튼과 같은 전체 폭에 놓는다 */
+.entry-screen .region-select .hint {
+  grid-column: 1 / -1;
 }
 
 .entry-screen .region-query-error p {

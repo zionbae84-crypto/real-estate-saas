@@ -126,17 +126,31 @@ describe("App - 지역 선택 위자드", () => {
     window.localStorage.clear();
   });
 
-  it("예산을 확정하기 전에는 지역 선택 단계가 보이지 않는다", () => {
+  /*
+   * 지역 선택 카드는 이제 화면 1의 3번째 자리(연 소득 다음)에 사용자
+   * 지시로 항상 그려진다 — 예산을 확정하기 전에 숨기는 대신, 조회
+   * 버튼만 잠근다(`RegionSelect.tsx`의 disabled prop). 예산 없이 조회가
+   * 성공하면 화면이 빈 결과 셸로 넘어가는 사고(이 저장소가 여섯 번
+   * 반복한 실패의 형태, 커밋 `c90babf`)를 이 잠금이 막는다.
+   */
+  it("예산을 확정하기 전에도 지역 선택 카드는 보이지만, 구를 골라도 조회 버튼은 비활성화돼 있다", async () => {
     render(<App />);
-    expect(screen.queryByRole("region", { name: "지역 선택" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("광역단체")).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    expect(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    ).toBeDisabled();
   });
 
-  it("현금·소득·주택 수를 입력하면 지역 선택 단계가 나타난다", async () => {
+  it("현금·소득·주택 수·평형대를 모두 정하면 조회 버튼이 활성화된다", async () => {
     render(<App />);
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
     await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
-    expect(screen.getByRole("region", { name: "지역 선택" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    ).not.toBeDisabled();
   });
 
   /*
@@ -1038,7 +1052,7 @@ describe("App - 단지 상세(화면 4)", () => {
     ).toBeInTheDocument();
     // 목록·지역 선택은 상세가 열리면 화면에서 빠진다 — 별개 화면이다.
     expect(
-      screen.queryByRole("region", { name: "지역 선택" }),
+      screen.queryByRole("group", { name: "어느 지역에 살고 싶으세요?" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("살 수 있는 단지")).not.toBeInTheDocument();
   });
@@ -1218,13 +1232,16 @@ describe("App - 단지 상세(화면 4)", () => {
    * 형태다.
    */
   describe("리뷰 수정: 무엇이 모자란지 화면 1에서 말한다", () => {
-    it("돈을 안 넣었으면 그 안내가 입력 화면 안에 있다", () => {
+    it("돈을 안 넣었으면 그 안내가 입력 화면 안에 있다", async () => {
       const { container } = render(<App />);
 
-      // 전제: 아직 조회 버튼이 없다(무엇이 모자란지 화면이 말해야 하는 상태).
+      // 전제: 구를 골라도 조회 버튼이 잠겨 있다(무엇이 모자란지 화면이
+      // 말해야 하는 상태) — 버튼 자체는 이제 항상 화면에 있다(사용자
+      // 지시로 지역 카드가 3번째 자리에 항상 그려지므로).
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
       expect(
-        screen.queryByRole("button", { name: "이 지역으로 조회하기" }),
-      ).not.toBeInTheDocument();
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).toBeDisabled();
 
       const prompt = screen.getByText(/현금·연 소득·주택 수를 알려주면/);
       const entry = container.querySelector(".entry-screen");
@@ -1237,8 +1254,9 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(entry).not.toHaveClass("entry-screen--hidden");
     });
 
-    it("돈·주택 수를 넣으면 안내가 사라지고 지역 선택이 나타난다(대조군)", async () => {
+    it("돈·주택 수를 넣으면 안내가 사라지고 조회 버튼이 풀린다(대조군)", async () => {
       render(<App />);
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
       await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
       await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
       await userEvent.click(
@@ -1250,7 +1268,7 @@ describe("App - 단지 상세(화면 4)", () => {
       ).not.toBeInTheDocument();
       expect(
         screen.getByRole("button", { name: "이 지역으로 조회하기" }),
-      ).toBeInTheDocument();
+      ).not.toBeDisabled();
     });
 
     /**
@@ -1259,6 +1277,7 @@ describe("App - 단지 상세(화면 4)", () => {
      */
     it("돈만 넣고 주택 수를 안 답했으면 여전히 같은 안내다", async () => {
       render(<App />);
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
       await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
       await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
 
@@ -1266,21 +1285,24 @@ describe("App - 단지 상세(화면 4)", () => {
         screen.getByText(/현금·연 소득·주택 수를 알려주면/),
       ).toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "이 지역으로 조회하기" }),
-      ).not.toBeInTheDocument();
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).toBeDisabled();
     });
 
     /**
-     * 평형대를 전부 끄면 조회 버튼이 사라진다. **빈 선택을 조용히
+     * 평형대를 전부 끄면 조회 버튼이 다시 잠긴다. **빈 선택을 조용히
      * "전체"로 바꿔 읽지 않는다** — 그렇게 읽으면 화면이 사용자가 고른 적
-     * 없는 조건으로 결과를 그리면서 그 사실을 말하지 않게 된다.
+     * 없는 조건으로 결과를 그리면서 그 사실을 말하지 않게 된다. 조회
+     * 버튼도 같은 원칙을 따른다 — 평형대 없이 조회하면 결과 화면이 매물을
+     * 하나도 못 보여준다.
      *
      * 이 축을 보려면 먼저 돈·주택 수를 모두 채워야 한다 — 안 그러면
      * 평형대를 아무리 껐다 켜도 "무엇이 모자란지" 조건이 여전히
      * 돈/주택 수 쪽에 걸려 있어 평형대 안내 자체가 뜨지 않는다.
      */
-    it("평형대를 전부 끄면 돈 안내가 아니라 평형대 안내가 나온다", async () => {
+    it("평형대를 전부 끄면 돈 안내가 아니라 평형대 안내가 나오고, 조회 버튼도 잠긴다", async () => {
       render(<App />);
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
       await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
       await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
       await userEvent.click(
@@ -1297,12 +1319,13 @@ describe("App - 단지 상세(화면 4)", () => {
         screen.queryByText(/현금·연 소득·주택 수를 알려주면/),
       ).not.toBeInTheDocument();
       expect(
-        screen.queryByRole("button", { name: "이 지역으로 조회하기" }),
-      ).not.toBeInTheDocument();
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).toBeDisabled();
     });
 
     it("칩을 하나 다시 켜면 곧바로 빠져나온다 — 갇히는 화면이 아니다", async () => {
       render(<App />);
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
       await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
       await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
       await userEvent.click(
@@ -1318,7 +1341,7 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(screen.queryByText(/찾는 평형대를 하나 이상/)).toBeNull();
       expect(
         screen.getByRole("button", { name: "이 지역으로 조회하기" }),
-      ).toBeInTheDocument();
+      ).not.toBeDisabled();
     });
   });
 

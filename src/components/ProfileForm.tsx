@@ -1,17 +1,26 @@
+import type { ReactNode } from "react";
 import { rules } from "../state/useAffordability";
 import type { ProfileFormState } from "../state/useProfileForm";
 import { AreaBandSelect } from "./AreaBandSelect";
 import { MoneyInput } from "./MoneyInput";
 
 /**
- * 화면 1이 묻는 것 — **다섯이다.**
+ * 화면 1이 묻는 것 — **여섯이다.**
  *
- * ① 얼마 있어요? ② 연 소득은요? ③ 무주택이세요? ④ 생애최초 구입이에요?
- * ⑤ 어느 평형대요? (지역은 `RegionSelect`가 바로 아래에서 담당한다 —
- * 예산을 알기 전에 확정하게 두지 않으므로 이 폼이 끝난 뒤에 나타난다.)
+ * ① 얼마 있어요? ② 연 소득은요? ③ 어디에 살고 싶으세요?(지역) ④
+ * 무주택이세요? ⑤ 생애최초 구입이에요? ⑥ 어느 평형대요?
  *
- * ③·④는 카드 모양이 같다 — 물음표로 끝나는 제목 + "맞아요/아니에요"류
- * 라디오 둘. ④는 원래 체크박스 하나였는데 ③과 통일했다(사용자 지시).
+ * ⚠ **③(지역)은 이 컴포넌트 소유가 아니다.** `App.tsx`가
+ * `regionSlot` prop으로 `<RegionSelect>`(+조회 로딩·실패 문구)를
+ * 끼워 넣는다 — 지역 조회는 여러 상태(로딩·성공·실패)를 갖고 그
+ * 상태에 따라 `App.tsx`가 화면 단계(`phase`)까지 옮기므로, 이 순수
+ * 폼 컴포넌트가 직접 소유하기엔 책임이 다르다. 그래도 자리는 사용자
+ * 지시로 여기(② 다음, ④ 앞)가 됐다 — 예산(현금·소득)을 모르는 채로
+ * 지역부터 확정하게 두지 않는다는 원래 취지는 지역 카드 자체의 게이트
+ * (`App.tsx`)가 그대로 지킨다.
+ *
+ * ④·⑤는 카드 모양이 같다 — 물음표로 끝나는 제목 + "맞아요/아니에요"류
+ * 라디오 둘. ⑤는 원래 체크박스 하나였는데 ④와 통일했다(사용자 지시).
  *
  * ⚠ **③·④는 사용자 지시로 되살아났다.** 한때는 "없앤 입력 넷"(생애최초 ·
  * 기존 대출 · 주택 수 · 규제지역 체크박스)에 속해 값을
@@ -31,9 +40,15 @@ export interface ProfileFormProps {
     key: K,
     value: ProfileFormState[K],
   ) => void;
+  /**
+   * 지역 선택(+조회 상태 문구)이 들어갈 자리. `App.tsx`가 넘긴다 —
+   * 위 파일 머리 주석 참고. `null`이면 그 자리에 아무것도 그리지
+   * 않는다(예: 순수 렌더 검증에서 이 슬롯을 비워 두고 싶을 때).
+   */
+  regionSlot?: ReactNode;
 }
 
-export function ProfileForm({ state, setField }: ProfileFormProps) {
+export function ProfileForm({ state, setField, regionSlot }: ProfileFormProps) {
   return (
     <form className="profile-form" onSubmit={(e) => e.preventDefault()}>
       <MoneyInput
@@ -53,6 +68,8 @@ export function ProfileForm({ state, setField }: ProfileFormProps) {
         hint="DSR(총부채원리금상환비율)로 대출 한도를 정하는 데 써요 — 소득이
           낮으면 현금이 있어도 원리금을 감당할 수 있는 만큼만 빌릴 수 있어요."
       />
+
+      {regionSlot}
 
       {/*
         보유 주택 수. 정확한 채수가 아니라 "무주택이냐 아니냐"만 묻는다 —

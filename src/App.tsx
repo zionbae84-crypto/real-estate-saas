@@ -870,7 +870,37 @@ export function App() {
           받았기 때문이다. 유형 선택이 사라지면서 이 앱은 실거주
           전용이 됐고, 이 화면은 언제나 그려진다.
         */}
-        <ProfileForm state={state} setField={setField} />
+        {/*
+          지역 선택은 이제 `ProfileForm` 안, 3번째 자리(연 소득 다음,
+          주택 수 앞)에 그려진다(사용자 지시) — `regionSlot`으로 끼워
+          넣는다. 화면에 항상 보이지만, 예산을 모르는 채로 조회를
+          실행하지는 못한다 — `disabled`가 "이 지역으로 조회하기"
+          버튼을 잠근다(`RegionSelect.tsx`의 disabled prop 주석 참고).
+          이렇게 안 하면 예산 없이 조회가 성공해 화면이 "결과"로
+          넘어가는데 그 결과 셸은 프로필이 없으면 아무것도 그리지
+          않는다 — 이 저장소가 여섯 번 반복한, 빠져나올 수 없는 빈
+          화면(커밋 `c90babf`)과 같은 모양이 된다.
+
+          평형대를 하나도 안 고른 것도 같은 축으로 막는다 — 빈 선택을
+          조용히 "전체"로 읽지 않는다는 원칙(아래 `state.areaBands.length
+          === 0` 분기와 `lib/area-band.ts`의 `matchesAreaBands`)이 조회
+          자체에도 적용돼야, 평형대 없이 조회해 결과 화면이 아무 매물도
+          없이 뜨는 것을 막는다.
+        */}
+        <ProfileForm
+          state={state}
+          setField={setField}
+          regionSlot={
+            <RegionSelect
+              onSelect={handleRegionSelect}
+              disabled={
+                affordability === null ||
+                residentialProfile === null ||
+                state.areaBands.length === 0
+              }
+            />
+          }
+        />
 
         {/*
           예산을 모르는 채로 지역부터 확정하게 두지 않는다. 대신 무엇이
@@ -918,8 +948,6 @@ export function App() {
           </p>
         ) : (
           <>
-            <RegionSelect onSelect={handleRegionSelect} />
-
             {regionComplexes.status === "loading" && (
               <p>지역 실거래가를 조회하고 있어요…</p>
             )}
