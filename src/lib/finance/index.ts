@@ -1,4 +1,9 @@
-export { maxPrincipal, monthlyPayment } from "./amortization";
+export {
+  equalPrincipalSchedule,
+  maxPrincipal,
+  monthlyPayment,
+} from "./amortization";
+export type { EqualPrincipalSchedule } from "./amortization";
 export {
   calcAcquisitionCosts,
   householdCountNoteFor,
