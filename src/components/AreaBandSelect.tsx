@@ -56,10 +56,10 @@ export function AreaBandSelect({
   return (
     <fieldset className="field area-band-select">
       <legend>어느 평형대요?</legend>
-      <p className="hint">
-        전용면적 기준이에요. 여러 개 고를 수 있고, 고른 평형대만 지도와
-        목록에 보여줘요.
-      </p>
+      {/*
+        선택(칩 줄)을 설명보다 먼저 그린다 — 사용자 지시로 다른 질문
+        카드(무주택·생애최초)와 같은 순서로 통일했다.
+      */}
       <div className="area-band-options">
         {ranges.map((range) => (
           <label className="area-band-option" key={range.band}>
@@ -77,6 +77,10 @@ export function AreaBandSelect({
           </label>
         ))}
       </div>
+      <p className="hint">
+        전용면적 기준이에요. 여러 개 고를 수 있고, 고른 평형대만 지도와
+        목록에 보여줘요.
+      </p>
     </fieldset>
   );
 }

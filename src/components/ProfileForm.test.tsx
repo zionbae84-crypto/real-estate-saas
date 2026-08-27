@@ -37,15 +37,16 @@ describe("ProfileForm — 화면 1이 묻는 것", () => {
    * ⚠ **이 테스트가 이 태스크의 핵심이다.** 무엇이 남았는지를 개수로
    * 못박아야 다음에 입력이 조용히 늘거나 주는 것을 잡을 수 있다.
    *
-   * 이 폼이 담는 것은 다섯 중 넷이다 — ① 현금 ② 연 소득 ③ 무주택 여부
-   * ④ 생애최초 여부 ⑤ 평형대. 지역(`RegionSelect`)은 예산을 알기 전에
+   * 이 폼이 담는 것은 다섯이다 — ① 현금 ② 연 소득 ③ 무주택 여부 ④
+   * 생애최초 여부 ⑤ 평형대. 지역(`RegionSelect`)은 예산을 알기 전에
    * 확정하게 두지 않으므로 이 폼 바깥에서, 이 폼이 끝난 뒤에 나타난다
    * (App.tsx).
    *
-   * 주택 수·생애최초는 사용자 지시로 되살아났다 — 라디오 둘(무주택/집이
-   * 있어요)과 체크박스 하나(생애최초)로 각각 나온다.
+   * 주택 수·생애최초는 사용자 지시로 되살아났고, 둘 다 라디오 둘짜리
+   * 카드다(사용자 지시로 생애최초도 체크박스에서 라디오로 바뀌어
+   * 모양이 통일됐다) — 평형대 칩만 체크박스로 남는다.
    */
-  it("입력이 넷이다 — 현금·연 소득·주택 수·생애최초·평형대", () => {
+  it("입력이 다섯이다 — 현금·연 소득·주택 수·생애최초·평형대", () => {
     renderForm();
 
     // 금액 입력 둘. SEED TextField는 textbox로 노출된다.
@@ -53,21 +54,19 @@ describe("ProfileForm — 화면 1이 묻는 것", () => {
     expect(screen.getByLabelText(/얼마 있어요/)).toBeInTheDocument();
     expect(screen.getByLabelText(/연 소득은요/)).toBeInTheDocument();
 
-    // 평형대 칩 + 생애최초 체크박스.
-    expect(screen.getAllByRole("checkbox")).toHaveLength(
-      AREA_BANDS.length + 1,
-    );
-    expect(
-      screen.getByRole("checkbox", { name: /생애최초/ }),
-    ).toBeInTheDocument();
+    // 평형대 칩뿐이다 — 생애최초는 이제 체크박스가 아니라 라디오다.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(AREA_BANDS.length);
     expect(
       screen.getByRole("group", { name: "어느 평형대요?" }),
     ).toBeInTheDocument();
 
-    // 무주택 여부 라디오 둘.
-    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    // 무주택 여부 라디오 둘 + 생애최초 라디오 둘 = 넷.
+    expect(screen.getAllByRole("radio")).toHaveLength(4);
     expect(
       screen.getByRole("group", { name: "무주택이세요?" }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("group", { name: "생애최초 구입이에요?" }),
     ).toBeInTheDocument();
   });
 
@@ -101,16 +100,21 @@ describe("ProfileForm — 화면 1이 묻는 것", () => {
     }
   });
 
-  it("생애최초는 기본으로 꺼져 있다 — 안전한 기본값이다", () => {
+  /**
+   * 생애최초는 값 자체(`isFirstTimeBuyer`)가 항상 true/false라 라디오
+   * 둘 중 하나는 언제나 선택돼 있다 — 무주택 질문과 달리 "아직 아무것도
+   * 선택 안 됨" 상태가 없다(안전한 기본값이라 답을 강제하지 않는다).
+   */
+  it("생애최초는 기본으로 '아니에요'가 선택돼 있다 — 안전한 기본값이다", () => {
     renderForm();
-    expect(screen.getByRole("checkbox", { name: /생애최초/ })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "아니에요" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "맞아요" })).not.toBeChecked();
   });
 
   it("무주택이세요 질문은 기본으로 어느 쪽도 선택돼 있지 않다", () => {
     renderForm();
-    for (const radio of screen.getAllByRole("radio")) {
-      expect(radio).not.toBeChecked();
-    }
+    expect(screen.getByRole("radio", { name: "무주택이에요" })).not.toBeChecked();
+    expect(screen.getByRole("radio", { name: "집이 있어요" })).not.toBeChecked();
   });
 
   it("주택 수·생애최초를 고르면 폼 상태가 바뀐다", async () => {
@@ -121,8 +125,9 @@ describe("ProfileForm — 화면 1이 묻는 것", () => {
       screen.getByRole("radio", { name: "무주택이에요" }),
     ).not.toBeChecked();
 
-    await userEvent.click(screen.getByRole("checkbox", { name: /생애최초/ }));
-    expect(screen.getByRole("checkbox", { name: /생애최초/ })).toBeChecked();
+    await userEvent.click(screen.getByRole("radio", { name: "맞아요" }));
+    expect(screen.getByRole("radio", { name: "맞아요" })).toBeChecked();
+    expect(screen.getByRole("radio", { name: "아니에요" })).not.toBeChecked();
   });
 
   it("평형대 칩을 누르면 폼 상태가 바뀐다", async () => {
