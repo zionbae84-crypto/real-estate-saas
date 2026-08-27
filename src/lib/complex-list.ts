@@ -176,21 +176,23 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
 /**
  * 부담 수준 2분류 — **대출 없이 살 수 있는가, 대출이 필요한가.**
  *
- * 지도 마커 색이 이 뜻을 지고(design.md §4: "마커 색의 뜻이 바뀐다 —
- * 가격대가 아니라 부담 수준이다"), 목록 행도 같은 값으로 갈린다.
+ * 목록 행이 이 값으로 "대출 없이 살 수 있어요"와 "월 …· 부담률 …"을
+ * 가른다.
+ *
+ * ⚠ **예전에는 지도 마커 색도 이 값을 썼다**(design.md §4). 사용자가
+ * "면적·거래건·대출없이(색 구분)를 지우고 단지명·가격만 보여 달라"고
+ * 해서 지도는 이제 이 값을 전혀 안 본다 — 마커가 전부 한 색이다
+ * (`ComplexMap.tsx`, `git log` 기준 "지도 마커를 단지명·가격만 담은
+ * 말풍선 핀으로 바꾸고 부담 수준 색 구분을 걷어낸다"). 이 타입·함수는
+ * 이제 **목록 전용**이다.
  */
 export type BurdenTier = "no-loan" | "loan";
 
 /**
  * 그 행이 대출 없이 살 수 있는 집인가.
  *
- * **목록과 지도가 이 함수 하나를 함께 부른다.** 목록 행
- * (`ComplexList`의 `ComplexRow`)은 이 값으로 "대출 없이 살 수 있어요"
- * (`NoLoanLine`)와 "월 …· 부담률 …"을 가르고, 지도 마커
- * (`ComplexMap`의 `burdenTiers`)는 같은 값으로 색과 라벨 꼬리표를
- * 가른다. 지도가 자기 계산을 따로 하면 두 창이 같은 단지를 두고 다른
- * 말을 하게 된다 — 이 저장소가 여섯 번 겪은 버그 형태다(design.md의
- * Global Constraints, App.tsx의 `mappedUnits` 주석).
+ * 목록 행(`ComplexList`의 `ComplexRow`)이 이 값으로 "대출 없이 살 수
+ * 있어요"(`NoLoanLine`)와 "월 …· 부담률 …"을 가른다.
  *
  * 판정 근거는 `entry.burden`(= `calcBurdenAt`이 그 행의 실제 전용면적
  * 프로필로 `maxPrice`에서 낸 값)뿐이다. 새 계산을 하지 않고, 이미
