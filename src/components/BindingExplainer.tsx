@@ -8,6 +8,27 @@ import {
 
 export interface BindingExplainerProps {
   loanLimit: LoanLimit;
+  /**
+   * LTV 산정 기준. LTV 행의 짧은 안내에 실제로 적용된 매매가·요율을
+   * 밝히는 데 쓴다(사용자 지시: "LTV의 기준이되는 금액이 얼마인지
+   * 알수가 없고 LTV %가 없는데 설명에 기재해줘. 해당 지역에 맞는
+   * LTV를 적용해줘").
+   *
+   * `rate`는 `lib/finance`의 `ltvRateFor(profile, rules)`가 고른 값을
+   * 그대로 받는다 — `calcLtvLimit`(loan-limit.ts)이 이 breakdown.LTV를
+   * 낼 때 쓴 것과 **같은 함수**라, 화면이 계산과 다른 요율을 말할 수
+   * 없다. `breakdown.LTV / price`로 거꾸로 계산하지 않는 이유이기도
+   * 하다 — `breakdown.LTV`는 이미 `Math.floor`를 거친 정수라 나눗셈이
+   * 40.0000003% 같은 잡음을 낼 수 있다.
+   */
+  ltvBasis: {
+    /** LTV 계산에 쓰인 매매가(원) — 이 loanLimit을 낸 바로 그 가격이다. */
+    price: number;
+    /** 적용된 담보인정비율(예: 0.4 = 40%). */
+    rate: number;
+    isRegulatedArea: boolean;
+    isFirstTimeBuyer: boolean;
+  };
 }
 
 const LABELS: Record<BindingConstraint, string> = {
@@ -82,6 +103,25 @@ function formatLimitAmount(key: BindingConstraint, amount: number): string {
   return formatWonRoundedToMan(amount);
 }
 
+/** 0.4 → "40%". 지금 룰셋 값(40%/70%)은 소수점이 없지만, 나중에 바뀌어도 안전하게 남는 만큼만 보여준다. */
+function formatPercent(rate: number): string {
+  return `${Number((rate * 100).toFixed(2))}%`;
+}
+
+/**
+ * LTV 행에 붙는 짧은 안내. 어떤 표(규제지역/비규제지역 × 생애최초
+ * 여부)를 썼는지와 그 결과 요율, 그리고 그 요율이 곱해진 매매가를
+ * 한 문장으로 말한다 — "12억 7,442만원이 왜 그 숫자인지"에 답한다.
+ */
+function describeLtvBasis(basis: BindingExplainerProps["ltvBasis"]): string {
+  const areaLabel = basis.isRegulatedArea ? "규제지역" : "비규제지역";
+  const firstTimeLabel = basis.isFirstTimeBuyer ? " 생애최초" : "";
+  return (
+    `${areaLabel}${firstTimeLabel} 기준 LTV ${formatPercent(basis.rate)}를 ` +
+    `적용했어요. (매매가 ${formatWonRoundedToMan(basis.price)} 기준)`
+  );
+}
+
 /**
  * 대출 한도 카드. 사용자 지시로 `CostBreakdown`과 같은 summary/토글
  * 형식이다 — summary에는 "대출 한도 [금액]"이 항상 보이고, 무엇이
@@ -95,11 +135,14 @@ function formatLimitAmount(key: BindingConstraint, amount: number): string {
  * 것이 결정됐는지는 그 행의 `data-active`·"← 결정" 표시가 말한다.
  *
  * 대신 **LTV 기준**만 간단히 남긴다(사용자 지시: "LTV기준에 대한
- * 간단 언급. 작은글씨로 설명") — LTV가 대부분의 실거주 구매자를
- * 실제로 묶는 제약이라, 그 표의 숫자가 어떤 조건에 따라 갈리는지
- * 한 줄은 필요하다. 프로필별 정확한 요율(40%/70%)까지는 넣지 않는다
- * — 그러려면 이 컴포넌트가 `profile`·`rules`까지 받아야 하는데, 지금은
- * `loanLimit` 하나로 충분한 "간단 언급" 수준을 넘는 결합이다.
+ * 간단 언급. 작은글씨로 설명" — 이어서 "LTV의 기준이되는 금액이
+ * 얼마인지 알수가 없고 LTV %가 없는데 설명에 기재해줘. 해당 지역에
+ * 맞는 LTV를 적용해줘") — LTV가 대부분의 실거주 구매자를 실제로
+ * 묶는 제약이라, 그 표의 숫자가 어떤 매매가·어떤 요율에서 나왔는지
+ * 밝힌다(`ltvBasis` prop, `describeLtvBasis` 참고). 요율은
+ * `ltvRateFor(profile, rules)`가 고른 값을 호출부가 그대로 넘긴다 —
+ * `calcLtvLimit`이 breakdown.LTV를 낼 때 쓴 것과 같은 함수라 계산과
+ * 다른 숫자를 말할 수 없다.
  *
  * 금액은 전부 **만원 단위로 반올림**해 보여준다(사용자 지시) —
  * `CostBreakdown`의 항목별 표는 계산 검증용이라 정확한 원 단위를
@@ -107,7 +150,10 @@ function formatLimitAmount(key: BindingConstraint, amount: number): string {
  * 잔돈이 오히려 비교를 방해한다(`formatWonRoundedToMan` 참고,
  * "화면 표시 전용" — 실제 계산은 그대로 원 단위 정수를 쓴다).
  */
-export function BindingExplainer({ loanLimit }: BindingExplainerProps) {
+export function BindingExplainer({
+  loanLimit,
+  ltvBasis,
+}: BindingExplainerProps) {
   const runnerUp = findRunnerUp(loanLimit.binding, loanLimit.breakdown);
 
   return (
@@ -151,10 +197,7 @@ export function BindingExplainer({ loanLimit }: BindingExplainerProps) {
               {LABELS[key]}
               {key === loanLimit.binding && " ← 결정"}
               {key === "LTV" && (
-                <p className="hint">
-                  규제지역 여부와 생애최초 여부에 따라 담보인정비율이
-                  달라져요.
-                </p>
+                <p className="hint">{describeLtvBasis(ltvBasis)}</p>
               )}
             </dt>
             <dd>{formatLimitAmount(key, loanLimit.breakdown[key])}</dd>

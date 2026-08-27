@@ -37,6 +37,8 @@ function result(overrides: Partial<AffordableResult> = {}): AffordableResult {
 
 interface RenderResultOverrides {
   result?: AffordableResult;
+  isRegulatedArea?: boolean;
+  isFirstTimeBuyer?: boolean;
 }
 
 function renderResult(overrides: RenderResultOverrides = {}) {
@@ -45,6 +47,8 @@ function renderResult(overrides: RenderResultOverrides = {}) {
     <BudgetResult
       result={r}
       householdCountNote={rules.acquisitionTax.householdCountNote}
+      isRegulatedArea={overrides.isRegulatedArea ?? true}
+      isFirstTimeBuyer={overrides.isFirstTimeBuyer ?? false}
     />,
   );
 }

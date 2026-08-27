@@ -22,6 +22,7 @@ export type { AvailableCash } from "./available-cash";
 export {
   calcMaxLoan,
   calcPolicyLimit,
+  ltvRateFor,
   NO_ABSOLUTE_CAP,
   NO_POLICY_LIMIT,
 } from "./loan-limit";

@@ -16,6 +16,18 @@ function limit(binding: LoanLimit["binding"]): LoanLimit {
   };
 }
 
+/**
+ * 대부분의 테스트는 LTV 산정 기준 자체를 검증하지 않으므로 대표값
+ * 하나를 공유한다 — 규제지역·무주택(생애최초 아님) 기준 40%. 이 기준
+ * 자체를 검증하는 테스트는 아래에서 별도 describe로 명시적인 값을 쓴다.
+ */
+const LTV_BASIS = {
+  price: 1_050_000_000,
+  rate: 0.4,
+  isRegulatedArea: true,
+  isFirstTimeBuyer: false,
+};
+
 describe("BindingExplainer", () => {
   /**
    * 사용자 지시: "대출한도 부분 >> 부대비용 형식과 동일하게 표시" —
@@ -23,7 +35,7 @@ describe("BindingExplainer", () => {
    * 한도 표)는 펼쳐야 보인다.
    */
   it("summary에 '대출 한도'와 금액이 항상 보이고, 표는 접힌 채로 시작한다", () => {
-    const { container } = render(<BindingExplainer loanLimit={limit("LTV")} />);
+    const { container } = render(<BindingExplainer loanLimit={limit("LTV")} ltvBasis={LTV_BASIS} />);
     const details = container.querySelector(".binding-explainer");
     expect(details?.tagName).toBe("DETAILS");
     expect(details?.hasAttribute("open")).toBe(false);
@@ -46,7 +58,7 @@ describe("BindingExplainer", () => {
    * 보인다.
    */
   it("네 제약의 한도를 모두 만원 단위로 반올림해 표에 보여준다", () => {
-    render(<BindingExplainer loanLimit={limit("LTV")} />);
+    render(<BindingExplainer loanLimit={limit("LTV")} ltvBasis={LTV_BASIS} />);
     expect(screen.getByText("5억 7,432만원")).toBeInTheDocument();
     expect(screen.getByText("6억원")).toBeInTheDocument();
     // POLICY: 0은 NO_POLICY_LIMIT — "0원 받을 수 있다"가 아니라 "정책대출
@@ -66,7 +78,7 @@ describe("BindingExplainer", () => {
         POLICY: 200_000_000,
       },
     };
-    const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+    const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
     const policyRow = container.querySelector('[data-binding="POLICY"]');
     expect(policyRow).toHaveTextContent("2억원");
     expect(policyRow).not.toHaveTextContent("선택지 없음");
@@ -77,14 +89,100 @@ describe("BindingExplainer", () => {
    * 붙는다 — 나머지 세 행은 이 힌트가 없다.
    */
   it("LTV 행에만 담보인정비율 기준에 대한 짧은 안내가 붙는다", () => {
-    const { container } = render(<BindingExplainer loanLimit={limit("LTV")} />);
+    const { container } = render(
+      <BindingExplainer loanLimit={limit("LTV")} ltvBasis={LTV_BASIS} />,
+    );
     const ltvRow = container.querySelector('[data-binding="LTV"]');
     expect(ltvRow?.querySelector(".hint")).toHaveTextContent(
-      "규제지역 여부와 생애최초 여부에 따라 담보인정비율이 달라져요.",
+      "규제지역 기준 LTV 40%를 적용했어요. (매매가 10억 5,000만원 기준)",
     );
 
     const dsrRow = container.querySelector('[data-binding="DSR"]');
     expect(dsrRow?.querySelector(".hint")).toBeNull();
+  });
+
+  /**
+   * 사용자 지시: "LTV의 기준이되는 금액이 얼마인지 알수가 없고 LTV %가
+   * 없는데 설명에 기재해줘. 해당 지역에 맞는 LTV를 적용해줘." — 네
+   * 조합(규제지역×생애최초) 모두 실제로 적용된 매매가·요율을 정확히
+   * 말하는지 잠근다.
+   */
+  describe("LTV 안내 문구가 조합별로 정확한 기준을 말한다", () => {
+    it("규제지역·생애최초가 아니면 '규제지역 기준'과 그 요율을 말한다", () => {
+      render(
+        <BindingExplainer
+          loanLimit={limit("LTV")}
+          ltvBasis={{
+            price: 1_000_000_000,
+            rate: 0.4,
+            isRegulatedArea: true,
+            isFirstTimeBuyer: false,
+          }}
+        />,
+      );
+      expect(
+        screen.getByText(
+          "규제지역 기준 LTV 40%를 적용했어요. (매매가 10억원 기준)",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("규제지역·생애최초면 '규제지역 생애최초 기준'과 70%를 말한다", () => {
+      render(
+        <BindingExplainer
+          loanLimit={limit("LTV")}
+          ltvBasis={{
+            price: 1_000_000_000,
+            rate: 0.7,
+            isRegulatedArea: true,
+            isFirstTimeBuyer: true,
+          }}
+        />,
+      );
+      expect(
+        screen.getByText(
+          "규제지역 생애최초 기준 LTV 70%를 적용했어요. (매매가 10억원 기준)",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("비규제지역이면 생애최초 여부와 무관하게 '비규제지역 기준'을 말한다", () => {
+      render(
+        <BindingExplainer
+          loanLimit={limit("LTV")}
+          ltvBasis={{
+            price: 1_000_000_000,
+            rate: 0.7,
+            isRegulatedArea: false,
+            isFirstTimeBuyer: false,
+          }}
+        />,
+      );
+      expect(
+        screen.getByText(
+          "비규제지역 기준 LTV 70%를 적용했어요. (매매가 10억원 기준)",
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it("매매가와 요율이 바뀌면 문구도 그 값을 그대로 반영한다", () => {
+      render(
+        <BindingExplainer
+          loanLimit={limit("LTV")}
+          ltvBasis={{
+            price: 1_820_600_000,
+            rate: 0.4,
+            isRegulatedArea: true,
+            isFirstTimeBuyer: false,
+          }}
+        />,
+      );
+      expect(
+        screen.getByText(
+          "규제지역 기준 LTV 40%를 적용했어요. (매매가 18억 2,060만원 기준)",
+        ),
+      ).toBeInTheDocument();
+    });
   });
 
   /**
@@ -96,7 +194,7 @@ describe("BindingExplainer", () => {
     const bindings: LoanLimit["binding"][] = ["LTV", "DSR", "CAP", "POLICY"];
     for (const binding of bindings) {
       const { container, unmount } = render(
-        <BindingExplainer loanLimit={limit(binding)} />,
+        <BindingExplainer loanLimit={limit(binding)} ltvBasis={LTV_BASIS} />,
       );
       expect(container.querySelector(".binding-advice")).toBeNull();
       unmount();
@@ -121,7 +219,7 @@ describe("BindingExplainer", () => {
           POLICY: 0,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       const runnerUp = container.querySelector(".runner-up");
       // 여유액 = 350,000,000 - 172,290,000 = 177,710,000 = "1억 7,771만원"
       expect(runnerUp).toHaveTextContent("담보 가치(LTV)");
@@ -140,7 +238,7 @@ describe("BindingExplainer", () => {
           POLICY: 0,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       const runnerUp = container.querySelector(".runner-up");
       // 2순위는 CAP (150M) 이 DSR (200M) 보다 작음
       // 여유액 = 150,000,000 - 100,000,000 = 50,000,000 = "5,000만원"
@@ -159,7 +257,7 @@ describe("BindingExplainer", () => {
           POLICY: 0,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       const runnerUp = container.querySelector(".runner-up");
       // 2순위는 DSR (120M) 이 CAP (150M) 보다 작음
       // 여유액 = 120,000,000 - 100,000,000 = 20,000,000 = "2,000만원"
@@ -178,7 +276,7 @@ describe("BindingExplainer", () => {
           POLICY: 0,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       // 여유가 0이면 "여유가 있다"는 일반 문구는 거짓이므로 표시하지 않는다.
       expect(container.querySelector(".runner-up")).not.toBeInTheDocument();
       // 대신 같은 금액에서 다른 제약이 다시 걸린다는, 별도 클래스의 문구를 보여준다 —
@@ -199,7 +297,7 @@ describe("BindingExplainer", () => {
           POLICY: 0,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       const runnerUp = container.querySelector(".runner-up");
       // "담보 가치(LTV)" 앞뒤로 조사도 계사("~입니다"/"~이에요")도 붙지 않고
       // 줄표(—)로만 이어지므로, 받침 유무와 무관하게 항상 문법적으로
@@ -227,7 +325,7 @@ describe("BindingExplainer", () => {
           POLICY: 200_000_000,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       expect(container.querySelector(".runner-up")).not.toBeInTheDocument();
       expect(container.querySelector(".runner-up-tied")).not.toBeInTheDocument();
     });
@@ -243,7 +341,7 @@ describe("BindingExplainer", () => {
           POLICY: 0,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       const runnerUp = container.querySelector(".runner-up");
       // 2순위는 LTV (150M) (POLICY는 0이므로 제외, DSR은 200M)
       // 여유액 = 150,000,000 - 100,000,000 = 50,000,000 = "5,000만원"
@@ -267,7 +365,7 @@ describe("BindingExplainer", () => {
           POLICY: 200_000_000,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       const runnerUp = container.querySelector(".runner-up");
       expect(runnerUp).toHaveTextContent("상환 능력(DSR)");
       expect(runnerUp).not.toHaveTextContent("정책대출");
@@ -291,7 +389,7 @@ describe("BindingExplainer", () => {
           POLICY: 217_490_000,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       expect(container.querySelector(".runner-up-tied")).not.toBeInTheDocument();
       const runnerUp = container.querySelector(".runner-up");
       expect(runnerUp).toHaveTextContent("상환 능력(DSR)");
@@ -311,7 +409,7 @@ describe("BindingExplainer", () => {
           POLICY: 500_000_000,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       const runnerUp = container.querySelector(".runner-up");
       expect(runnerUp).toHaveTextContent("상환 능력(DSR)");
       expect(runnerUp).toHaveTextContent("5,000만원");
@@ -332,7 +430,7 @@ describe("BindingExplainer", () => {
           POLICY: 360_000_000,
         },
       };
-      const { container } = render(<BindingExplainer loanLimit={loanLimit} />);
+      const { container } = render(<BindingExplainer loanLimit={loanLimit} ltvBasis={LTV_BASIS} />);
       const runnerUp = container.querySelector(".runner-up");
       expect(runnerUp).not.toBeNull();
       expect(runnerUp).toHaveTextContent("담보 가치(LTV)");
@@ -348,7 +446,7 @@ describe("BindingExplainer", () => {
    * 바로 어느 것이 결정됐는지 드러난다.
    */
   it("결정된 한도가 data-active로 표시된다", () => {
-    const { container } = render(<BindingExplainer loanLimit={limit("LTV")} />);
+    const { container } = render(<BindingExplainer loanLimit={limit("LTV")} ltvBasis={LTV_BASIS} />);
     const table = container.querySelector(".binding-limit-table");
 
     const activeRow = table?.querySelector('[data-binding="LTV"]');

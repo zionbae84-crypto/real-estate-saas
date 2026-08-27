@@ -1,5 +1,5 @@
 import type { AffordableResult } from "../lib/finance";
-import { brokerageFeeRateFor } from "../lib/finance";
+import { brokerageFeeRateFor, ltvRateFor } from "../lib/finance";
 import { rules } from "../state/useAffordability";
 import { BindingExplainer } from "./BindingExplainer";
 import { CostBreakdown } from "./CostBreakdown";
@@ -25,6 +25,15 @@ export interface BudgetResultProps {
    * `householdCountNoteFor`로 골라 넘긴다({@link CostBreakdown} 참고).
    */
   householdCountNote: string;
+  /**
+   * 대출 한도 카드의 LTV 행이 "어느 지역·어느 자격 기준으로 이 요율을
+   * 적용했는지"를 밝히는 데 쓴다(사용자 지시: "해당 지역에 맞는 LTV를
+   * 적용해줘"). `residentialProfile`에서 그대로 받는다 — 이 값이
+   * `loanLimit.breakdown.LTV`를 낸 `calcLtvLimit`의 입력과 정확히
+   * 같아야, 화면이 계산과 다른 지역·자격을 말하지 않는다.
+   */
+  isRegulatedArea: boolean;
+  isFirstTimeBuyer: boolean;
 }
 
 /**
@@ -55,14 +64,27 @@ export interface BudgetResultProps {
  * 여기에 "경고를 숨기는 prop"을 두지 않는다 — 출처가 둘이 되고, 언젠가
  * 두 자리가 서로 다른 경고 집합을 말한다.
  */
-export function BudgetResult({ result, householdCountNote }: BudgetResultProps) {
+export function BudgetResult({
+  result,
+  householdCountNote,
+  isRegulatedArea,
+  isFirstTimeBuyer,
+}: BudgetResultProps) {
   return (
     <section className="budget-result">
       {result.affordablePrice === 0 ? (
         <ZeroBudgetMessage result={result} />
       ) : (
         <>
-          <BindingExplainer loanLimit={result.loanLimit} />
+          <BindingExplainer
+            loanLimit={result.loanLimit}
+            ltvBasis={{
+              price: result.affordablePrice,
+              rate: ltvRateFor({ isRegulatedArea, isFirstTimeBuyer }, rules),
+              isRegulatedArea,
+              isFirstTimeBuyer,
+            }}
+          />
           <CostBreakdown
             costs={result.costs}
             householdCountNote={householdCountNote}

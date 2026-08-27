@@ -231,18 +231,31 @@ function assertNoNaN(breakdown: Record<BindingConstraint, number>): void {
   }
 }
 
+/**
+ * 이 프로필에 적용되는 담보인정비율(LTV). `calcLtvLimit`과 같은 표
+ * (`rules.ltv`)에서 같은 규칙으로 고른다 — 화면(`BindingExplainer`)이
+ * "규제지역 기준 LTV 40%를 적용했어요" 같은 설명을 낼 때, 계산과
+ * 다른 숫자를 말하지 않도록 이 함수 하나를 함께 쓴다.
+ *
+ * 규제지역 무주택자는 40%, 비규제 수도권은 70%. 생애최초는 양쪽 모두
+ * 70%라, 규제지역에서만 생애최초 우대가 실제 의미를 갖는다.
+ */
+export function ltvRateFor(
+  profile: Pick<BuyerProfile, "isRegulatedArea" | "isFirstTimeBuyer">,
+  rules: Rules,
+): number {
+  const table = profile.isRegulatedArea
+    ? rules.ltv.regulated
+    : rules.ltv.unregulated;
+  return profile.isFirstTimeBuyer ? table.firstTimeBuyer : table.default;
+}
+
 function calcLtvLimit(
   profile: BuyerProfile,
   rules: Rules,
   price: number,
 ): number {
-  // 규제지역 무주택자는 40%, 비규제 수도권은 70%. 생애최초는 양쪽 모두
-  // 70%라, 규제지역에서만 생애최초 우대가 실제 의미를 갖는다.
-  const table = profile.isRegulatedArea
-    ? rules.ltv.regulated
-    : rules.ltv.unregulated;
-  const rate = profile.isFirstTimeBuyer ? table.firstTimeBuyer : table.default;
-  return price * rate;
+  return price * ltvRateFor(profile, rules);
 }
 
 /**

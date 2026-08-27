@@ -24,6 +24,7 @@ const EXPECTED_FUNCTIONS = [
   "calcSafetyScore",
   "equalPrincipalSchedule",
   "householdCountNoteFor",
+  "ltvRateFor",
   "matchPolicyLoans",
   "maxPrincipal",
   "monthlyPayment",

@@ -5,6 +5,7 @@ import {
   calcMaxLoan,
   calcPolicyLimit,
   calcPolicyLoanAvailability,
+  ltvRateFor,
   NO_ABSOLUTE_CAP,
 } from "./loan-limit";
 import { matchPolicyLoans } from "./policy-loans";
@@ -581,6 +582,43 @@ describe("규제지역 LTV", () => {
       300_000_000,
     );
     expect(first.breakdown.LTV).toBe(base.breakdown.LTV);
+  });
+});
+
+/**
+ * `ltvRateFor`는 `calcLtvLimit`이 breakdown.LTV를 낼 때 쓰는 것과
+ * 같은 표(rules.ltv)에서 같은 규칙으로 고른다 — 화면(BindingExplainer)이
+ * "규제지역 기준 LTV 40%를 적용했어요" 같은 설명을 낼 때 쓰는 함수라,
+ * 위 "규제지역 LTV" describe의 네 조합과 정확히 같은 값을 내야 한다.
+ */
+describe("ltvRateFor", () => {
+  it("규제지역 무주택(생애최초 아님)은 0.4다", () => {
+    expect(
+      ltvRateFor({ isRegulatedArea: true, isFirstTimeBuyer: false }, rules),
+    ).toBe(0.4);
+  });
+
+  it("규제지역 생애최초는 0.7이다", () => {
+    expect(
+      ltvRateFor({ isRegulatedArea: true, isFirstTimeBuyer: true }, rules),
+    ).toBe(0.7);
+  });
+
+  it("비규제지역은 생애최초 여부와 무관하게 0.7이다", () => {
+    expect(
+      ltvRateFor({ isRegulatedArea: false, isFirstTimeBuyer: false }, rules),
+    ).toBe(0.7);
+    expect(
+      ltvRateFor({ isRegulatedArea: false, isFirstTimeBuyer: true }, rules),
+    ).toBe(0.7);
+  });
+
+  it("calcMaxLoan의 breakdown.LTV와 같은 요율을 고른다 — 두 계산이 다른 표를 보지 않는다", () => {
+    const p = profile({ isRegulatedArea: true, annualIncome: 1_000_000_000 });
+    const price = 300_000_000;
+    const result = calcMaxLoan(p, rules, price);
+    const rate = ltvRateFor(p, rules);
+    expect(Math.floor(price * rate)).toBe(result.breakdown.LTV);
   });
 });
 

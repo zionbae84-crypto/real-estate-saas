@@ -1389,6 +1389,8 @@ export function App() {
                   <BudgetResult
                     result={affordability.result}
                     householdCountNote={ACQUISITION_TAX_SUMMARY_NOTE}
+                    isRegulatedArea={residentialProfile.isRegulatedArea}
+                    isFirstTimeBuyer={residentialProfile.isFirstTimeBuyer}
                   />
                   {affordability.result.affordablePrice > 0 && (
                     <>
