@@ -123,6 +123,30 @@ function describeLtvBasis(basis: BindingExplainerProps["ltvBasis"]): string {
 }
 
 /**
+ * 2순위 제약 행에 붙는 짧은 안내(사용자 지시: "이건 dsr아래에
+ * 작은글씨로 설명으로 이동해줘" — 예전에는 표 위에 독립된 상자로
+ * 떠 있었다). 어느 행 아래 붙는지가 이미 "2순위가 무엇인지"를
+ * 말하므로, 문장 안에서는 2순위 이름을 되풀이하지 않는다 — 대신
+ * **지금 결정된(binding) 쪽**의 이름을 넣어 "그게 없었다면"을
+ * 말한다(사용자 지시: "규제지역 상한이 없으면 얼마더 대출이
+ * 가능해요 이런식으로").
+ *
+ * `bindingLabel`을 문장에 직접 붙이지 않고 고정 명사 "제약"을 사이에
+ * 끼운다 — "담보 가치(LTV)"처럼 괄호로 끝나는 라벨에는 조사를 바로
+ * 붙일 문법적 자리가 없다(LTV 힌트·구 runner-up 문구와 같은 이유).
+ * "제약이"는 앞에 어떤 라벨이 와도 받침 걱정 없이 항상 안전하다.
+ */
+function describeRunnerUp(
+  bindingLabel: string,
+  runnerUp: { constraint: BindingConstraint; headroom: number },
+): string {
+  if (runnerUp.headroom === 0) {
+    return `${bindingLabel} 제약이 없어도 같은 금액이라 여유가 없어요.`;
+  }
+  return `${bindingLabel} 제약이 없으면 ${formatWonRoundedToMan(runnerUp.headroom)} 더 빌릴 수 있어요.`;
+}
+
+/**
  * 대출 한도 카드. 사용자 지시로 `CostBreakdown`과 같은 summary/토글
  * 형식이다 — summary에는 "대출 한도 [금액]"이 항상 보이고, 무엇이
  * 결정됐는지는 표를 펼쳐야 보인다.
@@ -143,6 +167,12 @@ function describeLtvBasis(basis: BindingExplainerProps["ltvBasis"]): string {
  * `ltvRateFor(profile, rules)`가 고른 값을 호출부가 그대로 넘긴다 —
  * `calcLtvLimit`이 breakdown.LTV를 낼 때 쓴 것과 같은 함수라 계산과
  * 다른 숫자를 말할 수 없다.
+ *
+ * **2순위 제약 안내도 표 위 독립된 상자가 아니라 그 행 아래 작은
+ * 글씨다**(사용자 지시: "이건 dsr아래에 작은글씨로 설명으로
+ * 이동해줘"). LTV 힌트와 같은 자리·같은 역할이고, 2순위가 되는
+ * 제약(LTV/DSR/CAP 중 하나, `findRunnerUp` 참고)이 매번 다르므로
+ * 그 행에 동적으로 붙는다(`describeRunnerUp` 참고).
  *
  * 금액은 전부 **만원 단위로 반올림**해 보여준다(사용자 지시) —
  * `CostBreakdown`의 항목별 표는 계산 검증용이라 정확한 원 단위를
@@ -165,27 +195,6 @@ export function BindingExplainer({
         </span>
       </summary>
 
-      {/*
-        사용자 지시로 "다음으로 가까운 한도 — …" 같은 설명조 서두를
-        걷어내고 결론만 남겼다("이건 결론 같은거니 더 쉽게고 간단하게").
-        라벨과 문장 사이에 여전히 조사를 붙이지 않는다 — "담보 가치(LTV)"
-        처럼 괄호로 끝나는 라벨에는 어떤 조사도 문법적으로 자연스럽게
-        못 붙는다(리뷰 수정 가드 사각지대 Minor 1의 그 이유가 그대로
-        남아 있다). 줄표(—)로만 이으면 받침 유무·표기 형태와 무관하게
-        항상 안전하다.
-      */}
-      {runnerUp && runnerUp.headroom === 0 && (
-        <p className="runner-up-tied">
-          {`${LABELS[runnerUp.constraint]} — 같은 금액이라 여유가 없어요.`}
-        </p>
-      )}
-
-      {runnerUp && runnerUp.headroom > 0 && (
-        <p className="runner-up">
-          {`${LABELS[runnerUp.constraint]} — ${formatWonRoundedToMan(runnerUp.headroom)} 더 여유가 있어요.`}
-        </p>
-      )}
-
       <dl className="binding-limit-table">
         {ORDER.map((key) => (
           <div
@@ -198,6 +207,11 @@ export function BindingExplainer({
               {key === loanLimit.binding && " ← 결정"}
               {key === "LTV" && (
                 <p className="hint">{describeLtvBasis(ltvBasis)}</p>
+              )}
+              {runnerUp && key === runnerUp.constraint && (
+                <p className="hint">
+                  {describeRunnerUp(LABELS[loanLimit.binding], runnerUp)}
+                </p>
               )}
             </dt>
             <dd>{formatLimitAmount(key, loanLimit.breakdown[key])}</dd>

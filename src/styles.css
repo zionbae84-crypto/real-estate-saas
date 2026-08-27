@@ -514,24 +514,6 @@ body {
   font-weight: 700;
 }
 
-/*
- * 여유(runner-up)와 동률 재걸림(runner-up-tied). 예전에는 초록(safe)·
- * 노랑(warn) 계열로 갈랐는데, 사용자 지시로 색을 통일했다("어울리고
- * 통일성 있게") — 이 문장은 경고가 아니라 결론 한 줄이라, 같은 카드
- * 안 "← 결정" 행이 이미 쓰는 중립 회색(`--seed-color-bg-neutral-weak`)
- * 을 그대로 재사용한다. 둘의 뜻 차이(여유 있음/없음)는 색이 아니라
- * 문장 자체("더 여유가 있어요" / "여유가 없어요")가 말한다 — 색만으로
- * 의미를 전달하지 않는다는 이 앱의 원칙과도 맞는다.
- */
-.runner-up,
-.runner-up-tied {
-  margin: 0.75rem 0 0;
-  padding: 0.5rem 0.75rem;
-  background: var(--seed-color-bg-neutral-weak);
-  border-radius: 0.25rem;
-  font-size: 0.9375rem;
-}
-
 .no-budget {
   margin: 1rem 0;
   padding: 1rem;
