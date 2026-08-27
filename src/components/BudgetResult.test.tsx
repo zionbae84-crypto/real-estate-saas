@@ -98,30 +98,73 @@ describe("BudgetResult", () => {
     ).toBeInTheDocument();
   });
 
-  it("걸린 제약의 상세 설명은 접힌 채로 들어 있다", () => {
+  /**
+   * 사용자 지시로 겉껍질 `<details>`("부대비용·정책대출·상세 설명 더
+   * 보기")를 걷어냈다 — 대출 한도·부대비용·정책대출이 각자 카드로
+   * 서면서 **요점은 펼쳐진 채**가 됐다.
+   *
+   * 이 테스트가 잠그는 것은 그 뒤집힌 계약이다: 조언은 이제 접혀 있지
+   * **않아야** 한다. 옛 테스트("접힌 채로 들어 있다")를 그대로 두면
+   * 걷어낸 껍질이 다시 들어와도 통과한다.
+   */
+  it("걸린 제약의 조언은 카드에 펼쳐진 채로 보인다 — 접혀 있지 않다", () => {
     renderResult();
-    // <details>는 열려 있지 않아도 텍스트가 DOM에 있다(jsdom은 CSS로
-    // 접힌 콘텐츠의 렌더링을 계산하지 않는다) — 여기서는 "접혀 있다"는
-    // 사실 자체(<details> 안에 있다)를 확인한다.
     const advice = screen.getByText(/현금을 더 모으면/);
-    expect(advice.closest("details")).not.toBeNull();
+    expect(advice.closest("details")).toBeNull();
+    // 그 조언이 앉는 곳은 대출 한도 카드다.
+    expect(advice.closest(".binding-explainer")).not.toBeNull();
   });
 
-  it("리뷰 수정(인쇄 결함 2): summary의 '더 보기'만 별도 span으로 감싼다", () => {
-    // 인쇄에서 <details>가 강제로 펼쳐지면(styles.css의 ::details-content
-    // 규칙) "더 보기"는 이미 펼쳐진 내용 바로 위에서 하라고 시키는 죽은
-    // 지시문이 된다 — .fold-more-hint만 인쇄에서 지운다. 이 details 안에
-    // BindingExplainer의 "네 가지 한도 모두 보기" summary도 중첩돼
-    // 있으므로, 바깥 details의 자식 summary로 범위를 좁혀 조회한다.
+  /**
+   * 요점만 펼치고 **근거는 여전히 접는다.** 껍질 하나를 없앤 것이지
+   * 근거를 없앤 것이 아니라는 것을 카드 안쪽의 `<details>`로 확인한다 —
+   * 네 가지 한도 표가 그것이다(인쇄에서는 강제로 펼쳐진다).
+   */
+  it("한도 넷의 표는 카드 안에서 여전히 접혀 있다", () => {
     renderResult();
-    const summary = document.querySelector(".result-step--fold > summary");
+    const fourLimits = screen.getByText(/네 가지 한도/);
+    const details = fourLimits.closest("details");
+    expect(details).not.toBeNull();
+    expect(details?.closest(".binding-explainer")).not.toBeNull();
+  });
+
+  it("리뷰 수정(인쇄 결함 2): summary의 '모두 보기'만 별도 span으로 감싼다", () => {
+    // 인쇄에서 <details>가 강제로 펼쳐지면(styles.css의 ::details-content
+    // 규칙) "모두 보기"는 이미 펼쳐진 내용 바로 위에서 하라고 시키는 죽은
+    // 지시문이 된다 — .fold-more-hint만 인쇄에서 지운다.
+    //
+    // 겉껍질 details가 사라지면서(사용자 지시) 이 화면에서 그 장치가
+    // 남은 자리는 BindingExplainer의 "네 가지 한도 모두 보기" 하나다.
+    renderResult();
+    const summary = document.querySelector(".binding-explainer summary");
     expect(summary).not.toBeNull();
 
     const hint = summary?.querySelector(".fold-more-hint");
     expect(hint).not.toBeNull();
-    expect(hint?.textContent).toBe(" 더 보기");
+    expect(hint?.textContent).toBe(" 모두 보기");
     // 제목 자체(펼쳐진 내용의 헤딩 구실)는 hint 바깥에 남는다.
-    expect(summary?.textContent).toBe("부대비용·정책대출·상세 설명 더 보기");
+    expect(summary?.textContent).toBe("네 가지 한도 모두 보기");
+  });
+
+  /**
+   * 부대비용·대출 한도의 **요점(금액)이 펼치지 않아도 보인다**는 것이
+   * 이번 사용자 지시의 핵심이다. 옛 구조에서는 둘 다 겉껍질 details
+   * 안에 있어 한 번 펼쳐야 나왔다.
+   */
+  it("부대비용 합계와 대출 한도 금액이 접히지 않은 자리에 있다", () => {
+    renderResult();
+
+    const costTotal = screen.getByText("1,424만 7,840원");
+    expect(costTotal.closest("details[open]")).toBeNull();
+    // 부대비용은 자기 details의 summary 안이다 — 접혀 있어도 보이는 자리다.
+    expect(costTotal.closest("summary")).not.toBeNull();
+
+    // 같은 금액이 접힌 "네 가지 한도" 표의 LTV 줄에도 있으므로
+    // (breakdown.LTV === amount) 카드 머리의 금액으로 범위를 좁힌다.
+    const loanAmount = screen.getByText("4억 2,000만원", {
+      selector: ".binding-amount",
+    });
+    expect(loanAmount.closest("details")).toBeNull();
   });
 
   it("실구매력이 0이면 숫자 대신 안내를 보여준다", () => {

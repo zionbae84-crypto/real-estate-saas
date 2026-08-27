@@ -243,6 +243,95 @@ body {
   margin: 0.25rem 0 0;
 }
 
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 예산 상세 패널의 **카드**(사용자 지시)
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 예전에는 대출 한도·부대비용·정책대출이 `<details>` 한 겹
+ * ("부대비용·정책대출·상세 설명 더 보기") 안에 함께 접혀 있었다. 사용자
+ * 지시로 그 겉껍질을 걷어내고 셋을 각자 카드로 세웠다 — 요점(부대비용
+ * 합계·대출 한도 금액)이 펼치지 않아도 보인다.
+ *
+ * ⚠ **`overflow`·`max-height`·`display: none`을 쓰지 않는다.** 이 카드들은
+ * 인쇄에도 그대로 나가는 자리이고(안에 `MUST_SURVIVE_PRINT_CLASSES`가
+ * 여럿 있다), 그 셋 중 하나라도 걸면 종이에서 내용이 잘리거나 사라진다 —
+ * `scripts/printCss.test.ts`가 `budget-panel`을 겨눈 선택자에 대해 잠그는
+ * 것과 같은 규율을 이름이 다른 이 카드에도 손으로 지킨다. 여기서 하는
+ * 것은 배경·테두리·여백뿐이다.
+ */
+.budget-card,
+.budget-result > .binding-explainer,
+.budget-result > .cost-breakdown,
+.budget-result > .policy-loan-list,
+.budget-panel > .price-slider,
+.budget-panel > .safety-badge {
+  margin: 0 0 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--result-paper, #fff);
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 0.625rem;
+}
+
+/*
+ * 헤드라인 카드만 옅은 바탕으로 한 단 올린다 — 이 패널에서 답에 해당하는
+ * 숫자가 여기 하나뿐이라, 나머지 카드(근거)와 같은 무게로 서면 무엇을
+ * 먼저 읽어야 하는지가 사라진다.
+ */
+.budget-card--headline {
+  background: var(--result-alt, var(--seed-color-bg-neutral-weak));
+}
+
+/*
+ * "실구매 가능 가격" 제목을 **작은 라벨로 낮춘다**(사용자 지시: 요점만
+ * 보이게). `DESIGN.md`의 Stat Block 규율 그대로다 — 라벨 작게 위, 값 크게
+ * 아래. 예전에는 전역 `h2`(24px 700)를 그대로 받아 바로 아래 금액(32px)과
+ * 크기가 붙어, 298px짜리 좁은 카드 안에서 둘 중 무엇이 답인지가 흐렸다.
+ *
+ * **태그는 `<h2>` 그대로 둔다.** 이 패널에서 문서 구조상 여기가 제목
+ * 자리이고, 종이에서도 `<h2>`여야 덩어리의 시작으로 읽힌다 — 바꾸는
+ * 것은 크기뿐이다.
+ */
+.budget-card--headline .result-step--price h2 {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  color: var(--result-gray);
+}
+
+/*
+ * 카드 안에서 마지막 요소의 아래 여백을 지운다 — 안 지우면 카드마다
+ * 바닥에 빈 줄이 하나씩 생겨 카드 높이가 내용과 무관하게 들쭉날쭉해진다.
+ */
+.budget-card > :last-child,
+.budget-result > .binding-explainer > :last-child,
+.budget-result > .policy-loan-list > :last-child {
+  margin-bottom: 0;
+}
+
+/*
+ * 대출 한도 카드. 위 공용 카드 규칙이 테두리·여백을 이미 주므로, 예전
+ * `.binding-explainer` 자신의 규칙(margin: 1rem 0; padding: 1rem;
+ * border …)은 그 규칙에 흡수됐다 — 여기서는 카드 **안쪽** 배치만 한다.
+ * `<h3>` 제목은 이 자리에서 `showTitle={false}`라 그려지지 않고, 카드의
+ * 제목 구실은 `.binding-amount-label`("대출 한도")이 한다.
+ */
+.budget-result > .binding-explainer > h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.9375rem;
+}
+
+/*
+ * 정책대출 카드의 제목. 다른 카드의 제목(부대비용 summary·대출 한도
+ * 라벨)과 같은 크기로 맞춘다 — 카드 셋이 나란히 서는데 제목만 한 단
+ * 크면 그 카드가 더 중요한 것처럼 읽힌다.
+ */
+.budget-result > .policy-loan-list > h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9375rem;
+}
+
 .affordable-price {
   font-size: 2rem;
   font-weight: 700;
@@ -267,13 +356,47 @@ body {
   margin: 0 0 1rem;
 }
 
-.result-step--fold {
-  margin: 1rem 0;
+/*
+ * 부대비용 카드의 제목 줄("부대비용 850만 5,278원"). 카드 바깥 껍질
+ * (`<details className="result-step--fold">`)이 사라지면서 이 summary가
+ * 카드의 제목이 됐다 — 다른 카드 제목과 같은 크기·굵기로 맞추고,
+ * 누를 수 있다는 것은 커서가 말한다.
+ *
+ * `.detail-stat-line` 쪽(단지 상세)은 summary가 아이콘 하나짜리 다른
+ * 갈래(`repeatTotal={false}`)라 이 규칙에 닿지 않는다 — 선택자를
+ * `.budget-result >`로 좁혀 둔 이유다.
+ */
+/*
+ * ⚠ 색은 **폴백 없는 `var()` 하나**로 적는다. `scripts/seed-semantic-tokens.test.ts`
+ * 의 대비 전수 검사는 `var(--a, --b)` 형태를 hex로 풀지 못해 "못 푸는 값"으로
+ * 걸린다 — 검사에서 빠지는 색을 만들지 않는다. 이 자리는 결과 셸 안이라
+ * `--result-ink`가 언제나 정의돼 있다(`.budget-panel-title`이 같은 방식이다).
+ */
+.budget-result > .cost-breakdown > summary {
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--result-ink);
 }
 
-.result-step--fold > summary {
+/*
+ * 계산 전제 접기(`AssumptionLine`). 사용자 지시로 화면에서는 접어 두고
+ * 요약 한 줄만 남긴다 — 카드 셋(대출 한도·부대비용·정책대출)보다 한 단
+ * 낮은 무게라 테두리 없이 옅은 글자만으로 둔다.
+ *
+ * ⚠ 인쇄에서는 `@media print`가 모든 `<details>`를 강제로 펼치므로
+ * 종이에는 세 문장이 그대로 나간다(AssumptionLine.tsx 참고).
+ */
+.assumption-fold {
+  margin: 0 0 0.75rem;
+}
+
+/* 색에 폴백을 쓰지 않는 이유는 위 부대비용 summary 규칙의 주석과 같다. */
+.assumption-fold > summary {
   cursor: pointer;
-  color: var(--seed-color-fg-neutral-muted);
+  padding: 0.25rem 0;
+  font-size: 0.8125rem;
+  color: var(--result-gray);
 }
 
 /*
@@ -444,17 +567,46 @@ body {
   font-size: 0.875rem;
 }
 
+/*
+ * 슬라이더를 실구매 가능 가격 **위로** 올렸을 때의 경고(사용자 지시로
+ * 눈금 상한이 그 위까지 열렸다 — `useAffordability`의 `sliderMax`).
+ *
+ * ⚠ **한계 경고(`.slider-warning`)보다 무겁게 칠한다.** 이 두 문장은
+ * 같은 자리에서 갈리는데, 뜻의 무게가 다르다: 한계 경고는 "여기가
+ * 최대"라는 안내이고 이쪽은 **"지금 현금으로는 못 산다"는 사실**이다.
+ * 같은 노랑으로 두면 슬라이더를 끝까지 민 사람이 두 상태를 같은
+ * 강도로 읽는다.
+ *
+ * `--risk` 계열을 쓰는 이유는 `WarningList`와 같다 — 그냥 지나치면 안
+ * 되는 항목이다. 색만으로 말하지는 않는다: 문장 자체가 "살 수 없어요"와
+ * 모자란 금액을 이미 글자로 적는다.
+ */
+.slider-warning--over {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--seed-color-bg-critical-weak);
+  border-left: 3px solid var(--risk);
+  border-radius: 0.25rem;
+  color: var(--risk);
+}
+
+/* 모자란 금액. 문장 안에서 이 숫자가 사람이 실제로 찾는 값이다. */
+.slider-shortfall {
+  font-weight: 700;
+}
+
 .prompt {
   color: var(--seed-color-fg-neutral-muted);
   margin: 1.5rem 0;
 }
 
-.binding-explainer {
-  margin: 1rem 0;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-}
+/*
+ * 예전에는 여기 `.binding-explainer`가 자기 상자(margin·padding·border·
+ * radius)를 직접 그렸다. 사용자 지시로 이 컴포넌트가 예산 상세 패널의
+ * **대출 한도 카드**가 되면서 그 상자는 위 공용 카드 규칙
+ * (`.budget-result > .binding-explainer`)이 진다 — 같은 상자를 두 자리에
+ * 적어 두면 한쪽만 바뀌는 날 카드 하나만 다른 테두리를 갖는다.
+ */
 
 /*
  * 리뷰 수정(Minor 5): 라벨 없이 숫자만 두면 접힌 4단 안에서 바로 위

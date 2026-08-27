@@ -6,6 +6,11 @@ function renderSlider(overrides: Partial<PriceSliderProps> = {}) {
   const props: PriceSliderProps = {
     price: overrides.price ?? 300_000_000,
     max: overrides.max ?? 640_000_000,
+    // 넘기지 않으면 컴포넌트가 `max`로 기본값을 잡는다 — 눈금 상한이 곧
+    // 한계였던 예전 그대로 움직인다. 아래 "초과 구간" describe만 둘을
+    // 갈라 넘긴다.
+    affordablePrice: overrides.affordablePrice,
+    cashShortfall: overrides.cashShortfall,
     safePrice: overrides.safePrice,
     onChange: overrides.onChange ?? vi.fn(),
   };
@@ -142,6 +147,116 @@ describe("PriceSlider", () => {
       renderSlider({ price: 300_000_000, max: 640_000_000 });
       const priceEl = screen.getByText("3억원", { selector: ".slider-price" });
       expect(priceEl).not.toHaveClass("slider-price--max");
+    });
+  });
+
+  /**
+   * 사용자 지시로 눈금 상한이 실구매 가능 가격 **위**까지 열렸다
+   * (`useAffordability`의 `sliderMax`). 그 위 구간에서 화면이 해야 하는
+   * 말은 하나다 — **지금 현금으로는 못 산다, 얼마가 모자라다.**
+   *
+   * 이 구간이 열리기 전에는 "한계예요"가 눈금 끝의 유일한 문장이었다.
+   * 그 문장이 초과 구간까지 따라 올라가면, 살 수 없는 가격을 살 수 있는
+   * 것처럼 말하게 된다 — 이 앱이 가장 경계하는 방향(낙관 쪽으로 틀리는
+   * 것)이라 아래 두 테스트가 그 경계를 함께 잠근다.
+   */
+  describe("초과 구간 — 실구매 가능 가격 위로 올렸을 때", () => {
+    it("모자란 현금을 금액으로 말한다", () => {
+      renderSlider({
+        price: 700_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 45_000_000,
+      });
+      const warning = screen.getByText(/지금 현금으로는 이 가격을 살 수 없어요/);
+      expect(warning).toBeInTheDocument();
+      expect(warning.textContent).toContain("4,500만원");
+      // 살 수 있는 최대가 얼마인지도 같은 문장이 함께 말한다.
+      expect(warning.textContent).toContain("6억 4,000만원");
+    });
+
+    it("초과 구간에서는 '한계예요' 문장을 내지 않는다 — 살 수 없는 가격이다", () => {
+      renderSlider({
+        price: 700_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 45_000_000,
+      });
+      expect(
+        screen.queryByText(/빌릴 수 있는 한계예요/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("실구매 가능 가격에 정확히 있으면 한계 안내만 나온다", () => {
+      renderSlider({
+        price: 640_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 0,
+      });
+      expect(
+        screen.getByText(/빌릴 수 있는 한계예요/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/지금 현금으로는 이 가격을 살 수 없어요/),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * 금액을 말하는 경고라 금액이 0이면 낼 말이 없다. 두 조건은 정상
+     * 상태에서 함께 참이지만, 하나만 보고 문장을 내면 "현금이 0원 더
+     * 필요해요"라는 답의 모양을 한 거짓말이 나간다.
+     */
+    it("초과 구간이어도 모자란 금액이 0이면 경고를 내지 않는다", () => {
+      renderSlider({
+        price: 700_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 0,
+      });
+      expect(
+        screen.queryByText(/지금 현금으로는 이 가격을 살 수 없어요/),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * 눈금이 한계 위로 이어지면서 "어디까지가 살 수 있는 구간인지"가
+     * 눈금만 봐서는 사라졌다 — 마커로 되돌린다.
+     */
+    it("살 수 있는 최대를 눈금에 마커로 표시한다", () => {
+      renderSlider({
+        price: 300_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+      });
+      expect(screen.getByText("살 수 있는 최대")).toBeInTheDocument();
+    });
+
+    it("안전선과 값이 같으면 마커를 겹쳐 붙이지 않는다", () => {
+      renderSlider({
+        price: 300_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        safePrice: 640_000_000,
+      });
+      expect(screen.getByText("무리 없는 선")).toBeInTheDocument();
+      expect(screen.queryByText("살 수 있는 최대")).not.toBeInTheDocument();
+    });
+
+    /**
+     * 색이 말하는 것은 "이 숫자가 실구매 가능 가격이다"이지 "슬라이더가
+     * 끝까지 갔다"가 아니다 — 눈금 상한이 그 위로 열리면서 둘이 갈렸다.
+     */
+    it("눈금 끝(상한)에서는 브랜드 색을 쓰지 않는다 — 그 값은 못 사는 가격이다", () => {
+      renderSlider({
+        price: 832_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 210_000_000,
+      });
+      expect(
+        screen.getByText("8억 3,200만원", { selector: ".slider-price" }),
+      ).not.toHaveClass("slider-price--max");
     });
   });
 

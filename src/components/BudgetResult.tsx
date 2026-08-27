@@ -34,12 +34,22 @@ export interface BudgetResultProps {
 }
 
 /**
- * 결과를 네 단으로 나눈다.
+ * 결과를 **카드 넉 장**으로 나눈다(사용자 지시).
  *
- * 1. 최대 가격 — 크게
- * 2. 무엇이 막았는지 한 줄
- * 3. 안전선 — 최대 가격 옆에 나란히
- * 4. 접힌 채로 — 부대비용 내역·정책대출 목록·상세 설명
+ * 1. 헤드라인 카드 — 최대 가격 + 무엇이 막았는지 한 줄 + 안전선
+ * 2. 대출 한도 카드 — `BindingExplainer`
+ * 3. 부대비용 카드 — `CostBreakdown`
+ * 4. 정책대출 카드 — `PolicyLoanList`(자격이 없으면 스스로 `null`)
+ *
+ * ⚠ **예전에는 2~4가 `<details>` 한 겹 안에 함께 접혀 있었다**
+ * ("부대비용·정책대출·상세 설명 더 보기"). 사용자 지시로 그 겉껍질을
+ * 걷어내 셋을 각자 카드로 세웠다 — 부대비용 합계와 대출 한도 금액이
+ * 화면에서 **한 번에 보이는 요점**이 됐다.
+ *
+ * 대신 각 카드는 자기 안에서 다시 접는다: 부대비용의 항목별 표
+ * (`CostBreakdown`의 `<dl>`)와 대출 한도의 "네 가지 한도"가 그것이다.
+ * 요점은 펼쳐 두고 근거는 접어 둔다 — 겉껍질 하나를 없앤 것이지 근거를
+ * 없앤 것이 아니다(인쇄에서는 `<details>`가 전부 강제로 펼쳐진다).
  *
  * **경고(`WarningList`)는 이 컴포넌트가 그리지 않는다.** 이 계단 전체가
  * 접히는 예산 상세 패널 안으로 들어갔기 때문이다(Task 5) — 여기서 그리면
@@ -60,53 +70,42 @@ export function BudgetResult({
         <ZeroBudgetMessage result={result} />
       ) : (
         <>
-          <div className="result-step result-step--price">
-            <h2>실구매 가능 가격</h2>
-            {/*
-              SEED `Text`는 공식 문서에 `as` prop이 없다 — 있어도 제목
-              계층이 필요한 자리에는 쓰지 않는다. 그래서 블록 배치는
-              평범한 `<p>`가 맡고, `Text`는(기본 `<span>`) 그 안에서
-              숫자에만 SEED 타이포 토큰을 입힌다.
-            */}
-            <p className="affordable-price">
-              <Text>{formatWon(result.affordablePrice)}</Text>
+          <div className="budget-card budget-card--headline">
+            <div className="result-step result-step--price">
+              <h2>실구매 가능 가격</h2>
+              {/*
+                SEED `Text`는 공식 문서에 `as` prop이 없다 — 있어도 제목
+                계층이 필요한 자리에는 쓰지 않는다. 그래서 블록 배치는
+                평범한 `<p>`가 맡고, `Text`는(기본 `<span>`) 그 안에서
+                숫자에만 SEED 타이포 토큰을 입힌다.
+              */}
+              <p className="affordable-price">
+                <Text>{formatWon(result.affordablePrice)}</Text>
+              </p>
+            </div>
+
+            <p className="result-step result-step--binding">
+              {getBindingTitle(result.loanLimit.binding)}
             </p>
+
+            <div className="result-step result-step--safe-line">
+              <SafeLine
+                affordablePrice={result.affordablePrice}
+                safePrice={safePrice}
+                // ZeroBudgetMessage와 같은 근거로 원인을 판단해 넘긴다 —
+                // breakdown.DSR은 가격에 의존하지 않으므로 affordablePrice가
+                // 0이 아닌 이 분기에서도 그대로 유효하다(SafeLine.tsx 참고).
+                noRepaymentCapacity={result.loanLimit.breakdown.DSR === 0}
+              />
+            </div>
           </div>
 
-          <p className="result-step result-step--binding">
-            {getBindingTitle(result.loanLimit.binding)}
-          </p>
-
-          <div className="result-step result-step--safe-line">
-            <SafeLine
-              affordablePrice={result.affordablePrice}
-              safePrice={safePrice}
-              // ZeroBudgetMessage와 같은 근거로 원인을 판단해 넘긴다 —
-              // breakdown.DSR은 가격에 의존하지 않으므로 affordablePrice가
-              // 0이 아닌 이 분기에서도 그대로 유효하다(SafeLine.tsx 참고).
-              noRepaymentCapacity={result.loanLimit.breakdown.DSR === 0}
-            />
-          </div>
-
-          <details className="result-step result-step--fold">
-            {/*
-              리뷰 수정(인쇄 결함 2): "더 보기"는 인쇄에서 <details>가
-              강제로 펼쳐지면(styles.css의 ::details-content 규칙) 이미
-              펼쳐진 내용 바로 위에서 하라고 시키는 죽은 지시문이 된다.
-              접미사만 별도 span으로 감싸 인쇄에서 지운다 —
-              hiddenInPrint.ts의 .fold-more-hint.
-            */}
-            <summary>
-              부대비용·정책대출·상세 설명
-              <span className="fold-more-hint"> 더 보기</span>
-            </summary>
-            <BindingExplainer loanLimit={result.loanLimit} showTitle={false} />
-            <CostBreakdown
-              costs={result.costs}
-              householdCountNote={householdCountNote}
-            />
-            <PolicyLoanList matched={result.matchedPolicyLoans} />
-          </details>
+          <BindingExplainer loanLimit={result.loanLimit} showTitle={false} />
+          <CostBreakdown
+            costs={result.costs}
+            householdCountNote={householdCountNote}
+          />
+          <PolicyLoanList matched={result.matchedPolicyLoans} />
         </>
       )}
     </section>

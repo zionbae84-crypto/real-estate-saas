@@ -1400,9 +1400,20 @@ export function App() {
                   />
                   {affordability.result.affordablePrice > 0 && (
                     <>
+                      {/*
+                        ⚠ **`max`와 `affordablePrice`는 이제 다른 값이다.**
+                        눈금 상한(`sliderMax`)은 실구매 가능 가격보다
+                        위다(사용자 지시) — 지금 현금으로 못 사는 가격도
+                        짚어 볼 수 있어야 "현금이 얼마 더 필요한지"를
+                        말할 수 있다. 그 금액(`cashShortfall`)은 엔진의
+                        `ownFundsRequired`에서 나온다(useAffordability.ts)
+                        — 슬라이더가 자기 식으로 다시 유도하지 않는다.
+                      */}
                       <PriceSlider
                         price={affordability.price}
-                        max={affordability.result.affordablePrice}
+                        max={affordability.sliderMax}
+                        affordablePrice={affordability.result.affordablePrice}
+                        cashShortfall={affordability.cashShortfall}
                         safePrice={affordability.safePrice}
                         onChange={affordability.setPrice}
                       />

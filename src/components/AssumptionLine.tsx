@@ -202,6 +202,25 @@ export function buildAssumptionItems(
  * 장치는 문구 안의 "눌러서 알려주세요"류 **조작 지시**만 종이에서
  * 지우려고 있던 것인데, 이제 어느 문구에도 조작 지시가 없다 — 전부
  * 사실과 방향뿐이라 종이에 그대로 나가는 것이 맞다.
+ *
+ * ## 접어 둔다 — 그러나 **지우지 않는다**
+ *
+ * 사용자 지시로 이 문구 덩어리를 화면에서 접었다("크게 필요없는
+ * 부분이라서, 축약정리 하거나 제외해도 될것같아"). 둘 중 **축약**을
+ * 골랐고 제외는 고르지 않았다 — 이 목록이 존재하는 이유가 정확히 "조용히
+ * 깔린 기본값을 만들지 않는다"이고, 화면에서 지우면 그 사고를 우리가
+ * 다시 만드는 것이 된다(이 파일 위쪽 `removedInputNotices` 주석 참고).
+ *
+ * 그래서 `<details>`다. 셋 다 고를 수 있는 값이 아니라 **읽고 넘기는
+ * 사실**이라, 요약 한 줄(무엇을 몇 개 가정했는가)로 존재를 알리고 본문은
+ * 펼쳐서 읽게 한다.
+ *
+ * ⚠ **인쇄에서는 접힘이 풀린다.** `styles.css`의 `@media print`가 모든
+ * `<details>`를 강제로 펼치므로(`::details-content` 규칙), 종이에는
+ * 지금까지와 똑같이 세 문장이 그대로 나간다 — `assumption-line`·
+ * `assumption-notice`가 `MUST_SURVIVE_PRINT_CLASSES`인 이유가 여기서도
+ * 그대로 지켜진다. 화면에서만 접히고 종이에서는 펼쳐지는 것이 이
+ * 저장소가 `CostBreakdown`·`BindingExplainer`에서 이미 쓰는 관용구다.
  */
 export function AssumptionLine({
   state,
@@ -216,12 +235,28 @@ export function AssumptionLine({
   if (items.length === 0) return null;
 
   return (
-    <ul className="assumption-line">
-      {items.map((item) => (
-        <li key={item.text}>
-          <p className="assumption-notice">{item.text}</p>
-        </li>
-      ))}
-    </ul>
+    <details className="assumption-fold">
+      {/*
+        요약은 **개수까지 적는다**. "계산 전제"만 적으면 접힌 채로는 이
+        안에 무엇이 몇 개 있는지 알 수 없어, 펼쳐 볼 이유 자체가 화면에
+        드러나지 않는다.
+
+        "펼쳐 보기"만 `.fold-more-hint`로 감싼다 — 인쇄에서 이미 펼쳐진
+        내용 위에 붙는 죽은 지시문이라(hiddenInPrint.ts), 이 저장소가
+        다른 `<details>`에서 쓰는 것과 같은 처리다. 제목("계산 전제
+        N가지")은 펼쳐진 내용의 머리글로 여전히 뜻이 있어 남는다.
+      */}
+      <summary>
+        계산 전제 {items.length}가지
+        <span className="fold-more-hint"> 펼쳐 보기</span>
+      </summary>
+      <ul className="assumption-line">
+        {items.map((item) => (
+          <li key={item.text}>
+            <p className="assumption-notice">{item.text}</p>
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }

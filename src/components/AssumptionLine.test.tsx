@@ -271,4 +271,60 @@ describe("렌더 — 전부 순수 정보 문구다", () => {
     // 하나 더 붙는다 — 기존 대출·규제지역·면적 셋이 최소치다.
     expect(screen.getAllByRole("listitem").length).toBeGreaterThanOrEqual(3);
   });
+
+  /**
+   * 사용자 지시로 이 덩어리를 화면에서 **접었다**("크게 필요없는
+   * 부분이라서, 축약정리 하거나 제외해도 될것같아").
+   *
+   * ⚠ **둘 중 축약을 골랐고 제외는 고르지 않았다.** 이 목록이 존재하는
+   * 이유가 정확히 "조용히 깔린 기본값을 만들지 않는다"이고, 문구를
+   * 지우면 이 저장소가 여섯 번 반복한 그 사고를 우리가 다시 만드는 것이
+   * 된다. 아래 두 테스트가 **접혔다**와 **그대로 남아 있다**를 함께
+   * 잠근다 — 하나만 잠그면 다음 사람이 "접는다"를 "지운다"로 읽는다.
+   */
+  it("화면에서는 접힌다 — 요약 한 줄이 개수를 말한다", () => {
+    const { container } = render(<AssumptionLine state={state()} />);
+    const fold = container.querySelector("details.assumption-fold");
+    expect(fold).not.toBeNull();
+    // 기본 상태는 접힘이다.
+    expect(fold).not.toHaveAttribute("open");
+
+    const items = buildAssumptionItems(state(), THRESHOLD);
+    expect(fold?.querySelector("summary")?.textContent).toBe(
+      `계산 전제 ${items.length}가지 펼쳐 보기`,
+    );
+  });
+
+  it("접혀도 문구는 DOM에 그대로 남는다 — 인쇄에서 강제로 펼쳐지는 자리다", () => {
+    const { container } = render(<AssumptionLine state={state()} />);
+    const items = buildAssumptionItems(state(), THRESHOLD);
+
+    // 접힘은 CSS가 하는 일이고, 종이에서는 @media print가 모든 details를
+    // 강제로 펼친다(styles.css의 ::details-content). 그래서 문구 수는
+    // 접기 전과 똑같아야 한다.
+    const notices = container.querySelectorAll(".assumption-notice");
+    expect(notices).toHaveLength(items.length);
+    for (const item of items) {
+      expect(container.textContent).toContain(item.text);
+    }
+
+    // 목록은 접기 안쪽에 있다 — 바깥으로 새어 나가면 접어도 화면에 남는다.
+    expect(
+      container.querySelector("details.assumption-fold ul.assumption-line"),
+    ).not.toBeNull();
+  });
+
+  /**
+   * "펼쳐 보기"는 인쇄에서 이미 펼쳐진 내용 위에 붙는 죽은 지시문이라
+   * `.fold-more-hint`로 감싸 종이에서만 지운다(hiddenInPrint.ts).
+   * 제목("계산 전제 N가지")은 펼쳐진 내용의 머리글로 뜻이 남아 그대로
+   * 나간다.
+   */
+  it("요약의 '펼쳐 보기'만 .fold-more-hint로 감싼다", () => {
+    const { container } = render(<AssumptionLine state={state()} />);
+    const hint = container.querySelector(
+      ".assumption-fold > summary > .fold-more-hint",
+    );
+    expect(hint?.textContent).toBe(" 펼쳐 보기");
+  });
 });
