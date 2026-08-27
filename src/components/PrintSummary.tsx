@@ -16,12 +16,15 @@ import {
  * 그래서 이 컴포넌트가 계산의 전제를 화면 상태와 무관하게 항상 같은
  * 자리에서 평문으로 낸다.
  *
- * ⚠ **없앤 입력 넷의 가정값도 여기 남는다.** 종이를 건네받은 사람은
- * 화면을 보지 못했고, 그 사람에게 "무주택 기준"·"기존 대출 없음
- * 기준"이라는 전제가 빠지면 남은 숫자를 자기 사정에 그대로 적용해
- * 읽는다. 값은 `ASSUMED_REMOVED_INPUTS` 한 곳에서 온다 — 화면의 가정
- * 문구(`AssumptionLine`)와 같은 원본이라 종이와 화면이 두 말을 할 수
- * 없다.
+ * ⚠ **아직 남은 가정(기존 대출)의 값도 여기 남는다.** 종이를 건네받은
+ * 사람은 화면을 보지 못했고, 그 사람에게 "기존 대출 없음 기준"이라는
+ * 전제가 빠지면 남은 숫자를 자기 사정에 그대로 적용해 읽는다. 값은
+ * `ASSUMED_REMOVED_INPUTS` 한 곳에서 온다 — 화면의 가정 문구
+ * (`AssumptionLine`)와 같은 원본이라 종이와 화면이 두 말을 할 수 없다.
+ *
+ * 주택 수·생애최초는 이제 가정이 아니라 **사용자가 답한 값**이다
+ * (`state.ownedHomeCount`·`isFirstTimeBuyer`) — 그래서 아래 표에서
+ * "(가정)"이 안 붙는다.
  */
 
 /**
@@ -85,16 +88,23 @@ export function buildPrintSummaryItems(
       value: describeAreaBands(state.areaBands, ruralTaxAreaThresholdSqm),
     },
     {
-      // 아래 넷은 화면에서 **없앤 입력**의 가정값이다. 사용자가 답한
-      // 것이 아니므로 전부 "(가정)"을 달아 사실과 가정을 가른다.
+      // 사용자가 화면 1에서 직접 답한 값이다 — "(가정)"을 달지 않는다.
+      // null(미답변)은 이 컴포넌트에 도달하지 않는다: toProfile이 그
+      // 상태에서 null을 돌려주므로 결과 화면 자체가 뜨지 않는다
+      // (App.tsx). 그래도 타입이 `number | null`이라 방어적으로 다룬다.
       label: "주택 수",
-      value: `${describeOwnedHomeCount(ASSUMED_REMOVED_INPUTS.ownedHomeCount)} (가정)`,
+      value:
+        state.ownedHomeCount === null
+          ? "입력 안 함"
+          : describeOwnedHomeCount(state.ownedHomeCount),
     },
     {
       label: "생애최초 주택 구입",
-      value: `${ASSUMED_REMOVED_INPUTS.isFirstTimeBuyer ? "예" : "아니오"} (가정)`,
+      value: state.isFirstTimeBuyer ? "예" : "아니오",
     },
     {
+      // 아래는 화면에서 여전히 **없앤 입력**의 가정값이다. 사용자가
+      // 답한 것이 아니므로 "(가정)"을 달아 사실과 가정을 가른다.
       label: "기존 대출(연간 상환액)",
       value:
         ASSUMED_REMOVED_INPUTS.existingDebtAnnualPayment === 0

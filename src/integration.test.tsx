@@ -119,25 +119,30 @@ describe("예산 계산기 통합", () => {
   it("필수값을 채우기 전에는 결과를 그리지 않는다", () => {
     render(<App />);
     expect(screen.queryByText("실구매 가능 가격")).not.toBeInTheDocument();
-    expect(screen.getByText(/현금과 연 소득을 알려주면/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/현금·연 소득·주택 수를 알려주면/),
+    ).toBeInTheDocument();
   });
 
   /**
-   * ⚠ **주택 수는 더 이상 묻지 않는다 — 무주택으로 가정한다**(스펙 §3).
+   * 주택 수(무주택이세요?)·생애최초는 사용자 지시로 다시 화면 1의 실제
+   * 질문이 됐다 — cash·annualIncome과 같은 자리에 서므로 답하지 않으면
+   * 결과가 뜨지 않는다(`ProfileFormState.ownedHomeCount` 참고).
    *
-   * 예전에는 현금·소득과 같은 층위의 필수 답이었다. 화면 1이 네 질문으로
-   * 줄면서 그 입력이 사라졌고, 미답을 기다리는 대신 **가정하고 그 사실을
-   * 적는다.** 가정은 낙관 방향이므로(무주택이면 디딤돌·보금자리론 자격이
-   * 모두 열려 한도가 커진다) 그 문장이 반드시 화면에 있어야 한다 —
-   * 이 테스트가 그 짝을 잠근다.
+   * 남은 진짜 가정은 기존 대출뿐이다. 그 가정은 낙관 방향이므로(기존
+   * 대출이 없으면 DSR 여력이 그대로 남아 한도가 커진다) 그 문장이
+   * 반드시 화면에 있어야 한다 — 이 테스트가 그 짝을 잠근다.
    */
-  it("현금·소득만 넣으면 결과가 나오고, 무주택 가정이 화면에 적힌다", async () => {
+  it("현금·소득·주택 수를 넣으면 결과가 나오고, 기존 대출 가정이 화면에 적힌다", async () => {
     render(<App />);
 
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.queryByText(/현금과 연 소득을 알려주면/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/현금·연 소득·주택 수를 알려주면/),
+    ).not.toBeInTheDocument();
 
     // 제목으로 찾는다 — 전체화면 셸의 상단바 요약이 **같은 라벨**로 같은
     // 숫자를 함께 보여주므로(App.tsx의 ResultSummaryItem "실구매 가능
@@ -147,9 +152,12 @@ describe("예산 계산기 통합", () => {
     ).toBeInTheDocument();
 
     // 가정 문구는 예산 상세 패널 안에 있다(닫혀 있어도 DOM에는 있다).
-    expect(screen.getByText(/무주택으로 계산했어요/)).toBeInTheDocument();
-    expect(screen.getByText(/기존 대출이 없다고 보고 계산했어요/)).toBeInTheDocument();
-    expect(screen.getByText(/생애최초 우대는 빼고 계산했어요/)).toBeInTheDocument();
+    // 주택 수·생애최초는 이제 답한 값이라 이 자리에 안 나온다 — 폼 자체가
+    // 그 답을 보여준다.
+    expect(
+      screen.getByText(/기존 대출이 없다고 보고 계산했어요/),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/생애최초 우대는 빼고 계산했어요/)).toBeNull();
   });
 
   /**
@@ -161,6 +169,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "5000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
     expect(screen.getByText("보금자리론")).toBeInTheDocument();
   });
 
@@ -176,6 +185,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "5000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     expect(screen.getByText(무주택문구)).toBeInTheDocument();
     expect(screen.queryByText(유주택문구)).not.toBeInTheDocument();
@@ -186,6 +196,7 @@ describe("예산 계산기 통합", () => {
 
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     // 위와 같은 이유로 제목으로 찾는다(상단바 요약이 같은 라벨을 쓴다).
     expect(
@@ -207,6 +218,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     const slider = screen.getByRole("slider");
     // SEED 썸은 <div role="slider">라 네이티브 max 속성이 없다 —
@@ -230,6 +242,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     expect(
       screen.getByText(/빌릴 수 있는 한계예요\. 무리 없는 선은 따로 있어요/),
@@ -260,6 +273,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     const priceBefore = readAffordablePrice();
     expect(priceBefore).toBeGreaterThan(0);
@@ -286,6 +300,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
 
@@ -317,6 +332,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     expect(screen.getByText(/확인하지 못해/)).toBeInTheDocument();
 
@@ -344,6 +360,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
     await selectRegion("서울특별시", "강남구");
@@ -381,6 +398,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
     await selectRegion("서울특별시", "강남구");
@@ -415,6 +433,7 @@ describe("예산 계산기 통합", () => {
     render(<App />);
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
@@ -464,6 +483,10 @@ describe("저장본에서 시작하는 세션", () => {
       JSON.stringify({
         cash: 200_000_000,
         annualIncome: 100_000_000,
+        // 주택 수는 사용자 지시로 다시 필수값이 됐다 — 빠지면
+        // toProfile이 null을 돌려주고 이 블록의 렌더 전제(결과 화면이
+        // 바로 뜬다) 자체가 깨진다.
+        ownedHomeCount: 0,
         isRegulatedArea: true,
         touched: ["regulatedArea"],
         ...overrides,

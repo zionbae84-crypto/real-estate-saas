@@ -34,15 +34,18 @@ function renderForm(initial: Partial<ProfileFormState> = {}) {
 
 describe("ProfileForm — 화면 1이 묻는 것", () => {
   /**
-   * ⚠ **이 테스트가 이 태스크의 핵심이다.** 스펙이 요구한 것은 새 화면이
-   * 아니라 **덜어내는 것**이고, 무엇이 남았는지를 개수로 못박아야 다음에
-   * 입력이 조용히 다시 늘어나는 것을 잡을 수 있다.
+   * ⚠ **이 테스트가 이 태스크의 핵심이다.** 무엇이 남았는지를 개수로
+   * 못박아야 다음에 입력이 조용히 늘거나 주는 것을 잡을 수 있다.
    *
-   * 이 폼이 담는 것은 넷 중 셋이다 — ① 현금 ② 연 소득 ④ 평형대.
-   * ③ 지역(`RegionSelect`)은 예산을 알기 전에 확정하게 두지 않으므로
-   * 이 폼 바깥에서, 이 폼이 끝난 뒤에 나타난다(App.tsx).
+   * 이 폼이 담는 것은 다섯 중 넷이다 — ① 현금 ② 연 소득 ③ 무주택 여부
+   * ④ 생애최초 여부 ⑤ 평형대. 지역(`RegionSelect`)은 예산을 알기 전에
+   * 확정하게 두지 않으므로 이 폼 바깥에서, 이 폼이 끝난 뒤에 나타난다
+   * (App.tsx).
+   *
+   * 주택 수·생애최초는 사용자 지시로 되살아났다 — 라디오 둘(무주택/집이
+   * 있어요)과 체크박스 하나(생애최초)로 각각 나온다.
    */
-  it("입력이 셋뿐이다 — 현금·연 소득·평형대", () => {
+  it("입력이 넷이다 — 현금·연 소득·주택 수·생애최초·평형대", () => {
     renderForm();
 
     // 금액 입력 둘. SEED TextField는 textbox로 노출된다.
@@ -50,33 +53,35 @@ describe("ProfileForm — 화면 1이 묻는 것", () => {
     expect(screen.getByLabelText(/얼마 있어요/)).toBeInTheDocument();
     expect(screen.getByLabelText(/연 소득은요/)).toBeInTheDocument();
 
-    // 평형대 칩 넷. 이것이 유일한 체크박스 묶음이다.
-    expect(screen.getAllByRole("checkbox")).toHaveLength(AREA_BANDS.length);
+    // 평형대 칩 + 생애최초 체크박스.
+    expect(screen.getAllByRole("checkbox")).toHaveLength(
+      AREA_BANDS.length + 1,
+    );
+    expect(
+      screen.getByRole("checkbox", { name: /생애최초/ }),
+    ).toBeInTheDocument();
     expect(
       screen.getByRole("group", { name: "어느 평형대요?" }),
     ).toBeInTheDocument();
 
-    // 라디오·숫자 입력은 하나도 없다.
-    expect(screen.queryAllByRole("radio")).toHaveLength(0);
+    // 무주택 여부 라디오 둘.
+    expect(screen.getAllByRole("radio")).toHaveLength(2);
+    expect(
+      screen.getByRole("group", { name: "무주택이세요?" }),
+    ).toBeInTheDocument();
   });
 
   /**
-   * 없앤 입력 넷이 **어떤 상태에서도** 돌아오지 않는다. 예전에는 이
-   * 셋(기존 대출·규제지역·전용면적)이 `openField`/`touched`에 따라
-   * 조건부로 나타났다 — 그 조건 자체가 사라졌으므로 조회할 라벨도
-   * 사라져야 한다.
+   * 없앤 입력 둘(기존 대출·규제지역 체크박스)은 **어떤 상태에서도**
+   * 돌아오지 않는다.
    */
-  it("없앤 입력 넷은 어디에도 없다", () => {
+  it("남은 없앤 입력 둘은 어디에도 없다", () => {
     // touched를 채워도, 옛 조건이 참이 될 만한 상태를 만들어도 마찬가지다.
     renderForm({ touched: ["regulatedArea"] });
 
     expect(screen.queryByLabelText(/매달 나가는 대출금/)).toBeNull();
     expect(screen.queryByLabelText(/전용면적/)).toBeNull();
     expect(screen.queryByRole("checkbox", { name: /규제지역/ })).toBeNull();
-    expect(screen.queryByRole("checkbox", { name: /생애최초/ })).toBeNull();
-    expect(screen.queryByLabelText("무주택")).toBeNull();
-    expect(screen.queryByLabelText("유주택")).toBeNull();
-    expect(screen.queryByLabelText(/주택 수/)).toBeNull();
   });
 
   it("현금과 연 소득을 입력할 수 있다", async () => {
@@ -89,9 +94,35 @@ describe("ProfileForm — 화면 1이 묻는 것", () => {
 
   it("평형대는 기본으로 전부 켜져 있다 — 필터 없음이 시작 상태다", () => {
     renderForm();
-    for (const checkbox of screen.getAllByRole("checkbox")) {
+    for (const checkbox of screen.getAllByRole("checkbox", {
+      name: /㎡/,
+    })) {
       expect(checkbox).toBeChecked();
     }
+  });
+
+  it("생애최초는 기본으로 꺼져 있다 — 안전한 기본값이다", () => {
+    renderForm();
+    expect(screen.getByRole("checkbox", { name: /생애최초/ })).not.toBeChecked();
+  });
+
+  it("무주택이세요 질문은 기본으로 어느 쪽도 선택돼 있지 않다", () => {
+    renderForm();
+    for (const radio of screen.getAllByRole("radio")) {
+      expect(radio).not.toBeChecked();
+    }
+  });
+
+  it("주택 수·생애최초를 고르면 폼 상태가 바뀐다", async () => {
+    renderForm();
+    await userEvent.click(screen.getByRole("radio", { name: "집이 있어요" }));
+    expect(screen.getByRole("radio", { name: "집이 있어요" })).toBeChecked();
+    expect(
+      screen.getByRole("radio", { name: "무주택이에요" }),
+    ).not.toBeChecked();
+
+    await userEvent.click(screen.getByRole("checkbox", { name: /생애최초/ }));
+    expect(screen.getByRole("checkbox", { name: /생애최초/ })).toBeChecked();
   });
 
   it("평형대 칩을 누르면 폼 상태가 바뀐다", async () => {

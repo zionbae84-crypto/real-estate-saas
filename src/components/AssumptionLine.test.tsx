@@ -24,19 +24,20 @@ const texts = (s: ProfileFormState, areaOverridden = false) =>
 const joined = (s: ProfileFormState, areaOverridden = false) =>
   texts(s, areaOverridden).join("\n");
 
-describe("없앤 입력 넷은 조용한 기본값이 아니라 문장으로 남는다", () => {
+describe("여전히 없앤 입력(기존 대출)·규제지역은 조용한 기본값이 아니라 문장으로 남는다", () => {
   /**
    * ⚠ **이 저장소가 여섯 번 반복한 사고를 겨누는 테스트다.**
    *
-   * 화면 1에서 입력란 넷을 지우는 것과 여기서 문장 넷을 남기는 것은 한
-   * 쌍이다. 한쪽만 하면 사용자가 확인한 적 없는 값이 조용히 계산을
-   * 움직이게 된다.
+   * 화면 1에서 입력란을 지우는 것과 여기서 문장을 남기는 것은 한 쌍이다.
+   * 한쪽만 하면 사용자가 확인한 적 없는 값이 조용히 계산을 움직이게 된다.
+   *
+   * 생애최초·주택 수는 더 이상 여기 없다 — 사용자 지시로 화면 1의 실제
+   * 질문이 됐으므로(`ProfileForm.tsx`), 그 답은 폼 자체에 보이지 이
+   * "가정 알림" 목록에는 나오지 않는다.
    */
-  it("생애최초·기존 대출·주택 수·규제지역이 각각 자기 문장을 남긴다", () => {
+  it("기존 대출·규제지역이 각각 자기 문장을 남긴다", () => {
     const all = joined(state());
-    expect(all).toMatch(/생애최초/);
     expect(all).toMatch(/기존 대출/);
-    expect(all).toMatch(/무주택/);
     expect(all).toMatch(/규제지역/);
   });
 
@@ -62,30 +63,25 @@ describe("없앤 입력 넷은 조용한 기본값이 아니라 문장으로 남
    */
   it("문장은 실제 가정값에서 만든다 — 값을 바꾸면 문장도 바뀐다", () => {
     const flipped = removedInputNotices({
-      isFirstTimeBuyer: true,
       existingDebtAnnualPayment: 1_200_000,
-      ownedHomeCount: 2,
     });
-    expect(flipped.isFirstTimeBuyer).toMatch(/생애최초 우대를 받는 것으로/);
     expect(flipped.existingDebtAnnualPayment).toMatch(/120만원/);
-    expect(flipped.ownedHomeCount).toMatch(/유주택 2채/);
   });
 
   /**
-   * 셋 중 둘은 **낙관 방향**의 가정이다 — 진실이 다르면 살 수 있는 가격이
-   * 지금 화면보다 **낮다**. 이 제품이 가장 경계하는 방향이라 그 사실이
-   * 문장에 있어야 한다. 생애최초만 반대다.
+   * 기존 대출 없음은 **낙관 방향**의 가정이다 — 진실이 다르면 살 수 있는
+   * 가격이 지금 화면보다 **낮다**. 이 제품이 가장 경계하는 방향이라 그
+   * 사실이 문장에 있어야 한다.
    */
   it("진실이 다르면 숫자가 어느 쪽으로 움직이는지 말한다", () => {
     const notices = removedInputNotices(ASSUMED_REMOVED_INPUTS);
     expect(notices.existingDebtAnnualPayment).toMatch(/낮아요/);
-    expect(notices.ownedHomeCount).toMatch(/낮아요/);
-    expect(notices.isFirstTimeBuyer).toMatch(/높아질 수 있어요/);
   });
 
-  it("사용자가 무엇을 하든 이 넷은 사라지지 않는다", () => {
+  it("사용자가 무엇을 하든 이 둘은 사라지지 않는다", () => {
     // 옛 화면에서는 값을 정하면 그 문구가 사라졌다. 이제 정할 방법이
-    // 없으므로 사라질 경로도 없어야 한다.
+    // 없으므로(기존 대출) 또는 값 자체가 이 목록에 없으므로(규제지역은
+    // 값이 아니라 출처가 갈릴 뿐) 사라질 경로가 없어야 한다.
     for (const s of [
       state(),
       state({ touched: ["regulatedArea"] }),
@@ -93,9 +89,25 @@ describe("없앤 입력 넷은 조용한 기본값이 아니라 문장으로 남
       state({ areaBands: ["중대형"] }),
     ]) {
       const all = joined(s);
-      expect(all).toMatch(/생애최초/);
       expect(all).toMatch(/기존 대출/);
-      expect(all).toMatch(/무주택/);
+      expect(all).toMatch(/규제지역/);
+    }
+  });
+
+  /**
+   * 생애최초·주택 수는 답을 뭐라고 넣어도 이 목록에 나타나지 않는다 —
+   * 화면 1의 폼이 그 답을 직접 보여준다(`ProfileForm.tsx`).
+   */
+  it("생애최초·주택 수는 어디에도 없다", () => {
+    for (const s of [
+      state(),
+      state({ ownedHomeCount: 0, isFirstTimeBuyer: false }),
+      state({ ownedHomeCount: 1, isFirstTimeBuyer: true }),
+    ]) {
+      const all = joined(s);
+      expect(all).not.toMatch(/생애최초/);
+      expect(all).not.toMatch(/무주택/);
+      expect(all).not.toMatch(/유주택/);
     }
   });
 });
@@ -135,15 +147,15 @@ describe("전용면적 — 고른 평형대에 85㎡ 초과가 섞였는가", ()
    *
    * 고른 구간이 전부 85㎡ 이하이므로 헤드라인이 쓴 전제는 **가정이 아니라
    * 사실**이다 — 그런데도 "가정한 면적 기준이라…"라고 적으면 사실과 다른
-   * 겸양이고, 그건 노이즈다. 사용자는 진짜 가정 넷(주택 수·기존 대출·
-   * 생애최초·규제지역)을 읽어야 하는데 그 사이에 가짜 가정이 섞인다.
+   * 겸양이고, 그건 노이즈다. 사용자는 진짜 가정(기존 대출·규제지역)을
+   * 읽어야 하는데 그 사이에 가짜 가정이 섞인다.
    */
   it("85㎡ 초과가 안 섞였으면 면적 문구를 아예 내지 않는다", () => {
     const s = joined(state({ areaBands: ["소형", "중소형"] }));
     expect(s).not.toMatch(/전용/);
     expect(s).not.toMatch(/농특세/);
-    // 진짜 가정 넷은 그대로 남는다.
-    expect(s).toMatch(/무주택/);
+    // 진짜 가정은 그대로 남는다.
+    expect(s).toMatch(/기존 대출/);
     expect(s).toMatch(/규제지역/);
   });
 
@@ -195,7 +207,7 @@ describe("전용면적 — 고른 평형대에 85㎡ 초과가 섞였는가", ()
   it("상세를 열어 실제 면적으로 계산 중이면 이 문구를 빼고, 나머지는 남긴다", () => {
     const s = joined(state({ areaBands: ["중대형"] }), true);
     expect(s).not.toMatch(/농특세/);
-    expect(s).toMatch(/무주택/);
+    expect(s).toMatch(/기존 대출/);
     expect(s).toMatch(/규제지역/);
   });
 });
@@ -255,6 +267,8 @@ describe("렌더 — 전부 순수 정보 문구다", () => {
   it("목록 자체는 .assumption-line이다", () => {
     const { container } = render(<AssumptionLine state={state()} />);
     expect(container.querySelector("ul.assumption-line")).not.toBeNull();
-    expect(screen.getAllByRole("listitem").length).toBeGreaterThanOrEqual(5);
+    // 기본값(state())은 전체 평형대 선택이라 85㎡ 초과가 섞여 면적 문구가
+    // 하나 더 붙는다 — 기존 대출·규제지역·면적 셋이 최소치다.
+    expect(screen.getAllByRole("listitem").length).toBeGreaterThanOrEqual(3);
   });
 });

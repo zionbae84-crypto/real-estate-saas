@@ -33,21 +33,22 @@ interface AssumptionItem {
 /**
  * ⚠ **이 저장소가 여섯 번 반복한 사고를 막는 자리다.**
  *
- * 화면 1에서 없앤 입력 셋(생애최초 · 기존 대출 · 주택 수)이 계산에
- * 넘기는 값은 {@link ASSUMED_REMOVED_INPUTS} 한 곳에 있다. 이 함수의
- * 반환 타입이 **그 객체의 키 전체를 요구하는 `Record`**라, 가정을 하나
- * 더 늘리면 문장을 쓰지 않는 한 타입이 통과하지 않는다 — 조용히 깔린
- * 기본값이 생길 자리가 구조적으로 없다.
+ * 화면 1에서 아직 없앤 채로 남은 입력(기존 대출)이 계산에 넘기는 값은
+ * {@link ASSUMED_REMOVED_INPUTS} 한 곳에 있다. 이 함수의 반환 타입이
+ * **그 객체의 키 전체를 요구하는 `Record`**라, 가정을 하나 더 늘리면
+ * 문장을 쓰지 않는 한 타입이 통과하지 않는다 — 조용히 깔린 기본값이 생길
+ * 자리가 구조적으로 없다.
  *
- * 문장은 **실제 가정값에서 만든다.** `ownedHomeCount`를 1로 바꾸면
- * 문구도 "유주택 1채로 계산했어요"가 된다. 하드코딩하면 값이 바뀐 날
- * 화면이 거짓말을 한다.
+ * ⚠ **생애최초·주택 수는 여기서 빠졌다.** 사용자 지시로 화면 1의 실제
+ * 질문이 됐기 때문이다(`ProfileForm.tsx`) — 이제 그 값들은 "가정"이
+ * 아니라 사용자가 고른 답이라, 이 자리(가정을 드러내는 알림)가 아니라
+ * 폼 자체에 답으로 보인다. `ownedHomeCount`가 아직 `null`(미답변)인
+ * 동안은 계산 자체가 멈추므로(`toProfile`) 여기서 "무주택으로 계산했어요"
+ * 같은 문구를 낼 필요도, 낼 수도 없다.
  *
- * 방향도 함께 말한다 — 진실이 이 가정과 다르면 숫자가 **어느 쪽으로**
- * 움직이는지. 셋 중 둘(기존 대출 없음 · 무주택)은 낙관 방향의
- * 가정이라(실제로는 살 수 있는 가격이 이보다 낮다) 그 사실이 특히
- * 분명해야 한다. 생애최초만 반대다 — 우대를 빼고 계산했으므로 실제
- * 생애최초 구매자에게는 숫자가 이보다 올라간다.
+ * 문장은 **실제 가정값에서 만든다.** 하드코딩하면 값이 바뀐 날 화면이
+ * 거짓말을 한다. 기존 대출 없음은 낙관 방향의 가정이라(실제로는 살 수
+ * 있는 가격이 이보다 낮다) 그 사실이 분명해야 한다.
  *
  * **고칠 수 있는 칩이 아니라 순수 정보 문구(notice)다.** 입력란이
  * 사라졌으니 누를 곳도 사라졌다 — 눌러도 아무 일도 없는 죽은 칩은 이
@@ -57,23 +58,12 @@ export function removedInputNotices(
   assumed: AssumedRemovedInputs,
 ): Record<keyof AssumedRemovedInputs, string> {
   return {
-    isFirstTimeBuyer: assumed.isFirstTimeBuyer
-      ? "생애최초 우대를 받는 것으로 계산했어요. 해당하지 않으면 살 수 " +
-        "있는 가격이 이보다 낮아요."
-      : "생애최초 우대는 빼고 계산했어요. 생애최초로 집을 사는 거라면 " +
-        "취득세 감면과 정책대출 우대가 붙어 살 수 있는 가격이 이보다 " +
-        "높아질 수 있어요.",
     existingDebtAnnualPayment:
       assumed.existingDebtAnnualPayment === 0
         ? "기존 대출이 없다고 보고 계산했어요. 매달 갚는 돈이 있다면 " +
           "DSR에서 먼저 빠지므로 살 수 있는 가격이 이보다 낮아요."
         : `기존 대출을 연 ${formatWon(assumed.existingDebtAnnualPayment)} ` +
           "상환으로 보고 계산했어요.",
-    ownedHomeCount:
-      assumed.ownedHomeCount === 0
-        ? "무주택으로 계산했어요. 이미 집이 있다면 디딤돌·보금자리론 " +
-          "자격과 취득세가 달라져 살 수 있는 가격이 이보다 낮아요."
-        : `유주택 ${assumed.ownedHomeCount}채로 계산했어요.`,
   };
 }
 
@@ -129,12 +119,11 @@ export function buildAssumptionItems(
   const items: AssumptionItem[] = [];
   const notices = removedInputNotices(ASSUMED_REMOVED_INPUTS);
 
-  // 없앤 입력 셋. **조건 없이 언제나 나온다** — 사용자가 이 값들을 정할
-  // 방법이 없으므로 "정했으니 문구를 감춘다"는 경로 자체가 없다.
-  items.push({ text: notices.ownedHomeCount });
+  // 여전히 없앤 입력(기존 대출). **조건 없이 언제나 나온다** — 사용자가
+  // 이 값을 정할 방법이 없으므로 "정했으니 문구를 감춘다"는 경로 자체가
+  // 없다.
   items.push({ text: notices.existingDebtAnnualPayment });
-  items.push({ text: notices.isFirstTimeBuyer });
-  // 없앤 입력 넷째. 값의 출처가 지역 조회라 문구가 갈린다.
+  // 값의 출처가 지역 조회라 문구가 갈린다.
   items.push({ text: regulatedAreaNotice(state) });
 
   /*

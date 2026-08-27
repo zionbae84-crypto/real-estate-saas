@@ -469,6 +469,7 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
     // 16억 현금 · 2억 소득이면 토지임대부 평형이 목록에 뜬다.
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "160000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "20000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");

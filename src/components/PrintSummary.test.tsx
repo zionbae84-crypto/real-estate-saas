@@ -19,6 +19,12 @@ const FIXED_STATE: ProfileFormState = {
   ...DEFAULT_FORM_STATE,
   cash: 300_000_000,
   annualIncome: 80_000_000,
+  // 화면 1의 실제 질문이라(사용자 지시) 이제 명시적으로 답해 둔다 —
+  // DEFAULT_FORM_STATE의 null(미답변)을 그대로 두면 "입력 안 함"이라는
+  // 별도 분기로 떨어져, 아래 대부분의 테스트가 표적으로 삼는 정상 경로를
+  // 가리지 못한다.
+  ownedHomeCount: 0,
+  isFirstTimeBuyer: false,
   isRegulatedArea: false,
   touched: ["regulatedArea"],
 };
@@ -60,14 +66,12 @@ describe("buildPrintSummaryItems", () => {
   });
 
   /**
-   * ⚠ **없앤 입력 넷은 종이에서도 가정임이 드러나야 한다.** 종이를
-   * 건네받은 사람은 화면을 보지 못했고, "(가정)"이 빠지면 그 사람은
-   * 이 숫자를 자기 사정이 반영된 값으로 읽는다.
+   * ⚠ **아직 없앤 입력(기존 대출)은 종이에서도 가정임이 드러나야 한다.**
+   * 종이를 건네받은 사람은 화면을 보지 못했고, "(가정)"이 빠지면 그
+   * 사람은 이 숫자를 자기 사정이 반영된 값으로 읽는다.
    */
-  describe("없앤 입력의 가정값", () => {
-    it("주택 수·생애최초·기존 대출이 전부 '(가정)'을 달고 나온다", () => {
-      expect(valueOf("주택 수")).toBe("무주택 (가정)");
-      expect(valueOf("생애최초 주택 구입")).toBe("아니오 (가정)");
+  describe("남은 가정값(기존 대출)", () => {
+    it("기존 대출이 '(가정)'을 달고 나온다", () => {
       expect(valueOf("기존 대출(연간 상환액)")).toBe("없음 (가정)");
     });
 
@@ -76,13 +80,55 @@ describe("buildPrintSummaryItems", () => {
      * 종이와 화면이 두 말을 할 수 없어야 한다.
      */
     it("값은 폼 상태가 아니라 ASSUMED_REMOVED_INPUTS에서 온다", () => {
-      // 폼 상태에는 이 키들이 아예 없다. 있었다면 여기서 흘러들었을 것이다.
-      expect(Object.keys(DEFAULT_FORM_STATE)).not.toContain("ownedHomeCount");
-      expect(Object.keys(DEFAULT_FORM_STATE)).not.toContain("isFirstTimeBuyer");
+      // 폼 상태에는 이 키가 아예 없다. 있었다면 여기서 흘러들었을 것이다.
       expect(Object.keys(DEFAULT_FORM_STATE)).not.toContain(
         "existingDebtAnnualPayment",
       );
-      expect(ASSUMED_REMOVED_INPUTS.ownedHomeCount).toBe(0);
+      expect(ASSUMED_REMOVED_INPUTS.existingDebtAnnualPayment).toBe(0);
+    });
+  });
+
+  /**
+   * ⚠ **주택 수·생애최초는 더 이상 가정이 아니다.** 사용자 지시로
+   * 화면 1의 실제 질문이 됐으므로, "(가정)"을 달지 않고 폼 상태의 답을
+   * 그대로 적는다 — 값은 `ASSUMED_REMOVED_INPUTS`가 아니라
+   * `ProfileFormState`에서 온다.
+   */
+  describe("주택 수·생애최초 — 이제 사용자가 답한 값이다", () => {
+    it("무주택으로 답하면 '무주택'이라고만 적는다 — '(가정)'을 달지 않는다", () => {
+      expect(valueOf("주택 수", { ...FIXED_STATE, ownedHomeCount: 0 })).toBe(
+        "무주택",
+      );
+    });
+
+    it("유주택으로 답하면 채수를 적는다", () => {
+      expect(valueOf("주택 수", { ...FIXED_STATE, ownedHomeCount: 1 })).toBe(
+        "유주택 1채",
+      );
+    });
+
+    it("주택 수를 아직 안 답했으면(null) '입력 안 함'이다", () => {
+      expect(
+        valueOf("주택 수", { ...FIXED_STATE, ownedHomeCount: null }),
+      ).toBe("입력 안 함");
+    });
+
+    it("생애최초로 답하면 '예'라고만 적는다", () => {
+      expect(
+        valueOf("생애최초 주택 구입", {
+          ...FIXED_STATE,
+          isFirstTimeBuyer: true,
+        }),
+      ).toBe("예");
+    });
+
+    it("생애최초가 아니라고 답하면 '아니오'라고만 적는다", () => {
+      expect(
+        valueOf("생애최초 주택 구입", {
+          ...FIXED_STATE,
+          isFirstTimeBuyer: false,
+        }),
+      ).toBe("아니오");
     });
   });
 

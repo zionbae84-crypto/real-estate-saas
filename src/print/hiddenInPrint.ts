@@ -24,8 +24,7 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // **푸는 대신 통째로 지우는 이유**: 이 레이어가 담은 것 중 종이에
   // 남아야 하는 것이 없다. 입력 장치(`.profile-form`·`.region-select`)는
   // 이미 각각 이 목록에 있고, 부제의 룰셋 기준은 `PrintSummary`가 같은
-  // `formatRuleVersionLabel(rules)`로 다시 적으며, 개인정보 문구는
-  // `.subtitle-privacy-note`로 이미 지운다. 조회 로딩·실패 문구는
+  // `formatRuleVersionLabel(rules)`로 다시 적는다. 조회 로딩·실패 문구는
   // 종이에서 근거를 잃는 고아 문구다(`.complex-map-status`와 같은
   // 이유). 남은 것은 제목과 눈썹 라벨뿐이다.
   //
@@ -64,6 +63,13 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 조작할 수 없다. 실제로 무엇으로 좁혔는지는 목록에 뜬 행들의
   // 법정동명이 그대로 말한다.
   ".dong-narrow",
+  // `.housing-type-select`(아래)와 `.dong-narrow`(위)를 함께 감싸는
+  // 그룹이자, 그 아래 단지 목록과 갈라 주는 연한 구분선을 지닌 자리다
+  // (App.tsx·styles.css 참고). 자식 둘은 이미 각자 이 목록에 있어
+  // display:none이 걸리지만, 부모 자체는 지우지 않으면 자식이 사라진
+  // 자리에 내용 없는 구분선(border-bottom)만 종이에 남는다 — 그래서
+  // 부모도 통째로 지운다.
+  ".complex-filters",
   // "조건 다시 넣기". 화면 1로 돌아가는 화면 전환 버튼이라 종이에서는
   // 누를 대상이 없다 — 지금까지 이 목록에 없어 죽은 버튼 모양이 종이에
   // 그대로 나왔다(Task 3이 이 버튼을 만들 때 함께 넣지 못한 것을
@@ -87,13 +93,6 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 이 숨김을 이기는 것으로 **오탐**된다(실제로는 서로 다른 요소다).
   // 이름 하나로 그 오탐을 피한다.
   ".budget-detail-close",
-  // 화면 부제의 개인정보 보호 안내("입력한 재무정보는 이 브라우저를
-  // 벗어나지 않아요"). 브라우저에 남는다는 사실 자체가 "이 브라우저"를
-  // 가리키는 말이라 종이 위에서는 지시 대상이 없어 뜻이 서지 않는다.
-  // 나머지 부제(룰셋 기준)는 종이에서도 뜻이 있어 남긴다 — "· 수도권"은
-  // 조회 범위가 전국으로 넓어지며 사실이 아니게 돼 화면에서 빠졌다
-  // (App.tsx의 부제 주석 참고).
-  ".subtitle-privacy-note",
   // PriceSlider 한계 경고 안의 "슬라이더를 내려 ~ 확인해 보세요" 조작
   // 지시. "이건 빌릴 수 있는 한계예요. 무리 없는 선은 따로 있어요"는
   // 이 인쇄물에서 가장 중요한 문장 중 하나라 반드시 남아야 하고, 뒤의

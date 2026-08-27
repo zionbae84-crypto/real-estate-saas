@@ -850,32 +850,18 @@ export function App() {
         <h2 className="entry-headline">
           얼마가 있고,
           <br />
-          어디서 찾고 계신가요.
+          어디에 살고 싶으신가요.
         </h2>
         <p className="subtitle">
-          {/*
-            리뷰 수정(인쇄 함께 볼 것): "이 브라우저를 벗어나지 않아요"는
-            "이 브라우저"라는 지시 대상이 종이 위에는 없어 뜻이 서지 않는다
-            — 인쇄에서만 지운다(hiddenInPrint.ts의 .subtitle-privacy-note).
-            뒤에 붙는 "고른 지역 코드만 서버로 전송돼요"도 같은 약속의
-            단서라 같은 span 안에 둔다. 앞의 룰셋 기준은 종이에서도 뜻이
-            있어 남긴다.
-
-            "· 수도권"은 지웠다. 지역이 전국으로 넓어져 더 이상 사실이
-            아니다 — 범위를 실제보다 좁게 말하는 쪽이라도, 화면이 확인한
-            적 없는 것을 말하는 것은 마찬가지다.
-          */}
           {/*
             어느 룰셋 기준으로 계산했는지. `rules/2026-08.json`의
             LTV·DSR·절대상한은 실거주 매수를 전제한 값이고, 이 앱은
             실거주 전용이 됐으므로 적을 기준도 하나다.
+
+            개인정보 보호 문구(입력값이 브라우저를 벗어나지 않는다는 안내)는
+            사용자 지시로 지웠다.
           */}
           {formatRuleVersionLabel(rules)}
-          <span className="subtitle-privacy-note">
-            {" "}
-            · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는
-            고른 지역 코드만 서버로 전송돼요.
-          </span>
         </p>
 
         {/*
@@ -917,7 +903,7 @@ export function App() {
             사용자가 아니라 테스트 하네스만 볼 수 있는 자리에 있었다.
           */
           <p className="prompt">
-            현금과 연 소득을 알려주면 살 수 있는 가격을 계산해요.
+            현금·연 소득·주택 수를 알려주면 살 수 있는 가격을 계산해요.
           </p>
         ) : state.areaBands.length === 0 ? (
           /*
@@ -1555,58 +1541,72 @@ export function App() {
                     areaFilteredUnits.length > 0 && (
                       <>
                           {/*
-                            매물 유형(아파트/오피스텔) 필터 자리 — 지금은
-                            비활성 placeholder다. 오피스텔 실거래가 데이터는
-                            아직 연동하지 않았다(국토부 아파트매매 실거래가
-                            API만 쓴다 — 별도 스펙에서 오피스텔 매매 실거래가
-                            API를 새로 연동할 때 이 select를 활성화한다).
-                            `dongOptions`(동 좁히기)와 달리 데이터 유무에
-                            좌우되지 않는 정적 요소라 그 조건 밖, 사이드바
-                            상단에 항상 그린다.
+                            매물 유형·행정동 좁히기를 한 그룹으로 묶는다.
+                            아래 목록(`ComplexList`)과는 성격이 다른
+                            "조회 조건" 축이라, 이 그룹 전체 아래에 연한
+                            구분선을 한 번만 긋는다(`.complex-filters`) —
+                            두 필드 각각에 선을 그으면 필드 사이에도 선이
+                            생겨 "조건 대 결과"가 아니라 "필드 대 필드"로
+                            읽힌다. 인쇄에서는 이 그룹 전체가 사라진다
+                            (`src/print/hiddenInPrint.ts`의 `.complex-filters`
+                            항목 참고) — 안 그러면 자식(둘 다 인쇄 숨김
+                            대상)만 지워지고 빈 구분선만 종이에 남는다.
                           */}
-                          <div className="field housing-type-select">
-                            <label htmlFor="housing-type">매물 유형</label>
-                            <select id="housing-type" value="apartment" disabled>
-                              <option value="apartment">아파트</option>
-                            </select>
-                          </div>
-                          {/*
-                            `.dong-narrow`는 인쇄에서 지우는 선택자다
-                            (`src/print/hiddenInPrint.ts`) — 종이 위에서는
-                            고를 수 없는 장치다. 클래스가 없으면 그 규칙이
-                            이 select에 닿지 못한다.
-                          */}
-                          {dongOptions.length > 1 && (
-                            <div className="field dong-narrow">
-                              <label htmlFor="dong-narrow">행정동으로 좁히기</label>
-                              <select
-                                id="dong-narrow"
-                                value={selectedDong ?? ""}
-                                onChange={(e) => {
-                                  setSelectedDong(
-                                    e.target.value === "" ? null : e.target.value,
-                                  );
-                                  // 동을 바꾸면 앞서 고른 단지가 새 목록에
-                                  // 없을 수 있다 — 목록에 없는 행을 가리키는
-                                  // 표시가 남지 않게 함께 되돌린다.
-                                  setFocusedComplexKey(null);
-                                  // 앞서 걸러지지 않은 목록에서 "더 보기"로
-                                  // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
-                                  // 좁힌 새 목록이 이전 목록의 스크롤
-                                  // 깊이를 그대로 물려받는다
-                                  // (handleRegionSelect와 같은 이유).
-                                  setVisibleCount(10);
-                                }}
-                              >
-                                <option value="">전체</option>
-                                {dongOptions.map((d) => (
-                                  <option key={d} value={d}>
-                                    {d}
-                                  </option>
-                                ))}
+                          <div className="complex-filters">
+                            {/*
+                              매물 유형(아파트/오피스텔) 필터 자리 — 지금은
+                              비활성 placeholder다. 오피스텔 실거래가 데이터는
+                              아직 연동하지 않았다(국토부 아파트매매 실거래가
+                              API만 쓴다 — 별도 스펙에서 오피스텔 매매 실거래가
+                              API를 새로 연동할 때 이 select를 활성화한다).
+                              `dongOptions`(동 좁히기)와 달리 데이터 유무에
+                              좌우되지 않는 정적 요소라 그 조건 밖, 사이드바
+                              상단에 항상 그린다.
+                            */}
+                            <div className="field housing-type-select">
+                              <label htmlFor="housing-type">매물 유형</label>
+                              <select id="housing-type" value="apartment" disabled>
+                                <option value="apartment">아파트</option>
                               </select>
                             </div>
-                          )}
+                            {/*
+                              `.dong-narrow`는 인쇄에서 지우는 선택자다
+                              (`src/print/hiddenInPrint.ts`) — 종이 위에서는
+                              고를 수 없는 장치다. 클래스가 없으면 그 규칙이
+                              이 select에 닿지 못한다.
+                            */}
+                            {dongOptions.length > 1 && (
+                              <div className="field dong-narrow">
+                                <label htmlFor="dong-narrow">행정동으로 좁히기</label>
+                                <select
+                                  id="dong-narrow"
+                                  value={selectedDong ?? ""}
+                                  onChange={(e) => {
+                                    setSelectedDong(
+                                      e.target.value === "" ? null : e.target.value,
+                                    );
+                                    // 동을 바꾸면 앞서 고른 단지가 새 목록에
+                                    // 없을 수 있다 — 목록에 없는 행을 가리키는
+                                    // 표시가 남지 않게 함께 되돌린다.
+                                    setFocusedComplexKey(null);
+                                    // 앞서 걸러지지 않은 목록에서 "더 보기"로
+                                    // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
+                                    // 좁힌 새 목록이 이전 목록의 스크롤
+                                    // 깊이를 그대로 물려받는다
+                                    // (handleRegionSelect와 같은 이유).
+                                    setVisibleCount(10);
+                                  }}
+                                >
+                                  <option value="">전체</option>
+                                  {dongOptions.map((d) => (
+                                    <option key={d} value={d}>
+                                      {d}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            )}
+                          </div>
                           {dongFilteredEmpty ? (
                             <p className="dong-empty">
                               이 동엔 조건에 맞는 단지가 없어요. 다른 동을

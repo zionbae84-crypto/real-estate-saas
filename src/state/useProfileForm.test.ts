@@ -23,9 +23,14 @@ const storage = (value: string | null) => ({ getItem: () => value });
 const THRESHOLD = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
 
 describe("DEFAULT_FORM_STATE", () => {
-  it("필수값(현금·연 소득)은 비어 있다", () => {
+  it("필수값(현금·연 소득·주택 수)은 비어 있다", () => {
     expect(DEFAULT_FORM_STATE.cash).toBeNull();
     expect(DEFAULT_FORM_STATE.annualIncome).toBeNull();
+    expect(DEFAULT_FORM_STATE.ownedHomeCount).toBeNull();
+  });
+
+  it("생애최초는 안전한 기본값(false)이라 미답변으로도 계산을 막지 않는다", () => {
+    expect(DEFAULT_FORM_STATE.isFirstTimeBuyer).toBe(false);
   });
 
   /**
@@ -55,28 +60,31 @@ describe("DEFAULT_FORM_STATE", () => {
   });
 
   /**
-   * ⚠ **없앤 입력 셋은 폼 상태에 아예 없다.** 상태에 남겨 두면 언젠가
-   * 어딘가에서 그 값이 읽히고, 화면에는 그 값을 보거나 고칠 자리가
+   * ⚠ **여전히 없앤 입력(기존 대출)은 폼 상태에 없다.** 상태에 남겨 두면
+   * 언젠가 어딘가에서 그 값이 읽히고, 화면에는 그 값을 보거나 고칠 자리가
    * 없다 — 이 저장소가 이미 겪은 결함의 모양이다. 값은
    * `ASSUMED_REMOVED_INPUTS` 한 곳에만 있다.
+   *
+   * 생애최초·주택 수는 사용자 지시로 다시 화면 1의 실제 질문이 됐으므로
+   * (`ProfileFormState.ownedHomeCount`·`isFirstTimeBuyer`) 이 목록에서
+   * 빠졌다 — 아래 별도 테스트가 그 둘이 폼 상태에 **있다**는 것을 잠근다.
    */
-  it("없앤 입력 셋(생애최초·기존 대출·주택 수)은 폼 상태에 없다", () => {
-    for (const key of [
-      "isFirstTimeBuyer",
+  it("기존 대출은 폼 상태에 없다", () => {
+    expect(Object.keys(DEFAULT_FORM_STATE)).not.toContain(
       "existingDebtAnnualPayment",
-      "ownedHomeCount",
-    ]) {
-      expect(Object.keys(DEFAULT_FORM_STATE)).not.toContain(key);
-    }
+    );
+  });
+
+  it("생애최초·주택 수는 폼 상태에 있다 — 다시 실제 질문이다", () => {
+    expect(Object.keys(DEFAULT_FORM_STATE)).toContain("isFirstTimeBuyer");
+    expect(Object.keys(DEFAULT_FORM_STATE)).toContain("ownedHomeCount");
   });
 });
 
-describe("ASSUMED_REMOVED_INPUTS — 없앤 입력이 계산에 넘기는 값", () => {
-  it("스펙 §3의 표 그대로다", () => {
+describe("ASSUMED_REMOVED_INPUTS — 남은 가정(기존 대출)이 계산에 넘기는 값", () => {
+  it("기존 대출 없음 하나만 남았다", () => {
     expect(ASSUMED_REMOVED_INPUTS).toEqual({
-      isFirstTimeBuyer: false,
       existingDebtAnnualPayment: 0,
-      ownedHomeCount: 0,
     });
   });
 });
@@ -109,7 +117,7 @@ describe("assumedExclusiveAreaSqm — 고른 평형대가 헤드라인에 넘기
    */
   it("임계값 위에서는 어떤 값을 넣어도 결과가 같다", () => {
     const base = toProfile(
-      state({ cash: 300_000_000, annualIncome: 80_000_000 }),
+      state({ cash: 300_000_000, annualIncome: 80_000_000, ownedHomeCount: 0 }),
     )!;
     const prices = [THRESHOLD + 0.01, THRESHOLD + 1, 120, 200, 1000].map(
       (sqm) => calcAffordablePrice({ ...base, exclusiveAreaSqm: sqm }, rules),
@@ -143,11 +151,26 @@ describe("assumedExclusiveAreaSqm — 고른 평형대가 헤드라인에 넘기
 
 describe("toProfile", () => {
   it("현금이 없으면 null이다", () => {
-    expect(toProfile(state({ annualIncome: 50_000_000 }))).toBeNull();
+    expect(
+      toProfile(state({ annualIncome: 50_000_000, ownedHomeCount: 0 })),
+    ).toBeNull();
   });
 
   it("소득이 없으면 null이다", () => {
-    expect(toProfile(state({ cash: 100_000_000 }))).toBeNull();
+    expect(
+      toProfile(state({ cash: 100_000_000, ownedHomeCount: 0 })),
+    ).toBeNull();
+  });
+
+  /**
+   * 주택 수는 사용자 지시로 다시 실제 질문이 됐다 — cash·annualIncome과
+   * 같은 자리에 서므로, 미답변(null)이면 다른 둘이 채워져 있어도 계산
+   * 자체를 하지 않는다(`ProfileFormState.ownedHomeCount` 주석 참고).
+   */
+  it("주택 수가 없으면 null이다", () => {
+    expect(
+      toProfile(state({ cash: 100_000_000, annualIncome: 50_000_000 })),
+    ).toBeNull();
   });
 
   /**
@@ -158,20 +181,34 @@ describe("toProfile", () => {
    */
   it("평형대를 하나도 안 골라도 예산은 계산된다 — 다른 축이다", () => {
     const profile = toProfile(
-      state({ cash: 100_000_000, annualIncome: 50_000_000, areaBands: [] }),
+      state({
+        cash: 100_000_000,
+        annualIncome: 50_000_000,
+        ownedHomeCount: 0,
+        areaBands: [],
+      }),
     );
     expect(profile).not.toBeNull();
     expect(profile?.cash).toBe(100_000_000);
   });
 
-  it("현금·소득만 있으면 프로필을 만든다 — 주택 수를 더 묻지 않는다", () => {
+  it("현금·소득·주택 수가 있으면 프로필을 만든다", () => {
     expect(
-      toProfile(state({ cash: 100_000_000, annualIncome: 50_000_000 })),
+      toProfile(
+        state({
+          cash: 100_000_000,
+          annualIncome: 50_000_000,
+          ownedHomeCount: 0,
+          isFirstTimeBuyer: false,
+        }),
+      ),
     ).toEqual({
       status: "무주택",
       cash: 100_000_000,
       annualIncome: 50_000_000,
       isRegulatedArea: true,
+      ownedHomeCount: 0,
+      isFirstTimeBuyer: false,
       // 기본값은 전체 선택이라 85㎡ 초과가 섞여 있다 — 농특세가 붙는
       // 쪽(보수적)으로 계산한다.
       exclusiveAreaSqm: THRESHOLD + 1,
@@ -180,17 +217,34 @@ describe("toProfile", () => {
   });
 
   /**
-   * 계산에 실제로 넘어가는 값이 화면이 적는 문장과 같은 원본에서 와야
-   * 둘이 어긋날 수 없다.
+   * 생애최초·주택 수를 답하면 그 값이 그대로 프로필에 실린다 — 더는
+   * `ASSUMED_REMOVED_INPUTS`를 거치지 않는다.
    */
-  it("없앤 입력 셋을 ASSUMED_REMOVED_INPUTS 그대로 엔진에 넘긴다", () => {
+  it("주택 수·생애최초를 답한 값 그대로 엔진에 넘긴다", () => {
     const profile = toProfile(
-      state({ cash: 100_000_000, annualIncome: 50_000_000 }),
+      state({
+        cash: 100_000_000,
+        annualIncome: 50_000_000,
+        ownedHomeCount: 1,
+        isFirstTimeBuyer: true,
+      }),
     )!;
-    expect(profile.ownedHomeCount).toBe(ASSUMED_REMOVED_INPUTS.ownedHomeCount);
-    expect(profile.isFirstTimeBuyer).toBe(
-      ASSUMED_REMOVED_INPUTS.isFirstTimeBuyer,
-    );
+    expect(profile.ownedHomeCount).toBe(1);
+    expect(profile.isFirstTimeBuyer).toBe(true);
+  });
+
+  /**
+   * 계산에 실제로 넘어가는 값이 화면이 적는 문장과 같은 원본에서 와야
+   * 둘이 어긋날 수 없다. 이제 이 원본에 남은 것은 기존 대출뿐이다.
+   */
+  it("남은 가정(기존 대출)을 ASSUMED_REMOVED_INPUTS 그대로 엔진에 넘긴다", () => {
+    const profile = toProfile(
+      state({
+        cash: 100_000_000,
+        annualIncome: 50_000_000,
+        ownedHomeCount: 0,
+      }),
+    )!;
     expect(profile.existingDebtAnnualPayment).toBe(
       ASSUMED_REMOVED_INPUTS.existingDebtAnnualPayment,
     );
@@ -202,12 +256,17 @@ describe("toProfile", () => {
    */
   it("엔진에 넘기는 전용면적은 고른 평형대에서 유도한다", () => {
     const narrow = toProfile(
-      state({ cash: 1, annualIncome: 1, areaBands: ["소형", "중소형"] }),
+      state({
+        cash: 1,
+        annualIncome: 1,
+        ownedHomeCount: 0,
+        areaBands: ["소형", "중소형"],
+      }),
     )!;
     expect(narrow.exclusiveAreaSqm).toBe(THRESHOLD);
 
     const wide = toProfile(
-      state({ cash: 1, annualIncome: 1, areaBands: ["중대형"] }),
+      state({ cash: 1, annualIncome: 1, ownedHomeCount: 0, areaBands: ["중대형"] }),
     )!;
     expect(wide.exclusiveAreaSqm).toBeGreaterThan(THRESHOLD);
   });
@@ -218,6 +277,7 @@ describe("toProfile", () => {
         state({
           cash: 1,
           annualIncome: 1,
+          ownedHomeCount: 0,
           isRegulatedArea: false,
         }),
       )?.isRegulatedArea,
@@ -230,6 +290,7 @@ describe("toProfile", () => {
         state({
           cash: 1,
           annualIncome: 1,
+          ownedHomeCount: 0,
           existingHome: {
             expectedSalePrice: 700_000_000,
             remainingLoan: 300_000_000,
@@ -246,6 +307,7 @@ describe("toProfile", () => {
         state({
           cash: 1,
           annualIncome: 1,
+          ownedHomeCount: 1,
           status: "갈아타기",
           existingHome: {
             expectedSalePrice: 700_000_000,
@@ -267,6 +329,7 @@ describe("toProfile", () => {
         state({
           cash: 1,
           annualIncome: 1,
+          ownedHomeCount: 1,
           status: "갈아타기",
           existingHome: {
             expectedSalePrice: 700_000_000,
@@ -284,6 +347,7 @@ describe("toProfile", () => {
         state({
           cash: 1,
           annualIncome: 1,
+          ownedHomeCount: 1,
           status: "갈아타기",
           existingHome: {
             expectedSalePrice: 700_000_000,
@@ -334,29 +398,58 @@ describe("loadStoredState", () => {
   });
 
   /**
+   * 주택 수·생애최초는 cash·annualIncome과 같은 자리다 — 이제 화면에
+   * 실제 입력란이 있으므로(사용자 지시) 저장값을 되살린다.
+   */
+  it("주택 수·생애최초도 그대로 복원한다", () => {
+    const restored = loadStoredState(
+      storage(
+        JSON.stringify({
+          cash: 300_000_000,
+          annualIncome: 80_000_000,
+          ownedHomeCount: 1,
+          isFirstTimeBuyer: true,
+        }),
+      ),
+    );
+    expect(restored.ownedHomeCount).toBe(1);
+    expect(restored.isFirstTimeBuyer).toBe(true);
+  });
+
+  it("주택 수가 형태에 안 맞으면(음수·소수·상한 초과) null(미답변)로 되돌린다", () => {
+    for (const bad of [-1, 1.5, 51, "1", null]) {
+      expect(
+        loadStoredState(
+          storage(JSON.stringify({ ownedHomeCount: bad })),
+        ).ownedHomeCount,
+      ).toBeNull();
+    }
+  });
+
+  /**
    * ⚠ **이 저장소는 저장된 값 때문에 빠져나올 수 없는 화면이 뜨는 버그를
    * 겪었다(커밋 `c90babf`).** 화면에 입력란이 없는 값을 저장본에서
    * 되살리면 사용자가 **보지도 고치지도 못하는 값**이 계산을 움직인다.
    * 그래서 없앤 입력의 저장값은 통째로 버린다.
    */
-  describe("없앤 입력의 저장값은 되살리지 않는다", () => {
+  describe("여전히 없앤 입력(기존 대출·전용면적)의 저장값은 되살리지 않는다", () => {
+    // ownedHomeCount·isFirstTimeBuyer는 이 블록에서 뺐다 — 사용자 지시로
+    // 다시 실제 입력란이 됐으므로 이제는 되살아나는 쪽이 맞다. 그 사실은
+    // 아래 별도 describe("주택 수·생애최초도 그대로 복원한다" 등, 위쪽)가
+    // 확인한다.
     const legacy = JSON.stringify({
       cash: 300_000_000,
       annualIncome: 80_000_000,
-      ownedHomeCount: 2,
-      isFirstTimeBuyer: true,
       existingDebtAnnualPayment: 12_000_000,
       exclusiveAreaSqm: 84,
       touched: ["existingDebt", "area", "regulatedArea"],
     });
 
-    it("폼 상태에 그 키들이 아예 들어오지 않는다", () => {
+    it("폼 상태에 그 키가 아예 들어오지 않는다", () => {
       const restored = loadStoredState(storage(legacy)) as unknown as Record<
         string,
         unknown
       >;
-      expect(restored.ownedHomeCount).toBeUndefined();
-      expect(restored.isFirstTimeBuyer).toBeUndefined();
       expect(restored.existingDebtAnnualPayment).toBeUndefined();
     });
 
@@ -378,10 +471,9 @@ describe("loadStoredState", () => {
       expect(loadStoredState(storage(legacy)).touched).toEqual([]);
     });
 
-    it("엔진에 넘어가는 값도 가정값이다 — 옛 답이 조용히 계산을 움직이지 않는다", () => {
-      const profile = toProfile(loadStoredState(storage(legacy)))!;
-      expect(profile.ownedHomeCount).toBe(0);
-      expect(profile.isFirstTimeBuyer).toBe(false);
+    it("엔진에 넘어가는 기존 대출도 가정값이다 — 옛 답이 조용히 계산을 움직이지 않는다", () => {
+      const restored = { ...loadStoredState(storage(legacy)), ownedHomeCount: 0 };
+      const profile = toProfile(restored)!;
       expect(profile.existingDebtAnnualPayment).toBe(0);
     });
   });

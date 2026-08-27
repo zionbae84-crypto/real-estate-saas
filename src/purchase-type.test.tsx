@@ -43,6 +43,7 @@ const INCOME = 150_000_000;
 async function fillProfile() {
   await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
   await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+  await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 }
 
 /**

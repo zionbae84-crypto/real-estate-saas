@@ -93,29 +93,30 @@ const ASSUMABLE_FIELD_SCOPE: Record<
  * 타입이 통과하지 않는다.** 가정을 늘리면서 고지를 빠뜨릴 자리가
  * 구조적으로 없다.
  *
- * 값 자체가 문장에 들어가므로(예: `ownedHomeCount: 0` → "무주택으로
- * 계산했어요") 값을 바꾸면 문장도 함께 바뀐다. 문장을 하드코딩하지
- * 않는다.
+ * 값 자체가 문장에 들어가므로 값을 바꾸면 문장도 함께 바뀐다. 문장을
+ * 하드코딩하지 않는다.
+ *
+ * ⚠ **원래 셋이었다 — 생애최초·기존 대출·주택 수.** 사용자 지시로
+ * 생애최초와 주택 수는 다시 화면 1의 실제 질문이 됐다(대출·취득세
+ * 계산에 직접 반영해야 한다는 요청). 그래서 이제 이 객체에는
+ * `existingDebtAnnualPayment` 하나만 남는다 — 나머지 둘은
+ * `ProfileFormState.isFirstTimeBuyer`·`ownedHomeCount`에서 직접 온다
+ * (`toProfile` 참고). 기존 대출만 남은 이유는 그대로다: 매달 갚는
+ * 원리금까지 물어보면 질문이 다시 늘어난다는 판단이 바뀌지 않았다.
  */
 export interface AssumedRemovedInputs {
-  /** 생애최초 우대(취득세 감면·정책대출)를 받는 것으로 계산하는가 */
-  isFirstTimeBuyer: boolean;
   /** 기존 대출의 연간 상환액(원) */
   existingDebtAnnualPayment: number;
-  /** 보유 주택 수(채) */
-  ownedHomeCount: number;
 }
 
 /*
- * 타입을 `as const`로 좁히지 않는다 — 좁히면 값이 리터럴 타입(`false`·
- * `0`)이 되어, `removedInputNotices`가 **다른 값에서도 옳은 문장을
- * 만드는지** 검증하는 테스트가 타입 수준에서 막힌다. 그 검증이 곧 "문장을
+ * 타입을 `as const`로 좁히지 않는다 — 좁히면 값이 리터럴 타입(`0`)이
+ * 되어, `removedInputNotices`가 **다른 값에서도 옳은 문장을 만드는지**
+ * 검증하는 테스트가 타입 수준에서 막힌다. 그 검증이 곧 "문장을
  * 하드코딩하지 않았다"는 증거이므로, 값이 아니라 모양을 고정한다.
  */
 export const ASSUMED_REMOVED_INPUTS: AssumedRemovedInputs = {
-  isFirstTimeBuyer: false,
   existingDebtAnnualPayment: 0,
-  ownedHomeCount: 0,
 };
 
 export interface ProfileFormState {
@@ -135,6 +136,30 @@ export interface ProfileFormState {
    * 그 평형의 **실제** 전용면적으로 계산한다.
    */
   areaBands: AreaBand[];
+  /**
+   * 보유 주택 수(채). **이번에 사려는 집은 세지 않는다.**
+   *
+   * `null`은 "아직 답하지 않았다"는 뜻이다 — 미답변을 0(무주택)으로
+   * 조용히 채우면 정책대출 자격이 넓어져 한도가 실제보다 커진다(사용자가
+   * 확인한 적 없는 값으로 낙관적인 답을 내는 셈이다). 그래서 `cash`·
+   * `annualIncome`과 같은 자리에 선다 — 답하기 전에는 `toProfile`이
+   * `null`을 돌려주고, 화면은 계산 자체를 하지 않는다.
+   *
+   * 지금 화면은 "무주택"과 "집이 있어요" 둘만 물어 정확한 채수는 묻지
+   * 않는다 — 정책대출 자격(`maxOwnedHomes`)이 0/1만 가르므로 1로도
+   * 충분하다. 값 자체는 그대로 원 단위 정책대출 계산에 들어가므로
+   * `BuyerProfile.ownedHomeCount`와 뜻이 같다.
+   */
+  ownedHomeCount: number | null;
+  /**
+   * 생애최초 주택 구입 여부. LTV 우대(규제지역 70%)·취득세 감면·정책대출
+   * 자격에 쓰인다.
+   *
+   * 기본값 `false`는 안전한 방향이다 — 우대를 빼고 계산하므로 실제
+   * 생애최초 구매자에게는 살 수 있는 가격이 이보다 **올라간다**. 그래서
+   * `ownedHomeCount`와 달리 답하기 전에 계산을 막지 않는다.
+   */
+  isFirstTimeBuyer: boolean;
   status: HouseholdStatus;
   isRegulatedArea: boolean;
   existingHome: ExistingHomeFormState;
@@ -205,6 +230,11 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
   // 기본값은 전체 선택 = 필터 없음. 처음 온 사용자는 네 번째 질문에
   // 이미 답한 상태로 시작한다(스펙 §4).
   areaBands: [...AREA_BANDS],
+  // cash·annualIncome과 같은 이유로 null이다 — 답하기 전까지는 계산
+  // 자체를 하지 않는다(ProfileFormState.ownedHomeCount 주석 참고).
+  ownedHomeCount: null,
+  // 안전한 기본값(우대 없음)이라 답하지 않아도 계산을 막지 않는다.
+  isFirstTimeBuyer: false,
   status: "무주택",
   // 켜두면 LTV·정책대출 자격을 과대평가하는 방향이므로 꺼진 쪽이 안전하다.
   // 규제지역 무주택자 LTV는 40%, 비규제(수도권)는 70%다. 잘못 꺼두면
@@ -221,7 +251,7 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
 };
 
 /**
- * 현금·연 소득이 모두 채워졌을 때만 BuyerProfile을 만든다.
+ * 현금·연 소득·주택 수가 모두 채워졌을 때만 BuyerProfile을 만든다.
  *
  * **평형대는 이 조건에 없다.** 평형대는 "무엇을 보여줄까"를 정하는
  * 축이고, 여기서 만드는 것은 "얼마를 빌릴 수 있고 얼마짜리를 살 수
@@ -230,18 +260,32 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
  * 여섯 번 반복한 사고의 모양이다. 평형대가 비었다는 사실은 화면 1이
  * 따로, 자기 문장으로 말한다(App.tsx).
  *
- * 없앤 입력 셋(생애최초·기존 대출·주택 수)은 폼 상태가 아니라
+ * **주택 수는 현금·소득과 같은 자리에 있다.** 미답변을 0(무주택)으로
+ * 채우면 정책대출 자격이 넓어져 한도가 커지는데, 그건 사용자가 확인한
+ * 적 없는 값으로 낙관적인 답을 내는 것이다(`ProfileFormState.ownedHomeCount`
+ * 주석 참고) — 그래서 이 값도 없으면 계산 자체를 하지 않는다.
+ *
+ * 생애최초 여부는 `state.isFirstTimeBuyer`에서 직접 온다 — 기본값
+ * `false`가 안전한 방향이라 답을 막지 않는다. 남은 가정 하나(기존 대출)만
  * {@link ASSUMED_REMOVED_INPUTS}에서 온다 — 값이 한 곳에만 있어야
  * `AssumptionLine`이 적는 문장과 실제 계산이 어긋날 수 없다.
  */
 export function toProfile(state: ProfileFormState): BuyerProfile | null {
-  if (state.cash === null || state.annualIncome === null) return null;
+  if (
+    state.cash === null ||
+    state.annualIncome === null ||
+    state.ownedHomeCount === null
+  ) {
+    return null;
+  }
 
   const profile: BuyerProfile = {
     status: state.status,
     cash: state.cash,
     annualIncome: state.annualIncome,
     isRegulatedArea: state.isRegulatedArea,
+    ownedHomeCount: state.ownedHomeCount,
+    isFirstTimeBuyer: state.isFirstTimeBuyer,
     // 폼 상태에 면적은 없다 — 고른 평형대에서 유도한다(위 주석 참고).
     exclusiveAreaSqm: assumedExclusiveAreaSqm(state.areaBands),
     ...ASSUMED_REMOVED_INPUTS,
@@ -271,19 +315,16 @@ export function toProfile(state: ProfileFormState): BuyerProfile | null {
  * localStorage는 사용자가 직접 고칠 수 있는 자리이므로 신뢰하지 않는다.
  * 형태가 어긋난 필드는 조용히 기본값으로 대체한다.
  *
- * ⚠ **없앤 입력들의 저장값은 읽지 않는다 — 통째로 버린다.**
- * `isFirstTimeBuyer`·`existingDebtAnnualPayment`·`ownedHomeCount`·
- * `exclusiveAreaSqm`은 이제
- * 화면에 입력란이 없다. 저장본에 남은 값을 되살리면 사용자가 **보지도
- * 고치지도 못하는 값**이 계산을 움직이게 되고, 그건 이 저장소가 이미
- * 겪은 결함(커밋 `c90babf` — 저장된 값 때문에 빠져나올 수 없는 화면)과
- * 같은 모양이다.
+ * ⚠ **여전히 입력란이 없는 값(`existingDebtAnnualPayment`·
+ * `exclusiveAreaSqm`)의 저장값은 읽지 않는다 — 통째로 버린다.** 저장본에
+ * 남은 값을 되살리면 사용자가 **보지도 고치지도 못하는 값**이 계산을
+ * 움직이게 되고, 그건 이 저장소가 이미 겪은 결함(커밋 `c90babf` — 저장된
+ * 값 때문에 빠져나올 수 없는 화면)과 같은 모양이다.
  *
- * 버리는 방향의 대가는 분명히 있다: 예전에 "유주택 2채"라고 답했던
- * 사용자는 이제 무주택으로 계산돼 한도가 **올라간다**(낙관 방향). 그
- * 값을 되살릴 화면이 없는 이상 피할 수 없는 대가라, 대신
- * `AssumptionLine`이 "무주택으로 계산했어요"를 **언제나** 적는다 —
- * 조용히 깔리는 기본값은 하나도 없다.
+ * `ownedHomeCount`·`isFirstTimeBuyer`는 **다시 화면에 입력란이 생겨서**
+ * (사용자 지시) 이 규칙에서 빠졌다 — `cash`·`annualIncome`과 같은
+ * 자리에 서서 그대로 복원된다. 값도 지위(=답했는지)도 화면에서 보고
+ * 고칠 수 있으므로 되살려도 위 결함이 재현되지 않는다.
  */
 export function loadStoredState(
   storage: Pick<Storage, "getItem">,
@@ -311,6 +352,14 @@ export function loadStoredState(
     cash: amount(o.cash),
     annualIncome: amount(o.annualIncome),
     areaBands: parseAreaBands(o.areaBands),
+    // cash·annualIncome과 같은 취급이다 — 이제 화면에 실제 입력란이
+    // 있으므로(없앤 입력이 아니다) 저장값을 되살린다. 형태가 어긋나면
+    // null로 떨어져 "아직 답하지 않음"이 되고, toProfile이 계산을 막는다.
+    ownedHomeCount: ownedHomeCount(o.ownedHomeCount),
+    isFirstTimeBuyer:
+      typeof o.isFirstTimeBuyer === "boolean"
+        ? o.isFirstTimeBuyer
+        : DEFAULT_FORM_STATE.isFirstTimeBuyer,
     // "갈아타기" 상태는 저장본에 남아 있어도 항상 "무주택"으로 되돌린다.
     // ProfileForm은 status/기존 주택(existingHome) 편집 UI를 전혀
     // 렌더링하지 않는다 — 사용자가 이 값을 보거나 고칠 방법이 없다.
@@ -414,6 +463,21 @@ function amount(value: unknown): number | null {
     Number.isFinite(value) &&
     value >= 0 &&
     value <= Number.MAX_SAFE_INTEGER
+    ? value
+    : null;
+}
+
+/**
+ * 저장된 보유 주택 수를 복원한다. `amount()`와 달리 원 단위 금액이
+ * 아니라 채수라 상한을 훨씬 낮게 잡는다 — 조작된 값(예: 1e300)이 그대로
+ * `BuyerProfile.ownedHomeCount`로 흘러가 정책대출 자격 판정에서 이상한
+ * 비교를 만들 이유가 없다.
+ */
+function ownedHomeCount(value: unknown): number | null {
+  return typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 0 &&
+    value <= 50
     ? value
     : null;
 }
