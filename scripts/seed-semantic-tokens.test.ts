@@ -89,24 +89,30 @@ describe("등급색 대비율 — 흰 배경(#ffffff), 본문 크기 기준 4.5:
 });
 
 /**
- * 지도 마커 **부담 수준** 2분류의 배경-텍스트 대비율.
- * `src/styles.css`의 `.complex-map-marker--{no-loan,loan}`(과 같은 규칙을
- * 공유하는 범례 견본)이 실제로 쓰는 토큰 값을 그대로 옮겨 계산한다.
+ * 지도 마커 채움 위 흰 글자의 대비율.
  *
- * **예전에는 가격 3분위(low/mid/high)였다.** Task 4에서 마커 색의 뜻이
- * 가격대에서 부담 수준으로 바뀌며 그 세 클래스가 사라졌다 — 그 조합을
- * 그대로 두면 이 테스트는 **화면 어디에도 없는 색**의 대비율을 재는,
- * 통과해도 아무것도 지키지 않는 검사가 된다(task-1에서
- * `land-lease.test.ts`가 같은 이유로 함께 옮겨졌다).
+ * **예전에는 부담 수준 2분류(파랑 "대출 없이" / 주황 "대출 필요")였고,
+ * 두 채움 다 기준에 못 미쳐 아래 예외 목록에 이름으로 적혀 있었다**
+ * (각각 2.65:1 / 3.28:1). 사용자 지시로 마커에서 색 구분을 걷어내며
+ * (면적·거래건과 함께) 그 두 채움이 사라졌고, 남은 한 색은
+ * `--result-ink`(#12294d)다 — 예외를 물려받지 않고 기준을 넘긴다.
  *
- * 두 색은 design.md §1이 "밝은 면 위 태그"로 제시한 짝 그대로다.
+ * 그 전에는 `priceTiers`(가격 3분위)였다. 두 번 다 **화면 어디에도 없는
+ * 색의 대비율을 재는, 통과해도 아무것도 지키지 않는 검사**가 남는 것을
+ * 막으려고 이 블록을 함께 옮겼다(task-1에서 `land-lease.test.ts`가 같은
+ * 이유로 옮겨졌다).
  */
-describe("지도 마커 부담 수준 대비율 — 배경 대비 텍스트, 본문 크기 기준 4.5:1", () => {
-  it("대출 없이: bg #dff0e8(bg-positive-weak) / text #1d5c43(fg-positive-contrast)", () => {
-    expect(contrastRatio("#dff0e8", "#1d5c43")).toBeGreaterThanOrEqual(4.5);
+describe("지도 마커 대비율 — 채움 대비 흰 글자, 본문 크기 기준 4.5:1", () => {
+  it("마커: bg #12294d(--result-ink) / text #ffffff", () => {
+    expect(contrastRatio(rawToken("--result-ink"), "#ffffff")).toBeGreaterThanOrEqual(4.5);
   });
-  it("대출 필요: bg #f7e9cf(bg-warning-weak) / text #6d4610(fg-warning-contrast)", () => {
-    expect(contrastRatio("#f7e9cf", "#6d4610")).toBeGreaterThanOrEqual(4.5);
+
+  it("실측값이 14.48:1이다 — 옛 채움(2.65:1 / 3.28:1)과 비교해 남긴다", () => {
+    expect(contrastRatio(rawToken("--result-ink"), "#ffffff").toFixed(2)).toBe("14.48");
+    // 예전 두 채움. 지금은 마커에 쓰이지 않지만, "왜 바꿨는가"가 숫자로
+    // 남아 있어야 다음 사람이 되돌리기 전에 이 값을 본다.
+    expect(contrastRatio(rawToken("--result-signal"), "#ffffff").toFixed(2)).toBe("2.65");
+    expect(contrastRatio(rawToken("--result-warn"), "#ffffff").toFixed(2)).toBe("3.28");
   });
 });
 
@@ -691,27 +697,28 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
   const isDisabledControl = (selector: string) => selector.includes(":disabled");
 
   /**
-   * **사용자가 명시적으로 지시한, 기준에 못 미치는 채움 세 자리.**
+   * **사용자가 명시적으로 지시한, 기준에 못 미치는 채움 한 자리.**
    *
    * 화면 2 재스킨의 출처인 `prototype-results.html`은 그 판단을 머리주석에
-   * 이미 적어 두었다 — 파랑(`--result-signal` #3ba6f1)·주황
-   * (`--result-warn` #e8663c) 채움 **위 굵은 흰 글자**는 각각 2.65:1 /
-   * 3.28:1로 본문 기준(4.5:1)에 못 미친다. 굵기로도 메워지지 않는다:
-   * 3:1 완화는 18.66px부터인데 이 자리들은 11~13px이다.
+   * 이미 적어 두었다 — 파랑(`--result-signal` #3ba6f1) 채움 **위 굵은 흰
+   * 글자**는 2.65:1로 본문 기준(4.5:1)에 못 미친다. 굵기로도 메워지지
+   * 않는다: 3:1 완화는 18.66px부터인데 이 자리는 11~13px이다.
+   *
+   * **예전에는 세 자리였다.** 지도 마커의 두 채움(파랑 "대출 없이" /
+   * 주황 "대출 필요")이 여기 함께 적혀 있었는데, 사용자가 마커에서 색
+   * 구분 자체를 걷어내라고 지시하며(면적·거래건과 함께) 그 두 규칙이
+   * 사라졌다. 마커는 이제 `--result-ink`(#12294d) 한 색이고 흰 글자에서
+   * 14.48:1이라 **예외가 아니라 기준을 넘는다** — 위 "지도 마커 대비율"
+   * 블록이 그 값을 잰다. 예외는 지시가 사라지면 함께 사라진다.
    *
    * **통과시키는 방법은 있다** — 채움을 `--result-signal-ink`(#1f6ea9,
-   * 흰 글자 5.44:1)나 `#c8431b`(4.91:1)로 내리면 된다. 그만큼 사용자가
-   * 지정한 색에서 멀어지고, 사용자는 이 색을 두 차례(커밋 `1c47333`·
-   * `ce41eda`) 명시적으로 지시했다. 지시가 바뀌면 여기부터 고치면 된다.
-   *
-   * **색만으로 말하지는 않는다.** 두 채움의 뜻(대출 없이 / 대출 필요)은
-   * 마커 라벨과 범례에 **글자로도** 적혀 있다(`ComplexMap.tsx`의
-   * `BURDEN_TIER_MARKER_LABEL`·`BURDEN_TIER_LEGEND`) — 색이 하나도
-   * 전달되지 않아도 뜻은 남는다.
+   * 흰 글자 5.44:1)로 내리면 된다. 그만큼 사용자가 지정한 색에서
+   * 멀어지고, 사용자는 이 색을 두 차례(커밋 `1c47333`·`ce41eda`)
+   * 명시적으로 지시했다. 지시가 바뀌면 여기부터 고치면 된다.
    *
    * ⚠ **예외는 선택자 하나하나로 적는다.** "흰 글자면 봐준다" 같은 규칙을
    * 두면 다음 사람이 아무 자리에나 흰 글자를 얹어 조용히 이 검사를
-   * 빠져나간다. 아래 "예외가 실제로 그 값인지" 테스트가 각 자리의 실측을
+   * 빠져나간다. 아래 "예외가 실제로 그 값인지" 테스트가 그 자리의 실측을
    * 다시 잰다 — 채움이 움직이면 예외 쪽이 먼저 깨진다.
    */
   const USER_MANDATED_LOW_CONTRAST_FILLS: ReadonlyArray<{
@@ -721,9 +728,6 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
   }> = [
     // 상단바 "조건 다시 넣기"(프로토타입의 `.ghost`)
     { selector: ".back-to-entry-button", ratio: "2.65" },
-    // 지도 마커 — 대출 없이(파랑) / 대출 필요(주황)
-    { selector: ".complex-map-marker--no-loan", ratio: "2.65" },
-    { selector: ".complex-map-marker--loan", ratio: "3.28" },
   ];
 
   const isUserMandatedFill = (selector: string) =>
@@ -788,10 +792,10 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
    * ── 예외가 조용히 낡지 않게 한다 ────────────────────────────────
    * 위 예외 목록은 "검사에서 빼는" 목록이라, 아무 검사도 받지 않으면
    * 채움이 바뀌어도 조용하다. 그래서 각 자리를 여기서 **다시 잰다** —
-   * 채움이 움직이면 이 세 테스트가 먼저 깨지고, 그때 예외를 유지할지
+   * 채움이 움직이면 아래 테스트가 먼저 깨지고, 그때 예외를 유지할지
    * 지울지 다시 판단하게 된다.
    */
-  it("예외 세 자리가 실제로 존재하고, 흰 글자 + 채움 짝이다", () => {
+  it("예외에 적힌 자리가 실제로 존재하고, 흰 글자 + 채움 짝이다", () => {
     const missing = USER_MANDATED_LOW_CONTRAST_FILLS.filter(
       (e) =>
         !COLOR_RULES.some(
@@ -810,7 +814,7 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
     ).toEqual([]);
   });
 
-  it("예외 세 자리의 실측 대비율이 못박은 값 그대로다", () => {
+  it("예외에 적힌 자리의 실측 대비율이 못박은 값 그대로다", () => {
     const measured = USER_MANDATED_LOW_CONTRAST_FILLS.map((e) => {
       const rule = COLOR_RULES.find((r) => r.selector === e.selector)!;
       const ratio = contrastRatio(
@@ -826,12 +830,12 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
   });
 
   it("예외를 어둡게 하면 기준을 넘는다 — 지시가 바뀌면 여기부터 고친다", () => {
-    // 프로토타입 머리주석이 적어 둔 두 대안. 값이 실제로 통과한다는 것을
-    // 계산으로 남겨, "고칠 방법이 없다"로 굳지 않게 한다.
+    // 프로토타입 머리주석이 적어 둔 대안. 값이 실제로 통과한다는 것을
+    // 계산으로 남겨, "고칠 방법이 없다"로 굳지 않게 한다. (주황 쪽
+    // 대안 #c8431b은 그 채움을 쓰던 마커가 사라지며 함께 뺐다.)
     expect(contrastRatio("#ffffff", rawToken("--result-signal-ink")).toFixed(2)).toBe(
       "5.44",
     );
-    expect(contrastRatio("#ffffff", "#c8431b").toFixed(2)).toBe("4.91");
   });
 
   it("문제 토큰이 실제로 이 검사를 받는 자리에 쓰이고 있다", () => {

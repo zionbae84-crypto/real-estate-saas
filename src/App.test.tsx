@@ -1462,7 +1462,6 @@ describe("App - 단지 상세(화면 4)", () => {
         ".result-shell",
         ".region-results-sidebar",
         ".complex-map-frame",
-        ".complex-map-legend",
         ".back-to-entry-button",
       ]) {
         expect(
@@ -1912,9 +1911,10 @@ describe("App - 지도", () => {
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => expect(markerEls.length).toBeGreaterThan(0));
 
+    // 라벨은 단지명 + 가격 범위다(면적은 더 이상 적지 않는다).
     const labels = markerEls.map((el) => el.textContent ?? "").join("|");
-    expect(labels).toContain("90㎡"); // 목록에 뜨는 단지
-    expect(labels).not.toContain("130㎡"); // 예산을 넘어 목록에 없는 단지
+    expect(labels).toContain("테스트단지"); // 목록에 뜨는 단지
+    expect(labels).not.toContain("비싼단지"); // 예산을 넘어 목록에 없는 단지
     expect(markerEls).toHaveLength(1);
 
     // 목록 쪽도 같은 집합인지 확인한다 — 한쪽만 보면 두 창이 어긋나도 통과한다.
@@ -2268,44 +2268,54 @@ describe("전체화면 결과 셸", () => {
   });
 
   /**
-   * 마커 색의 뜻이 부담 수준으로 바뀌었다(design.md §4). **지도가 그
-   * 판정을 새로 하지 않는다**는 것을 여기서 확인한다 — 목록 행이 자기
-   * 자리에서 말하는 것과 마커 색이 단지별로 일치하는지 대조한다.
+   * 사용자 지시로 마커에서 면적·거래 건수·부담 수준 색 구분이 빠지고
+   * **단지명과 가격 범위만** 남았다. 두 창이 어긋나지 않는지를 여기서
+   * 확인한다 — 예전에는 마커 **색**이 목록 행의 부담 문구와 맞는지를
+   * 봤고, 지금은 마커 **이름**이 목록 행의 이름과 맞는지를 본다.
+   *
+   * **목록 쪽 부담 배지는 그대로다.** `burdenTierOf`(단수)는 살아 있고
+   * `ComplexList`가 계속 쓴다 — 이번 변경은 지도만의 일이다. 그 사실을
+   * 아래에서 함께 못박는다(목록에서도 사라지면 이 검사가 깨진다).
    */
-  it("마커 색(부담 수준)이 같은 단지의 목록 행이 말하는 것과 일치한다", async () => {
+  it("마커 라벨이 단지명과 가격 범위만 내고, 목록 행과 같은 단지를 가리킨다", async () => {
     const { container } = await renderResults();
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() =>
       expect(container.querySelectorAll(".complex-map-marker")).toHaveLength(2),
     );
 
-    const tierOf = (complexKey: string) => {
+    const markerOf = (complexKey: string) => {
       const marker = [
         ...container.querySelectorAll<HTMLElement>(".complex-map-marker"),
       ].find((el) => el.dataset.complexKey === complexKey);
       expect(marker, `${complexKey} 마커가 없습니다`).toBeDefined();
-      return marker!.classList.contains("complex-map-marker--no-loan")
-        ? "no-loan"
-        : "loan";
+      return marker!;
     };
 
+    const cash = markerOf(CASH_UNIT.complexKey);
+    const loan = markerOf(LOAN_UNIT.complexKey);
+
+    // 마커가 자기 단지를 이름으로 가리킨다.
+    expect(cash.textContent).toContain("현금단지");
+    expect(loan.textContent).toContain("대출단지");
+
+    // 뺀 셋은 어느 마커에도 없다.
+    for (const marker of [cash, loan]) {
+      expect(marker.textContent).not.toContain("㎡");
+      expect(marker.textContent).not.toContain("거래");
+      expect(marker.textContent).not.toContain("대출 없이");
+      expect(marker.textContent).not.toContain("대출 필요");
+    }
+    // 색 구분도 남아 있지 않다 — 두 마커의 클래스 목록이 글자 그대로 같다.
+    expect(cash.className).toBe(loan.className);
+
+    // **목록 행의 부담 배지는 그대로다** — `burdenTierOf`는 지도가 아니라
+    // 목록의 함수다. 지도에서 뺀 것을 목록에서까지 빼지 않았다.
     const rowText = (name: string) =>
       screen.getByRole("button", { name: new RegExp(name) }).textContent ?? "";
-
-    // 전제: 두 색이 실제로 갈렸다. 안 갈리면 아래 대조가 공허해진다.
-    expect(tierOf(CASH_UNIT.complexKey)).toBe("no-loan");
-    expect(tierOf(LOAN_UNIT.complexKey)).toBe("loan");
-
-    // 그리고 목록 행이 같은 말을 한다.
     expect(rowText("현금단지")).toContain("대출 없이 살 수 있어요");
     expect(rowText("대출단지")).toContain("부담률");
     expect(rowText("대출단지")).not.toContain("대출 없이 살 수 있어요");
-
-    // 마커 라벨도 색에만 기대지 않고 글자로 말한다.
-    const cashMarker = [
-      ...container.querySelectorAll<HTMLElement>(".complex-map-marker"),
-    ].find((el) => el.dataset.complexKey === CASH_UNIT.complexKey);
-    expect(cashMarker?.textContent).toContain("대출 없이");
   });
 
   it("목록 행을 누르면 그 단지의 마커가 강조된다", async () => {

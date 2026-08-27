@@ -20,8 +20,7 @@ import {
   type ComplexUnit,
 } from "./data/complexes";
 import { matchesAreaBands, mixesAreaAcrossThreshold } from "./lib/area-band";
-import { buildComplexList, burdenTierOf } from "./lib/complex-list";
-import { unitKey } from "./components/ComplexList";
+import { buildComplexList } from "./lib/complex-list";
 import { regionNameByCode } from "./data/regions";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { formatWon } from "./format/won";
@@ -536,32 +535,6 @@ export function App() {
 
   const mappedUnits = useMemo(
     () => mappedEntries.map((entry) => entry.unit),
-    [mappedEntries],
-  );
-
-  /**
-   * 지도 마커 색이 뜻할 **부담 수준**(대출 없이 / 대출 필요).
-   *
-   * **지도가 이 값을 스스로 계산하지 않게 하는 자리다.** 위
-   * `mappedEntries`는 목록이 그리는 바로 그 항목들이고, `burdenTierOf`는
-   * 목록 행이 "대출 없이 살 수 있어요"와 "월 …· 부담률 …"을 가를 때
-   * 부르는 것과 **같은 함수**다(`lib/complex-list.ts`). 그래서 지도와
-   * 목록이 같은 단지를 두고 다른 말을 하려면 그 함수 하나가 같은 입력에
-   * 다른 답을 내야 한다.
-   *
-   * 예전 마커 색(가격 3분위)은 **그린 집합 안에서의 상대 위치**라
-   * "이 지역 기준으로 싼 편"일 뿐인데 "내 예산에 맞는다"로 읽혔다
-   * (design.md §4가 그 뜻을 바꾼 이유). 지금은 단지 자체의 사실이라
-   * 몇 개를 함께 그리든 같은 단지는 같은 색이다.
-   *
-   * 키는 평형 단위(`unitKey`)다 — 부담은 평형마다 다르고, 마커는 그중
-   * 대표 평형의 숫자를 라벨에 낸다(ComplexMap의 `burdenTiers`).
-   */
-  const burdenByUnit = useMemo(
-    () =>
-      new Map(
-        mappedEntries.map((entry) => [unitKey(entry.unit), burdenTierOf(entry)]),
-      ),
     [mappedEntries],
   );
 
@@ -1284,13 +1257,6 @@ export function App() {
                             */
                             units={mappedUnits}
                             coordinates={complexCoordinates.coordinates}
-                            /*
-                              마커 색이 뜻하는 부담 수준. 목록 항목에서
-                              뽑아 온 값을 그대로 넘긴다 — 지도가 자기
-                              계산을 새로 하지 않게 하는 자리다
-                              (`burdenByUnit` 정의의 주석 참고).
-                            */
-                            burdenByUnit={burdenByUnit}
                             /*
                               선택은 App이 한 벌만 든다 — 목록 행 표시와
                               이 마커 강조가 같은 값을 본다.

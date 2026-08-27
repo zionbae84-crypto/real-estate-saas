@@ -1565,9 +1565,15 @@ body {
 }
 
 /*
- * 지도 액자(ComplexMap.tsx). 범례를 지도 위에 얹기 위한 기준 상자다 —
- * 지도 컨테이너 자신을 기준으로 쓸 수 없는 이유는 바로 위 경고와 같다
- * (SDK가 그 요소의 position을 인라인으로 정한다).
+ * 지도 액자(ComplexMap.tsx). 지도 칸의 높이·테두리를 지는 상자다 —
+ * 지도 컨테이너 자신에게 그 일을 맡길 수 없는 이유는 바로 위 경고와
+ * 같다(SDK가 그 요소의 position을 인라인으로 정한다).
+ *
+ * 예전에는 마커 색 범례를 지도 위 좌측 하단에 얹기 위한 기준 상자이기도
+ * 했다. 마커가 한 색이 되며 범례는 사라졌지만(위 마커 섹션 주석), 이
+ * 액자는 남는다 — `position: relative`도 그대로 둔다. 지도 위에 무언가를
+ * 다시 얹게 되는 날 기준이 되고, 지금 지우면 `overflow: hidden`이
+ * 걸린 이 상자의 성격만 반쪽이 된다.
  */
 .complex-map-frame {
   position: relative;
@@ -1576,57 +1582,6 @@ body {
   min-height: 0;
   overflow: hidden;
   border-left: 1px solid var(--result-rule);
-}
-
-/*
- * 마커 색 범례(design.md §4: "좌측 하단에 범례"). 색은 덧말이고 같은
- * 뜻이 마커 라벨에 글자로도 적혀 있다 — 이 상자가 없어도 뜻은 남는다.
- */
-.complex-map-legend {
-  position: absolute;
-  left: 1rem;
-  bottom: 1rem;
-  z-index: 2;
-  /*
-   * **클릭을 통과시킨다**(리뷰 findings m2). 불투명한 배경에 z-index 2를
-   * 얹은 상자라, 이 상자 아래에 그려진 마커는 지도를 움직이기 전까지
-   * 누를 수 없었다 — 사용자에게는 그 마커가 고장 난 것으로 보인다.
-   * 범례에는 누를 것이 하나도 없으므로 잃는 것이 없다.
-   * `scripts/map-overlay-guard.test.ts`가 지도 위 절대 배치 오버레이
-   * 전부에 이 선언을 요구한다.
-   */
-  pointer-events: none;
-  margin: 0;
-  padding: 8px 12px;
-  list-style: none;
-  display: grid;
-  gap: 0.25rem;
-  font-size: 0.6875rem;
-  line-height: 1.95;
-  color: var(--result-gray);
-  /*
-   * 프로토타입은 `rgba(255,255,255,.95)`지만 여기서는 불투명한 흰색을
-   * 쓴다. 반투명 값은 `resolveColor`가 hex로 풀지 못해 대비 전수 검사에서
-   * **조용히 빠지고**(seed-semantic-tokens.test.ts), 이 상자는 위에 글자가
-   * 앉는 자리다 — 검사에서 빠지는 면을 만들지 않는다.
-   */
-  background: var(--result-paper);
-  border: 1px solid var(--result-rule);
-  border-radius: 12px;
-  box-shadow: 0 1px 4px rgb(18 41 77 / 15%);
-}
-
-.complex-map-legend-item {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-
-.complex-map-legend-swatch {
-  width: 8px;
-  height: 8px;
-  flex: none;
-  border-radius: 2px;
 }
 
 /*
@@ -2174,107 +2129,119 @@ body {
 }
 
 /*
- * 마커 위에 항상 보이는 라벨(면적+가격범위+거래건수+부담 수준). 클릭
- * 전에도 보여야 해서 InfoWindow와 달리 지도에 바로 얹힌다.
+ * 마커 위에 항상 보이는 라벨 — **단지명과 가격 범위, 둘뿐이다.**
+ * 클릭 전에도 보여야 해서 InfoWindow와 달리 지도에 바로 얹힌다.
  *
- * **색의 뜻이 바뀌었다(Task 4, design.md §4).** 예전에는 가격 3분위
- * (그린 단지들 안에서 싼가/비싼가)였는데, 그 색은 "이 지역 기준으로 싼
- * 편"일 뿐인데 "내 예산에 맞는다"로 읽혔다. 지금은 **부담 수준**이다 —
- * 대출 없이 살 수 있는가, 대출이 필요한가. 목록 행의 갈림과 뜻이 같고
- * (`lib/complex-list.ts`의 `burdenTierOf`), 같은 뜻이 라벨에 글자로도
- * 적혀 있어 색이 유일한 전달자가 아니다.
+ * 사용자 지시로 면적·거래 건수·부담 수준 문구가 빠졌고, 그와 함께
+ * **색이 무엇도 분류하지 않게 됐다** — 부담 수준 2분류(파랑 "대출 없이" /
+ * 주황 "대출 필요")를 통째로 걷어냈다. 색이 하나뿐이니 범례도 사라졌다
+ * (설명할 갈림이 없다). 목록 행의 부담 배지는 그대로다 —
+ * `lib/complex-list.ts`의 `burdenTierOf`는 살아 있고, 이번 변경은
+ * **지도만**의 일이다.
  *
- * 두 색은 design.md §1이 "밝은 면 위 태그"로 못 박은 짝을 그대로 쓴다
- * (안전: 글자 #1d5c43 / 바탕 #dff0e8, 주의: 글자 #6d4610 / 바탕 #f7e9cf).
- * 대비율은 scripts/seed-semantic-tokens.test.ts가 검증한다.
+ * ── 채움: `--result-ink`(#12294d) + 흰 글자 = 14.48:1 ───────────────
+ * 예전 두 채움은 사용자가 지시한 파랑·주황이었고 흰 글자 위에서 각각
+ * 2.65:1 / 3.28:1로 본문 기준(4.5:1)에 못 미쳐
+ * `scripts/seed-semantic-tokens.test.ts`의 **예외 목록**에 이름으로 적혀
+ * 있었다. 그 지시는 "색으로 부담을 구분한다"는 전제 위의 것이었고 그
+ * 전제가 사라졌으므로, 예외를 물려받지 않고 이미 검증된 어두운
+ * 잉크색으로 내린다 — 지도 타일 위에서 대비가 가장 안전한 값이고,
+ * 아무 분류도 암시하지 않는 중립색이기도 하다. 예외 목록에서 두 줄이
+ * 함께 빠진다.
+ */
+
+/*
+ * 마커 바깥 상자 — 알약 라벨과 그 아래 삼각 꼬리를 세로로 쌓는다.
+ *
+ * ⚠ **`width: 0`과 `align-items: center`가 앵커 x=0의 근거다.**
+ * 자식들은 폭 0인 이 축을 기준으로 좌우로 똑같이 넘쳐 나므로, 단지
+ * 이름이 길든 짧든 꼬리 꼭짓점의 x는 언제나 0이다 — `ComplexMap.tsx`의
+ * `MARKER_ANCHOR` 주석 참고. 폭을 주는 순간 그 산수가 깨진다.
+ *
+ * `position: absolute`를 쓰지 않는다: 세로로 쌓아야 아이콘 높이가 곧
+ * 꼬리 끝의 y가 되고(앵커 y의 근거), `scripts/map-overlay-guard.test.ts`가
+ * "지도 위 절대 배치 상자는 클릭을 통과시킨다"로 잡는 규칙에 **눌려야
+ * 하는** 마커가 걸리지도 않는다.
+ */
+.complex-map-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 0;
+  /* 인라인 SVG 아래 생기는 베이스라인 여백을 없앤다 — 앵커 y가 어긋난다. */
+  line-height: 0;
+}
+
+/*
+ * ⚠ **글자 크기를 `rem`이 아니라 px로 적는다.** 이 다섯 값(위/아래
+ * 패딩, 두 줄 line-height, 꼬리 높이)의 합이 `ComplexMap.tsx`의
+ * `MARKER_ANCHOR.y`다. `rem`으로 두면 루트 글꼴 크기가 바뀌는 순간
+ * 앵커와 실제 높이가 갈라지고, 마커가 가리키는 자리가 조용히 틀어진다.
+ * `ComplexMap.test.tsx`의 "앵커 y가 styles.css의 실제 박스 모델 높이와
+ * 같다"가 이 값들을 여기서 직접 읽어 합을 다시 잰다.
+ *
+ * 테두리를 두지 않는다 — 그림자로만 면을 띄운다. 테두리를 더하면 위
+ * 합에 2px이 붙어 앵커를 함께 고쳐야 한다.
  */
 .complex-map-marker {
-  font-size: 0.6875rem;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  padding: 3px 9px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 4px 10px;
   border-radius: 18px;
-  border: 1px solid transparent;
+  background: var(--result-ink);
+  color: #ffffff;
+  letter-spacing: -0.02em;
   white-space: nowrap;
   font-variant-numeric: tabular-nums;
   box-shadow: 0 1px 4px rgb(18 41 77 / 22%);
   cursor: pointer;
 }
 
-/*
- * 마커 라벨 둘째 줄 — 거래 건수와 부담 수준. 가격 문자열이 min===max에서
- * 숫자 하나로 접히므로(formatRange), 이 줄이 없으면 마커는 아무 단서 없는
- * 가격 하나를 늘 띄우게 된다(ComplexMap.tsx의 markerLabel 주석).
- *
- * 같은 줄이 아니라 아랫줄에 둔다 — 마커 폭이 늘면 서로 겹친다. 부담
- * 수준 글자도 (첫 줄이 아니라) 여기 붙는 이유가 그것이다.
- */
-/*
- * 마커 라벨 둘째 줄. **`opacity`를 걸지 않는다** — 이미 기준에 못 미치는
- * 채움(2.65:1 / 3.28:1) 위에서 흰 글자를 더 흐리게 하면 그만큼 더
- * 떨어지고, 불투명도는 대비 전수 검사가 보지 못하는 값이라(그 검사는
- * 규칙의 `color`만 읽는다) 화면만 조용히 나빠진다. 위계는 크기·굵기가
- * 진다.
- */
-.complex-map-marker-trades {
-  display: block;
+/* 첫 줄 — 단지명. 가격보다 한 단계 작고 덜 굵다(가격이 이 라벨의 값이다). */
+.complex-map-marker-name {
+  font-size: 11px;
+  line-height: 14px;
   font-weight: 600;
-  font-size: 0.625rem;
-  letter-spacing: 0;
 }
 
 /*
- * ⚠ **두 티어 다 채움 위 굵은 흰 글자다 — 각각 2.65:1 / 3.28:1로 본문
- * 기준(4.5:1)에 못 미친다.** 사용자가 명시적으로 지시한 조합이고(커밋
- * `1c47333`·`ce41eda`), `scripts/seed-semantic-tokens.test.ts`의 예외
- * 목록이 이 두 선택자를 이름으로 적고 실측값을 다시 잰다.
- *
- * **색만으로 말하지 않는다.** 같은 뜻("대출 없이"/"대출 필요")이 마커
- * 라벨 둘째 줄과 범례에 글자로 적혀 있다(`ComplexMap.tsx`의
- * `BURDEN_TIER_MARKER_LABEL`·`BURDEN_TIER_LEGEND`) — 색이 하나도
- * 전달되지 않아도 뜻은 남는다.
- *
- * `color`를 채움과 **같은 규칙에** 선언한다. 기본 규칙 쪽으로 올리면 그
- * 검사가 "흰 글자가 흰 면 위에 앉는다"로 읽어(배경이 같은 규칙에 없으면
- * 밝은 면으로 잰다) 엉뚱한 자리에서 깨진다.
+ * 둘째 줄 — 가격 범위. **`opacity`를 걸지 않는다**(옛 둘째 줄 주석에서
+ * 이어지는 규칙이다): 불투명도는 대비 전수 검사가 보지 못하는 값이라
+ * 화면만 조용히 나빠진다. 위계는 크기·굵기가 진다.
  */
-
-/* 대출 없이 살 수 있는 단지 — 파랑 */
-.complex-map-marker--no-loan {
-  background: var(--result-signal);
-  border-color: var(--result-signal);
-  color: #ffffff;
-}
-
-/* 대출이 필요한 단지 — 주황 */
-.complex-map-marker--loan {
-  background: var(--result-warn);
-  border-color: var(--result-warn);
-  color: #ffffff;
+.complex-map-marker-price {
+  font-size: 12px;
+  line-height: 15px;
+  font-weight: 700;
 }
 
 /*
- * 범례 견본은 마커와 **같은 토큰**을 쓴다 — 두 자리가 각자 색을 들면
- * 한쪽만 바뀌는 날 범례가 지도에 없는 색을 설명한다. 견본에는 글자가
- * 앉지 않으므로 `color`를 주지 않는다.
+ * 말풍선 꼬리. **이 삼각형의 꼭짓점이 좌표에 앉는 점이다** — 마커가
+ * "정확히 여기"를 가리키게 하는 유일한 부분이라 장식이 아니다.
+ * 채움은 `fill="currentColor"`(ComplexMap.tsx)라 여기 `color`가 곧
+ * 삼각형 색이다 — 알약과 **같은 토큰**을 써서 둘이 갈라지지 않게 한다.
  */
-.complex-map-legend-swatch--no-loan {
-  background: var(--result-signal);
-}
-
-.complex-map-legend-swatch--loan {
-  background: var(--result-warn);
+.complex-map-marker-tail {
+  display: block;
+  height: 7px;
+  color: var(--result-ink);
 }
 
 /*
  * 목록에서 고른(또는 방금 누른) 단지의 마커.
  *
- * ⚠ **채움색을 바꾸지 않는다.** 채움이 곧 분류(파랑=대출 없이,
- * 주황=대출 필요)라, 고른 순간 색이 바뀌면 그 마커가 어느 분류였는지
- * 사라진다 — 사용자 요청으로 프로토타입에서 바꿔 둔 규칙이고,
- * `scripts/result-screen-layout.test.ts`가 이 규칙에 `background`·`color`가
- * 없는지 검사한다. 대신 바깥에 흰 테 + 진한 테를 두른다(`outline`이
- * 아니라 `box-shadow`인 이유: 18px 알약의 곡률을 그대로 따라간다).
+ * ⚠ **채움색을 바꾸지 않는다.** 예전 이유는 "채움이 곧 분류라 고른 순간
+ * 색이 바뀌면 어느 분류였는지 사라진다"였고, 분류가 없어진 지금 그
+ * 이유는 사라졌다. 그래도 **결과는 그대로 둔다** — 마커가 전부 같은
+ * 색인 지금, 하나만 채움을 달리하면 그 마커가 다른 **종류**로 읽힌다
+ * (없어진 색 구분을 되살리는 셈이다). 선택은 종류가 아니라 상태이므로
+ * 바깥 테로 말한다. `scripts/result-screen-layout.test.ts`가 이 규칙에
+ * `background`·`color`가 없는지 검사한다(`outline`이 아니라 `box-shadow`인
+ * 이유: 18px 알약의 곡률을 그대로 따라간다).
+ *
+ * 테는 알약에만 두른다 — 꼬리까지 감싸려면 절대 배치가 필요하고, 그러면
+ * 위 `.complex-map-pin`이 지키는 앵커 산수가 깨진다.
  */
 .complex-map-marker--focused {
   box-shadow:
