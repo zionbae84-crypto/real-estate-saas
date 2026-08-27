@@ -18,15 +18,19 @@
       gray       #4f6a8c    5.57
       signal-ink #1f6ea9    5.44
 
-    ⚠ **Cyan Signal은 글자로 쓸 수 없다**
+    ⚠ **Cyan Signal은 글자 대비가 약하다**
       #3ba6f1 on #ffffff   2.65   ← 본문 4.5:1도, 큰 글자 3:1도 미달
-      #ffffff on #3ba6f1   2.65   ← 흰 글자를 얹는 것도 안 된다
-      #12294d on #3ba6f1   5.46   ← 어두운 글자를 얹으면 된다
+      #ffffff on #3ba6f1   2.65   ← 채움 위 흰 글자(사용자 지시로 채택)
+      #12294d on #3ba6f1   5.46   ← 어두운 글자를 얹으면 통과한다
 
-    그래서 이 색은 **채움·테두리**로만 쓰고(버튼 바탕·마커 채움·선택
-    테두리·범례 견본), 색이 글자로 나가야 하는 자리(금액)는 같은 색상을
-    어둡게 한 #1f6ea9를 쓴다. 요청한 색을 눈에 보이는 자리에는 그대로
-    쓰면서, 읽을 수 없는 자리에만 변형을 쓰는 방식이다.
+    이 색은 **채움·테두리**로 쓴다(버튼 바탕·마커 채움·선택 테두리·범례
+    견본). 채움 위 글자는 사용자 지시에 따라 굵은 흰색이고, 그 조합은
+    2.65:1이라 대비 기준에 못 미친다 — 굵기로는 메워지지 않는다
+    (3:1 완화는 18.66px부터인데 이 자리들은 11~13px이다).
+
+    색이 **글자로** 나가야 하는 자리(금액)는 같은 색상을 어둡게 한
+    #1f6ea9(5.44:1)를 쓴다. 화면에서 가장 중요한 숫자를 2.65:1로 둘 수는
+    없다.
 
     선택된 카드 바탕 #e8f4fe 위 gray = 4.98
 
@@ -60,17 +64,23 @@
     /*
       포인트 색 — Cyan Signal #3ba6f1.
 
-      ⚠ **이 색은 글자로 쓸 수 없다.** 실측:
-         #3ba6f1 on #ffffff = 2.65:1   (본문 4.5:1은 물론 큰 글자 3:1도 미달)
-         #ffffff on #3ba6f1 = 2.65:1   (흰 글자를 얹는 것도 안 된다)
-      대신 어두운 글자를 얹으면 잘 나온다:
+      채움 위 글자는 **사용자 지시로 굵은 흰색**이다.
+
+      ⚠ 그 조합의 실측값은 **2.65:1**로 본문 기준(4.5:1)에 못 미친다.
+      굵게 해도 3:1(큰 굵은 글자) 기준은 18.66px부터 적용되는데, 이
+      자리들은 11~13px이라 해당되지 않는다. 즉 굵기로는 메워지지 않는다.
+
+      참고로 같은 채움 위 어두운 글자는 통과한다:
          #12294d on #3ba6f1 = 5.46:1
          #0a1b2e on #3ba6f1 = 6.54:1
+      또 채움을 --signal-ink(#1f6ea9)로 내리면 흰 글자가 5.44:1로 통과한다.
+      둘 중 하나로 바꾸면 대비 문제는 사라진다 — 지시가 바뀌면 여기부터
+      고치면 된다.
 
-      그래서 --signal은 **채움과 테두리**로만 쓰고, 색이 글자로 나가야 하는
-      자리(금액)는 같은 색상을 어둡게 한 --signal-ink를 쓴다.
+      글자 색으로 나가야 하는 자리(금액)는 여전히 --signal-ink를 쓴다.
+      화면에서 가장 중요한 숫자를 2.65:1로 둘 수는 없다.
     */
-    --signal:      #3ba6f1;  /* 채움·테두리 — 그 위 글자는 --ink */
+    --signal:      #3ba6f1;  /* 채움·테두리 — 그 위 글자는 굵은 흰색(지시) */
     --signal-ink:  #1f6ea9;  /* 글자용 — 흰 배경 5.44:1 */
     --signal-wash: #e8f4fe;  /* 선택된 카드 바탕 — 그 위 --gray 4.98:1 */
 
@@ -119,7 +129,7 @@
   .stat .v.money { color: var(--signal-ink); }
   .ghost {
     background: var(--signal); border: 0; border-radius: 18px;
-    padding: 8px 14px; font-size: 13px; font-weight: 600; color: var(--ink);
+    padding: 8px 14px; font-size: 13px; font-weight: 700; color: #ffffff;
     cursor: pointer; flex: none;
   }
   .ghost:hover { background: #59b4f4; }
@@ -161,7 +171,7 @@
     padding: 2px 9px; font-size: 11px; font-weight: 500;
     background: var(--tint); color: var(--ink);
   }
-  .tg.cash { background: var(--signal); color: var(--ink); }
+  .tg.cash { background: var(--signal); color: #ffffff; font-weight: 700; }
 
   /* ── 지도 위 ─────────────────────────────────────────────── */
   .legend {
@@ -186,7 +196,7 @@
     font-variant-numeric: tabular-nums;
     box-shadow: 0 1px 4px rgba(18,41,77,.22); cursor: pointer;
   }
-  .pin.cash { background: var(--signal); color: var(--ink); }
+  .pin.cash { background: var(--signal); color: #ffffff; font-weight: 700; }
   /* 선택 표시에 빨강을 쓰지 않는다 — 빨강은 위험을 뜻하는 자리로 남긴다 */
   .pin.on { background: var(--signal-ink); border-color: var(--signal-ink); color: #fff; }
 </style>
