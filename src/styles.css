@@ -263,8 +263,7 @@ body {
 .budget-result > .binding-explainer,
 .budget-result > .cost-breakdown,
 .budget-result > .policy-loan-list,
-.budget-panel > .price-slider,
-.budget-panel > .safety-badge {
+.budget-panel > .price-slider {
   margin: 0 0 0.75rem;
   padding: 0.875rem 1rem;
   background: var(--result-paper, #fff);
@@ -379,10 +378,17 @@ body {
   margin: 0;
 }
 
+/*
+ * 사용자 지시: "글씨 크기는 사이드바의 다른 글씨들과 균형을 맞춰줘".
+ * 예전에는 1.5rem(상단바의 실구매 가능 가격보다도 컸다)이었다 — 이
+ * 카드가 슬라이더+부담 표로 합쳐지며 다른 카드들의 제목 크기
+ * (`.cost-breakdown summary`·`.binding-explainer summary`, 0.9375rem)와
+ * 맞춘다.
+ */
 .slider-price {
-  font-size: 1.5rem;
+  font-size: 0.9375rem;
   font-weight: 700;
-  margin: 0.25rem 0;
+  margin: 0 0 0.25rem;
 }
 
 /*
@@ -430,6 +436,111 @@ body {
 /* 모자란 금액. 문장 안에서 이 숫자가 사람이 실제로 찾는 값이다. */
 .slider-shortfall {
   font-weight: 700;
+}
+
+/*
+ * 사용자 지시로 이 슬라이더 카드와 옛 `SafetyBadge` 카드를 하나로
+ * 합쳤다. 슬라이더 위쪽 요소와 구분하는 여백만 준다 — 카드 테두리·배경은
+ * 이미 `.price-slider` 자신이(공용 카드 규칙) 지고 있어 여기서 다시
+ * 그리지 않는다.
+ */
+.price-slider-burden {
+  margin: 0.75rem 0 0;
+}
+
+/*
+ * "이 가격으로 샀을 때 최대로 빌린다면" — 아래 표가 **무엇을 가정한
+ * 계산인지** 항상 밝힌다(사용자 지시). 예전에는 단지를 고를 때만
+ * 붙었는데, 메인 예산 패널에서는 라벨이 없어 이 표가 "실제로 사면
+ * 이렇게 된다"처럼 읽혔다.
+ */
+.price-slider-burden-label {
+  margin: 0 0 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
+ * 표 관행은 `.cost-breakdown dl`·`.binding-limit-table`과 같다(라벨
+ * 왼쪽, 금액 오른쪽, tabular-nums, 줄마다 옅은 구분선) — 사용자 지시:
+ * "위에 다른내용 처럼 표 형식으로... 다른 내용의 형식과 균형을
+ * 맞춰줘".
+ */
+.price-slider-burden-table {
+  margin: 0;
+}
+
+.price-slider-burden-table > div {
+  --burden-amount-col: 7rem;
+  --burden-col-gap: 0.75rem;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(var(--burden-amount-col), max-content);
+  align-items: baseline;
+  column-gap: var(--burden-col-gap);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.price-slider-burden-table > div:last-child {
+  border-bottom: none;
+}
+
+.price-slider-burden-table dt {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.price-slider-burden-table dt label {
+  font-weight: inherit;
+}
+
+.price-slider-burden-table dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 항목 아래 붙는 고지. `.cost-breakdown dt .hint`와 같은 요령으로 줄 전체 폭을 쓴다. */
+.price-slider-burden-table dt .hint {
+  display: block;
+  width: calc(100% + var(--burden-amount-col) + var(--burden-col-gap));
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.price-slider-grade[data-level="safe"] { color: var(--safe); }
+.price-slider-grade[data-level="caution"] { color: var(--warn); }
+.price-slider-grade[data-level="danger"] { color: var(--risk); }
+/* SafetyBadge의 같은 등급과 같은 이유로 --safe를 쓰지 않는다 — "안전"이라고 말하지 않기 위해 존재하는 등급이다. */
+.price-slider-grade[data-level="unverified"] { color: var(--warn); }
+
+/*
+ * 적용 금리 입력. `dd`가 오른쪽 정렬인 표 관행 안에서 입력란+단위를
+ * 나란히 붙인다. 종이에서는 이 입력란 자체를 지운다
+ * (`src/print/hiddenInPrint.ts`의 `.price-slider-rate-input`) — 실제로
+ * 쓰인 금리는 바로 위 `.hint`가 평문으로 다시 적는다.
+ */
+.price-slider-rate-input {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.price-slider-rate-input input {
+  width: 4rem;
+  padding: 0.25rem 0.375rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 0.25rem;
 }
 
 .prompt {
@@ -2996,6 +3107,7 @@ body.body-scroll-locked {
    * 전제로 계산했는지와 이 숫자가 가정이라는 사실이 함께 있다.
    */
   .loan-input-form,
+  .price-slider-rate-input,
   .complex-map,
   .complex-map-frame,
   .complex-map-status,
@@ -3101,6 +3213,7 @@ body.body-scroll-locked {
   .binding-explainer,
   .policy-loan-list li,
   .binding-limit-table > div,
+  .price-slider-burden-table > div,
   .print-summary dl > div,
   .purchase-print-summary dl > div,
   .purchase-metric,

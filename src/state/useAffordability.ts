@@ -14,6 +14,7 @@ import {
   type Rules,
   type SafetyScore,
 } from "../lib/finance";
+import { parseRatePercent } from "../lib/rate-input";
 
 /**
  * 번들에 포함된 규제 룰셋.
@@ -92,6 +93,31 @@ export interface Affordability {
    * 이유가 없다.
    */
   safePrice: number | null;
+  /**
+   * 부담(월 상환액·부담률) 계산에 쓰는 금리 입력란의 **문자열 값**.
+   * 사용자 지시로 "이 가격으로 샀을 때 최대로 빌린다면"의 상환액이
+   * 룰셋의 고정 금리(`rules.baseRate`)가 아니라 사용자가 조정할 수
+   * 있는 금리로 계산된다 — 여기 담기는 문자열이 그 입력이다.
+   *
+   * ⚠ **`loanAtPrice`(받을 수 있는 최대 대출액)는 이 금리를 보지
+   * 않는다.** 그 값은 DSR 스트레스 금리(`rules.baseRate +
+   * rules.stressDSR.surcharge`)라는 규제 심사 기준으로 정해지고, 이
+   * 입력란은 "받은 대출을 실제로 갚을 때 얼마가 나가는가"를 살펴보는
+   * 별개의 탐색용 숫자다. 둘을 섞으면 사용자가 금리를 낮게 넣었을 때
+   * 은행 심사 기준까지 함께 느슨해진 것처럼 보인다 — 규제 계산과
+   * 탐색용 가정은 분리해서 지킨다.
+   */
+  ratePercentText: string;
+  setRatePercentText: (text: string) => void;
+  /**
+   * `safety`가 실제로 쓴 금리(소수, 예: 0.0453). `ratePercentText`가
+   * 비어 있거나 범위 밖이면 `rules.baseRate`로 조용히 되돌아간다 —
+   * 입력이 무효라고 해서 이 카드의 숫자 전체가 사라지면 안 된다(이
+   * 카드는 상시 노출되는 정보이지, 사용자가 열어야 나타나는
+   * 계산기가 아니다). 화면은 이 값을 그대로 다시 적어 "지금 이
+   * 금리로 계산했다"는 사실을 감추지 않는다.
+   */
+  effectiveRate: number;
 }
 
 export function useAffordability(
@@ -100,6 +126,13 @@ export function useAffordability(
   // null이면 "최대치에 붙어 있음"을 뜻한다. 프로필이 바뀌어 실구매력이
   // 달라져도 자동으로 따라간다.
   const [override, setOverride] = useState<number | null>(null);
+
+  // 기본값은 룰셋의 기준 금리다 — 아무것도 만지지 않은 화면은 예전과
+  // 같은 금리로 계산한다. 문자열로 드는 이유는 `ratePercentText`
+  // 문서와 같다.
+  const [ratePercentText, setRatePercentText] = useState(() =>
+    String(+(rules.baseRate * 100).toFixed(2)),
+  );
 
   const result = useMemo(
     () => (profile === null ? null : calcAffordablePrice(profile, rules)),
@@ -133,8 +166,21 @@ export function useAffordability(
         ? result.affordablePrice
         : clamp(override, 0, sliderMax);
 
+    /*
+     * `loanAtPrice`(받을 수 있는 최대 대출)는 언제나 룰셋의 규제
+     * 금리로 구한다 — 이 값은 은행 심사 기준이지 사용자가 조정해 볼
+     * 대상이 아니다. `effectiveRate`가 그 아래 `safety`(실제로 그
+     * 대출을 갚을 때의 부담)에만 들어간다.
+     */
     const loanAtPrice = calcMaxLoan(profile, rules, price);
-    const safety = calcSafetyScore(profile, rules, loanAtPrice.amount);
+
+    const { percent: ratePercent, valid: rateValid } =
+      parseRatePercent(ratePercentText);
+    const effectiveRate =
+      rateValid && ratePercent !== null ? ratePercent / 100 : rules.baseRate;
+    const safetyRules: Rules =
+      effectiveRate === rules.baseRate ? rules : { ...rules, baseRate: effectiveRate };
+    const safety = calcSafetyScore(profile, safetyRules, loanAtPrice.amount);
     /*
      * 실구매 가능 가격 이하에서는 정의상 0이다(그 가격이 바로
      * "현금으로 감당되는 최대"이므로). 그래도 조건 분기 없이 언제나
@@ -156,8 +202,11 @@ export function useAffordability(
       loanAtPrice,
       safety,
       safePrice,
+      ratePercentText,
+      setRatePercentText,
+      effectiveRate,
     };
-  }, [profile, result, override, setPrice, safePrice]);
+  }, [profile, result, override, setPrice, safePrice, ratePercentText]);
 }
 
 function clamp(value: number, min: number, max: number): number {

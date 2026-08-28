@@ -1,6 +1,15 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { SafetyScore } from "../lib/finance";
 import { PriceSlider, type PriceSliderProps } from "./PriceSlider";
+
+const DEFAULT_SAFETY: SafetyScore = {
+  monthlyPayment: 1_500_000,
+  burdenRatio: 0.18,
+  stressedMonthlyPayment: 1_800_000,
+  stressedBurdenRatio: 0.22,
+  level: "safe",
+};
 
 function renderSlider(overrides: Partial<PriceSliderProps> = {}) {
   const props: PriceSliderProps = {
@@ -13,6 +22,13 @@ function renderSlider(overrides: Partial<PriceSliderProps> = {}) {
     cashShortfall: overrides.cashShortfall,
     safePrice: overrides.safePrice,
     onChange: overrides.onChange ?? vi.fn(),
+    safety: overrides.safety ?? DEFAULT_SAFETY,
+    loanAmount: overrides.loanAmount ?? 300_000_000,
+    ratePercentText: overrides.ratePercentText ?? "4.53",
+    onRateChange: overrides.onRateChange ?? vi.fn(),
+    effectiveRate: overrides.effectiveRate ?? 0.0453,
+    landLeasehold: overrides.landLeasehold,
+    explainGrade: overrides.explainGrade,
   };
   return render(<PriceSlider {...props} />);
 }
@@ -290,6 +306,142 @@ describe("PriceSlider", () => {
       expect(printedText).toContain("이건 빌릴 수 있는 한계예요.");
       expect(printedText).toContain("무리 없는 선은 따로 있어요.");
       expect(printedText).not.toContain("슬라이더를 내려");
+    });
+  });
+
+  /**
+   * 사용자 지시로 옛 `SafetyBadge` 카드를 이 슬라이더 카드에 합쳤다.
+   * 라벨은 이제 **항상** 나온다 — 예전에는 단지를 골랐을 때만 나와서,
+   * 메인 예산 패널에서는 이 표가 "실제로 사면 이렇게 된다"처럼 읽혔다
+   * (실제로는 최대로 빌렸을 때를 가정한 값이다).
+   */
+  describe("합쳐진 부담 표", () => {
+    it("항상 '최대로 빌린다면' 라벨을 낸다", () => {
+      renderSlider();
+      expect(
+        screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
+      ).toBeInTheDocument();
+    });
+
+    it("최대 대출 가능 금액을 표에 보여준다", () => {
+      renderSlider({ loanAmount: 475_330_000 });
+      expect(screen.getByText("4억 7,533만원")).toBeInTheDocument();
+    });
+
+    it("월 상환액·부담률·스트레스 시나리오를 표에 보여준다", () => {
+      renderSlider({
+        safety: {
+          monthlyPayment: 2_033_878,
+          burdenRatio: 0.244,
+          stressedMonthlyPayment: 2_536_169,
+          stressedBurdenRatio: 0.304,
+          level: "safe",
+        },
+      });
+      expect(
+        screen.getByText("203만 3,878원", { selector: "[data-field='payment']" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("24.4%", { selector: "[data-field='ratio']" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("253만 6,169원", {
+          selector: "[data-field='stressedPayment']",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("30.4%", { selector: "[data-field='stressedRatio']" }),
+      ).toBeInTheDocument();
+    });
+
+    it("등급 글자를 색 구분 속성과 함께 낸다", () => {
+      renderSlider({ safety: { ...DEFAULT_SAFETY, level: "danger" } });
+      const grade = screen.getByText("위험", { selector: ".price-slider-grade" });
+      expect(grade).toHaveAttribute("data-level", "danger");
+    });
+
+    it("단지를 고르지 않았으면(landLeasehold 없음) 순수 등급을 낸다", () => {
+      renderSlider({ safety: { ...DEFAULT_SAFETY, level: "safe" } });
+      expect(
+        screen.getByText("안전", { selector: ".price-slider-grade" }),
+      ).toBeInTheDocument();
+    });
+
+    it("토지임대부를 모르면(landLeasehold=null) '확인 필요'로 내리고 근거를 함께 말한다", () => {
+      renderSlider({
+        safety: { ...DEFAULT_SAFETY, level: "safe" },
+        landLeasehold: null,
+      });
+      expect(
+        screen.queryByText("안전", { selector: ".price-slider-grade" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("확인 필요")).toBeInTheDocument();
+      expect(
+        screen.getByText(/매달 나가는 돈을 다 재지 못해서/),
+      ).toBeInTheDocument();
+    });
+
+    it("explainGrade가 false면 등급 근거 문장을 내지 않는다", () => {
+      renderSlider({
+        safety: { ...DEFAULT_SAFETY, level: "safe" },
+        landLeasehold: null,
+        explainGrade: false,
+      });
+      // burdenGrade의 "unverified" 근거 문장(rules.grade.note)이 이
+      // 카드에는 없어야 한다 — ComplexDetail의 배지가 이미 말한다.
+      expect(screen.getByText("확인 필요")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/매달 나가는 돈을 다 재지 못해서/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("적용 금리 입력란은 ratePercentText를 그대로 값으로 쓴다", () => {
+      renderSlider({ ratePercentText: "3.9" });
+      expect(screen.getByLabelText("적용 금리 (연 %)")).toHaveValue(3.9);
+    });
+
+    it("금리 입력을 바꾸면 onRateChange에 입력 문자열을 그대로 넘긴다", () => {
+      const onRateChange = vi.fn();
+      renderSlider({ onRateChange });
+      fireEvent.change(screen.getByLabelText("적용 금리 (연 %)"), {
+        target: { value: "5.2" },
+      });
+      expect(onRateChange).toHaveBeenCalledWith("5.2");
+    });
+
+    it("실제로 계산에 쓰인 금리를 평문으로 다시 적는다 — 입력이 무효여도 감추지 않는다", () => {
+      renderSlider({ ratePercentText: "abc", effectiveRate: 0.0453 });
+      expect(screen.getByText(/지금은 연 4\.53%로 계산했어요/)).toBeInTheDocument();
+    });
+
+    it("월 상환액이 0원이면 전액 현금 구매임을 설명한다", () => {
+      renderSlider({
+        safety: {
+          monthlyPayment: 0,
+          burdenRatio: 0,
+          stressedMonthlyPayment: 0,
+          stressedBurdenRatio: 0,
+          level: "safe",
+        },
+      });
+      expect(
+        screen.getByText("대출 없이 전액 현금으로 사는 경우예요."),
+      ).toBeInTheDocument();
+    });
+
+    it("소득이 없어 부담률이 무한대면 그 사실까지 함께 설명한다", () => {
+      renderSlider({
+        safety: {
+          monthlyPayment: 0,
+          burdenRatio: Number.POSITIVE_INFINITY,
+          stressedMonthlyPayment: 0,
+          stressedBurdenRatio: Number.POSITIVE_INFINITY,
+          level: "danger",
+        },
+      });
+      expect(
+        screen.getByText(/이 등급은 상환 부담이 아니라 소득 정보가 없다는 사실을 반영해요/),
+      ).toBeInTheDocument();
     });
   });
 });

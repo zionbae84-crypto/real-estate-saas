@@ -485,15 +485,26 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
     if (row !== undefined) await userEvent.click(row);
   }
 
+  /**
+   * 예산 상세 쪽 등급(예전에는 `SafetyBadge`라 `.safety-level`)이
+   * `PriceSlider`와 합쳐지며 `.price-slider-grade`가 됐다 — 단지 상세
+   * 쪽(`ComplexDetail`의 `SafetyBadge`)은 그대로 `.safety-level`이다.
+   * 두 자리가 같은 등급을 말하는지는 여전히 함께 확인하고, 근거 문장은
+   * 각 자리의 클래스로 따로 센다(예산 상세는 `.price-slider-grade-note`,
+   * 단지 상세는 `.safety-grade-note`).
+   */
   it("두 배지가 같은 등급을 말하되 이유는 한 번만 적는다", async () => {
     await openLandLeaseDetail();
 
-    const levels = [...document.querySelectorAll(".safety-level")].map(
-      (n) => n.textContent?.trim(),
-    );
+    const levels = [
+      ...document.querySelectorAll(".price-slider-grade, .safety-level"),
+    ].map((n) => n.textContent?.trim());
     expect(levels.length).toBe(2);
     expect(levels).toEqual([landLeaseRules.grade.label, landLeaseRules.grade.label]);
 
+    // 예산 상세 쪽은 explainGrade={false}라 근거를 내지 않는다 —
+    // 단지 상세 쪽(.safety-grade-note)만 낸다.
+    expect(document.querySelectorAll(".price-slider-grade-note")).toHaveLength(0);
     const notes = [...document.querySelectorAll(".safety-grade-note")].map(
       (n) => n.textContent,
     );

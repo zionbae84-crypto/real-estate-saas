@@ -12,7 +12,6 @@ import { ProfileForm } from "./components/ProfileForm";
 import { RegulationBadge } from "./components/RegulationBadge";
 import { ResultShell, ResultSummaryItem } from "./components/ResultShell";
 import { RegionSelect } from "./components/RegionSelect";
-import { SafetyBadge } from "./components/SafetyBadge";
 import { WarningList } from "./components/WarningList";
 import {
   AGGREGATION_WINDOW_LABEL,
@@ -1410,33 +1409,20 @@ export function App() {
                         cashShortfall={affordability.cashShortfall}
                         safePrice={affordability.safePrice}
                         onChange={affordability.setPrice}
-                      />
-                      <SafetyBadge
                         safety={affordability.safety}
-                        // 상세가 열려 있을 때만 라벨을 붙인다. 그때만 화면에
-                        // 배지가 둘(여기 + ComplexDetail 안)이고, 마크업이
-                        // 같아서 어느 쪽이 "이 집을 사면"의 답인지 알 수 없다 —
-                        // 하필 더 낙관적인 쪽이 매물 옆에 붙는다. 목록 화면에서는
-                        // 배지가 하나뿐이라 라벨이 잡음이 된다.
-                        //
-                        // 패널로 옮긴 뒤에도 조건은 그대로다: 화면에서는
-                        // 패널을 열어야 둘이 함께 보이고, **종이에서는
-                        // 언제나 둘이 함께 나온다**(패널은 닫혀 있어도
-                        // 인쇄된다) — 라벨이 필요한 쪽은 후자다.
-                        label={
-                          selectedUnit !== null
-                            ? "위 가격에서 최대로 빌렸을 때예요"
-                            : undefined
-                        }
-                        // 평형을 고른 동안에는 이 배지도 그 평형을 전제로
+                        loanAmount={affordability.loanAtPrice.amount}
+                        ratePercentText={affordability.ratePercentText}
+                        onRateChange={affordability.setRatePercentText}
+                        effectiveRate={affordability.effectiveRate}
+                        // 평형을 고른 동안에는 이 표도 그 평형을 전제로
                         // 계산된다(면적·가격 범위 모두). 상세 배지는
-                        // 등급을 붙드는데 이 배지만 "안전"이라고 말하면 한
+                        // 등급을 붙드는데 이 표만 "안전"이라고 말하면 한
                         // 화면이 스스로 모순되고, 하필 먼저 읽히는 쪽이
                         // 낙관적이다. 고른 평형이 없으면 넘기지 않는다 —
-                        // 그때 이 배지는 어떤 집도 가리키지 않는다.
+                        // 그때 이 표는 어떤 집도 가리키지 않는다.
                         landLeasehold={selectedUnit?.landLeasehold}
                         // 등급이 왜 멈췄는지는 상세 배지가 말한다.
-                        // 두 배지가 같은 문장을 말하면 한 화면에 똑같은
+                        // 둘 다 같은 문장을 말하면 한 화면에 똑같은
                         // 경고가 두 번 뜨고 둘 다 잡음으로 읽힌다. 등급
                         // 글자는 여기에도 그대로 남는다.
                         explainGrade={false}

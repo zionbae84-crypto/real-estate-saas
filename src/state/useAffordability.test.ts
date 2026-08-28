@@ -218,6 +218,60 @@ describe("useAffordability", () => {
     });
   });
 
+  /**
+   * 사용자 지시: "어떤이자율을 적용했는지 알려주고, 이자율은 조정이
+   * 가능하도록 입력값으로 수정해줘". `safety`(월 상환액·부담률)만
+   * 이 입력을 본다 — `loanAtPrice`(받을 수 있는 최대 대출)는 언제나
+   * 룰셋의 규제 금리로 정해지는 심사 기준이라 사용자가 조정할 대상이
+   * 아니다.
+   */
+  describe("ratePercentText — 부담 계산용 금리 입력", () => {
+    it("기본값은 룰셋의 기준 금리다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      expect(result.current!.ratePercentText).toBe(
+        String(+(rules.baseRate * 100).toFixed(2)),
+      );
+      expect(result.current!.effectiveRate).toBe(rules.baseRate);
+    });
+
+    it("금리를 올리면 월 상환액이 늘어난다 — 같은 대출액, 다른 금리", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      const before = result.current!.safety.monthlyPayment;
+
+      act(() => result.current!.setRatePercentText("7"));
+
+      expect(result.current!.effectiveRate).toBe(0.07);
+      expect(result.current!.safety.monthlyPayment).toBeGreaterThan(before);
+    });
+
+    it("금리를 조정해도 받을 수 있는 최대 대출액은 그대로다 — 은행 심사 기준은 규제 금리로 고정된다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      const before = result.current!.loanAtPrice.amount;
+
+      act(() => result.current!.setRatePercentText("7"));
+
+      expect(result.current!.loanAtPrice.amount).toBe(before);
+    });
+
+    it("빈 입력이면 기준 금리로 조용히 되돌아간다 — 표가 통째로 사라지지 않는다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      act(() => result.current!.setRatePercentText(""));
+
+      expect(result.current!.ratePercentText).toBe("");
+      expect(result.current!.effectiveRate).toBe(rules.baseRate);
+      expect(Number.isFinite(result.current!.safety.monthlyPayment)).toBe(
+        true,
+      );
+    });
+
+    it("범위 밖 입력(20% 초과)이면 기준 금리로 되돌아간다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      act(() => result.current!.setRatePercentText("25"));
+
+      expect(result.current!.effectiveRate).toBe(rules.baseRate);
+    });
+  });
+
   describe("safePrice", () => {
     it("calcSafePrice가 같은 프로필·룰셋에서 내는 값과 같다", () => {
       const p = profile();

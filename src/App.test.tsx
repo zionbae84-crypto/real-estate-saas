@@ -1103,31 +1103,40 @@ describe("App - 단지 상세(화면 4)", () => {
   });
 
   describe("리뷰 수정: 상세 화면의 배지 라벨·전용면적 입력·포커스", () => {
-    it("상세가 열리면 배지가 둘이 되고, 각각 무엇에 답하는지 라벨이 보인다", async () => {
+    /**
+     * 사용자 지시로 예산 상세의 "최대로 빌린다면" 표는 옛 `SafetyBadge`가
+     * 아니라 `PriceSlider`(`.price-slider-burden`)로 합쳐졌다 —
+     * `.safety-badge`는 이제 단지 상세(`ComplexDetail`)가 열렸을 때만
+     * 존재한다. 두 자리가 서로 다른 질문에 답한다는 사실은 그대로
+     * 잠근다: 예산 상세 쪽 라벨은 상세가 열려도 안 바뀌고, 상세 쪽
+     * 배지만 별도 라벨로 나타난다.
+     */
+    it("상세가 열려도 예산 상세의 라벨은 그대로고, 단지 상세 배지가 따로 생긴다", async () => {
       const { container } = render(<App />);
       await fillProfile();
 
-      // 목록 화면에서는 배지가 하나뿐이라 라벨을 붙이지 않는다.
-      expect(container.querySelectorAll(".safety-badge")).toHaveLength(1);
-      expect(container.querySelector(".safety-badge-label")).toBeNull();
+      // 목록 화면에서는 단지 상세 배지가 없다 — 예산 상세 쪽 라벨만 있다.
+      expect(container.querySelectorAll(".safety-badge")).toHaveLength(0);
+      expect(
+        screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
+      ).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
+      // 단지 상세가 열리면 그쪽 배지가 하나 생기고, 예산 상세 쪽 라벨은
+      // 그대로 남는다 — 서로 다른 질문에 각자 답한다.
       const badges = container.querySelectorAll(".safety-badge");
-      expect(badges).toHaveLength(2);
-
-      const labels = [...container.querySelectorAll(".safety-badge-label")].map(
-        (el) => el.textContent ?? "",
+      expect(badges).toHaveLength(1);
+      expect(container.querySelector(".safety-badge-label")?.textContent).toMatch(
+        /이 집을 샀을 때/,
       );
-      // 둘 다 라벨이 있고, 서로 다른 질문에 답한다고 글자로 말한다.
-      expect(labels).toHaveLength(2);
-      expect(labels[0]).toMatch(/최대로 빌렸을 때/);
-      expect(labels[1]).toMatch(/이 집을 샀을 때/);
+      expect(
+        screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
+      ).toBeInTheDocument();
 
-      // 목록으로 돌아오면 배지가 다시 하나가 되고 라벨도 사라진다.
+      // 목록으로 돌아오면 단지 상세 배지가 다시 사라진다.
       await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-      expect(container.querySelectorAll(".safety-badge")).toHaveLength(1);
-      expect(container.querySelector(".safety-badge-label")).toBeNull();
+      expect(container.querySelectorAll(".safety-badge")).toHaveLength(0);
     });
 
     /** 전용면적 입력란은 화면 1이 네 질문으로 줄면서 사라졌다. */

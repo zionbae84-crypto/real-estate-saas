@@ -2,22 +2,11 @@ import { useState } from "react";
 import { formatWon, formatWonRoundedToMan } from "../format/won";
 import type { LoanLimit } from "../lib/finance";
 import { equalPrincipalSchedule, monthlyPayment } from "../lib/finance";
+import { MAX_RATE_PERCENT, parseRatePercent } from "../lib/rate-input";
 import { rules } from "../state/useAffordability";
 import { MoneyInput } from "./MoneyInput";
 
-/**
- * 금리 입력의 상한(%).
- *
- * **20%인 이유**: 이자제한법·대부업법이 정한 최고이자율이 연 20%다 —
- * 그보다 높은 금리는 이 나라에서 주택담보대출로 존재할 수 없으므로,
- * 그 위는 "가정"이 아니라 오타(4.53을 453으로 치는 것 같은)로 보는 편이
- * 맞다. 상한을 두지 않으면 그 오타가 조용히 월 상환액 수천만원짜리
- * 그럴듯한 표가 되어 나온다.
- *
- * 하한은 0이다. 음수 금리는 `equalPrincipalSchedule`이 예외로 막지만,
- * 화면에서는 예외를 던지기 전에 먼저 안내로 잡는다.
- */
-export const MAX_RATE_PERCENT = 20;
+export { MAX_RATE_PERCENT };
 
 const MONEY_HINT = "단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요.";
 
@@ -104,13 +93,8 @@ export function LoanCalculator({ neededLoan, maxLoan }: LoanCalculatorProps) {
     );
   }
 
-  const ratePercent =
-    ratePercentText.trim() === "" ? null : Number(ratePercentText);
-  const rateValid =
-    ratePercent !== null &&
-    Number.isFinite(ratePercent) &&
-    ratePercent >= 0 &&
-    ratePercent <= MAX_RATE_PERCENT;
+  const { percent: ratePercent, valid: rateValid } =
+    parseRatePercent(ratePercentText);
 
   const guidance = guidanceFor(amount, maxLoan.amount, rateValid);
 

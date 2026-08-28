@@ -1,6 +1,11 @@
+import { useId } from "react";
 import { Slider } from "seed-design/ui/slider";
 import { formatWon } from "../format/won";
-import { PRICE_STEP } from "../lib/finance";
+import { burdenGrade, plainGrade } from "../lib/burden-grade";
+import { PRICE_STEP, type SafetyScore } from "../lib/finance";
+import { MAX_RATE_PERCENT } from "../lib/rate-input";
+import { landLeaseRules } from "../state/landLeaseRules";
+import { formatRatio } from "./SafetyBadge";
 
 export interface PriceSliderProps {
   price: number;
@@ -32,6 +37,47 @@ export interface PriceSliderProps {
    */
   safePrice?: number | null;
   onChange: (price: number) => void;
+  /**
+   * 지금 가격에서 **최대로 빌렸을 때**의 상환 부담. 계산은
+   * `useAffordability`가 하고 이 컴포넌트는 표시만 한다 — 필요 대출이
+   * 아니라 받을 수 있는 최대 대출을 기준으로 잰 값이라는 사실은
+   * `.price-slider-burden-label`이 문장으로 밝힌다(사용자 지시).
+   */
+  safety: SafetyScore;
+  /**
+   * 이 가격에서 받을 수 있는 **최대 대출액**(원, `calcMaxLoan`). 사용자
+   * 지시로 가격을 조정할 때마다 이 자리에서 함께 보인다. 아래 금리
+   * 입력과 무관한 값이다 — 은행 심사 기준(DSR 스트레스 금리)으로 정해지고,
+   * 사용자가 조정하는 것은 "받은 대출을 갚을 때"의 가정 금리뿐이다.
+   */
+  loanAmount: number;
+  /**
+   * 부담 계산에 쓰는 금리 입력란의 문자열 값(`useAffordability`의
+   * `ratePercentText`). 숫자가 아니라 문자열인 이유는 그 훅의 문서와
+   * 같다 — "4."처럼 아직 다 치지 않은 상태를 표현해야 한다.
+   */
+  ratePercentText: string;
+  onRateChange: (text: string) => void;
+  /**
+   * 실제로 `safety` 계산에 쓰인 금리(소수, 예: 0.0453). `ratePercentText`가
+   * 비어 있거나 범위 밖이면 룰셋 기준 금리로 조용히 되돌아가므로, 입력
+   * 그대로가 아니라 이 값을 화면에 다시 적어 "지금 무엇으로 계산했는지"를
+   * 감추지 않는다.
+   */
+  effectiveRate: number;
+  /**
+   * 이 배지가 **특정 평형**에 대한 것일 때만 넘긴다(`SafetyBadge`와
+   * 같은 계약). 넘기지 않으면 이 배지는 어떤 집도 가리키지 않는다는
+   * 뜻이다 — 프로필과 슬라이더 가격으로만 잰다.
+   */
+  landLeasehold?: "Y" | "N" | null;
+  /**
+   * 등급이 왜 거기서 멈췄는지를 이 카드가 직접 설명하는가. 기본은
+   * 설명한다. `false`를 주는 자리는 단지 상세가 함께 열려 있을 때뿐이다
+   * — 그때는 `ComplexDetail`의 배지가 같은 설명을 이미 말한다
+   * (`SafetyBadge`의 같은 이름 prop과 같은 이유).
+   */
+  explainGrade?: boolean;
 }
 
 /**
@@ -53,6 +99,11 @@ function toPrice(values: number[], max: number): number | undefined {
   return first === undefined ? undefined : Math.min(first, max);
 }
 
+/** 0.0453 → "4.53%". 소수점은 있는 만큼만 남긴다. */
+function formatPercent(rate: number): string {
+  return `${Number((rate * 100).toFixed(2))}%`;
+}
+
 export function PriceSlider({
   price,
   max,
@@ -60,7 +111,16 @@ export function PriceSlider({
   cashShortfall = 0,
   safePrice,
   onChange,
+  safety,
+  loanAmount,
+  ratePercentText,
+  onRateChange,
+  effectiveRate,
+  landLeasehold,
+  explainGrade = true,
 }: PriceSliderProps) {
+  const rateInputId = useId();
+
   const markers: { value: number; label: string }[] = [];
   if (
     safePrice !== null &&
@@ -101,6 +161,17 @@ export function PriceSlider({
    */
   const overLimit = price > affordablePrice && cashShortfall > 0;
 
+  /*
+   * 목록 화면과 같은 함수에서 등급을 낸다(`SafetyBadge`와 같은 계약).
+   * `landLeasehold`를 넘기지 않으면(main 예산 패널) 어떤 집도 가리키지
+   * 않는 배지라 `plainGrade`를 쓰고, 단지 상세가 함께 열려 있으면
+   * `burdenGrade`가 토지임대부 미확인을 "확인 필요"로 내려 준다.
+   */
+  const grade =
+    landLeasehold === undefined
+      ? plainGrade(safety.level)
+      : burdenGrade(safety.level, landLeasehold, landLeaseRules);
+
   return (
     <section className="price-slider">
       <p
@@ -116,7 +187,7 @@ export function PriceSlider({
         (`src/print/hiddenInPrint.ts`의 `.price-slider-control`).
         드래그로 값을 바꾸는 장치는 종이 위에서 무의미하지만, 지금 가리키는
         **값**(위의 `.slider-price`)과 한계 안내(아래 `.slider-warning`)는
-        바로 아래 대출 배지가 이 가격을 기준으로 계산되므로(전제) 남긴다 —
+        바로 아래 부담 표가 이 가격을 기준으로 계산되므로(전제) 남긴다 —
         그래서 Slider만 별도 div로 감싼다.
       */}
       <div className="price-slider-control">
@@ -182,6 +253,107 @@ export function PriceSlider({
           </span>
         </p>
       )}
+
+      {/*
+        사용자 지시로 이 슬라이더 카드와 옛 `SafetyBadge` 카드를 하나로
+        합쳤다 — 둘 다 "지금 가리키는 가격"을 두고 하는 말이라 따로 있을
+        이유가 없었다. 라벨을 항상 낸다(예전에는 단지를 골랐을 때만
+        냈는데, 그러면 메인 예산 패널에서는 이 표가 "실제로 사면 이렇게
+        된다"처럼 읽혔다 — 실제로는 최대로 빌렸을 때를 가정한 값이다).
+      */}
+      <div className="price-slider-burden">
+        <p className="price-slider-burden-label">
+          이 가격으로 샀을 때 최대로 빌린다면
+        </p>
+
+        <dl className="price-slider-burden-table">
+          <div>
+            <dt>
+              부담 등급
+              {grade.note !== null && explainGrade && (
+                <p className="hint price-slider-grade-note">{grade.note}</p>
+              )}
+            </dt>
+            <dd className="price-slider-grade" data-level={grade.level}>
+              {grade.label}
+            </dd>
+          </div>
+
+          <div>
+            <dt>최대 대출 가능 금액</dt>
+            <dd>{formatWon(loanAmount)}</dd>
+          </div>
+
+          <div>
+            <dt>월 상환액</dt>
+            <dd data-field="payment">{formatWon(safety.monthlyPayment)}</dd>
+          </div>
+
+          <div>
+            <dt>소득 대비 상환부담률</dt>
+            <dd data-field="ratio">{formatRatio(safety.burdenRatio)}</dd>
+          </div>
+
+          <div>
+            <dt>금리 2%p 오르면 월 상환액</dt>
+            <dd data-field="stressedPayment">
+              {formatWon(safety.stressedMonthlyPayment)}
+            </dd>
+          </div>
+
+          <div>
+            <dt>금리 2%p 오르면 부담률</dt>
+            <dd data-field="stressedRatio">
+              {formatRatio(safety.stressedBurdenRatio)}
+            </dd>
+          </div>
+
+          <div>
+            <dt>
+              <label htmlFor={rateInputId}>적용 금리 (연 %)</label>
+              <p className="hint">
+                {`금리를 조정하면 위 상환액·부담률이 다시 계산돼요. 지금은 연 ${formatPercent(effectiveRate)}로 계산했어요.`}
+              </p>
+            </dt>
+            {/*
+              입력란은 종이에서는 조작할 수 없는 장치다(`LoanCalculator`의
+              `.loan-input-form`과 같은 이유) — `.price-slider-rate-input`을
+              인쇄에서 지우고(`hiddenInPrint.ts`), 실제로 쓰인 금리는 바로
+              위 `.hint`가 평문으로 남긴다.
+            */}
+            <dd className="price-slider-rate-input">
+              <input
+                id={rateInputId}
+                type="number"
+                inputMode="decimal"
+                autoComplete="off"
+                min={0}
+                max={MAX_RATE_PERCENT}
+                step={0.01}
+                value={ratePercentText}
+                onChange={(event) => onRateChange(event.target.value)}
+              />
+              <span aria-hidden="true">%</span>
+            </dd>
+          </div>
+        </dl>
+
+        {/*
+          대출 없이 전액 현금인 경우(월 상환액 0원)의 설명. 엔진(safety.ts)은
+          소득이 0이면 부담률을 Infinity로 돌려주고 등급이 "위험"이 되는데,
+          "월 상환액 0원"과 "위험" 배지가 나란히 있으면 모순처럼 보인다 —
+          실제로는 상환 부담이 큰 게 아니라 소득 정보 자체가 없다는 뜻이므로
+          그 사실을 풀어 적는다(`SafetyBadge`의 `ZeroPaymentNote`와 같은
+          판단).
+        */}
+        {safety.monthlyPayment === 0 && (
+          <p className="safety-note">
+            {Number.isFinite(safety.burdenRatio)
+              ? "대출 없이 전액 현금으로 사는 경우예요."
+              : "대출 없이 전액 현금으로 사는 경우예요. 이 등급은 상환 부담이 아니라 소득 정보가 없다는 사실을 반영해요."}
+          </p>
+        )}
+      </div>
     </section>
   );
 }
