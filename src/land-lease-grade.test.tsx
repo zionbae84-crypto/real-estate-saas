@@ -352,12 +352,14 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
   const p = profile({ cash: 2_000_000_000, annualIncome: 400_000_000 });
 
   /**
-   * 상세를 열고 **매물가격까지 넣는다.**
+   * 상세를 열고 **예상 매수금액까지 명시적으로 넣는다.**
    *
    * 사용자 지시로 이 화면의 계산이 `unit.maxPrice` 고정에서 사용자가
-   * 넣는 매물가격 기준으로 바뀌었다 — 가격을 넣기 전에는 등급이 아예
-   * 나오지 않는다(아무 주장도 하지 않는 상태다). 그래서 목록과 견주려면
-   * 목록이 쓰는 것과 **같은 가격**(`u.maxPrice`)을 넣어야 한다.
+   * 넣는 예상 매수금액 기준으로 바뀌었다. 이 칸은 이제 그 평형의
+   * 실거래 범위 위쪽(`unit.maxPrice`)으로 채워진 채 시작하므로 사실
+   * 아무것도 안 넣어도 목록과 같은 가격이지만, 이 테스트가 검사하는
+   * 것은 "목록과 상세가 같은 가격에서 같은 등급을 말하는가"이므로 그
+   * 가격을 명시적으로 넣는 형태를 유지한다.
    */
   async function detailOf(u: ComplexUnit) {
     // App.tsx의 `effectiveProfile`과 **같은 규칙**으로 만든다 — 이 평형의
@@ -386,9 +388,12 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
      * "목록과 상세가 같은 가격에서 같은 등급을 말하는가"이므로 그 가격을
      * 명시적으로 넣는 형태를 유지한다.)
      */
-    const priceInput = screen.getByLabelText("매물가격");
+    const priceInput = screen.getByLabelText("예상 매수금액");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, String(u.maxPrice / 10_000));
+    // 이 입력란은 `commitOn="blur"`다 — 벗어나야 값이 확정되고, 아래
+    // 등급이 그 값을 기준으로 다시 계산된다.
+    await userEvent.tab();
     return rendered;
   }
 
@@ -419,11 +424,19 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
   );
 
   /**
-   * 등급이 왜 "안전"까지 못 갔는지는 **등급 글자와 같은 줄**에서 말한다.
-   * 자리가 배지 아래에서 계산기 표의 한 줄로 옮겨졌을 뿐, 낯선 등급
-   * 글자만 남지 않게 한다는 계약은 그대로다.
+   * 등급이 왜 "안전"까지 못 갔는지는 **등급 글자 바로 다음**에서 말한다.
+   * 낯선 등급 글자만 남지 않게 한다는 계약은 그대로다.
+   *
+   * ⚠ **더 이상 "같은 `<div>` 안"이 아니다.** 사용자 지시로 등급 낱말
+   * ("안전")을 카드 오른쪽 위로 올리면서(`ComplexDetail.tsx`의
+   * `.detail-monthly-header`), 등급은 제목 줄과 나란히 서고 근거 문장은
+   * 그 아래 **전체 폭**을 쓰는 별도 줄이 됐다 — 카드 하나에서 오른쪽
+   * 끝에 짧게 붙은 낱말과 그 아래 긴 문장을 같은 폭의 상자에 억지로
+   * 가두면 문장이 좁게 줄바꿈된다. 그래서 지금 확인하는 것은 "같은
+   * 상자 안"이 아니라 **"등급 머리 바로 다음에 온다"**(둘 사이에
+   * 다른 내용이 끼어들지 않는다)는 순서 계약이다.
    */
-  it("상세도 왜 멈췄는지를 등급 글자와 같은 줄에서 말한다", async () => {
+  it("상세도 왜 멈췄는지를 등급 글자 바로 다음에서 말한다", async () => {
     const u = REAL_LAND_LEASE[0];
     expect(u).toBeDefined();
     if (u === undefined) return;
@@ -431,8 +444,12 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
     const level = container.querySelector(".safety-level");
     const note = container.querySelector(".safety-grade-note");
     expect(note?.textContent).toBe(landLeaseRules.grade.note);
-    // 같은 `<div>`(표의 한 줄) 안에 등급 글자와 그 이유가 함께 있다.
-    expect(level?.closest("div")?.contains(note as Node)).toBe(true);
+
+    const header = level?.closest(".detail-monthly-header");
+    expect(header).not.toBeNull();
+    // 등급 머리(.detail-monthly-header) 바로 다음 형제가 근거 문장이다
+    // — 둘 사이에 다른 내용이 끼어들면 등급과 근거가 멀어져 읽힌다.
+    expect(header?.nextElementSibling).toBe(note);
   });
 });
 
@@ -516,22 +533,26 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
 
   /**
    * 예산 상세 쪽 등급은 `PriceSlider`와 합쳐지며 `.price-slider-grade`가
-   * 됐고(사용자 지시), 단지 상세 쪽은 그대로 `SafetyBadge`의
-   * `.safety-level`이다.
+   * 됐고(사용자 지시), 단지 상세 쪽도 이제 `SafetyBadge`를 거치지 않고
+   * `ComplexDetail`이 직접 `.safety-level`을 그린다(사용자 지시로
+   * "매달 나가는 돈" 머리를 다시 짜면서 — `ComplexDetail.tsx`의
+   * `.detail-monthly-header` 문서 참고). **클래스 이름은 그대로다.**
    *
    * **계약은 그대로다**: 두 자리가 같은 등급을 말하고, 왜 "안전"까지
    * 못 갔는지는 **한 번만** 적는다.
    *
-   * 매물가격은 이제 이 평형의 실거래 범위 위쪽으로 채워진 채 시작하므로
-   * (`ComplexDetail`의 `askingPrice` 문서) **먼저 비우고** 이 테스트가
-   * 정한 값을 넣는다 — 안 그러면 기본값 뒤에 붙어 훨씬 큰 금액이 되고,
-   * 두 자리가 서로 다른 등급을 말하게 된다.
+   * 예상 매수금액은 이제 이 평형의 실거래 범위 위쪽으로 채워진 채
+   * 시작하므로(`ComplexDetail`의 `askingPrice` 문서) **먼저 비우고**
+   * 이 테스트가 정한 값을 넣는다 — 안 그러면 기본값 뒤에 붙어 훨씬 큰
+   * 금액이 되고, 두 자리가 서로 다른 등급을 말하게 된다. 이 입력란은
+   * `commitOn="blur"`이므로 벗어나야(`tab()`) 값이 확정된다.
    */
   it("두 자리가 같은 등급을 말하되 이유는 한 번만 적는다", async () => {
     await openLandLeaseDetail();
-    const priceInput = screen.getByLabelText("매물가격");
+    const priceInput = screen.getByLabelText("예상 매수금액");
     await userEvent.clear(priceInput);
     await userEvent.type(priceInput, "150000");
+    await userEvent.tab();
 
     const levels = [
       ...document.querySelectorAll(".price-slider-grade, .safety-level"),

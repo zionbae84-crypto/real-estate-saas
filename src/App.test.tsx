@@ -1130,10 +1130,10 @@ describe("App - 단지 상세(화면 4)", () => {
         screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
       ).toBeInTheDocument();
       // 그리고 단지 상세는 자기 질문(이 단지, 이 평형)을 연다.
-      expect(screen.getByLabelText("매물가격")).toBeInTheDocument();
+      expect(screen.getByLabelText("예상 매수금액")).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-      expect(screen.queryByLabelText("매물가격")).not.toBeInTheDocument();
+      expect(screen.queryByLabelText("예상 매수금액")).not.toBeInTheDocument();
     });
 
     /** 전용면적 입력란은 화면 1이 네 질문으로 줄면서 사라졌다. */

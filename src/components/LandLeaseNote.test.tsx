@@ -335,13 +335,19 @@ describe("토지임대부 표시", () => {
      *
      * **지켜야 하는 것은 그대로다**: 이 표시가 **금액보다 앞**에 있어야
      * 한다. 그래야 그 금액에 토지 사용료가 빠져 있다는 사실이 금액을
-     * 읽기 전에 도착한다. 지금은 매물가격 입력란보다도 앞이라, 사용자가
-     * 값을 넣기 전에 이미 읽는다 — 더 이른 자리다.
+     * 읽기 전에 도착한다. 지금은 예상 매수금액 입력란보다도 앞이라,
+     * 사용자가 값을 넣기 전에 이미 읽는다 — 더 이른 자리다.
      */
     it("상세에서는 가격 입력란보다도, 금액 블록보다도 앞이다", async () => {
       const { container } = renderDetail(unit({ landLeasehold: "Y" }));
-      // 금액 블록은 매물가격을 넣어야 생긴다.
-      await userEvent.type(screen.getByLabelText("매물가격"), "120000");
+      // 금액 블록은 이미 이 평형 기준값으로 채워져 있다(ComplexDetail의
+      // 프리필) — 그대로도 아래 검사가 성립하지만, 명시적으로 값을
+      // 다시 넣어 이 시나리오("사용자가 방금 값을 넣었다")를 재현한다.
+      // `commitOn="blur"`라 벗어나야 확정된다.
+      const priceInput = screen.getByLabelText("예상 매수금액");
+      await userEvent.clear(priceInput);
+      await userEvent.type(priceInput, "120000");
+      await userEvent.tab();
 
       const note = container.querySelector(
         '.land-lease-note[data-variant="monthly"]',

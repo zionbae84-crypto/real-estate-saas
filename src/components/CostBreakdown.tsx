@@ -1,6 +1,6 @@
 import { formatWon, formatWonRoundedToMan } from "../format/won";
 import type { CostBreakdown as CostBreakdownData } from "../lib/finance";
-import { ChevronIcon } from "./ChevronIcon";
+import { CalcBasisIcon } from "./CalcBasisIcon";
 
 export interface CostBreakdownProps {
   costs: CostBreakdownData;
@@ -42,9 +42,14 @@ export interface CostBreakdownProps {
 }
 
 /*
- * 내역을 펼치는 아이콘은 `./ChevronIcon`으로 나갔다 — 매달 나가는 돈
- * 계산기가 **같은 트리거**를 쓰게 되면서 출처를 하나로 뒀다. 모양·속성은
- * 그대로이고, 이 파일에서 바뀐 것은 정의가 import로 바뀐 것뿐이다.
+ * 내역을 펼치는 아이콘은 `./CalcBasisIcon`에서 온다(사용자 지시:
+ * "산출근거 아이콘으로 수정해줘"). 예전에는 아래로 펼쳐지는 화살표
+ * (`ChevronIcon`)였다 — 그 판단은 이 트리거가 "이 자리에서 카드를
+ * 접었다 폈다" 하는 것이라는 전제였는데, 사용자가 이 내역을 "산출근거"
+ * (숫자가 왜 이런지 설명)로 부르면서 그 전제가 바뀌었다. 대출 한도의
+ * 같은 성격 트리거(`ComplexDetail`의 `.detail-binding-toggle`)와
+ * 같은 아이콘을 쓴다 — 한 화면에 "이 숫자 설명 보기" 버튼이 둘일 때
+ * 서로 다른 그림이면 같은 뜻이 다르게 읽힌다.
  */
 
 type CostKey = keyof Omit<CostBreakdownData, "total">;
@@ -147,7 +152,7 @@ export function CostBreakdown({
           className="fold-more-hint cost-breakdown-toggle"
           aria-label="취득시 부대비용 내역 보기"
         >
-          <ChevronIcon />
+          <CalcBasisIcon />
         </summary>
       )}
       <dl>

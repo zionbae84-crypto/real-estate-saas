@@ -178,17 +178,18 @@ export function PriceCheck({
       <LandLeaseNote landLeasehold={unit.landLeasehold} variant="price" />
 
       {/*
-        제어 모드에서는 입력란을 그리지 않는다 — 호가를 위쪽 매물가격
-        입력란 하나가 정한다(사용자 지시). 대신 **무엇을 기준으로 판정한
-        것인지**를 한 줄로 적는다: 이 영역은 접혀 있다가 펼쳐지므로,
-        위 입력란이 화면 밖에 있을 때 판정만 보이면 어느 금액에 대한
-        답인지 알 수 없다. 값이 아직 없으면 그 사실을 말한다.
+        제어 모드에서는 입력란을 그리지 않는다 — 호가를 위쪽 예상
+        매수금액 입력란 하나가 정한다(사용자 지시). 대신 **무엇을
+        기준으로 판정한 것인지**를 한 줄로 적는다: 이 영역은 접혀
+        있다가 펼쳐지므로, 위 입력란이 화면 밖에 있을 때 판정만 보이면
+        어느 금액에 대한 답인지 알 수 없다. 값이 아직 없으면 그 사실을
+        말한다.
       */}
       {controlled ? (
         <p className="price-check-basis">
           {askingPrice === null
-            ? "위 매물가격을 넣으면 이 평형의 실거래 범위 어디쯤인지 짚어 드려요."
-            : `위에 넣은 매물가격 ${formatWon(askingPrice)} 기준이에요.`}
+            ? "위 예상 매수금액을 넣으면 이 평형의 실거래 범위 어디쯤인지 짚어 드려요."
+            : `위에 넣은 예상 매수금액 ${formatWon(askingPrice)} 기준이에요.`}
         </p>
       ) : (
         <form className="price-check-form" onSubmit={(e) => e.preventDefault()}>

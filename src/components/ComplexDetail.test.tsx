@@ -81,21 +81,32 @@ function renderDetail(overrides: RenderOverrides = {}) {
 }
 
 /**
- * 매물가격 입력란에 값을 넣는다 — 이 화면의 유일한 가격 입력이다.
+ * 예상 매수금액 입력란에 값을 넣는다 — 이 화면의 유일한 가격 입력이다.
  *
  * ⚠ **먼저 비운다.** 이 칸은 이제 이 평형의 실거래 범위 위쪽으로
  * 채워진 채 시작하므로(`ComplexDetail`의 `askingPrice` 문서), 그냥
  * 타이핑하면 기본값 뒤에 붙어 엉뚱한 금액이 된다.
+ *
+ * ⚠ **끝에 `tab()`으로 블러(blur)한다.** 이 입력란은 `commitOn="blur"`
+ * 다(사용자 지시: "입력하면 그 자리에 확정된 금액이 적히도록") — 타이핑
+ * 하는 동안은 부모(`askingPrice`)를 건드리지 않으므로, 벗어나기 전까지는
+ * 아래 부대비용·최대 대출이 여전히 예전 값이다.
  */
 async function enterPrice(won: string) {
-  const input = screen.getByLabelText("매물가격");
+  const input = screen.getByLabelText("예상 매수금액");
   await userEvent.clear(input);
   await userEvent.type(input, won);
+  await userEvent.tab();
 }
 
-/** 매물가격을 비운다 — "아직 안 넣은" 상태를 만드는 유일한 길이다 */
+/**
+ * 예상 매수금액을 비운다 — "아직 안 넣은" 상태를 만드는 유일한 길이다.
+ * `commitOn="blur"`라 비운 뒤에도 `tab()`으로 벗어나야 확정된다(위
+ * `enterPrice` 문서와 같은 이유).
+ */
 async function clearPrice() {
-  await userEvent.clear(screen.getByLabelText("매물가격"));
+  await userEvent.clear(screen.getByLabelText("예상 매수금액"));
+  await userEvent.tab();
 }
 
 describe("ComplexDetail — 제목과 사실 줄", () => {
@@ -249,7 +260,7 @@ describe("ComplexDetail — 실거래 내역", () => {
   });
 });
 
-describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () => {
+describe("ComplexDetail — 예상 매수금액이 아래 전부를 움직인다", () => {
   /**
    * 사용자 지시로 이 화면의 가격 입력란은 하나다. 예전에는 위쪽 계산이
    * `unit.maxPrice` 고정이고 호가 입력이 접힌 영역 안에 따로 있어, 한
@@ -257,7 +268,7 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
    */
   it("가격 입력란이 하나뿐이다", () => {
     const { container } = renderDetail();
-    expect(screen.getByLabelText("매물가격")).toBeInTheDocument();
+    expect(screen.getByLabelText("예상 매수금액")).toBeInTheDocument();
     /*
       호가 입력란(`PriceCheck`가 스스로 그리던 것)은 더 이상 없다.
       `queryByLabelText(/호가/)`로 재지 않는다 — 그 영역의 **판정 결과**
@@ -284,15 +295,19 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
    * 안내 한 줄만 남았다. 이제 이 평형의 실거래 범위 위쪽으로 채워 두고
    * 시작한다 — 열자마자 숫자가 보이고, 사용자는 자기 호가로 고쳐 쓴다.
    */
-  it("상세를 열면 매물가격이 이 평형 기준으로 채워져 두 블록이 바로 보인다", () => {
+  it("상세를 열면 예상 매수금액이 이 평형 기준으로 채워져 두 블록이 바로 보인다", () => {
     renderDetail({ unit: unit({ maxPrice: 1_200_000_000 }) });
 
-    // 12억 = 만원 단위 120,000 (셋째 자리 쉼표는 MoneyInput의 표기 규칙)
-    expect(screen.getByLabelText("매물가격")).toHaveValue("120,000");
+    /*
+      이 입력란은 `commitOn="blur"`다(사용자 지시) — 값이 확정되면
+      되비추기(.echo)가 아니라 **입력란 자신**이 사람이 읽는 형태로
+      바뀐다(`formatWon`). 12억원이 그 형태다.
+    */
+    expect(screen.getByLabelText("예상 매수금액")).toHaveValue("12억원");
     expect(screen.getByText("취득시 부대비용")).toBeInTheDocument();
     expect(screen.getByText("매달 나가는 돈")).toBeInTheDocument();
     expect(
-      screen.queryByText(/매물가격을 넣으면 취득시 부대비용과 매달 나가는 돈을 계산해요/),
+      screen.queryByText(/예상 매수금액을 넣으면 취득시 부대비용과 매달 나가는 돈을 계산해요/),
     ).not.toBeInTheDocument();
   });
 
@@ -301,7 +316,7 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
     await clearPrice();
 
     expect(
-      screen.getByText(/매물가격을 넣으면 취득시 부대비용과 매달 나가는 돈을 계산해요/),
+      screen.getByText(/예상 매수금액을 넣으면 취득시 부대비용과 매달 나가는 돈을 계산해요/),
     ).toBeInTheDocument();
     expect(screen.queryByText("취득시 부대비용")).not.toBeInTheDocument();
   });
@@ -434,7 +449,7 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
     await enterPrice("100000");
     const 싼값 = total();
 
-    await userEvent.clear(screen.getByLabelText("매물가격"));
+    // enterPrice가 이미 지우고 다시 채우므로 별도로 비울 필요가 없다.
     await enterPrice("150000");
 
     expect(total()).not.toBe(싼값);
@@ -450,12 +465,12 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
    * 호가 위치 확인이 **같은 가격**을 쓴다. 두 값이 갈리면 위쪽 부대비용과
    * 아래쪽 호가 판정이 서로 다른 가격을 말하게 된다.
    */
-  it("호가 위치 확인도 같은 매물가격을 기준으로 판정한다", async () => {
+  it("호가 위치 확인도 같은 예상 매수금액을 기준으로 판정한다", async () => {
     renderDetail();
     await enterPrice("120000");
 
     expect(
-      screen.getByText(/위에 넣은 매물가격 12억원 기준이에요/),
+      screen.getByText(/위에 넣은 예상 매수금액 12억원 기준이에요/),
     ).toBeInTheDocument();
   });
 
@@ -463,7 +478,7 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
     renderDetail();
     await clearPrice();
     expect(
-      screen.getByText(/위 매물가격을 넣으면 이 평형의 실거래 범위 어디쯤인지/),
+      screen.getByText(/위 예상 매수금액을 넣으면 이 평형의 실거래 범위 어디쯤인지/),
     ).toBeInTheDocument();
   });
 
@@ -474,7 +489,7 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
    * 59㎡의 것으로 남아, 화면은 멀쩡한 부대비용·상환액을 내는데 그 숫자가
    * 통째로 다른 평형에 대한 것이 된다.
    */
-  it("평형을 갈아타면 매물가격이 그 평형 기준으로 다시 채워진다", async () => {
+  it("평형을 갈아타면 예상 매수금액이 그 평형 기준으로 다시 채워진다", () => {
     const small = unit({ areaBucket: 59, maxPrice: 683_000_000 });
     const large = unit({ areaBucket: 84, maxPrice: 920_000_000 });
 
@@ -491,7 +506,7 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
         onClose={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("매물가격")).toHaveValue("68,300");
+    expect(screen.getByLabelText("예상 매수금액")).toHaveValue("6억 8,300만원");
 
     rerender(
       <ComplexDetail
@@ -504,7 +519,7 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
         onClose={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText("매물가격")).toHaveValue("92,000");
+    expect(screen.getByLabelText("예상 매수금액")).toHaveValue("9억 2,000만원");
   });
 });
 

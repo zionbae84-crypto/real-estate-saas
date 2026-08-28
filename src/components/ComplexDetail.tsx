@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit, TradeRecord } from "../data/complexes";
 import { formatWon, formatWonRoundedToMan } from "../format/won";
+import { burdenGrade } from "../lib/burden-grade";
 import type { BuyerProfile } from "../lib/finance";
 import {
   brokerageFeeRateFor,
@@ -11,11 +12,12 @@ import {
   ltvRateFor,
 } from "../lib/finance";
 import type { PriceBudgetInput } from "../lib/price";
+import { landLeaseRules } from "../state/landLeaseRules";
 import { rules } from "../state/useAffordability";
 import { locationRules } from "../state/useLocationFacts";
 import { priceRules } from "../state/usePriceCheck";
 import { BindingLimitTable } from "./BindingExplainer";
-import { ChevronIcon } from "./ChevronIcon";
+import { CalcBasisIcon } from "./CalcBasisIcon";
 import { CostBreakdown } from "./CostBreakdown";
 import { LandLeaseNote } from "./LandLeaseNote";
 import { LoanCalculator } from "./LoanCalculator";
@@ -23,7 +25,6 @@ import { LocationFacts } from "./LocationFacts";
 import { MoneyInput } from "./MoneyInput";
 import { NoLoanLine } from "./NoLoanLine";
 import { PriceCheck } from "./PriceCheck";
-import { SafetyBadge } from "./SafetyBadge";
 
 export interface ComplexDetailProps {
   /** 지금 고른 평형. 아래 계산은 전부 이 평형 기준이다 */
@@ -196,25 +197,30 @@ export function ComplexDetail({
    */
   const atPrice = useMemo(() => {
     if (profile === null || askingPrice === null || askingPrice <= 0) return null;
+
+    /*
+     * 이 가격을 사려면 실제로 빌려야 하는 금액과, 그 대출에서의 부담.
+     * **목록 행과 같은 함수**(`calcBurdenAt`)를 쓴다 — 두 화면이 같은
+     * 집을 두고 다른 등급을 말할 수 없게 하는 자리다.
+     */
+    const burden = calcBurdenAt(profile, rules, askingPrice);
+
     return {
       // 프로필을 함께 담는다 — 이 객체가 `null`이 아니면 프로필도
       // `null`이 아니라는 사실을 타입 수준에서 들고 다니려는 것이다.
       profile,
       costs: calcAcquisitionCosts(askingPrice, profile, rules),
       maxLoan: calcMaxLoan(profile, rules, askingPrice),
+      burden,
       /*
-       * 이 가격을 사려면 실제로 빌려야 하는 금액. 계산기 입력란의
-       * 기본값이 된다 — 열자마자 보이는 숫자가 사용자가 실제로 필요한
-       * 금액이어야 한다. 음수가 되지 않게 바닥을 깐다(현금이 남는 경우).
+       * 화면에 보일 등급(그리고 그 등급이 왜 거기서 멈췄는지). 목록의
+       * 행 배지와 **같은 함수**(`burdenGrade`)를 쓴다 — 토지임대부(또는
+       * 모름)라 "안전"까지 못 갔다면 그 사실을 두 화면이 같은 말로
+       * 전해야 한다.
        */
-      /*
-       * 이 가격을 사려면 실제로 빌려야 하는 금액과, 그 대출에서의 부담.
-       * **목록 행과 같은 함수**(`calcBurdenAt`)를 쓴다 — 두 화면이 같은
-       * 집을 두고 다른 등급을 말할 수 없게 하는 자리다.
-       */
-      burden: calcBurdenAt(profile, rules, askingPrice),
+      grade: burdenGrade(burden.safety.level, unit.landLeasehold, landLeaseRules),
     };
-  }, [profile, askingPrice]);
+  }, [profile, askingPrice, unit.landLeasehold]);
 
   return (
     <section
@@ -284,9 +290,19 @@ export function ComplexDetail({
       <TradeHistory unit={unit} />
 
       {/*
-        매물가격 — **이 화면에 가격 입력란은 이것 하나다**(사용자 지시).
-        예전에는 위쪽 계산이 `unit.maxPrice` 고정이고 호가 입력이 접힌
+        예상 매수금액(사용자 지시: "매물가격 >> 예상 매수금액 으로
+        수정") — **이 화면에 가격 입력란은 이것 하나다.** 예전에는
+        위쪽 계산이 `unit.maxPrice` 고정이고 호가 입력이 접힌
         `PriceCheck` 안에 따로 있어, 한 화면이 두 가격을 기준으로 말했다.
+
+        `commitOn="blur"`(사용자 지시: "입력하면 그 자리에 확정된
+        금액이 적히도록 해줘 — 지금은 아래에 중복해서 금액이 생김").
+        입력하는 동안은 부대비용·최대 대출을 다시 계산하지 않는다 —
+        "9"·"90"·"900"…이 매번 "9만원"·"90만원"으로 잘못 해석돼 아래
+        숫자들이 깜빡이는 것을 막는다. 벗어나면(blur) 그 값으로 확정해
+        아래 전부를 다시 계산하고, 입력란 자신이 "9억원"처럼 사람이
+        읽는 형태로 바뀐다 — 그래서 이 아래에 결과를 되비추는 줄이
+        따로 없다(`MoneyInput`의 `commitOn` 문서 참고).
 
         인쇄에서는 입력란을 지운다(`.price-check-form`과 같은 관행 —
         `.complex-detail-price-form`). 넣은 값 자체는 아래 결과들이 각자
@@ -298,10 +314,11 @@ export function ComplexDetail({
       >
         <MoneyInput
           id="complex-detail-price"
-          label="매물가격"
+          label="예상 매수금액"
           hint="단위를 안 쓰면 만원으로 읽어요. '12억3000'처럼 써도 돼요."
           value={askingPrice}
           onChange={setAskingPrice}
+          commitOn="blur"
         />
       </form>
 
@@ -313,7 +330,7 @@ export function ComplexDetail({
         <p className="complex-detail-await-price">
           {profile === null
             ? "예산(현금·연 소득)을 먼저 넣으면 이 가격의 부대비용과 매달 나가는 돈을 계산해요."
-            : "매물가격을 넣으면 취득시 부대비용과 매달 나가는 돈을 계산해요."}
+            : "예상 매수금액을 넣으면 취득시 부대비용과 매달 나가는 돈을 계산해요."}
         </p>
       ) : (
         <>
@@ -339,30 +356,58 @@ export function ComplexDetail({
             (예전에는 셰브런 뒤에 숨어 있었다).
           */}
           <section className="detail-block detail-block--monthly">
-            <h3 className="detail-stat-label">매달 나가는 돈</h3>
-
             {/*
               **이 가격에 이 집을 샀을 때**의 등급. 아래 계산기가 내는
               등급과 **다른 질문에 답한다** — 이쪽은 "이 가격이면 이만큼
               빌려야 하고, 그게 감당되는가"이고, 아래쪽은 "내가 정한 그
-              대출액이면 어떤가"다. 그래서 라벨을 각각 단다.
+              대출액이면 어떤가"다.
 
               ⚠ **지우면 안 되는 자리다.** 목록 행이 같은 함수
               (`calcBurdenAt` → `burdenGrade`)로 낸 등급을 이 화면에서도
               말해야 "목록은 확인 필요, 상세는 아무 말 없음"이 되지
               않는다. 특히 현금으로 다 살 수 있어 대출이 0원인 집에서는
-              아래 계산기가 등급을 내지 않으므로, 이 배지가 없으면 등급이
+              아래 계산기가 등급을 내지 않으므로, 이 자리가 없으면 등급이
               화면에서 통째로 사라진다.
 
-              `showFigures={false}` — 금액·부담률은 아래 계산기가 낸다.
-              여기서는 등급 글자와 그 등급이 왜 멈췄는지만 남긴다.
+              **등급 글자("안전")를 오른쪽 위 빈 공간으로 올린다**(사용자
+              지시: "안전을 오른쪽 상단 빈공간으로 이동하고 줄을
+              올려줘"). 예전에는 `SafetyBadge`(라벨 → 등급을 세로로
+              쌓는 컴포넌트)를 그대로 써서 "매달 나가는 돈" 아래 두 줄을
+              더 차지했다 — 카드 오른쪽이 통째로 비어 있는데도. 이 카드
+              하나만의 배치라 `SafetyBadge`를 CSS로 다시 늘어놓는 대신
+              그 컴포넌트가 하던 일(등급 낱말·등급이 멈춘 이유)만 여기서
+              직접 그린다 — `PriceSlider`가 같은 이유로 이미 이 방식을
+              쓴다.
             */}
-            <SafetyBadge
-              safety={atPrice.burden.safety}
-              label="이 가격에 샀을 때예요"
-              landLeasehold={unit.landLeasehold}
-              showFigures={false}
-            />
+            <div className="detail-monthly-header">
+              <div>
+                <h3 className="detail-stat-label">매달 나가는 돈</h3>
+                <p className="safety-badge-label">이 가격에 샀을 때예요</p>
+              </div>
+              <p className="safety-level" data-level={atPrice.grade.level}>
+                {atPrice.grade.label}
+              </p>
+            </div>
+
+            {atPrice.grade.note !== null && (
+              <p className="safety-grade-note">{atPrice.grade.note}</p>
+            )}
+
+            {/*
+              소득이 0이라 부담률을 잴 수 없는 경우의 설명(`SafetyBadge`의
+              `ZeroPaymentNote`와 같은 판단·같은 문구). "월 상환액 0원"과
+              어떤 등급이 나란히 있으면 계산이 안 된 것처럼도 읽혀서,
+              대출이 없어서가 아니라 소득 정보가 없어서라는 사실을 밝힌다.
+              현금으로 다 덮이는 평범한 경우(부담률이 유한한 0)는 바로
+              아래 `NoLoanLine`이 이미 "대출 없이 살 수 있어요"로 말하므로
+              여기서 또 적지 않는다.
+            */}
+            {!Number.isFinite(atPrice.burden.safety.burdenRatio) && (
+              <p className="safety-note">
+                대출 없이 전액 현금으로 사는 경우예요. 이 등급은 상환
+                부담이 아니라 소득 정보가 없다는 사실을 반영해요.
+              </p>
+            )}
 
             {/*
               현금만으로 덮이는 가격이라는 **사실**. 계산기를 대신하지
@@ -432,7 +477,7 @@ export function ComplexDetail({
                       className="fold-more-hint detail-binding-toggle"
                       aria-label="이 한도가 어떻게 정해졌는지 보기"
                     >
-                      <ChevronIcon />
+                      <CalcBasisIcon />
                     </summary>
                     <div className="detail-binding-popup">
                       <p className="detail-binding-title">한도 결정 내역</p>

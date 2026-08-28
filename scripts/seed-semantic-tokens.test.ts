@@ -175,7 +175,7 @@ describe("fg-brand-contrast를 쓰는 자리", () => {
     (m) => m[1]!.trim().split("\n").pop()!.trim(),
   );
 
-  it("큰 굵은 글자 두 자리에서만 쓴다", () => {
+  it("큰 굵은 글자 세 자리에서만 쓴다", () => {
     // 늘리려면 그 자리가 정말 큰 굵은 글자인지 먼저 확인하고 여기에
     // 적어야 한다. (2026-08-26 팔레트 교체로 이 토큰은 이제 본문 크기
     // 기준도 넘지만, 이 제약은 "여러 자리에서 색이 갈리지 않게 한다"는
@@ -193,12 +193,23 @@ describe("fg-brand-contrast를 쓰는 자리", () => {
     // 금액이 여러 번 나올 때 색이 갈리지 않게 한다"는 것이다(위 describe
     // 머리 주석).
     //
+    // `.detail-max-loan-amount`는 단지 상세의 최대 대출 가능 금액이다
+    // (사용자 지시: "최대대출금액 도 부대비용과 같은 황금색으로
+    // 수정해줘"). `.detail-stat-value`와 정확히 같은 크기·굵기
+    // (1.125rem/700)이고 화면에 찍히는 값의 종류도 같다(금액) — 같은
+    // 색을 쓰는 것이 "같은 종류의 값은 같은 색"이라는 이 목록의 규칙에
+    // 그대로 맞는다.
+    //
     // `.affordable-price`(구 헤드라인 카드)와
     // `.safe-line-item--max .safe-line-amount`(구 `SafeLine`)는 각각
     // 사용자 지시로 헤드라인 카드 자체와 그 안의 비교 줄이 없어지며
     // 함께 없어졌다 — 상단바가 이미 같은 값을 보여주므로 잃는 정보는
     // 없다.
-    expect(users.sort()).toEqual([".detail-stat-value", ".slider-price--max"]);
+    expect(users.sort()).toEqual([
+      ".detail-max-loan-amount",
+      ".detail-stat-value",
+      ".slider-price--max",
+    ]);
   });
 
   it("돌아가기 버튼은 더 이상 이 토큰을 쓰지 않는다", () => {
