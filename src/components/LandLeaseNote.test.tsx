@@ -67,6 +67,8 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     minFloor: 3,
     maxFloor: 18,
     unknownFloorCount: 0,
+    address: null,
+    trades: [],
     lowConfidence: false,
     ...overrides,
   };

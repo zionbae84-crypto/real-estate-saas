@@ -21,6 +21,8 @@ function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
     minFloor: 3,
     maxFloor: 15,
     unknownFloorCount: 0,
+    address: null,
+    trades: [],
     lowConfidence: false,
     ...over,
   };

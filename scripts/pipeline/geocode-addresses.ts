@@ -1,43 +1,16 @@
 // scripts/pipeline/geocode-addresses.ts
+import { buildAddressString } from "./address";
 import { buildTargets, defaultWait, fetchAllPages, MONTHS_BACK, type Waiter } from "./fetch";
 import { normalizeAll } from "./normalize";
-import { regionNameByCode } from "../../src/data/regions";
-import type { RawTrade } from "./types";
 
 /**
- * "0"·"00"·"0000" 등 0 패딩 형태와 무관하게 부번이 실제로 없는지(=0인지)
- * 판단한다. 부번을 숫자로 바꾸지 않는다 — bonbun/bubun은 이 코드베이스에서
- * 정보 손실을 피하려고 의도적으로 불투명한 문자열로 다룬다
- * (scripts/pipeline/parse-response.ts 247줄 근처 주석 참고).
+ * 주소 조립은 `./address`로 옮겼다 — 집계(`aggregate.ts`)가 단지 상세
+ * 화면에 적을 주소를 만들 때 **같은 함수**를 써야 하는데, 이 파일을
+ * 직접 import하면 네트워크 조회 코드(`fetch.ts`)까지 딸려 들어간다.
+ * 여기서 다시 내보내는 이유는 이 이름으로 이 모듈을 부르던 자리
+ * (`geocode-addresses.test.ts`)를 그대로 두기 위해서다.
  */
-function normalizedBubun(bubun: string | null): string | null {
-  if (bubun === null) return null;
-  const stripped = bubun.replace(/^0+/, "");
-  return stripped === "" ? null : stripped;
-}
-
-/**
- * 거래 하나의 주소를 지오코딩 가능한 문자열 하나로 합친다.
- *
- * "시도 시군구 법정동 지번" 형태다. 지번이 없으면 본번-부번으로 대신
- * 만든다(둘 다 없으면 null — 지어내지 않는다). regionCode를 이름으로
- * 못 바꾸면(모르는 지역코드) 역시 null이다.
- *
- * 도로명주소가 아니라 지번주소를 쓰는 이유: `RawAddress`에 도로명
- * 건물본번이 저장돼 있지 않아(원본이 도로명·도로명코드·지번만 준다)
- * 완전한 도로명주소를 만들 수 없다. 지번은 본번·부번이 항상 함께 온다.
- */
-export function buildAddressString(trade: RawTrade): string | null {
-  const regionName = regionNameByCode(trade.regionCode);
-  if (regionName === null) return null;
-
-  const { jibun, bonbun, bubun } = trade.address;
-  const bubunSuffix = normalizedBubun(bubun);
-  const lot = jibun ?? (bonbun !== null ? `${bonbun}${bubunSuffix !== null ? `-${bubunSuffix}` : ""}` : null);
-  if (lot === null) return null;
-
-  return `${regionName} ${trade.legalDongName} ${lot}`;
-}
+export { buildAddressString };
 
 /**
  * 지역(그리고 선택적으로 법정동)의 단지별 대표 주소를 라이브로 구한다.

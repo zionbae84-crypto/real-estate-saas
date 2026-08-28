@@ -17,6 +17,8 @@ const UNIT: EmittedComplexUnit = {
   minFloor: 5,
   maxFloor: 5,
   unknownFloorCount: 0,
+  address: null,
+  trades: [],
   lowConfidence: true,
 };
 

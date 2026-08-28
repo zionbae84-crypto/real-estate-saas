@@ -21,6 +21,23 @@ export const AGGREGATION_WINDOW_MONTHS = 6;
 export const AGGREGATION_WINDOW_LABEL = `최근 ${AGGREGATION_WINDOW_MONTHS}개월`;
 
 /**
+ * 이 평형의 실거래 한 건. **집계값이 아니라 국토부가 공개한 사실 그대로다**
+ * (`scripts/pipeline/aggregate.ts`의 같은 이름 타입과 짝이다).
+ */
+export interface TradeRecord {
+  /** 원 단위 정수 */
+  price: number;
+  /** YYYY-MM-DD */
+  contractDate: string;
+  /**
+   * 층. **믿을 수 없으면 `null`이다** — 모르는 층을 0층·1층으로 채우지
+   * 않는다. 화면도 이 값이 `null`이면 층 칸을 비우는 대신 모른다고
+   * 말해야 한다.
+   */
+  floor: number | null;
+}
+
+/**
  * 파이프라인이 만든 단지×평형 한 건.
  *
  * 필드 정의는 `data/README.md`에 있다 — 파이프라인이 산출물과 함께 만든다.
@@ -78,9 +95,30 @@ export interface ComplexUnit {
    * "확인이 필요해요" 쪽으로 그려야 한다.
    */
   landLeasehold: "Y" | "N" | null;
+  /**
+   * 이 단지의 지번주소("서울특별시 강남구 대치동 316"). 만들 수 없으면 `null`.
+   *
+   * 단지 상세 화면의 제목 아래 한 줄이 이 값을 그대로 적는다. `null`이면
+   * **그 줄을 만들지 않는다** — 빈 자리를 두거나 "주소 없음"을 적는 것보다
+   * 낫다(주소가 없는 것은 우리가 못 만든 것이지 그 단지에 주소가 없는 것이
+   * 아니다).
+   */
+  address: string | null;
   tradeCount: number;
   minPrice: number;
   maxPrice: number;
+  /**
+   * `minPrice`~`maxPrice`·`tradeCount`를 만든 바로 그 거래들. 거래일
+   * 내림차순(최신이 앞)이고, 파이프라인 불변식상 `trades.length ===
+   * tradeCount`다.
+   *
+   * ⚠ **번들 데이터(`COMPLEX_UNITS`)에는 비어 있다.** 그 파일은 이 필드가
+   * 생기기 전에 만들어졌고 지금 화면이 실제로 쓰는 것은 라이브 API다
+   * (아래 `COMPLEX_UNITS` 주석 참고). 그래서 화면은 `trades`가 비었는데
+   * `tradeCount`가 0보다 큰 상태를 **정상 상태로 그리면 안 된다** — 그건
+   * "거래가 없다"가 아니라 "거래 내역을 받지 못했다"는 뜻이다.
+   */
+  trades: TradeRecord[];
   /**
    * `minPrice`~`maxPrice`를 만든 바로 그 거래들의 최저층. 층을 믿을 수
    * 있는 거래가 하나도 없었으면 `null`.
@@ -143,9 +181,23 @@ export function narrowLandLeasehold(value: string | null): "Y" | "N" | null {
   return value === "Y" || value === "N" ? value : null;
 }
 
+/**
+ * ⚠ **이 번들은 `address`·`trades`가 생기기 전에 만들어졌다.**
+ *
+ * 화면이 실제로 쓰는 것은 라이브 API(`/api/complexes` → `fetchRegionComplexes`)
+ * 이고, 이 상수는 지금 테스트에서만 쓰인다. 그래서 두 필드를 **없는 그대로**
+ * 채운다 — `address`는 `null`(주소를 모른다), `trades`는 빈 배열이다.
+ *
+ * 빈 배열을 "거래가 없다"로 읽으면 안 된다. `tradeCount`는 여전히 0보다
+ * 크고, 그 둘이 어긋난 상태가 곧 **"거래 내역을 받지 못했다"**는 신호다 —
+ * 화면은 그 상태를 빈 표가 아니라 문장으로 말한다({@link ComplexUnit.trades}).
+ * 파이프라인을 다시 돌리면 이 기본값들은 실제 값으로 채워진다.
+ */
 export const COMPLEX_UNITS: readonly ComplexUnit[] = rawComplexes.map((u) => ({
   ...u,
   landLeasehold: narrowLandLeasehold(u.landLeasehold),
+  address: null,
+  trades: [],
 }));
 
 export const REGIONS: readonly RegionSummary[] = rawRegions;

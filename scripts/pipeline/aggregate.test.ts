@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { buildAddressString } from "./address";
 import { aggregate, areaBucket, median, mergeLandLeasehold, pickComplexName } from "./aggregate";
 import { normalizeAll } from "./normalize";
 import type { RawTrade, ReportConfig } from "./types";
@@ -681,6 +682,146 @@ describe("aggregate — 단지 이름", () => {
     const reversed = aggregate(normalizeAll([...trades].reverse()), AS_OF, config);
     expect(forward[0]?.complexName).toBe("많은이름");
     expect(reversed[0]?.complexName).toBe("많은이름");
+  });
+});
+
+/**
+ * 사용자 지시로 단지 상세 화면이 "타입을 고르면 거래가·거래일"을
+ * 보여주게 되면서, 집계가 버리던 개별 거래를 산출물에 담게 됐다.
+ *
+ * 이 저장소가 `medianPrice`를 뺀 규칙("가격은 항상 범위로만 말한다")과
+ * 어긋나지 않는다 — 그 규칙이 막는 것은 **우리가 대표값을 골라 단정하는
+ * 것**이고, 여기 담기는 것은 실제로 체결된 계약 그대로다.
+ */
+describe("aggregate — 거래 내역(trades)", () => {
+  it("가격 범위를 만든 그 창의 거래만 담는다 — trades.length === tradeCount", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ price: 1_000_000_000, contractDate: "2026-07-01" }),
+        trade({ price: 2_000_000_000, contractDate: "2026-06-01" }),
+        // 8개월 전 — 범위에도 건수에도 안 들어가므로 목록에도 없어야 한다.
+        trade({ price: 9_000_000_000, contractDate: "2025-12-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+
+    const unit = units[0];
+    expect(unit?.trades).toHaveLength(2);
+    expect(unit?.trades.length).toBe(unit?.tradeCount);
+    // 창 밖 거래가 새어 들어오면 화면이 범위에 없는 금액을 적게 된다.
+    expect(unit?.trades.map((t) => t.price)).not.toContain(9_000_000_000);
+  });
+
+  it("거래일 내림차순이다 — 최신이 앞", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ contractDate: "2026-05-01" }),
+        trade({ contractDate: "2026-07-10" }),
+        trade({ contractDate: "2026-06-03" }),
+      ]),
+      AS_OF,
+      config,
+    );
+
+    expect(units[0]?.trades.map((t) => t.contractDate)).toEqual([
+      "2026-07-10",
+      "2026-06-03",
+      "2026-05-01",
+    ]);
+  });
+
+  it("같은 날이면 금액 내림차순이다 — 산출물 순서가 결정론이어야 한다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ contractDate: "2026-07-10", price: 1_000_000_000 }),
+        trade({ contractDate: "2026-07-10", price: 3_000_000_000 }),
+        trade({ contractDate: "2026-07-10", price: 2_000_000_000 }),
+      ]),
+      AS_OF,
+      config,
+    );
+
+    expect(units[0]?.trades.map((t) => t.price)).toEqual([
+      3_000_000_000, 2_000_000_000, 1_000_000_000,
+    ]);
+  });
+
+  it("못 믿을 층은 null로 담는다 — 0층·1층으로 채우지 않는다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ floor: 12, contractDate: "2026-07-10" }),
+        // 지하 표기 등. isTrustworthyFloor가 거르는 값이다.
+        trade({ floor: 0, contractDate: "2026-07-09" }),
+        trade({ floor: -1, contractDate: "2026-07-08" }),
+      ]),
+      AS_OF,
+      config,
+    );
+
+    expect(units[0]?.trades.map((t) => t.floor)).toEqual([12, null, null]);
+  });
+
+  it("금액과 거래일을 그대로 담는다 — 반올림하거나 다시 계산하지 않는다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ price: 1_234_567_890, contractDate: "2026-07-10", floor: 7 }),
+      ]),
+      AS_OF,
+      config,
+    );
+
+    expect(units[0]?.trades[0]).toEqual({
+      price: 1_234_567_890,
+      contractDate: "2026-07-10",
+      floor: 7,
+    });
+  });
+});
+
+describe("aggregate — 주소(address)", () => {
+  const NO_ADDRESS = {
+    roadNm: null,
+    roadNmCd: null,
+    bonbun: null,
+    bubun: null,
+    jibun: null,
+    umdCd: null,
+  };
+
+  it("지번주소를 단지 단위 문자열 하나로 만든다", () => {
+    const units = aggregate(normalizeAll([trade()]), AS_OF, config);
+    expect(units[0]?.address).toBe("서울특별시 강남구 대치동 316");
+  });
+
+  it("지오코딩이 쓰는 문자열과 같다 — 지도와 화면이 다른 표기를 말하지 않는다", () => {
+    const one = trade();
+    const units = aggregate(normalizeAll([one]), AS_OF, config);
+    expect(units[0]?.address).toBe(buildAddressString(one));
+  });
+
+  it("창이 recent가 아니라 그룹 전체다 — 주소는 시간과 무관한 건물의 성질이다", () => {
+    // 최근 거래에는 지번이 없고, 창 밖(8개월 전) 거래에만 있다.
+    const units = aggregate(
+      normalizeAll([
+        trade({ contractDate: "2026-07-10", address: NO_ADDRESS }),
+        trade({ contractDate: "2025-12-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+
+    expect(units[0]?.address).toBe("서울특별시 강남구 대치동 316");
+  });
+
+  it("어느 거래로도 못 만들면 null이다 — 지어내지 않는다", () => {
+    const units = aggregate(
+      normalizeAll([trade({ address: NO_ADDRESS })]),
+      AS_OF,
+      config,
+    );
+
+    expect(units[0]?.address).toBeNull();
   });
 });
 

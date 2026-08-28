@@ -62,6 +62,8 @@ const DETAIL_TEST_UNIT: ComplexUnit = {
   minFloor: 3,
   maxFloor: 18,
   unknownFloorCount: 0,
+  address: null,
+  trades: [],
   lowConfidence: false,
 };
 
