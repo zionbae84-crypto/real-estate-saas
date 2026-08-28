@@ -305,6 +305,28 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
   });
 
   /**
+   * 사용자 리포트: "대출입력하는 모듈이 없어졌어".
+   *
+   * 원인은 `neededLoan === 0`(현금이 이 가격+부대비용을 다 덮는다)일 때
+   * `LoanCalculator` 전체를 안 그리고 "대출 없이 살 수 있어요"만 그리던
+   * 분기였다. 사용자 지시는 "사용자가 본인이 필요한 대출액을 직접
+   * 입력"이라, **대출이 필요한지와 무관하게** 언제나 금액을 넣어 볼 수
+   * 있어야 한다 — 현금이 충분해도 레버리지를 검토해 볼 수 있다.
+   */
+  it("현금으로 다 덮이는 가격이어도 대출 입력 계산기는 사라지지 않는다", async () => {
+    // cash 7억, 가격 3억 — 부대비용을 더해도 여유가 커서 neededLoan은 0이다.
+    renderDetail({ profile: profile({ cash: 700_000_000 }) });
+    await enterPrice("30000");
+
+    // 사실은 사실대로 남는다.
+    expect(screen.getByText("대출 없이 살 수 있어요")).toBeInTheDocument();
+
+    // 그리고 계산기는 여전히 그대로 있다 — 대출금액을 직접 넣을 수 있다.
+    expect(screen.getByLabelText("대출금액")).toBeInTheDocument();
+    expect(screen.getByLabelText(/금리/)).toBeInTheDocument();
+  });
+
+  /**
    * 부대비용은 넣은 가격에서 다시 계산돼야 한다 — 예전처럼
    * `unit.maxPrice` 고정이면 화면이 사용자가 넣지 않은 가격의 숫자를
    * 낸다.

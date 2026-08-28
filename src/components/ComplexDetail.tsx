@@ -333,65 +333,82 @@ export function ComplexDetail({
               showFigures={false}
             />
 
-            {atPrice.burden.neededLoan === 0 ? (
-              /*
-                현금만으로 덮이는 가격. 0원짜리 표를 크게 찍는 대신 목록
-                행과 **같은 컴포넌트**로 "대출 없이 살 수 있어요"를 낸다 —
-                두 화면이 이 말을 다르게 할 수 없다. 토지임대부 단서도 그
-                컴포넌트가 같은 자리에서 함께 낸다.
-              */
+            {/*
+              현금만으로 덮이는 가격이라는 **사실**. 계산기를 대신하지
+              않는다 — 아래에서 지운다(예전 결함).
+
+              ⚠ **예전에는 이 사실이 계산기 전체를 가렸다**("대출입력하는
+              모듈이 없어졌어", 사용자 리포트). `neededLoan === 0`은
+              "이 가격을 사는 데 대출이 필요 없다"는 뜻이지 "대출을
+              생각해 볼 이유가 없다"는 뜻이 아니다 — 사용자 지시가
+              "사용자가 본인이 필요한 대출액을 직접 입력"이라, 필요
+              여부와 무관하게 언제나 금액을 넣어 볼 수 있어야 한다.
+              그래서 이제 **사실은 남기고 계산기는 그 아래 그대로 둔다.**
+            */}
+            {atPrice.burden.neededLoan === 0 && (
               <p className="detail-stat-value detail-stat-value--sentence">
                 <NoLoanLine landLeasehold={unit.landLeasehold} />
               </p>
-            ) : (
-              <>
-                {/*
-                  최대 대출 가능 금액. **이 블록에서 가장 중요한 숫자다**
-                  (사용자 지시) — 아래 계산기에 얼마를 넣을지 정하는
-                  기준이라, 문장 안에 섞이지 않고 줄을 바꿔 크게 선다.
-
-                  금액은 만원 단위까지만 적는다(사용자 지시). 이 자리는
-                  "얼마쯤 빌릴 수 있나"를 가늠하는 자리이지 원 단위까지
-                  맞춰야 하는 자리가 아니고, 정확한 값은 계산기가 한도를
-                  넘겼을 때 안내에 그대로 적는다.
-                */}
-                <p className="detail-max-loan">
-                  이 가격에 매수할 경우 최대 대출은
-                  <strong className="detail-max-loan-amount">
-                    {formatWonRoundedToMan(atPrice.maxLoan.amount)}
-                  </strong>
-                  이에요.
-                </p>
-                {/*
-                  **평형·가격별 `key`를 준다.** 평형을 갈아타거나
-                  매물가격을 바꾸면 계산기가 다시 마운트되면서 앞
-                  가정(대출액)이 비워진다. 없으면 화면은 멀쩡한 상환액을
-                  내는데 그 숫자가 통째로 다른 집·다른 가격에 대한 것이
-                  된다.
-                */}
-                <LoanCalculator
-                  key={`${unit.complexKey}|${unit.areaBucket}|${askingPrice}`}
-                  neededLoan={atPrice.burden.neededLoan}
-                  maxLoan={atPrice.maxLoan}
-                  profile={atPrice.profile}
-                  /*
-                    등급이 왜 멈췄는지는 **위 배지가 이미 말한다.** 둘 다
-                    말하면 한 화면에 똑같은 경고가 두 번 뜨고 둘 다
-                    잡음으로 읽힌다(`SafetyBadge.explainGrade`와 같은
-                    갈래의 판단). 등급 글자 자체는 여기에도 남으므로,
-                    위 배지보다 낙관적으로 말하는 일은 생기지 않는다.
-                  */
-                  explainGrade={false}
-                  /*
-                    등급을 붙드는 자리다 — 토지임대부거나 모르는 집이면
-                    우리 상환액에 토지 사용료가 빠져 있어 "안전"이라고
-                    말하면 안 된다(`LoanCalculator.landLeasehold` 문서).
-                    이 화면은 평형이 정해져 있으므로 언제나 넘긴다.
-                  */
-                  landLeasehold={unit.landLeasehold}
-                />
-              </>
             )}
+
+            {/*
+              최대 대출 가능 금액. **이 블록에서 가장 중요한 숫자다**
+              (사용자 지시) — 아래 계산기에 얼마를 넣을지 정하는 기준이라,
+              문장 안에 섞이지 않고 줄을 바꿔 크게 선다.
+
+              금액은 만원 단위까지만 적는다(사용자 지시). 이 자리는
+              "얼마쯤 빌릴 수 있나"를 가늠하는 자리이지 원 단위까지
+              맞춰야 하는 자리가 아니고, 정확한 값은 계산기가 한도를
+              넘겼을 때 안내에 그대로 적는다.
+
+              **한도가 0원이면 이 줄 자체를 만들지 않는다** — 맨숫자 0은
+              답의 모양을 한 거짓말이다(이 저장소의 규칙). 그 경우는
+              바로 아래 계산기가 "받을 수 있는 대출이 없어서…"로 이유를
+              말한다.
+            */}
+            {atPrice.maxLoan.amount > 0 && (
+              <p className="detail-max-loan">
+                이 가격에 매수할 경우 최대 대출은
+                <strong className="detail-max-loan-amount">
+                  {formatWonRoundedToMan(atPrice.maxLoan.amount)}
+                </strong>
+                이에요.
+              </p>
+            )}
+
+            {/*
+              계산기는 **언제나 그린다** — 대출이 필요 없거나(현금으로
+              덮이는 가격) 받을 수 있는 한도가 0이어도, 그 이유는 계산기
+              자신이 안내로 말한다(`guidanceFor`·`maxLoan.amount <= 0`
+              분기). 이 화면에서 "대출금액을 직접 넣어 본다"는 장치가
+              사라지는 경로가 있으면 안 된다.
+
+              **평형·가격별 `key`를 준다.** 평형을 갈아타거나 매물가격을
+              바꾸면 계산기가 다시 마운트되면서 앞 가정(대출액)이
+              비워진다. 없으면 화면은 멀쩡한 상환액을 내는데 그 숫자가
+              통째로 다른 집·다른 가격에 대한 것이 된다.
+            */}
+            <LoanCalculator
+              key={`${unit.complexKey}|${unit.areaBucket}|${askingPrice}`}
+              neededLoan={atPrice.burden.neededLoan}
+              maxLoan={atPrice.maxLoan}
+              profile={atPrice.profile}
+              /*
+                등급이 왜 멈췄는지는 **위 배지가 이미 말한다.** 둘 다
+                말하면 한 화면에 똑같은 경고가 두 번 뜨고 둘 다 잡음으로
+                읽힌다(`SafetyBadge.explainGrade`와 같은 갈래의 판단).
+                등급 글자 자체는 여기에도 남으므로, 위 배지보다
+                낙관적으로 말하는 일은 생기지 않는다.
+              */
+              explainGrade={false}
+              /*
+                등급을 붙드는 자리다 — 토지임대부거나 모르는 집이면 우리
+                상환액에 토지 사용료가 빠져 있어 "안전"이라고 말하면
+                안 된다(`LoanCalculator.landLeasehold` 문서). 이 화면은
+                평형이 정해져 있으므로 언제나 넘긴다.
+              */
+              landLeasehold={unit.landLeasehold}
+            />
           </section>
         </>
       )}
