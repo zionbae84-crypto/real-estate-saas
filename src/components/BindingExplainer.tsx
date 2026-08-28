@@ -6,6 +6,20 @@ import {
   type LoanLimit,
 } from "../lib/finance";
 
+/**
+ * LTV 산정 기준. {@link BindingExplainerProps.ltvBasis} 참고 — 표를
+ * 쓰는 자리가 둘이 되면서(예산 상세 카드 + 단지 상세의 결정 내역 팝업)
+ * 타입을 따로 이름 붙였다.
+ */
+export interface LtvBasis {
+  /** LTV 계산에 쓰인 매매가(원) — 이 loanLimit을 낸 바로 그 가격이다. */
+  price: number;
+  /** 적용된 담보인정비율(예: 0.4 = 40%). */
+  rate: number;
+  isRegulatedArea: boolean;
+  isFirstTimeBuyer: boolean;
+}
+
 export interface BindingExplainerProps {
   loanLimit: LoanLimit;
   /**
@@ -21,14 +35,7 @@ export interface BindingExplainerProps {
    * 하다 — `breakdown.LTV`는 이미 `Math.floor`를 거친 정수라 나눗셈이
    * 40.0000003% 같은 잡음을 낼 수 있다.
    */
-  ltvBasis: {
-    /** LTV 계산에 쓰인 매매가(원) — 이 loanLimit을 낸 바로 그 가격이다. */
-    price: number;
-    /** 적용된 담보인정비율(예: 0.4 = 40%). */
-    rate: number;
-    isRegulatedArea: boolean;
-    isFirstTimeBuyer: boolean;
-  };
+  ltvBasis: LtvBasis;
 }
 
 const LABELS: Record<BindingConstraint, string> = {
@@ -113,7 +120,7 @@ function formatPercent(rate: number): string {
  * 여부)를 썼는지와 그 결과 요율, 그리고 그 요율이 곱해진 매매가를
  * 한 문장으로 말한다 — "12억 7,442만원이 왜 그 숫자인지"에 답한다.
  */
-function describeLtvBasis(basis: BindingExplainerProps["ltvBasis"]): string {
+function describeLtvBasis(basis: LtvBasis): string {
   const areaLabel = basis.isRegulatedArea ? "규제지역" : "비규제지역";
   const firstTimeLabel = basis.isFirstTimeBuyer ? " 생애최초" : "";
   return (
@@ -184,8 +191,6 @@ export function BindingExplainer({
   loanLimit,
   ltvBasis,
 }: BindingExplainerProps) {
-  const runnerUp = findRunnerUp(loanLimit.binding, loanLimit.breakdown);
-
   return (
     <details className="binding-explainer">
       <summary>
@@ -195,29 +200,48 @@ export function BindingExplainer({
         </span>
       </summary>
 
-      <dl className="binding-limit-table">
-        {ORDER.map((key) => (
-          <div
-            key={key}
-            data-binding={key}
-            data-active={key === loanLimit.binding ? "true" : undefined}
-          >
-            <dt>
-              {LABELS[key]}
-              {key === loanLimit.binding && " ← 결정"}
-              {key === "LTV" && (
-                <p className="hint">{describeLtvBasis(ltvBasis)}</p>
-              )}
-              {runnerUp && key === runnerUp.constraint && (
-                <p className="hint">
-                  {describeRunnerUp(LABELS[loanLimit.binding], runnerUp)}
-                </p>
-              )}
-            </dt>
-            <dd>{formatLimitAmount(key, loanLimit.breakdown[key])}</dd>
-          </div>
-        ))}
-      </dl>
+      <BindingLimitTable loanLimit={loanLimit} ltvBasis={ltvBasis} />
     </details>
+  );
+}
+
+/**
+ * 네 가지 한도 표 자체. **카드에서 떼어 냈다** — 단지 상세의 "결정 내역"
+ * 팝업이 같은 표를 보여줘야 하는데(사용자 지시), 표를 두 벌 적으면 두
+ * 화면이 같은 한도를 두고 다른 설명을 하게 되는 날이 온다.
+ *
+ * 감싸는 껍질(카드의 `<details>`/팝업의 `<details>`)은 쓰는 쪽이 정하고,
+ * 이 컴포넌트는 표만 그린다.
+ */
+export function BindingLimitTable({
+  loanLimit,
+  ltvBasis,
+}: BindingExplainerProps) {
+  const runnerUp = findRunnerUp(loanLimit.binding, loanLimit.breakdown);
+
+  return (
+    <dl className="binding-limit-table">
+      {ORDER.map((key) => (
+        <div
+          key={key}
+          data-binding={key}
+          data-active={key === loanLimit.binding ? "true" : undefined}
+        >
+          <dt>
+            {LABELS[key]}
+            {key === loanLimit.binding && " ← 결정"}
+            {key === "LTV" && (
+              <p className="hint">{describeLtvBasis(ltvBasis)}</p>
+            )}
+            {runnerUp && key === runnerUp.constraint && (
+              <p className="hint">
+                {describeRunnerUp(LABELS[loanLimit.binding], runnerUp)}
+              </p>
+            )}
+          </dt>
+          <dd>{formatLimitAmount(key, loanLimit.breakdown[key])}</dd>
+        </div>
+      ))}
+    </dl>
   );
 }

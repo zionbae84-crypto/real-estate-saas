@@ -8,11 +8,14 @@ import {
   calcAcquisitionCosts,
   calcBurdenAt,
   calcMaxLoan,
+  ltvRateFor,
 } from "../lib/finance";
 import type { PriceBudgetInput } from "../lib/price";
 import { rules } from "../state/useAffordability";
 import { locationRules } from "../state/useLocationFacts";
 import { priceRules } from "../state/usePriceCheck";
+import { BindingLimitTable } from "./BindingExplainer";
+import { ChevronIcon } from "./ChevronIcon";
 import { CostBreakdown } from "./CostBreakdown";
 import { LandLeaseNote } from "./LandLeaseNote";
 import { LoanCalculator } from "./LoanCalculator";
@@ -395,13 +398,59 @@ export function ComplexDetail({
               말한다.
             */}
             {atPrice.maxLoan.amount > 0 && (
-              <p className="detail-max-loan">
-                이 가격에 매수할 경우 최대 대출은
-                <strong className="detail-max-loan-amount">
-                  {formatWonRoundedToMan(atPrice.maxLoan.amount)}
-                </strong>
-                이에요.
-              </p>
+              <div className="detail-max-loan">
+                <p className="detail-max-loan-label">
+                  이 가격에 매수할 경우 최대 대출은
+                </p>
+                {/*
+                  금액과 "결정 내역" 트리거를 **한 줄**에 둔다 — 위
+                  부대비용 블록이 큰 금액 옆에 내역 아이콘을 두는 것과
+                  같은 장치다(`.detail-stat-line`).
+                */}
+                <div className="detail-max-loan-line">
+                  <strong className="detail-max-loan-amount">
+                    {formatWonRoundedToMan(atPrice.maxLoan.amount)}
+                  </strong>
+                  {/*
+                    무엇이 이 한도를 정했는지(LTV·DSR·규제지역 상한·
+                    정책대출 중 어느 것) 보여주는 팝업. 사용자 지시:
+                    "대출금 옆에 결정내역 아이콘으로 해서 … 산출내역을
+                    팝업 형식으로 볼 수 있도록."
+
+                    ⚠ **`<dialog>`가 아니라 `<details>`다.** 모달로
+                    만들면 이 내역이 **인쇄에서 통째로 사라진다** — 종이는
+                    이 앱의 결과물이고(배우자·중개사에게 건네는 그 종이),
+                    "왜 이 한도인지"는 거기서 빠지면 안 되는 근거다.
+                    `<details>`는 `styles.css`의 `::details-content` 규칙이
+                    인쇄에서 강제로 펼쳐 주고(`CostBreakdown` 주석과 같은
+                    함정), 화면에서는 아래 `.detail-binding-popup` CSS가
+                    떠 있는 상자로 그린다 — 보이는 것은 팝업이고 종이에서는
+                    내역이 남는다.
+                  */}
+                  <details className="detail-binding">
+                    <summary
+                      className="fold-more-hint detail-binding-toggle"
+                      aria-label="이 한도가 어떻게 정해졌는지 보기"
+                    >
+                      <ChevronIcon />
+                    </summary>
+                    <div className="detail-binding-popup">
+                      <p className="detail-binding-title">한도 결정 내역</p>
+                      <BindingLimitTable
+                        loanLimit={atPrice.maxLoan}
+                        ltvBasis={{
+                          price: askingPrice ?? 0,
+                          // 계산이 쓴 것과 **같은 함수**로 요율을 고른다 —
+                          // 화면이 계산과 다른 %를 말할 수 없다.
+                          rate: ltvRateFor(atPrice.profile, rules),
+                          isRegulatedArea: atPrice.profile.isRegulatedArea,
+                          isFirstTimeBuyer: atPrice.profile.isFirstTimeBuyer,
+                        }}
+                      />
+                    </div>
+                  </details>
+                </div>
+              </div>
             )}
 
             {/*

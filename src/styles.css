@@ -1415,7 +1415,8 @@ body {
  * 다른 버튼이 뜬다. 아이콘 자체도 `ChevronIcon` 하나에서 온다.
  */
 .cost-breakdown-toggle,
-.loan-calc-toggle {
+.loan-calc-toggle,
+.detail-binding-toggle {
   /* 기본 삼각형 마커를 지운다 — 보이는 것은 아이콘 하나여야 한다 */
   list-style: none;
   display: flex;
@@ -1443,12 +1444,14 @@ body {
  * 이 규칙이다(그 가드 주석 참고).
  */
 .cost-breakdown-toggle::-webkit-details-marker,
-.loan-calc-toggle::-webkit-details-marker {
+.loan-calc-toggle::-webkit-details-marker,
+.detail-binding-toggle::-webkit-details-marker {
   display: none;
 }
 
 .cost-breakdown-toggle:hover,
-.loan-calc-toggle:hover {
+.loan-calc-toggle:hover,
+.detail-binding-toggle:hover {
   border-color: var(--result-signal);
   background: var(--result-signal-wash);
 }
@@ -1460,12 +1463,14 @@ body {
  * 일어난다), 방향 자체는 남는다.
  */
 .cost-breakdown-toggle svg,
-.loan-calc-toggle svg {
+.loan-calc-toggle svg,
+.detail-binding-toggle svg {
   transition: transform var(--seed-duration-d3) var(--seed-timing-function-easing);
 }
 
 .cost-breakdown[open] > .cost-breakdown-toggle svg,
-.loan-calc[open] > .loan-calc-toggle svg {
+.loan-calc[open] > .loan-calc-toggle svg,
+.detail-binding[open] > .detail-binding-toggle svg {
   transform: rotate(180deg);
 }
 
@@ -1617,10 +1622,29 @@ body {
  * 값이 아니다). 크기와 무게는 **금액에만** 준다.
  */
 .detail-max-loan {
+  margin: 0.35rem 0 0;
+  /* 아래 결정 내역 팝업이 이 상자를 기준으로 뜬다 */
+  position: relative;
+}
+
+/*
+ * "이 가격에 매수할 경우 최대 대출은" — 안내 문장이지 값이 아니라
+ * `.detail-stat-note`와 같은 캡션 톤이다. 끝의 "이에요."는 사용자
+ * 지시로 뺐다: 금액이 줄을 바꿔 따로 서면서 문장을 닫는 말이 금액
+ * 아래 홀로 떨어져 읽혔다.
+ */
+.detail-max-loan-label {
+  margin: 0;
   font-size: 0.8125rem;
   line-height: 1.5;
   color: var(--seed-color-fg-neutral-muted);
-  margin: 0.35rem 0 0;
+}
+
+/* 금액과 결정 내역 트리거를 한 줄에 — `.detail-stat-line`과 같은 장치다 */
+.detail-max-loan-line {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
 }
 
 /*
@@ -1634,7 +1658,6 @@ body {
  * 결이 다르다. 같은 색을 주면 세 숫자가 같은 종류로 읽힌다.
  */
 .detail-max-loan-amount {
-  display: block;
   font-size: 1.125rem;
   font-weight: 700;
   line-height: 1.3;
@@ -1642,6 +1665,78 @@ body {
   color: var(--seed-color-fg-neutral);
   font-variant-numeric: tabular-nums;
 }
+
+/*
+ * 한도 결정 내역 팝업(사용자 지시: "대출금 옆에 결정내역 아이콘으로
+ * 해서 … 산출내역을 팝업 형식으로 볼 수 있도록").
+ *
+ * ⚠ **`<dialog>`가 아니라 `<details>`를 띄운 상자로 그린다.** 모달로
+ * 만들면 이 내역이 인쇄에서 통째로 사라진다 — `<details>`는
+ * `@media print`의 `::details-content` 규칙이 강제로 펼쳐 준다
+ * (ComplexDetail.tsx의 해당 주석 참고). 화면에서만 떠 있는 상자로
+ * 보이고, 종이에서는 그 자리에 그대로 흐른다.
+ *
+ * `.detail-binding` 자체는 흐름에 자리를 차지하지 않아야 한다(아이콘
+ * 옆에 빈 공간이 생기면 금액 줄이 벌어진다) — 내용만 절대 배치한다.
+ */
+.detail-binding {
+  position: static;
+}
+
+.detail-binding-popup {
+  position: absolute;
+  z-index: 2;
+  top: 100%;
+  left: 0;
+  right: 0;
+  margin-top: 0.375rem;
+  padding: 0.75rem 0.875rem;
+  background: var(--result-paper, #fff);
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 0.625rem;
+  /*
+   * 떠 있는 상자라는 것을 그림자로 말한다. 색만으로 뜻을 전달하는
+   * 자리가 아니다 — 여닫는 상태는 아이콘 회전이, 무엇인지는 제목이
+   * 말한다.
+   */
+  box-shadow: 0 6px 20px rgb(21 32 43 / 12%);
+}
+
+.detail-binding-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--result-ink);
+}
+
+/*
+ * 이 팝업은 사이드바(298px) 안의 카드 안에 떠서 실폭이 약 240px다 —
+ * 예산 상세 카드보다 한참 좁다. 표의 기본 금액 칸(7rem)을 그대로 두면
+ * 라벨 칸에 100px밖에 안 남아 "담보 가치(LTV) ← 결정"이 세 줄로
+ * 부서진다(브라우저로 실측했다). 금액 칸을 줄여 라벨 쪽 폭을 되찾는다.
+ *
+ * 금액 칸을 6rem으로 잡은 근거: 이 표에서 가장 긴 값이 "4억 7,533만원"
+ * (13자)이고 0.875rem tabular-nums에서 약 92px다 — 96px 안에 들어간다.
+ */
+.detail-binding-popup .binding-limit-table > div {
+  --binding-amount-col: 6rem;
+  --binding-col-gap: 0.5rem;
+  padding-inline: 0;
+}
+
+/* "← 결정" 표시가 라벨과 떨어져 혼자 줄바꿈되지 않게 한다 */
+.detail-binding-popup .binding-limit-table dt {
+  text-wrap: pretty;
+}
+
+/*
+ * ⚠ 인쇄에서는 이 상자를 **띄우지 않는다** — 절대 배치인 채로
+ * 인쇄되면 뒤 내용 위에 겹쳐 찍히거나 페이지 밖으로 나간다. 그
+ * 해제 규칙은 이 파일 **맨 아래 `@media print` 블록 안**에 있다.
+ * 여기에 별도 `@media print`를 열지 않는 이유: `scripts/printCss.test.ts`가
+ * 인쇄 블록을 하나로 보고 파싱한다(두 번째 블록을 열면 그 검사가
+ * 통째로 깨진다).
+ */
 
 /* 상환부담률. **한 줄이다** — 별도 지표 블록으로 키우지 않는다 */
 .detail-burden-ratio {
@@ -3573,6 +3668,22 @@ body.body-scroll-locked {
     width: auto;
     padding: 0;
     border: none;
+    box-shadow: none;
+  }
+
+  /*
+   * 한도 결정 내역 팝업(단지 상세). 화면에서는 금액 아래 떠 있는
+   * 상자지만, 종이에서는 **흐름에 놓는다** — 절대 배치인 채로
+   * 인쇄되면 뒤 내용 위에 겹쳐 찍히거나 페이지 밖으로 나간다.
+   *
+   * 지우지 않고 푸는 이유: 이 표가 "왜 이 한도인지"를 말하는 근거이고,
+   * 종이를 건네받은 사람에게 그 근거가 빠지면 남은 금액이 설명 없는
+   * 숫자가 된다. `<details>`로 만든 덕에 위 `::details-content` 규칙이
+   * 이미 펼쳐 주므로, 여기서는 배치만 되돌린다.
+   */
+  .detail-binding-popup {
+    position: static;
+    margin-top: 0.5rem;
     box-shadow: none;
   }
 }

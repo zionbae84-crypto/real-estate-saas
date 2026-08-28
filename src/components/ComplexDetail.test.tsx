@@ -342,6 +342,60 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
     // (`formatWonRoundedToMan`은 만원 미만을 반올림해 지운다.)
     expect(amount?.textContent).toMatch(/^[\d억,\s만]+원$/);
     expect(amount?.textContent).not.toMatch(/만\s*[\d,]+원$/);
+
+    // 사용자 지시로 문장을 닫던 "이에요."를 뺐다 — 금액이 줄을 바꿔
+    // 따로 서면서 그 말이 금액 아래 홀로 떨어져 읽혔다.
+    expect(
+      container.querySelector(".detail-max-loan-label")?.textContent,
+    ).not.toMatch(/이에요/);
+  });
+
+  /**
+   * 사용자 지시: "대출금 옆에 결정내역 아이콘으로 해서 … 산출내역을
+   * 팝업 형식으로 볼 수 있도록."
+   *
+   * 표 자체는 예산 상세와 **같은 컴포넌트**(`BindingLimitTable`)라 두
+   * 화면이 같은 한도를 두고 다른 설명을 할 수 없다. 여기서 검사하는
+   * 것은 배선이다: 트리거가 금액 옆에 있고, 그 안의 표가 **이 매물가격
+   * 기준**으로 계산됐는가.
+   */
+  it("최대 대출 옆 아이콘으로 한도 결정 내역을 열어 볼 수 있다", async () => {
+    const { container } = renderDetail();
+    await enterPrice("120000");
+
+    const toggle = container.querySelector(".detail-binding-toggle");
+    expect(toggle).not.toBeNull();
+    // 아이콘 하나뿐이라 이름은 `aria-label`이 진다.
+    expect(toggle).toHaveAttribute("aria-label", "이 한도가 어떻게 정해졌는지 보기");
+
+    // 네 가지 한도가 모두 있고, 결정된 것이 표시된다.
+    const table = container.querySelector(".detail-binding-popup .binding-limit-table");
+    expect(table).not.toBeNull();
+    expect(table).toHaveTextContent("담보 가치(LTV)");
+    expect(table).toHaveTextContent("상환 능력(DSR)");
+    expect(table).toHaveTextContent("규제지역 상한");
+    expect(table).toHaveTextContent("정책대출");
+    expect(table?.querySelector('[data-active="true"]')).not.toBeNull();
+
+    // LTV 안내가 **이 매물가격**을 기준으로 말한다 — 12억을 넣었으므로
+    // 상세가 예전처럼 `unit.maxPrice`를 말하면 여기서 걸린다.
+    expect(table).toHaveTextContent(/매매가 12억원 기준/);
+  });
+
+  /**
+   * ⚠ **`<dialog>`가 아니라 `<details>`여야 한다.** 모달로 만들면 이
+   * 내역이 인쇄에서 통째로 사라진다 — `@media print`의
+   * `::details-content` 규칙은 `<details>`에만 걸린다.
+   */
+  it("결정 내역은 details로 접는다 — 인쇄에서 펼쳐지려면 그 태그여야 한다", async () => {
+    const { container } = renderDetail();
+    await enterPrice("120000");
+
+    const fold = container.querySelector(".detail-binding");
+    expect(fold?.tagName).toBe("DETAILS");
+    expect(container.querySelector("dialog")).toBeNull();
+    // 기본은 닫힘 — 누르면 열린다.
+    expect(fold).not.toHaveAttribute("open");
   });
 
   /**
