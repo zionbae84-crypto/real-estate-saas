@@ -1553,11 +1553,26 @@ body {
   margin: 0;
 }
 
+/*
+ * 단지 상세 두 블록의 값.
+ *
+ * ⚠ **28px에서 18px로 줄였다**(사용자 지시: "취득시 부대비용 글씨는
+ * 색은 유지하고, 크기는 다른 글자의 크기와 맞게 줄여줘"). 사이드바
+ * 폭에서 28px는 다른 어떤 글자보다도 커서, 이 화면에서 가장 중요한
+ * 값이 아닌데도 가장 크게 읽혔다. 18px는 상단바의 값
+ * (`.result-topbar-item-value`)과 같은 크기다 — 이 앱이 "값"에 쓰는
+ * 크기 계열에 맞춘 것이다.
+ *
+ * **색은 그대로 둔다**(사용자 지시). `--seed-color-fg-brand-contrast`는
+ * 카드 면 대비 5.63:1이라 본문 크기 기준(4.5:1)도 넘으므로, 크기를
+ * 줄여도 대비 요건이 깨지지 않는다 —
+ * `scripts/seed-semantic-tokens.test.ts`가 그 수치를 실측하고, 이 토큰을
+ * 쓰는 자리 목록도 거기서 잠근다(목록은 바뀌지 않았다).
+ */
 .detail-stat-value {
-  /* 28px. DESIGN.md가 정한 24~30px 범위 안이다 */
-  font-size: 1.75rem;
-  font-weight: 600;
-  line-height: 1.2;
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.3;
   margin: 0.15rem 0 0;
   color: var(--seed-color-fg-brand-contrast);
 }

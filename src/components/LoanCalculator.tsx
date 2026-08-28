@@ -17,6 +17,11 @@ export { MAX_RATE_PERCENT };
 
 const MONEY_HINT = "단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요.";
 
+/** 만원 단위(10,000원)로 올림/내림. 입력란 기본값을 읽을 수 있는 수로 맞춘다 */
+const MAN = 10_000;
+const ceilToMan = (won: number): number => Math.ceil(won / MAN) * MAN;
+const floorToMan = (won: number): number => Math.floor(won / MAN) * MAN;
+
 /** 상환방식. 기본은 원리금균등 — 계산기를 열기 전 이 카드가 이미 보여준 방식이다 */
 type Method = "level" | "principal";
 
@@ -115,9 +120,20 @@ export function LoanCalculator({
    * "위험" 등급이면 필요 대출액이 한도를 넘을 수 있는데, 그때 한도 밖
    * 값을 기본으로 띄우면 계산기가 열리자마자 "계산하지 않았어요"만
    * 보여 준다 — 받을 수 있는 최대치에서 출발하는 편이 맞다.
+   *
+   * ⚠ **만원 단위로 맞춘다**(사용자 지시). 그러지 않으면 입력란에
+   * `449,703,200원`처럼 원 단위 raw 값이 그대로 떠서 읽을 수가 없다
+   * ({@link MoneyInput}의 `toText` 참고 — 만원으로 나누어떨어질 때만
+   * 만원 단위 숫자로 적는다).
+   *
+   * **반올림 방향을 양쪽 다 보수적으로 잡는다.** 필요 대출액은 올림
+   * (모자라게 잡으면 실제보다 적은 상환액을 보여 주게 된다 — 이 앱이
+   * 가장 피하는 낙관 방향), 한도는 내림(한도를 넘겨 잡으면 받을 수
+   * 없는 금액이 기본값이 된다). 그 둘의 최소값이라 어느 쪽으로도
+   * 넘치지 않는다.
    */
   const [amount, setAmount] = useState<number | null>(
-    Math.min(neededLoan, maxLoan.amount),
+    Math.min(ceilToMan(neededLoan), floorToMan(maxLoan.amount)),
   );
   /*
    * 금리는 **문자열로 들고 있는다.** 숫자로 들면 "4."·"4.0"처럼 아직

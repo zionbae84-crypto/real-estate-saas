@@ -103,14 +103,53 @@ export function MoneyInput({
           {hint}
         </p>
       )}
-      {parsed !== null && <p className="echo">{formatWon(parsed)}</p>}
+      {/*
+        되비추기는 **입력한 글자와 뜻이 다를 때만** 낸다(사용자 지시:
+        "매물가격입력란 아래 중복으로 출력되는 금액은 제거해줘").
+
+        ⚠ **되비추기 자체를 없애지는 않았다.** 이 컴포넌트의 만원 기본
+        해석을 성립시키는 장치가 바로 이것이다(위 문서 참고) — "120000"을
+        치면 "12억원"이 떠서 자릿수 오해를 그 자리에서 잡는다. 없애면
+        5천만원을 의도한 "50000000"이 5,000억으로 조용히 들어간다.
+
+        지우는 것은 **같은 말을 두 번 하는 경우뿐**이다: "12억"이라고
+        친 아래에 "12억원"이 또 뜨는 자리. 판단은 서식 차이(쉼표·공백·
+        끝의 "원")를 걷어낸 뒤 글자로 견준다 — 뜻이 같으면 새로 알려줄
+        것이 없다.
+      */}
+      {parsed !== null && !readsSame(text, parsed) && (
+        <p className="echo">{formatWon(parsed)}</p>
+      )}
     </div>
   );
 }
 
-/** 원 단위 값을 입력란에 표시할 만원 단위 문자열로 바꾼다. */
+/**
+ * 입력한 글자가 해석 결과와 **같은 말인가**. 되비추기를 낼지 정한다.
+ *
+ * 서식만 다른 것은 같은 말로 본다 — 쉼표·공백은 `parseMoney`가 이미
+ * 무시하고(그 함수의 첫 줄), 끝의 "원"은 붙이든 말든 뜻이 같다.
+ * 그 둘만 걷어내고 남은 글자를 견준다.
+ */
+function readsSame(text: string, parsed: number): boolean {
+  const normalize = (s: string) => s.replace(/[,\s]/g, "").replace(/원$/, "");
+  return normalize(text) === normalize(formatWon(parsed));
+}
+
+/**
+ * 원 단위 값을 입력란에 표시할 문자열로 바꾼다.
+ *
+ * 만원으로 나누어떨어지면 **만원 단위 숫자**로 적는다(이 입력란은 단위
+ * 없는 숫자를 만원으로 읽으므로 그대로 되읽힌다). 아니면 원 단위로 적되
+ * "원"을 붙여 뜻을 못박는다.
+ *
+ * **셋째 자리마다 쉼표를 넣는다**(사용자 지시). `449703200원`처럼 붙어
+ * 나오면 자릿수를 눈으로 셀 수 없다 — 이 저장소가 금액을 언제나
+ * `formatWon`으로 끊어 보여 주는 것과 같은 이유다. `parseMoney`가 쉼표를
+ * 먼저 걷어내므로(그 함수의 첫 줄) 이 표기는 그대로 다시 읽힌다.
+ */
 function toText(value: number | null): string {
   if (value === null) return "";
-  if (value % MAN !== 0) return `${value}원`;
-  return String(value / MAN);
+  if (value % MAN !== 0) return `${value.toLocaleString("ko-KR")}원`;
+  return (value / MAN).toLocaleString("ko-KR");
 }

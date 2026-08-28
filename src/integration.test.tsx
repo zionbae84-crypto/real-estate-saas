@@ -284,7 +284,9 @@ describe("예산 계산기 통합", () => {
     unmount();
 
     render(<App />);
-    expect(screen.getByLabelText(/얼마 있어요/)).toHaveValue("20000");
+    // 입력란 표시는 만원 단위에 셋째 자리마다 쉼표다(사용자 지시,
+    // `MoneyInput`의 `toText`) — 저장된 값은 여전히 원 단위 2억이다.
+    expect(screen.getByLabelText(/얼마 있어요/)).toHaveValue("20,000");
   });
 
   /**
