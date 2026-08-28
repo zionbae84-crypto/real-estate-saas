@@ -1739,6 +1739,57 @@ body {
   background: var(--result-paper);
 }
 
+/*
+ * 매물가격(`ComplexDetail`)·대출금액(`LoanCalculator`)의 라벨·입력 상자를
+ * 바로 위 금리 입력과 같은 크기로 맞춘다(사용자 지시: "사이드바의
+ * 글자크기, 입력하는 글상자박스의 크기가 통일이 안되어있는데, 금리의
+ * 글자 크기와 상자박스를 통일되게 적용해줘").
+ *
+ * 그 둘은 `MoneyInput`(SEED `TextField`)으로 그려지는데, SEED의 기본
+ * 크기(outline/responsive — node_modules/@seed-design/css/recipes/
+ * text-input.css·field-label.css)는 라벨 16px, 상자 높이 40~52px·좌우
+ * 패딩 14~16px다. 금리는 네이티브 `<input>`이라 우리 CSS(`.loan-input-field`)
+ * 하나로 14px·8px 반경 상자로 정해져 있어, 같은 사이드바 안에서 크기가
+ * 들쭉날쭉해 보였다.
+ *
+ * **SEED `TextField`를 재구현하지 않는다**(design.md Global Constraints)
+ * — 그 컴포넌트가 실제로 그리는 라벨(`.seed-field-label__root`)과 상자
+ * (`.seed-text-input__root`)·값(`input`)만 이 크기로 덮는다. `.entry-screen`의
+ * 같은 방식과 다른 점: 거기는 화면 1 전체가 밑줄 스타일이라 상자 자체를
+ * 지우지만, 여기서는 **금리와 같은 테두리 상자**를 유지한다.
+ *
+ * ⚠ **렌더되는 변형 클래스 이름(`--variant_outline-size_responsive` 등)에
+ * 기대지 않고 기본 클래스에 건다** — SEED가 변형 이름을 바꿔도 이쪽이
+ * 그대로 이긴다(`.entry-screen` 규칙과 같은 이유, 그 규칙의 주석 참고).
+ *
+ * ⚠ **좌우 패딩은 이 화면에 이미 있는 두 폼 래퍼**
+ * (`.loan-input-form`·`.complex-detail-price-form`)**를 선택자에 넣어야
+ * 한다.** SEED가 좌우 패딩을 주는 규칙 자체가 `:first-child`/`:last-child`가
+ * 낀 클래스 두 개짜리라 특정도가 (0,2,0)이고, `.money-input input`
+ * 하나만으로는 (0,1,1)이라 진다 — 폼 래퍼 클래스까지 넣어야 (0,2,1)로
+ * 안전하게 이긴다.
+ */
+.loan-input-form .seed-field-label__root,
+.complex-detail-price-form .seed-field-label__root {
+  font-size: 0.875rem;
+}
+
+.loan-input-form .seed-text-input__root,
+.complex-detail-price-form .seed-text-input__root {
+  min-height: 0;
+  padding-block: 0.5rem;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--result-rule, var(--border));
+  background: var(--result-paper, #fff);
+}
+
+.loan-input-form .money-input input,
+.complex-detail-price-form .money-input input {
+  font-size: 0.875rem;
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+}
+
 /* 라디오 두 개. `<fieldset>` 기본 테두리·여백은 걷어낸다 */
 .loan-input-method {
   border: none;
