@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import rawFinanceRules from "../../rules/2026-08.json";
 import {
@@ -156,11 +157,11 @@ function renderDetail(u: ComplexUnit) {
   return render(
     <ComplexDetail
       unit={u}
-      burden={burden()}
-      costs={costs()}
-        householdCountNote={주택수고지}
+      units={[u]}
+      onSelectUnit={vi.fn()}
+      householdCountNote={주택수고지}
       priceBudget={priceBudget}
-      maxLoan={maxLoan}
+      profile={priceBudget.profile}
       onClose={vi.fn()}
     />,
   );
@@ -327,25 +328,36 @@ describe("토지임대부 표시", () => {
       expect(button?.querySelectorAll("p")).toHaveLength(0);
     });
 
-    it("상세에서는 등급 배지 바로 다음, 금액 블록 바로 앞이다", () => {
-      // 상세가 두 블록으로 줄면서(design.md §6) 월 상환액·부담률은
-      // 배지가 아니라 아래 "매달 나가는 돈" 블록이 낸다. 이 표시가
-      // 있어야 하는 자리는 그대로다 — **금액을 읽기 직전**이라야, 그
-      // 금액에 토지 사용료가 빠져 있다는 사실이 정정처럼 이어 읽힌다.
+    /**
+     * ⚠ **"등급 배지 바로 다음"이라는 절은 사라졌다.** 사용자 지시로 이
+     * 화면을 다시 짜면서 별도 등급 배지(`SafetyBadge`)가 없어지고, 등급은
+     * 대출 계산기 표의 한 줄로 들어갔다.
+     *
+     * **지켜야 하는 것은 그대로다**: 이 표시가 **금액보다 앞**에 있어야
+     * 한다. 그래야 그 금액에 토지 사용료가 빠져 있다는 사실이 금액을
+     * 읽기 전에 도착한다. 지금은 매물가격 입력란보다도 앞이라, 사용자가
+     * 값을 넣기 전에 이미 읽는다 — 더 이른 자리다.
+     */
+    it("상세에서는 가격 입력란보다도, 금액 블록보다도 앞이다", async () => {
       const { container } = renderDetail(unit({ landLeasehold: "Y" }));
-      const badge = container.querySelector(".safety-badge");
-      const note = container.querySelector('.land-lease-note[data-variant="monthly"]');
+      // 금액 블록은 매물가격을 넣어야 생긴다.
+      await userEvent.type(screen.getByLabelText("매물가격"), "120000");
+
+      const note = container.querySelector(
+        '.land-lease-note[data-variant="monthly"]',
+      );
+      const form = container.querySelector(".complex-detail-price-form");
       const monthly = container.querySelector(".detail-block--monthly");
-      expect(badge).not.toBeNull();
       expect(note).not.toBeNull();
+      expect(form).not.toBeNull();
       expect(monthly).not.toBeNull();
-      if (badge === null || note === null || monthly === null) return;
-      // 문서 순서상 배지가 먼저다.
+      if (note === null || form === null || monthly === null) return;
+
+      // 값을 넣는 자리보다 앞이다.
       expect(
-        badge.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
+        note.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(badge.nextElementSibling).toBe(note);
-      // 그리고 금액 블록보다는 앞이다.
+      // 그리고 금액 블록보다도 앞이다.
       expect(
         note.compareDocumentPosition(monthly) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();

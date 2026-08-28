@@ -736,49 +736,41 @@ export function App() {
       ? { source: "selectedUnit", sqm: selectedUnit.maxExclusiveAreaSqm }
       : { source: "assumed" };
 
+  /**
+   * 단지 상세에 넘길 것들.
+   *
+   * ⚠ **부대비용·대출 한도·상환 부담은 더 이상 여기서 계산하지 않는다.**
+   * 사용자 지시로 그 계산들의 기준 가격이 `selectedUnit.maxPrice`(범위
+   * 위쪽) 고정에서 **사용자가 넣는 매물가격**으로 바뀌었고, 그 입력은
+   * 상세 화면 안에 산다. 그래서 이 자리는 계산 결과가 아니라 **계산에
+   * 필요한 것**(프로필·고지·평형 목록)을 넘긴다.
+   *
+   * `profile`로 `residentialProfile`을 그대로 넘긴다 — 실거주가 아니면
+   * `null`이고, 그러면 상세가 실거주 기준 숫자를 아예 만들지 않는다.
+   * 이 프로필의 전용면적은 이미 고른 평형의 실제 면적으로 바꿔치기돼
+   * 있다(`effectiveProfile`) — 85㎡ 임계값을 낙관 방향으로 넘기지 않으려면
+   * 부대비용이 그 면적으로 계산돼야 한다.
+   */
   const detail = useMemo(() => {
-    if (residentialProfile === null || selectedUnit === null) return null;
+    if (selectedUnit === null) return null;
     return {
       unit: selectedUnit,
-      burden: calcBurdenAt(residentialProfile, rules, selectedUnit.maxPrice),
-      costs: calcAcquisitionCosts(
-        selectedUnit.maxPrice,
-        residentialProfile,
-        rules,
-      ),
+      profile: residentialProfile,
       /*
-       * 호가 위치 확인의 예산 줄이 쓸 프로필.
-       *
-       * `residentialProfile`을 그대로 넘긴다 — 실거주가 아니면 이
-       * 값이 `null`이고, 그러면 `assessPrice`가 예산 줄을 아예 만들지
-       * 않는다. 화면에서 숨기는 것이 아니라 계산 자체를 하지 않는
-       * 것이 요점이다(위 `residentialProfile` 주석과 같은 이유).
-       *
-       * 이 프로필의 전용면적은 이미 이 평형의 실제 면적으로 바꿔치기돼
-       * 있다(`effectiveProfile`) — 호가에서의 부대비용도 그 면적으로
-       * 계산돼야 85㎡ 임계값을 낙관 방향으로 넘기지 않는다.
+       * 호가 위치 확인의 예산 줄이 쓸 프로필. 실거주가 아니면 `null`이고,
+       * 그러면 `assessPrice`가 예산 줄을 아예 만들지 않는다 — 화면에서
+       * 숨기는 것이 아니라 계산 자체를 하지 않는 것이 요점이다.
        */
-      priceBudget: { profile: residentialProfile, financeRules: rules },
+      priceBudget:
+        residentialProfile === null
+          ? null
+          : { profile: residentialProfile, financeRules: rules },
       /*
        * 부대비용의 취득세 줄에 붙는 계산 기준 고지. 위쪽 `BudgetResult`와
        * **같은 상수**(`ACQUISITION_TAX_SUMMARY_NOTE`)를 써서 한 화면이
        * 두 말을 하지 않는다.
        */
       householdCountNote: ACQUISITION_TAX_SUMMARY_NOTE,
-      /*
-       * "매달 나가는 돈" 계산기의 입력 범위 상한(`ComplexDetail` →
-       * `LoanCalculator`).
-       *
-       * **`burden`·`costs`와 정확히 같은 인자로 낸다** — 같은 프로필,
-       * 같은 가격(`selectedUnit.maxPrice`), 같은 룰셋이다. 여기서만
-       * 다른 가격을 쓰면 화면이 "받을 수 있는 최대 대출액"이라고 적은
-       * 숫자가 바로 위 부담 계산과 다른 전제를 말하게 된다.
-       *
-       * 이 값은 **읽기만 한다** — 계산기의 입력은 프로필에 저장되지
-       * 않고, 위쪽 실구매 가능 가격·목록·지도에 영향을 주지 않는다
-       * (`PriceCheck`의 호가 입력과 같은 성격).
-       */
-      maxLoan: calcMaxLoan(residentialProfile, rules, selectedUnit.maxPrice),
     };
   }, [residentialProfile, selectedUnit]);
 
@@ -1482,11 +1474,17 @@ export function App() {
                 <>
                   <ComplexDetail
                     unit={detail.unit}
-                    burden={detail.burden}
-                    costs={detail.costs}
+                    /*
+                      평형 선택기의 원천. **필터를 거치기 전 목록**
+                      (`regionComplexes.units`)을 넘긴다 — 평형대로 좁혀
+                      놓고 들어왔다고 해서 이 단지에 그 평형만 있는 것은
+                      아니다(ComplexDetail의 `units` 문서 참고).
+                    */
+                    units={regionComplexes.units}
+                    onSelectUnit={handleSelectUnit}
                     householdCountNote={detail.householdCountNote}
                     priceBudget={detail.priceBudget}
-                    maxLoan={detail.maxLoan}
+                    profile={detail.profile}
                     onClose={handleCloseDetail}
                   />
                 </>

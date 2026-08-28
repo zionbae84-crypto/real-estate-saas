@@ -1,10 +1,17 @@
 import { useState } from "react";
 import { formatWon, formatWonRoundedToMan } from "../format/won";
-import type { LoanLimit } from "../lib/finance";
-import { equalPrincipalSchedule, monthlyPayment } from "../lib/finance";
+import { burdenGrade, plainGrade } from "../lib/burden-grade";
+import type { BuyerProfile, LoanLimit, Rules } from "../lib/finance";
+import {
+  calcSafetyScore,
+  equalPrincipalSchedule,
+  monthlyPayment,
+} from "../lib/finance";
 import { MAX_RATE_PERCENT, parseRatePercent } from "../lib/rate-input";
+import { landLeaseRules } from "../state/landLeaseRules";
 import { rules } from "../state/useAffordability";
 import { MoneyInput } from "./MoneyInput";
+import { formatRatio } from "./SafetyBadge";
 
 export { MAX_RATE_PERCENT };
 
@@ -30,6 +37,46 @@ export interface LoanCalculatorProps {
    * (`calcMaxLoan`). 입력 범위의 상한이자, 넘겼을 때 안내에 적는 값이다.
    */
   maxLoan: LoanLimit;
+  /**
+   * 소득 대비 원리금이 적정한지 판정하는 데 쓰는 프로필(사용자 지시).
+   *
+   * **이 계산기 안에서만 쓴다** — 프로필을 바꾸지 않는다. 사용자가 넣은
+   * 대출액·금리로 `calcSafetyScore`를 다시 돌려 등급(안전/주의/위험)을
+   * 낸다.
+   *
+   * ⚠ **`maxLoan`을 낸 것과 같은 프로필이어야 한다.** 호출부가 둘을 다른
+   * 프로필로 만들면 "받을 수 있는 최대"와 "그걸 갚을 수 있는가"가 서로
+   * 다른 사람의 이야기가 된다.
+   */
+  profile: BuyerProfile;
+  /**
+   * 이 집이 **토지임대부**인가(`ComplexUnit.landLeasehold` 그대로).
+   *
+   * ⚠ **등급을 붙드는 자리다.** `"Y"`(토지임대부)거나 `null`(모름)이면
+   * 우리가 낸 월 상환액에 매달 나가는 토지 사용료가 빠져 있다 — 그런
+   * 숫자 위에 이 앱에서 가장 강한 안심 등급("안전")을 얹지 않는다
+   * (`lib/burden-grade.ts`의 `burdenGrade`). `"N"`일 때만 등급이 엔진
+   * 값 그대로 나간다.
+   *
+   * 넘기지 않으면(`undefined`) **어떤 집도 가리키지 않는 계산**이라는
+   * 뜻이다 — 그때는 붙들 근거가 없으므로 `plainGrade`를 쓴다. `"N"`을
+   * 대신 넘기지 않는다: 그건 "토지임대부가 아니다"라고 말하는 것이고,
+   * 우리는 그렇게 말한 적이 없다(`SafetyBadge.landLeasehold`와 같은 규칙).
+   */
+  landLeasehold?: "Y" | "N" | null;
+  /**
+   * 등급이 왜 거기서 멈췄는지를 **이 계산기가 직접** 설명하는가.
+   * 기본은 설명한다.
+   *
+   * `false`를 주는 자리는 하나뿐이다: 바로 위에 같은 근거를 말하는
+   * 등급 배지가 이미 있는 화면(`ComplexDetail`). 둘 다 말하면 한
+   * 화면에 똑같은 경고가 두 번 뜨고 둘 다 잡음으로 읽힌다.
+   *
+   * **등급 글자 자체는 어느 경우에도 남는다** — 지우는 것은 설명뿐이라,
+   * 이 계산기가 위 배지보다 낙관적으로 말하는 일은 생기지 않는다
+   * (`SafetyBadge.explainGrade`와 같은 갈래의 prop이다).
+   */
+  explainGrade?: boolean;
 }
 
 /**
@@ -56,7 +103,13 @@ export interface LoanCalculatorProps {
  * 지운다(`.price-check-form`과 같은 관행). 대신 결과 카드가 무엇을
  * 전제로 계산했는지 다시 적으므로 종이에서 잃는 정보가 없다.
  */
-export function LoanCalculator({ neededLoan, maxLoan }: LoanCalculatorProps) {
+export function LoanCalculator({
+  neededLoan,
+  maxLoan,
+  profile,
+  landLeasehold,
+  explainGrade = true,
+}: LoanCalculatorProps) {
   /*
    * 기본값은 `min(필요 대출액, 한도)`다. 이 단지가 이미 "확인 필요"·
    * "위험" 등급이면 필요 대출액이 한도를 넘을 수 있는데, 그때 한도 밖
@@ -166,6 +219,9 @@ export function LoanCalculator({ neededLoan, maxLoan }: LoanCalculatorProps) {
         ratePercent={ratePercent}
         method={method}
         guidance={guidance}
+        profile={profile}
+        landLeasehold={landLeasehold}
+        explainGrade={explainGrade}
       />
     </div>
   );
@@ -213,11 +269,17 @@ function LoanCalcResult({
   ratePercent,
   method,
   guidance,
+  profile,
+  landLeasehold,
+  explainGrade,
 }: {
   amount: number | null;
   ratePercent: number | null;
   method: Method;
   guidance: string | null;
+  profile: BuyerProfile;
+  landLeasehold?: "Y" | "N" | null;
+  explainGrade: boolean;
 }) {
   if (guidance !== null || amount === null || ratePercent === null) {
     return (
@@ -229,6 +291,31 @@ function LoanCalcResult({
 
   const annualRate = ratePercent / 100;
   const months = rules.loanTermMonths;
+
+  /*
+   * 소득 대비 원리금 판정(사용자 지시). 사용자가 넣은 **그 금리**로
+   * 잰다 — 룰셋 기준 금리로 재면 화면이 방금 보여준 상환액과 다른
+   * 전제의 등급을 내놓는다.
+   *
+   * `PriceSlider`가 조정 금리를 반영할 때와 **같은 요령**이다: 룰셋을
+   * 통째로 바꾸지 않고 `baseRate`만 갈아 끼운 사본을 넘긴다. 스트레스
+   * 시나리오(+2%p)도 그 위에서 다시 계산되므로 두 갈래가 같은 전제
+   * 위에 선다.
+   */
+  const safetyRules: Rules =
+    annualRate === rules.baseRate ? rules : { ...rules, baseRate: annualRate };
+  const safety = calcSafetyScore(profile, safetyRules, amount);
+  /*
+   * ⚠ **`plainGrade`가 아니라 `burdenGrade`다.** 토지임대부거나 모르는
+   * 집이면 우리 상환액에 토지 사용료가 빠져 있어, `safe`를 그대로
+   * 내보내면 이 앱에서 가장 강한 안심 등급을 우리가 스스로 불완전하다고
+   * 인정하는 숫자 위에 얹게 된다. 목록 행·다른 화면과 **같은 함수**를
+   * 써서 한 집을 두고 두 등급이 나오지 않게 한다.
+   */
+  const grade =
+    landLeasehold === undefined
+      ? plainGrade(safety.level)
+      : burdenGrade(safety.level, landLeasehold, landLeaseRules);
 
   return (
     <div className="loan-calc-result">
@@ -246,6 +333,42 @@ function LoanCalcResult({
             months={months}
           />
         )}
+        {/*
+          소득 대비 부담률과 그 판정. `<dl>` 안이라 위 금액 줄들과 같은
+          표에 서고, 등급 글자는 색이 아니라 **글자**가 진다(이 저장소는
+          색만으로 뜻을 전달하지 않는다 — `SafetyBadge`와 같은 규칙).
+        */}
+        <div>
+          <dt>소득 대비 상환부담률</dt>
+          <dd data-field="burdenRatio">{formatRatio(safety.burdenRatio)}</dd>
+        </div>
+        <div>
+          <dt>
+            이 대출, 감당할 수 있나요
+            {/*
+              등급이 왜 "안전"까지 못 갔는지. **등급 글자와 같은 줄에**
+              둔다 — 이 문장이 사라지면 낯선 등급 글자만 남아, 무엇이
+              부족해서 멈춘 것인지 알 수 없다. `safety-grade-note`는
+              `MUST_SURVIVE_PRINT_CLASSES`라 종이에서도 남는다.
+            */}
+            {grade.note !== null && explainGrade && (
+              <p className="hint safety-grade-note">{grade.note}</p>
+            )}
+          </dt>
+          <dd
+            /*
+              `safety-level`은 달지 않는다 — 그 클래스는 이 화면 위쪽
+              등급 배지(`SafetyBadge`)의 등급 글자가 쓰는 이름이라,
+              여기까지 달면 "이 화면에 등급이 몇 개인가"를 세는 검사가
+              한 자리를 두 번 센다(`land-lease-grade.test.tsx`).
+            */
+            className="loan-calc-grade"
+            data-field="grade"
+            data-level={grade.level}
+          >
+            {grade.label}
+          </dd>
+        </div>
       </dl>
       <p className="loan-calc-basis">
         대출 {formatWon(amount)} · {loanTermLabel(months)} · 연{" "}

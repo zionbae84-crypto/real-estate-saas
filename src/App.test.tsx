@@ -1106,39 +1106,34 @@ describe("App - 단지 상세(화면 4)", () => {
 
   describe("리뷰 수정: 상세 화면의 배지 라벨·전용면적 입력·포커스", () => {
     /**
-     * 사용자 지시로 예산 상세의 "최대로 빌린다면" 표는 옛 `SafetyBadge`가
-     * 아니라 `PriceSlider`(`.price-slider-burden`)로 합쳐졌다 —
-     * `.safety-badge`는 이제 단지 상세(`ComplexDetail`)가 열렸을 때만
-     * 존재한다. 두 자리가 서로 다른 질문에 답한다는 사실은 그대로
-     * 잠근다: 예산 상세 쪽 라벨은 상세가 열려도 안 바뀌고, 상세 쪽
-     * 배지만 별도 라벨로 나타난다.
+     * 이 화면에서 등급이 나오는 자리가 두 번 옮겨졌다. 예산 상세의
+     * "최대로 빌린다면" 표는 `PriceSlider`(`.price-slider-burden`)로
+     * 합쳐졌고, 단지 상세의 배지는 대출 계산기 표의 한 줄
+     * (`[data-field="grade"]`)로 들어갔다 — 둘 다 사용자 지시다.
+     *
+     * **지켜야 하는 것은 그대로다**: 두 자리가 서로 다른 질문에 답하고,
+     * 어느 쪽도 상대의 답을 덮어쓰지 않는다. 예산 상세 쪽 라벨은 단지
+     * 상세를 열어도 그대로 남는다.
      */
-    it("상세가 열려도 예산 상세의 라벨은 그대로고, 단지 상세 배지가 따로 생긴다", async () => {
-      const { container } = render(<App />);
+    it("단지 상세를 열어도 예산 상세의 라벨은 그대로다 — 서로 다른 질문에 각자 답한다", async () => {
+      render(<App />);
       await fillProfile();
 
-      // 목록 화면에서는 단지 상세 배지가 없다 — 예산 상세 쪽 라벨만 있다.
-      expect(container.querySelectorAll(".safety-badge")).toHaveLength(0);
       expect(
         screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
       ).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
-      // 단지 상세가 열리면 그쪽 배지가 하나 생기고, 예산 상세 쪽 라벨은
-      // 그대로 남는다 — 서로 다른 질문에 각자 답한다.
-      const badges = container.querySelectorAll(".safety-badge");
-      expect(badges).toHaveLength(1);
-      expect(container.querySelector(".safety-badge-label")?.textContent).toMatch(
-        /이 집을 샀을 때/,
-      );
+      // 단지 상세가 열려도 예산 상세 쪽 라벨은 그대로다.
       expect(
         screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
       ).toBeInTheDocument();
+      // 그리고 단지 상세는 자기 질문(이 단지, 이 평형)을 연다.
+      expect(screen.getByLabelText("매물가격")).toBeInTheDocument();
 
-      // 목록으로 돌아오면 단지 상세 배지가 다시 사라진다.
       await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-      expect(container.querySelectorAll(".safety-badge")).toHaveLength(0);
+      expect(screen.queryByLabelText("매물가격")).not.toBeInTheDocument();
     });
 
     /** 전용면적 입력란은 화면 1이 네 질문으로 줄면서 사라졌다. */

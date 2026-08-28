@@ -1180,20 +1180,135 @@ body {
   cursor: pointer;
 }
 
+/*
+ * 사용자 지시로 제목이 **단지 이름 하나**가 됐다(면적·법정동은 아래
+ * 사실 줄과 평형 선택기로 내려갔다). 그래서 예전보다 조금 크게 둔다 —
+ * 이 화면에서 "무엇을 보고 있는가"를 지는 유일한 줄이다.
+ */
 .complex-detail-title {
   margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  line-height: 1.3;
 }
 
-.complex-detail-built,
-.complex-detail-basis {
+/*
+ * 주소 · 준공년(경과년수). 사용자 지시의 순서 그대로이고, 세대수는
+ * 지금 데이터에 없어 항목 자체를 만들지 않는다(ComplexDetail.tsx 주석).
+ *
+ * 가운뎃점 구분자는 CSS가 넣는다 — 주소가 `null`이면 그 `<span>` 자체가
+ * 없으므로, 마크업에 구분자를 박아 두면 준공년 앞에 고아 점이 남는다.
+ */
+.complex-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin: 0 0 0.75rem;
   color: var(--seed-color-fg-neutral-muted);
-  font-size: 0.9rem;
-  margin: 0.15rem 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
-.complex-detail-range {
+.complex-detail-facts > span + span::before {
+  content: "· ";
+}
+
+/*
+ * 평형(타입) 선택기. 지금 고른 것은 `aria-pressed`가 지고, 그 상태를
+ * 색만이 아니라 **테두리 굵기와 글자 굵기**로도 가른다 — 이 저장소는
+ * 색만으로 의미를 전달하지 않는다.
+ */
+.complex-detail-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0 0 0.875rem;
+}
+
+/*
+ * ⚠ 색은 **폴백 없는 `var()` 하나**로 적는다. `scripts/seed-semantic-tokens.test.ts`
+ * 의 대비 전수 검사는 `var(--a, --b)` 형태를 hex로 풀지 못해 "못 푸는 값"으로
+ * 걸린다 — 검사에서 빠지는 색을 만들지 않는다. 이 자리는 결과 셸 안이라
+ * `--result-ink`·`--result-paper`가 언제나 정의돼 있다
+ * (`.budget-result > summary`가 같은 방식이다). 테두리는 이 검사의
+ * 대상이 아니라 폴백을 그대로 둔다.
+ */
+.complex-detail-type {
+  padding: 0.3125rem 0.75rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--result-ink);
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.complex-detail-type[aria-pressed="true"] {
+  font-weight: 700;
+  border-width: 2px;
+  border-color: var(--seed-color-fg-neutral);
+}
+
+/*
+ * 실거래 내역 표(사용자 지시: "타입을 선택하면 거래가, 거래일을
+ * 볼수있도록"). `.cost-breakdown dl`과 같은 표 관행을 쓴다 — 금액은
+ * 오른쪽 정렬·tabular-nums, 줄마다 옅은 구분선.
+ *
+ * 진짜 `<table>`인 이유: 이건 세 열이 각각 뜻을 지는 **표 데이터**라
+ * (거래일·거래가·층) 스크린리더가 열 제목과 셀을 이어 읽어야 한다.
+ * 다른 자리의 `<dl>`은 라벨-값 쌍이라 결이 다르다.
+ */
+.complex-detail-trades {
+  margin: 0 0 1rem;
+}
+
+.complex-detail-trade-table {
+  width: 100%;
+  margin-top: 0.375rem;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.complex-detail-trade-table th {
+  text-align: left;
   font-weight: 600;
-  margin: 0.75rem 0 0.5rem;
+  color: var(--seed-color-fg-neutral-muted);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.complex-detail-trade-table td {
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+  font-variant-numeric: tabular-nums;
+}
+
+.complex-detail-trade-table tr:last-child td {
+  border-bottom: none;
+}
+
+.complex-detail-trade-table th:nth-child(2),
+.complex-detail-trade-price {
+  text-align: right;
+}
+
+.complex-detail-trade-table th:nth-child(3),
+.complex-detail-trade-floor {
+  text-align: right;
+  width: 4rem;
+}
+
+.complex-detail-trades-empty,
+.complex-detail-await-price,
+.price-check-basis {
+  color: var(--seed-color-fg-neutral-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0 0 0.875rem;
+}
+
+.complex-detail-price-form {
+  margin: 0 0 1rem;
 }
 
 /*
@@ -1642,6 +1757,20 @@ body {
   /* 금액은 줄바꿈하지 않는다 — 끊기면 두 값을 적은 것처럼 읽힌다 */
   white-space: nowrap;
 }
+
+/*
+ * 소득 대비 원리금 판정(사용자 지시: "안전/주의/경고 등을 알려줘").
+ * 색 대응은 `SafetyBadge`·`PriceSlider`와 **같은 토큰**을 쓴다 — 한 앱이
+ * 같은 등급을 세 화면에서 세 색으로 말하면 안 된다. 뜻은 색이 아니라
+ * 글자("안전"/"주의"/"위험")가 진다.
+ */
+.loan-calc-grade {
+  font-weight: 700;
+}
+
+.loan-calc-grade[data-level="safe"] { color: var(--safe); }
+.loan-calc-grade[data-level="caution"] { color: var(--warn); }
+.loan-calc-grade[data-level="danger"] { color: var(--risk); }
 
 /*
  * 무엇을 전제로 계산했는가 / 이 숫자가 가정이라는 사실. 둘 다 종이에
@@ -3100,6 +3229,11 @@ body.body-scroll-locked {
   .fold-more-hint,
   .purchase-form,
   .price-check-form,
+  /*
+   * 단지 상세의 매물가격 입력란. 위 `.price-check-form`과 같은 이유다 —
+   * 종이에서는 채울 수 없다. 넣은 값은 아래 결과들이 다시 적는다.
+   */
+  .complex-detail-price-form,
   /*
    * 매달 나가는 돈 계산기의 입력란(대출금액·금리·상환방식). 바로 위
    * `.price-check-form`과 같은 이유다 — 종이에서는 채울 수 없다.

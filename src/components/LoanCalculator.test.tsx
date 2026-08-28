@@ -1,6 +1,6 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
-import type { LoanLimit } from "../lib/finance";
+import type { BuyerProfile, LoanLimit } from "../lib/finance";
 import { equalPrincipalSchedule, monthlyPayment } from "../lib/finance";
 import { formatWonRoundedToMan } from "../format/won";
 import { rules } from "../state/useAffordability";
@@ -14,13 +14,37 @@ function maxLoan(amount: number): LoanLimit {
   };
 }
 
+/**
+ * 소득 대비 원리금 판정에 쓰는 프로필(사용자 지시로 추가된 prop).
+ * 이 파일의 기존 검사들은 금액·상환방식만 보므로 소득은 판정이 갈릴
+ * 만큼만 있으면 된다.
+ */
+function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
+  return {
+    status: "무주택",
+    ownedHomeCount: 0,
+    cash: 200_000_000,
+    annualIncome: 100_000_000,
+    existingDebtAnnualPayment: 0,
+    isFirstTimeBuyer: false,
+    exclusiveAreaSqm: 84,
+    isRegulatedArea: true,
+    ...overrides,
+  };
+}
+
 function renderCalc(
-  props: { neededLoan?: number; maxLoanAmount?: number } = {},
+  props: {
+    neededLoan?: number;
+    maxLoanAmount?: number;
+    profile?: BuyerProfile;
+  } = {},
 ) {
   return render(
     <LoanCalculator
       neededLoan={props.neededLoan ?? 200_000_000}
       maxLoan={maxLoan(props.maxLoanAmount ?? 300_000_000)}
+      profile={props.profile ?? profile()}
     />,
   );
 }

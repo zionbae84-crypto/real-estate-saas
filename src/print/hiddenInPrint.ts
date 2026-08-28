@@ -119,6 +119,20 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 지킨다. 그 한 줄이 사라지면 종이를 건네받은 사람이 아래 판정을
   // "적정가 판정"으로 읽는다.
   ".price-check-form",
+  // 단지 상세의 **매물가격 입력란**(ComplexDetail.tsx). 사용자 지시로 이
+  // 화면의 가격 입력란을 하나로 합치면서 생겼다 — 위 `.price-check-form`과
+  // 같은 이유로 종이에서는 채울 수 없다. 넣은 값 자체는 아래 결과들이
+  // 각자 다시 적으므로(부대비용 합계·"최대 대출은 …"·호가 판정의
+  // `.price-check-basis`) 종이에서 잃는 정보가 없다.
+  //
+  // ⚠ **이름에 `complex-detail`을 그대로 쓴다.** 아래
+  // MUST_SURVIVE_PRINT_CLASSES에 `complex-detail`로 시작하는 보호 대상이
+  // 있으면 이 목록은 부분 일치로 위반을 잡으므로(`printCss.test.ts`)
+  // 그런 이름을 새로 만들지 않도록 주의해야 한다 — 지금 보호 대상은
+  // `complex-detail-trades`·`complex-detail-facts`처럼 더 긴 이름이고,
+  // 이 선택자(`.complex-detail-price-form`)는 그 어느 것의 부분
+  // 문자열도 아니다.
+  ".complex-detail-price-form",
   // "매달 나가는 돈" 계산기의 **입력란**(대출금액·금리·상환방식 라디오,
   // LoanCalculator.tsx). 바로 위 `.price-check-form`과 **같은 성격**이다 —
   // 종이 위에서는 채울 수도 고를 수도 없는 조작 장치다. 무엇을 넣었고

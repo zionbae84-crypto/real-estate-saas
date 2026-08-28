@@ -351,22 +351,37 @@ describe("대출 0원 + 토지임대부", () => {
 describe("목록과 상세가 같은 판단을 보여 준다", () => {
   const p = profile({ cash: 2_000_000_000, annualIncome: 400_000_000 });
 
-  function detailOf(u: ComplexUnit) {
+  /**
+   * 상세를 열고 **매물가격까지 넣는다.**
+   *
+   * 사용자 지시로 이 화면의 계산이 `unit.maxPrice` 고정에서 사용자가
+   * 넣는 매물가격 기준으로 바뀌었다 — 가격을 넣기 전에는 등급이 아예
+   * 나오지 않는다(아무 주장도 하지 않는 상태다). 그래서 목록과 견주려면
+   * 목록이 쓰는 것과 **같은 가격**(`u.maxPrice`)을 넣어야 한다.
+   */
+  async function detailOf(u: ComplexUnit) {
+    // App.tsx의 `effectiveProfile`과 **같은 규칙**으로 만든다 — 이 평형의
+    // 실제 전용면적을 반영한 프로필이라야 85㎡ 임계값(농특세)을 낙관
+    // 방향으로 넘기지 않는다.
     const rowProfile = { ...p, exclusiveAreaSqm: u.maxExclusiveAreaSqm };
-    return render(
+    const rendered = render(
       <ComplexDetail
         unit={u}
-        burden={calcBurdenAt(rowProfile, rules, u.maxPrice)}
-        costs={calcAcquisitionCosts(u.maxPrice, rowProfile, rules)}
+        units={[u]}
+        onSelectUnit={() => undefined}
         householdCountNote={householdCountNoteFor(rowProfile, rules)}
         priceBudget={{ profile: rowProfile, financeRules: rules }}
-        // App.tsx와 **같은 인자**로 낸다 — 목록과 상세가 같은 판단을
-        // 보여 주는지 재는 파일이라, 계산기의 한도도 같은 프로필·같은
-        // 가격에서 나와야 한다.
-        maxLoan={calcMaxLoan(rowProfile, rules, u.maxPrice)}
+        profile={rowProfile}
         onClose={() => undefined}
       />,
     );
+    // MoneyInput은 만원 단위로 읽는다(입력 힌트 참고) — 원 단위 값을
+    // 그대로 넣지 않도록 만원으로 바꿔서 넣는다.
+    await userEvent.type(
+      screen.getByLabelText("매물가격"),
+      String(u.maxPrice / 10_000),
+    );
+    return rendered;
   }
 
   it.each(
@@ -375,14 +390,14 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
     ),
   )(
     "%s의 목록 등급과 상세 등급이 같다",
-    (_key, u) => {
+    async (_key, u) => {
       const result = build([u], p);
       const list = renderList(result);
       const rows = [...list.container.querySelectorAll(".complex-row")];
       expect(rows).toHaveLength(1);
       const rowLevel = levelTextOf(rows[0] as Element);
 
-      const detail = detailOf(u);
+      const detail = await detailOf(u);
       const badgeLevel = detail.container
         .querySelector(".safety-level")
         ?.textContent?.trim();
@@ -395,15 +410,21 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
     },
   );
 
-  it("상세도 왜 멈췄는지를 등급 글자 바로 아래에서 말한다", () => {
+  /**
+   * 등급이 왜 "안전"까지 못 갔는지는 **등급 글자와 같은 줄**에서 말한다.
+   * 자리가 배지 아래에서 계산기 표의 한 줄로 옮겨졌을 뿐, 낯선 등급
+   * 글자만 남지 않게 한다는 계약은 그대로다.
+   */
+  it("상세도 왜 멈췄는지를 등급 글자와 같은 줄에서 말한다", async () => {
     const u = REAL_LAND_LEASE[0];
     expect(u).toBeDefined();
     if (u === undefined) return;
-    const { container } = detailOf(u);
+    const { container } = await detailOf(u);
     const level = container.querySelector(".safety-level");
     const note = container.querySelector(".safety-grade-note");
     expect(note?.textContent).toBe(landLeaseRules.grade.note);
-    expect(level?.nextElementSibling).toBe(note);
+    // 같은 `<div>`(표의 한 줄) 안에 등급 글자와 그 이유가 함께 있다.
+    expect(level?.closest("div")?.contains(note as Node)).toBe(true);
   });
 });
 
@@ -486,21 +507,28 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
   }
 
   /**
-   * 예산 상세 쪽 등급(예전에는 `SafetyBadge`라 `.safety-level`)이
-   * `PriceSlider`와 합쳐지며 `.price-slider-grade`가 됐다 — 단지 상세
-   * 쪽(`ComplexDetail`의 `SafetyBadge`)은 그대로 `.safety-level`이다.
-   * 두 자리가 같은 등급을 말하는지는 여전히 함께 확인하고, 근거 문장은
-   * 각 자리의 클래스로 따로 센다(예산 상세는 `.price-slider-grade-note`,
-   * 단지 상세는 `.safety-grade-note`).
+   * 예산 상세 쪽 등급은 `PriceSlider`와 합쳐지며 `.price-slider-grade`가
+   * 됐고(사용자 지시), 단지 상세 쪽은 그대로 `SafetyBadge`의
+   * `.safety-level`이다.
+   *
+   * **계약은 그대로다**: 두 자리가 같은 등급을 말하고, 왜 "안전"까지
+   * 못 갔는지는 **한 번만** 적는다.
+   *
+   * 단지 상세 쪽 등급은 매물가격을 넣어야 나온다 — 넣기 전에는 아무
+   * 주장도 하지 않는 상태다.
    */
-  it("두 배지가 같은 등급을 말하되 이유는 한 번만 적는다", async () => {
+  it("두 자리가 같은 등급을 말하되 이유는 한 번만 적는다", async () => {
     await openLandLeaseDetail();
+    await userEvent.type(screen.getByLabelText("매물가격"), "150000");
 
     const levels = [
       ...document.querySelectorAll(".price-slider-grade, .safety-level"),
     ].map((n) => n.textContent?.trim());
     expect(levels.length).toBe(2);
-    expect(levels).toEqual([landLeaseRules.grade.label, landLeaseRules.grade.label]);
+    expect(levels).toEqual([
+      landLeaseRules.grade.label,
+      landLeaseRules.grade.label,
+    ]);
 
     // 예산 상세 쪽은 explainGrade={false}라 근거를 내지 않는다 —
     // 단지 상세 쪽(.safety-grade-note)만 낸다.
