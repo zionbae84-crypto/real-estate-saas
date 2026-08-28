@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type SyntheticEvent } from "react";
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit, TradeRecord } from "../data/complexes";
 import { formatWon, formatWonRoundedToMan } from "../format/won";
@@ -17,8 +17,8 @@ import { rules } from "../state/useAffordability";
 import { locationRules } from "../state/useLocationFacts";
 import { priceRules } from "../state/usePriceCheck";
 import { BindingLimitTable } from "./BindingExplainer";
-import { CalcBasisIcon } from "./CalcBasisIcon";
 import { CostBreakdown } from "./CostBreakdown";
+import { DetailViewIcon } from "./DetailViewIcon";
 import { LandLeaseNote } from "./LandLeaseNote";
 import { LoanCalculator } from "./LoanCalculator";
 import { LocationFacts } from "./LocationFacts";
@@ -221,6 +221,43 @@ export function ComplexDetail({
       grade: burdenGrade(burden.safety.level, unit.landLeasehold, landLeaseRules),
     };
   }, [profile, askingPrice, unit.landLeasehold]);
+
+  /**
+   * 한도 결정 내역 팝업이 화면 어디에 뜰지(뷰포트 좌표).
+   *
+   * ⚠ **사이드바 카드 안이 아니라 뷰포트 기준으로 띄운다**(사용자
+   * 지시: "지금 팝업이 사이드바 위치에 생겨서 내용을 가리는데 오른쪽
+   * 맵부분에 생기도록 해줘"). 사이드바(`.region-results-sidebar`)는
+   * `overflow-y: auto`인데, CSS 오버플로 규칙상 한 축만 `auto`를 걸어도
+   * 나머지 축이 `visible`에서 `auto`로 함께 바뀐다 — 그래서 `position:
+   * absolute`로 띄우면 사이드바 오른쪽 경계에서 그대로 잘렸다(실측).
+   * `position: fixed`는 이 사이드바처럼 `transform`·`filter`가 없는
+   * 조상의 overflow에 갇히지 않고 곧장 뷰포트 기준으로 뜬다 — 그래서
+   * 사이드바를 벗어나 지도 위에 자연스럽게 걸친다. 리액트 포털 없이도
+   * 되는 이유가 이것이다: DOM 자리는 그대로 `<details>` 안이고,
+   * `position`만 바꿨다.
+   *
+   * 좌표는 트리거(아이콘)를 열 때 한 번만 잰다 — 계속 스크롤을 추적하지
+   * 않는다. 이 팝업은 열자마자 읽고 곧 닫는 짧은 상호작용이라, 그 사이
+   * 사이드바를 또 스크롤하는 경우는 드물고, 만약 그런다면 살짝 어긋나는
+   * 정도가 스크롤마다 위치를 다시 재는 복잡도보다 싸다.
+   */
+  const [bindingPopupPos, setBindingPopupPos] = useState({ top: 0, left: 0 });
+
+  /**
+   * `<details>`의 네이티브 toggle 이벤트로 여닫힘을 안다 — 별도 상태로
+   * `open`을 다시 관리(제어 컴포넌트로 만들기)하지 않는다. 그러면
+   * 인쇄에서 `<details>`를 강제로 펼치는 `::details-content` 규칙이
+   * 그대로 걸린다(제어 컴포넌트로 바꾸면 그 규칙이 보는 `open` 속성과
+   * 리액트 상태가 어긋날 수 있다).
+   */
+  function handleBindingToggle(event: SyntheticEvent<HTMLDetailsElement>) {
+    if (!event.currentTarget.open) return;
+    const trigger = event.currentTarget.querySelector(".detail-binding-toggle");
+    const rect = trigger?.getBoundingClientRect();
+    if (rect === undefined) return;
+    setBindingPopupPos({ top: rect.top, left: rect.right + 8 });
+  }
 
   return (
     <section
@@ -460,7 +497,11 @@ export function ComplexDetail({
                     무엇이 이 한도를 정했는지(LTV·DSR·규제지역 상한·
                     정책대출 중 어느 것) 보여주는 팝업. 사용자 지시:
                     "대출금 옆에 결정내역 아이콘으로 해서 … 산출내역을
-                    팝업 형식으로 볼 수 있도록."
+                    팝업 형식으로 볼 수 있도록." 아이콘은 "상세보기"
+                    (`DetailViewIcon`, 사용자 지시로 정보 아이콘에서
+                    바꿨다) — 팝업이 이제 이 자리에서 오른쪽(지도가 있는
+                    넓은 칸)으로 열리므로, 여는 방향을 가리키는 화살표가
+                    그 사실을 그림으로도 전한다.
 
                     ⚠ **`<dialog>`가 아니라 `<details>`다.** 모달로
                     만들면 이 내역이 **인쇄에서 통째로 사라진다** — 종이는
@@ -471,15 +512,28 @@ export function ComplexDetail({
                     함정), 화면에서는 아래 `.detail-binding-popup` CSS가
                     떠 있는 상자로 그린다 — 보이는 것은 팝업이고 종이에서는
                     내역이 남는다.
+
+                    `onToggle`이 열릴 때 아이콘의 화면 좌표를 재서
+                    `bindingPopupPos`에 담는다 — 왜 뷰포트 기준으로
+                    띄우는지는 그 상태의 문서 참고.
                   */}
-                  <details className="detail-binding">
+                  <details
+                    className="detail-binding"
+                    onToggle={handleBindingToggle}
+                  >
                     <summary
                       className="fold-more-hint detail-binding-toggle"
-                      aria-label="이 한도가 어떻게 정해졌는지 보기"
+                      aria-label="한도 결정 내역 상세보기"
                     >
-                      <CalcBasisIcon />
+                      <DetailViewIcon />
                     </summary>
-                    <div className="detail-binding-popup">
+                    <div
+                      className="detail-binding-popup"
+                      style={{
+                        top: bindingPopupPos.top,
+                        left: bindingPopupPos.left,
+                      }}
+                    >
                       <p className="detail-binding-title">한도 결정 내역</p>
                       <BindingLimitTable
                         loanLimit={atPrice.maxLoan}

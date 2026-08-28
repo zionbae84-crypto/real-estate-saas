@@ -640,8 +640,18 @@ body {
   color: var(--seed-color-fg-neutral-muted);
 }
 
+/*
+ * ⚠ **`font-size`를 명시한다**(사용자 지시: "팝업의 금액부분의 크기를
+ * 줄여서 다른 크기와 균형을 맞춰줘 — 볼드체로"). 예전에는 크기를
+ * 정하지 않아 조상(팝업이 뜬 자리에 따라 달라지는 앰비언트 크기)을
+ * 그대로 물려받았고, 특히 한도 결정 내역 팝업 안에서는 라벨(`dt`,
+ * 0.875rem)보다 눈에 띄게 커 보였다(브라우저로 실측). 라벨과 같은
+ * 크기로 맞추되 **굵기는 그대로 둔다** — 사용자 지시대로 금액은
+ * 여전히 볼드체다.
+ */
 .binding-limit-table dd {
   margin: 0;
+  font-size: 0.875rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -1690,9 +1700,19 @@ body {
 }
 
 /* 금액과 결정 내역 트리거를 한 줄에 — `.detail-stat-line`과 같은 장치다 */
+/*
+ * 아이콘을 **줄 오른쪽 끝까지** 민다(사용자 지시: "아이콘을 최대한
+ * 오른쪽으로 이동해서 아이콘과 팝업이 자연스럽게 연결되게"). 예전에는
+ * 금액 바로 옆에 작은 간격만 두고 붙어 있었다 — `justify-content:
+ * space-between`으로 이 줄(카드 안쪽 폭 전체)의 양 끝에 금액과 아이콘을
+ * 각각 세운다. 팝업이 이제 이 아이콘의 화면 좌표에서 오른쪽으로
+ * 뜨므로(`.detail-binding-popup` 문서), 아이콘이 카드 오른쪽 끝(=지도
+ * 칸과 맞닿는 경계)에 가까울수록 팝업이 지도 위로 자연스럽게 이어진다.
+ */
 .detail-max-loan-line {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 0.375rem;
 }
 
@@ -1739,23 +1759,61 @@ body {
   position: static;
 }
 
+/*
+ * ⚠ **`position: fixed`다 — `absolute`가 아니다**(사용자 지시: "지금
+ * 팝업이 사이드바 위치에 생겨서 내용을 가리는데 오른쪽 맵부분에
+ * 생기도록 해줘"). 이 팝업의 조상인 `.region-results-sidebar`는
+ * `overflow-y: auto`인데, CSS 오버플로 계산 규칙상 한 축만 `auto`를
+ * 걸어도 다른 축이 `visible`에서 `auto`로 함께 바뀐다 — 그래서
+ * `absolute`로 띄웠을 때 사이드바 오른쪽 경계에서 그대로 잘렸다
+ * (브라우저로 실측). `fixed`는 `transform`·`filter`가 없는 조상의
+ * overflow에 갇히지 않고 뷰포트 기준으로 뜬다 — 이 앱의 조상 트리
+ * 어디에도 그런 속성이 없어(styles.css 전수 확인) 사이드바를 벗어나
+ * 지도 위에 자연스럽게 걸친다.
+ *
+ * **리액트 포털을 쓰지 않았다.** DOM 자리는 그대로 `<details>` 안이고
+ * `position`만 바꿨다 — 인쇄 규칙(`::details-content`가 `<details>`
+ * 안의 내용만 강제로 펼친다)도, 기존 테스트의 `container.querySelector`
+ * 조회도 그대로 유효하다.
+ *
+ * `top`/`left`는 인라인 스타일로 온다(`ComplexDetail.tsx`의
+ * `bindingPopupPos` — 아이콘을 열 때 그 화면 좌표를 잰다). 여기서는
+ * `position`과 나머지 생김새만 정한다.
+ */
 .detail-binding-popup {
-  position: absolute;
-  z-index: 2;
-  top: 100%;
-  left: 0;
-  right: 0;
-  margin-top: 0.375rem;
+  position: fixed;
+  z-index: 20;
+  width: 19rem;
+  max-width: calc(100vw - 2rem);
   padding: 0.75rem 0.875rem;
   background: var(--result-paper, #fff);
   border: 1px solid var(--result-rule, var(--border));
   border-radius: 0.625rem;
   /*
    * 떠 있는 상자라는 것을 그림자로 말한다. 색만으로 뜻을 전달하는
-   * 자리가 아니다 — 여닫는 상태는 아이콘 회전이, 무엇인지는 제목이
-   * 말한다.
+   * 자리가 아니다 — 여닫는 상태는 아이콘이, 무엇인지는 제목이 말한다.
    */
   box-shadow: 0 6px 20px rgb(21 32 43 / 12%);
+}
+
+/*
+ * 아이콘과 팝업을 **선으로 잇는다**(사용자 지시: "아이콘과 팝업이
+ * 자연스럽게 연결되게"). 팝업이 더 이상 카드에 붙어 있지 않고 살짝
+ * 띄워진 채 지도 위에 떠 있어서, 그림자만으로는 "이게 그 아이콘에서
+ * 나왔다"는 관계가 옅게 읽힌다. 왼쪽 가장자리 중간에 작은 삼각형
+ * 꼬리를 달아 아이콘 쪽을 가리키게 한다 — 말풍선의 표준 관용구다.
+ */
+.detail-binding-popup::before {
+  content: "";
+  position: absolute;
+  top: 0.9rem;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--result-paper, #fff);
+  border-left: 1px solid var(--result-rule, var(--border));
+  border-bottom: 1px solid var(--result-rule, var(--border));
+  transform: rotate(45deg);
 }
 
 .detail-binding-title {
@@ -1765,30 +1823,15 @@ body {
   color: var(--result-ink);
 }
 
-/*
- * 이 팝업은 사이드바(298px) 안의 카드 안에 떠서 실폭이 약 240px다 —
- * 예산 상세 카드보다 한참 좁다. 표의 기본 금액 칸(7rem)을 그대로 두면
- * 라벨 칸에 100px밖에 안 남아 "담보 가치(LTV) ← 결정"이 세 줄로
- * 부서진다(브라우저로 실측했다). 금액 칸을 줄여 라벨 쪽 폭을 되찾는다.
- *
- * 금액 칸을 6rem으로 잡은 근거: 이 표에서 가장 긴 값이 "4억 7,533만원"
- * (13자)이고 0.875rem tabular-nums에서 약 92px다 — 96px 안에 들어간다.
- */
-.detail-binding-popup .binding-limit-table > div {
-  --binding-amount-col: 6rem;
-  --binding-col-gap: 0.5rem;
-  padding-inline: 0;
-}
-
 /* "← 결정" 표시가 라벨과 떨어져 혼자 줄바꿈되지 않게 한다 */
 .detail-binding-popup .binding-limit-table dt {
   text-wrap: pretty;
 }
 
 /*
- * ⚠ 인쇄에서는 이 상자를 **띄우지 않는다** — 절대 배치인 채로
- * 인쇄되면 뒤 내용 위에 겹쳐 찍히거나 페이지 밖으로 나간다. 그
- * 해제 규칙은 이 파일 **맨 아래 `@media print` 블록 안**에 있다.
+ * ⚠ 인쇄에서는 이 상자를 **뷰포트에 띄우지 않는다** — `fixed`인 채로
+ * 인쇄되면 페이지마다 같은 자리에 겹쳐 찍히거나 페이지 밖으로 나간다.
+ * 그 해제 규칙은 이 파일 **맨 아래 `@media print` 블록 안**에 있다.
  * 여기에 별도 `@media print`를 열지 않는 이유: `scripts/printCss.test.ts`가
  * 인쇄 블록을 하나로 보고 파싱한다(두 번째 블록을 열면 그 검사가
  * 통째로 깨진다).
@@ -3728,19 +3771,29 @@ body.body-scroll-locked {
   }
 
   /*
-   * 한도 결정 내역 팝업(단지 상세). 화면에서는 금액 아래 떠 있는
-   * 상자지만, 종이에서는 **흐름에 놓는다** — 절대 배치인 채로
-   * 인쇄되면 뒤 내용 위에 겹쳐 찍히거나 페이지 밖으로 나간다.
+   * 한도 결정 내역 팝업(단지 상세). 화면에서는 지도 위에 뷰포트 기준
+   * (`position: fixed`)으로 떠 있는 상자지만, 종이에서는 **흐름에
+   * 놓는다** — `fixed`인 채로 인쇄되면 페이지마다 같은 자리에 겹쳐
+   * 찍히거나 페이지 밖으로 나간다.
    *
    * 지우지 않고 푸는 이유: 이 표가 "왜 이 한도인지"를 말하는 근거이고,
    * 종이를 건네받은 사람에게 그 근거가 빠지면 남은 금액이 설명 없는
    * 숫자가 된다. `<details>`로 만든 덕에 위 `::details-content` 규칙이
-   * 이미 펼쳐 주므로, 여기서는 배치만 되돌린다.
+   * 이미 펼쳐 주므로, 여기서는 배치만 되돌린다. `width`도 함께 되돌린다
+   * — 화면용 고정폭(19rem)을 그대로 두면 종이 위에서 카드보다 넓은
+   * 상자가 어색하게 튀어나온다.
    */
   .detail-binding-popup {
     position: static;
+    width: auto;
+    max-width: none;
     margin-top: 0.5rem;
     box-shadow: none;
+  }
+
+  /* 말풍선 꼬리는 화면에서 아이콘을 가리키는 장치다 — 흐름에 놓이는 종이에서는 뜻이 없다 */
+  .detail-binding-popup::before {
+    display: none;
   }
 }
 

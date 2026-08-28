@@ -206,6 +206,12 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 비활성 select다(App.tsx 참고). 종이 위에서는 조작할 수 없는 장치이고,
   // 값 자체도 "아파트"뿐이라 지워도 잃는 정보가 없다.
   ".housing-type-select",
+  // 한도 결정 내역 팝업의 말풍선 꼬리(`ComplexDetail.tsx`의
+  // `.detail-binding-popup`). 화면에서는 이 삼각형이 팝업을 아이콘과
+  // 시각적으로 이어 주지만, 종이에서는 팝업 자체가 흐름에 놓이는
+  // 상자로 바뀌어(위 `.detail-binding-popup` 인쇄 규칙) 가리킬 아이콘이
+  // 옆에 없다 — 뜻 없는 삼각형만 남는다.
+  ".detail-binding-popup::before",
 ];
 
 /**

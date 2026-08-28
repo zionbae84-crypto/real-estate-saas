@@ -380,8 +380,9 @@ describe("ComplexDetail — 예상 매수금액이 아래 전부를 움직인다
 
     const toggle = container.querySelector(".detail-binding-toggle");
     expect(toggle).not.toBeNull();
-    // 아이콘 하나뿐이라 이름은 `aria-label`이 진다.
-    expect(toggle).toHaveAttribute("aria-label", "이 한도가 어떻게 정해졌는지 보기");
+    // 아이콘 하나뿐이라 이름은 `aria-label`이 진다. 사용자 지시로
+    // "상세보기"를 담게 바뀌었다.
+    expect(toggle).toHaveAttribute("aria-label", "한도 결정 내역 상세보기");
 
     // 네 가지 한도가 모두 있고, 결정된 것이 표시된다.
     const table = container.querySelector(".detail-binding-popup .binding-limit-table");
@@ -411,6 +412,35 @@ describe("ComplexDetail — 예상 매수금액이 아래 전부를 움직인다
     expect(container.querySelector("dialog")).toBeNull();
     // 기본은 닫힘 — 누르면 열린다.
     expect(fold).not.toHaveAttribute("open");
+  });
+
+  /**
+   * 사용자 지시: "지금 팝업이 사이드바 위치에 생겨서 내용을 가리는데
+   * 오른쪽 맵부분에 생기도록 해줘." — CSS는 `position: fixed`로 뷰포트
+   * 기준으로 띄운다(`styles.css`의 `.detail-binding-popup`이 정한다.
+   * jsdom은 스타일시트를 실제로 적용·계산하지 않아 여기서 재지
+   * 않는다 — 실제 화면 확인은 브라우저로 했다).
+   *
+   * 이 테스트가 잠그는 것은 **좌표 배선**이다: 아이콘을 열면 그
+   * 화면 좌표(`getBoundingClientRect`)를 재서 팝업에 인라인
+   * `top`/`left`로 넘긴다는 계약. 값 자체는 jsdom에서 항상 0이지만,
+   * "연다고 해서 인라인 좌표가 아예 안 실리는" 회귀는 이걸로 잡는다.
+   */
+  it("한도 결정 내역을 열면 아이콘 좌표를 팝업에 인라인으로 넘긴다", async () => {
+    const { container } = renderDetail();
+    await enterPrice("120000");
+
+    const toggle = container.querySelector(".detail-binding-toggle");
+    expect(toggle).not.toBeNull();
+    if (toggle === null) return;
+    await userEvent.click(toggle);
+
+    const popup = container.querySelector(
+      ".detail-binding-popup",
+    ) as HTMLElement | null;
+    expect(popup).not.toBeNull();
+    expect(popup?.style.top).not.toBe("");
+    expect(popup?.style.left).not.toBe("");
   });
 
   /**
