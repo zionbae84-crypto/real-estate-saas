@@ -375,12 +375,20 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
         onClose={() => undefined}
       />,
     );
-    // MoneyInput은 만원 단위로 읽는다(입력 힌트 참고) — 원 단위 값을
-    // 그대로 넣지 않도록 만원으로 바꿔서 넣는다.
-    await userEvent.type(
-      screen.getByLabelText("매물가격"),
-      String(u.maxPrice / 10_000),
-    );
+    /*
+     * MoneyInput은 만원 단위로 읽는다(입력 힌트 참고) — 원 단위 값을
+     * 그대로 넣지 않도록 만원으로 바꿔서 넣는다.
+     *
+     * ⚠ **먼저 비운다.** 이 칸은 이제 `unit.maxPrice`로 채워진 채
+     * 시작하므로(`ComplexDetail`의 `askingPrice` 문서), 그냥 타이핑하면
+     * 기본값 뒤에 붙어 훨씬 큰 금액이 되고 부담 등급이 달라진다.
+     * (여기서 넣는 값이 곧 그 기본값과 같지만, 이 테스트가 검사하는 것은
+     * "목록과 상세가 같은 가격에서 같은 등급을 말하는가"이므로 그 가격을
+     * 명시적으로 넣는 형태를 유지한다.)
+     */
+    const priceInput = screen.getByLabelText("매물가격");
+    await userEvent.clear(priceInput);
+    await userEvent.type(priceInput, String(u.maxPrice / 10_000));
     return rendered;
   }
 
@@ -514,12 +522,16 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
    * **계약은 그대로다**: 두 자리가 같은 등급을 말하고, 왜 "안전"까지
    * 못 갔는지는 **한 번만** 적는다.
    *
-   * 단지 상세 쪽 등급은 매물가격을 넣어야 나온다 — 넣기 전에는 아무
-   * 주장도 하지 않는 상태다.
+   * 매물가격은 이제 이 평형의 실거래 범위 위쪽으로 채워진 채 시작하므로
+   * (`ComplexDetail`의 `askingPrice` 문서) **먼저 비우고** 이 테스트가
+   * 정한 값을 넣는다 — 안 그러면 기본값 뒤에 붙어 훨씬 큰 금액이 되고,
+   * 두 자리가 서로 다른 등급을 말하게 된다.
    */
   it("두 자리가 같은 등급을 말하되 이유는 한 번만 적는다", async () => {
     await openLandLeaseDetail();
-    await userEvent.type(screen.getByLabelText("매물가격"), "150000");
+    const priceInput = screen.getByLabelText("매물가격");
+    await userEvent.clear(priceInput);
+    await userEvent.type(priceInput, "150000");
 
     const levels = [
       ...document.querySelectorAll(".price-slider-grade, .safety-level"),

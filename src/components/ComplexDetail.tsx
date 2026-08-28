@@ -137,13 +137,41 @@ export function ComplexDetail({
   /**
    * 사용자가 넣은 매물가격. **아래 모든 계산의 기준이다.**
    *
-   * 비어 있는 채로 시작한다 — 사용자 지시가 "매물가격을 입력하면 …
-   * 확인할 수 있도록"이라, 넣기 전에 숫자를 내면 그 숫자가 어디서 왔는지
-   * 말할 수 없다. 예전에는 `unit.maxPrice`(범위 위쪽)를 말없이 깔고
-   * 시작했고, 그게 사용자가 지적한 "불필요한 설명"의 절반이었다(그
-   * 전제를 매번 문장으로 해명해야 했다).
+   * ⚠ **이 평형의 실거래 범위 위쪽(`unit.maxPrice`)으로 채워 두고
+   * 시작한다.** 한동안 빈 칸으로 시작했는데, 그러면 상세를 열자마자
+   * 부대비용도 매달 나가는 돈도 없이 "가격을 넣으면 계산해요" 한 줄만
+   * 남는다 — 사용자가 "부대비용, 매달나가는돈 확인란이 다 없어졌어"라고
+   * 지적한 상태가 이것이다.
+   *
+   * **왜 하필 범위 위쪽인가.** 목록 행·예전 상세와 **같은 기준**이라
+   * 화면들이 서로 다른 가격을 말하지 않고(`lib/complex-list.ts`),
+   * 무엇보다 틀리는 방향이 안전하다 — 범위 위쪽으로 재면 부담이 실제보다
+   * **작게** 나오는 일이 없다. 이 앱이 가장 피하는 것이 낙관 방향의
+   * 오답이다.
+   *
+   * **지어낸 값이 아니다.** 바로 위 실거래 내역 표가 그 범위를 만든
+   * 거래들을 그대로 보여주고 있어, 이 숫자가 어디서 왔는지 화면에서
+   * 확인된다. 사용자는 자기가 들은 호가로 바로 고쳐 쓰면 된다.
    */
-  const [askingPrice, setAskingPrice] = useState<number | null>(null);
+  const [askingPrice, setAskingPrice] = useState<number | null>(unit.maxPrice);
+
+  /**
+   * 평형을 갈아타면 매물가격을 그 평형의 기준값으로 되돌린다.
+   *
+   * ⚠ **없으면 조용한 오답이 난다** — 59㎡를 보다가 84㎡ 칩을 눌러도
+   * 가격이 59㎡의 것으로 남아, 화면은 멀쩡한 부대비용·상환액을 내는데
+   * 그 숫자가 통째로 다른 평형에 대한 것이 된다.
+   *
+   * 렌더 중에 상태를 고치는 React 공식 패턴이다(`useEffect`보다 낫다 —
+   * 잘못된 가격으로 한 번 그린 뒤 고치는 것이 아니라 아예 그리지
+   * 않는다). 조건이 있어 무한 루프가 되지 않는다.
+   */
+  const unitKey = `${unit.complexKey}|${unit.areaBucket}`;
+  const [priceUnitKey, setPriceUnitKey] = useState(unitKey);
+  if (priceUnitKey !== unitKey) {
+    setPriceUnitKey(unitKey);
+    setAskingPrice(unit.maxPrice);
+  }
 
   /** 같은 단지의 평형들. 선택기에 그린다 — 면적 오름차순. */
   const siblings = useMemo(

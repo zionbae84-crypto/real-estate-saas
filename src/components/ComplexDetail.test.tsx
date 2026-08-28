@@ -80,9 +80,22 @@ function renderDetail(overrides: RenderOverrides = {}) {
   );
 }
 
-/** 매물가격 입력란에 값을 넣는다 — 이 화면의 유일한 가격 입력이다 */
+/**
+ * 매물가격 입력란에 값을 넣는다 — 이 화면의 유일한 가격 입력이다.
+ *
+ * ⚠ **먼저 비운다.** 이 칸은 이제 이 평형의 실거래 범위 위쪽으로
+ * 채워진 채 시작하므로(`ComplexDetail`의 `askingPrice` 문서), 그냥
+ * 타이핑하면 기본값 뒤에 붙어 엉뚱한 금액이 된다.
+ */
 async function enterPrice(won: string) {
-  await userEvent.type(screen.getByLabelText("매물가격"), won);
+  const input = screen.getByLabelText("매물가격");
+  await userEvent.clear(input);
+  await userEvent.type(input, won);
+}
+
+/** 매물가격을 비운다 — "아직 안 넣은" 상태를 만드는 유일한 길이다 */
+async function clearPrice() {
+  await userEvent.clear(screen.getByLabelText("매물가격"));
 }
 
 describe("ComplexDetail — 제목과 사실 줄", () => {
@@ -251,15 +264,42 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
       에도 "호가"가 들어간 라벨이 여럿 있어서(`.price-evidence` 등)
       입력란이 없어도 걸린다. 실제로 세야 하는 것은 **입력 요소의 수**다.
     */
-    expect(container.querySelectorAll("input[inputmode='numeric']")).toHaveLength(
-      1,
-    );
+    /*
+      ⚠ **"숫자 입력이 하나"가 아니라 "가격 입력이 하나"다.** 계산기의
+      대출금액 칸도 `inputmode="numeric"`이지만 그건 **가격**이 아니라
+      빌릴 금액이라 세면 안 된다(예전에는 가격이 채워지기 전이라 계산기
+      자체가 없어서 우연히 1이었다). 실제로 잠가야 하는 것은 이 화면에
+      **가격을 정하는 칸이 둘 있지 않다**는 것이다.
+    */
+    const priceForm = container.querySelector(".complex-detail-price-form");
+    expect(priceForm?.querySelectorAll("input")).toHaveLength(1);
     expect(container.querySelector(".price-check-form")).toBeNull();
   });
 
   /** 빈 표는 언제나 "계산해 봤더니 0"으로 읽힌다 */
-  it("가격을 넣기 전에는 0원짜리 표 대신 무엇을 하면 되는지 말한다", () => {
+  /**
+   * 사용자 리포트: "부대비용, 매달나가는돈 확인란이 다 없어졌어."
+   *
+   * 한동안 이 칸이 빈 채로 시작해서, 상세를 열자마자 두 블록이 없고
+   * 안내 한 줄만 남았다. 이제 이 평형의 실거래 범위 위쪽으로 채워 두고
+   * 시작한다 — 열자마자 숫자가 보이고, 사용자는 자기 호가로 고쳐 쓴다.
+   */
+  it("상세를 열면 매물가격이 이 평형 기준으로 채워져 두 블록이 바로 보인다", () => {
+    renderDetail({ unit: unit({ maxPrice: 1_200_000_000 }) });
+
+    // 12억 = 만원 단위 120,000 (셋째 자리 쉼표는 MoneyInput의 표기 규칙)
+    expect(screen.getByLabelText("매물가격")).toHaveValue("120,000");
+    expect(screen.getByText("취득시 부대비용")).toBeInTheDocument();
+    expect(screen.getByText("매달 나가는 돈")).toBeInTheDocument();
+    expect(
+      screen.queryByText(/매물가격을 넣으면 취득시 부대비용과 매달 나가는 돈을 계산해요/),
+    ).not.toBeInTheDocument();
+  });
+
+  it("가격을 비우면 0원짜리 표 대신 무엇을 하면 되는지 말한다", async () => {
     renderDetail();
+    await clearPrice();
+
     expect(
       screen.getByText(/매물가격을 넣으면 취득시 부대비용과 매달 나가는 돈을 계산해요/),
     ).toBeInTheDocument();
@@ -365,11 +405,52 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
     ).toBeInTheDocument();
   });
 
-  it("가격을 넣기 전에는 호가 판정도 무엇을 하면 되는지 말한다", () => {
+  it("가격을 비우면 호가 판정도 무엇을 하면 되는지 말한다", async () => {
     renderDetail();
+    await clearPrice();
     expect(
       screen.getByText(/위 매물가격을 넣으면 이 평형의 실거래 범위 어디쯤인지/),
     ).toBeInTheDocument();
+  });
+
+  /**
+   * 평형을 갈아타면 가격도 그 평형 기준으로 돌아가야 한다.
+   *
+   * ⚠ **없으면 조용한 오답이다** — 59㎡를 보다가 84㎡ 칩을 눌러도 가격이
+   * 59㎡의 것으로 남아, 화면은 멀쩡한 부대비용·상환액을 내는데 그 숫자가
+   * 통째로 다른 평형에 대한 것이 된다.
+   */
+  it("평형을 갈아타면 매물가격이 그 평형 기준으로 다시 채워진다", async () => {
+    const small = unit({ areaBucket: 59, maxPrice: 683_000_000 });
+    const large = unit({ areaBucket: 84, maxPrice: 920_000_000 });
+
+    // 호출부(App)가 고른 평형을 내려 주는 구조라, 칩을 누르면 부모가
+    // `unit`을 바꿔 다시 그린다 — 그 흐름을 rerender로 재현한다.
+    const { rerender } = render(
+      <ComplexDetail
+        unit={small}
+        units={[small, large]}
+        onSelectUnit={vi.fn()}
+        householdCountNote={주택수고지}
+        priceBudget={{ profile: profile(), financeRules: rules }}
+        profile={profile()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("매물가격")).toHaveValue("68,300");
+
+    rerender(
+      <ComplexDetail
+        unit={large}
+        units={[small, large]}
+        onSelectUnit={vi.fn()}
+        householdCountNote={주택수고지}
+        priceBudget={{ profile: profile(), financeRules: rules }}
+        profile={profile()}
+        onClose={vi.fn()}
+      />,
+    );
+    expect(screen.getByLabelText("매물가격")).toHaveValue("92,000");
   });
 });
 
