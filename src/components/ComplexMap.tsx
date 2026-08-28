@@ -105,24 +105,18 @@ export function groupWithCoords(
   return groupByComplex(units).filter((g) => coordinates.has(g.complexKey));
 }
 
-/**
- * 마커 팝업 안의 HTML. 단지 이름은 맨 위에 한 번, 그 아래 평형마다 한 줄.
+/*
+ * 예전에는 여기 `popupContent`(마커를 누르면 뜨던 흰 InfoWindow의 HTML)가
+ * 있었다. **사용자 지시로 없앴다 — 내용이 중복이었다.**
  *
- * 목록 행과 같은 정보만 낸다 — 가격은 범위와 거래 건수로만 말하고, 단일
- * "적정가" 숫자는 여기서도 내지 않는다(부모 스펙 §6). 평형이 여러 개여도
- * 그 원칙은 줄마다 그대로다: 어느 줄도 하나의 숫자로 접히지 않는다.
+ * 마커 라벨이 이미 단지 이름과 가격 범위를 적고 있어서, 팝업이 더하는
+ * 것은 평형별 줄과 거래 건수뿐이었다. 그런데 그 둘은 마커를 누르면
+ * 함께 열리는 단지 상세가 훨씬 자세히 보여준다(평형 선택기와 실거래
+ * 내역 표). 같은 말을 두 번 하면서 지도까지 가리던 상자였다.
+ *
+ * 마커 클릭이 하던 **나머지 일은 그대로다**: 목록 쪽 선택을 함께 움직여
+ * 그 단지로 스크롤하며 표시를 단다(아래 클릭 리스너).
  */
-function popupContent(units: readonly ComplexUnit[]): string {
-  const name = escapeHtml(units[0]!.complexName);
-  const rows = units
-    .map(
-      (u) =>
-        `<span class="complex-map-popup-row">${escapeHtml(String(u.areaBucket))}㎡: ` +
-        `${escapeHtml(formatRange(u.minPrice, u.maxPrice))}, 거래 ${escapeHtml(String(u.tradeCount))}건</span>`,
-    )
-    .join("");
-  return `<div class="complex-map-popup"><strong class="complex-map-popup-name">${name}</strong>${rows}</div>`;
-}
 
 /**
  * 단지 그룹(같은 complexKey) 안에서 마커에 표시할 대표 평형을 고른다.
@@ -493,26 +487,22 @@ export function ComplexMap({
               anchor: new naverGlobal.maps.Point(MARKER_ANCHOR.x, MARKER_ANCHOR.y),
             },
           });
-          const infoWindow = new naverGlobal.maps.InfoWindow({
-            content: popupContent(group.units),
-          });
           const clickListener = naverGlobal.maps.Event.addListener(marker, "click", () => {
             /*
-             * 마커를 누르면 **목록 쪽 선택도 함께 움직인다** — App이 그
-             * 선택을 한 벌만 들고 있어(`focusedComplexKey`) 목록이 그
-             * 행으로 스크롤하며 표시를 단다. 팝업 토글은 그대로 둔다:
-             * 팝업은 이 단지의 평형을 전부 펼쳐 보여주는 자리라 선택과
-             * 하는 일이 다르다.
+             * 마커를 누르면 **목록 쪽 선택이 움직인다** — App이 그 선택을
+             * 한 벌만 들고 있어(`focusedComplexKey`) 목록이 그 행으로
+             * 스크롤하며 표시를 단다.
+             *
+             * 예전에는 여기서 흰 InfoWindow도 함께 여닫았다. 사용자
+             * 지시로 없앴다(위 주석 참고) — 마커 라벨과 단지 상세가
+             * 이미 같은 말을 하고 있었다.
              */
             onFocusRef.current?.(group.complexKey);
-            if (infoWindow.getMap()) infoWindow.close();
-            else infoWindow.open(map, marker);
           });
-          // 마커·정보창·클릭 리스너를 각각 명시적으로 정리한다 — `Event.removeListener`는
+          // 마커·클릭 리스너를 각각 명시적으로 정리한다 — `Event.removeListener`는
           // 마커+이벤트명이 아니라 `addListener`가 돌려준 핸들을 받는다(@types/navermaps 참고).
           cleanupFns.push(() => {
             naverGlobal.maps.Event.removeListener(clickListener);
-            infoWindow.setMap(null);
             marker.setMap(null);
           });
         }

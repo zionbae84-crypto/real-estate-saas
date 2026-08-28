@@ -432,7 +432,16 @@ describe("ComplexMap", () => {
     expect(fitBoundsCalls).toHaveLength(0);
   });
 
-  it("마커를 클릭하면 팝업이 열리고, 정보 팝업엔 적정가 숫자가 없다", async () => {
+  /**
+   * 사용자 지시로 마커를 눌렀을 때 뜨던 흰 InfoWindow를 없앴다 —
+   * 마커 라벨과 단지 상세가 이미 같은 말을 하고 있었다.
+   *
+   * **마커 클릭이 죽은 컨트롤이 되면 안 된다.** 팝업 대신 목록·상세
+   * 쪽 선택이 움직이는 것이 이제 이 클릭의 전부다(그 배선 자체는 아래
+   * "마커를 누르면 그 단지를 선택으로 올린다"가 검사한다). 여기서는
+   * **팝업이 정말 사라졌는지**를 못박는다.
+   */
+  it("마커를 눌러도 팝업 상자가 뜨지 않는다 — InfoWindow를 아예 만들지 않는다", async () => {
     const { naverGlobal, markers, infoWindows } = fakeNaverMaps();
     vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(naverGlobal as unknown as typeof naver);
 
@@ -443,19 +452,23 @@ describe("ComplexMap", () => {
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => expect(markers).toHaveLength(1));
 
+    // 만들지도 않는다 — 열지 않는 것과 다르다. 만들어 두면 다음 사람이
+    // "열기만 하면 되겠네"라고 되살리기 쉽다.
+    expect(infoWindows).toHaveLength(0);
     markers[0]!.listeners.click?.();
-    expect(infoWindows[0]!.opened).toBe(true);
-    expect(infoWindows[0]!.content).toContain("테스트아파트");
-    expect(infoWindows[0]!.content).not.toMatch(/적정가/);
+    expect(infoWindows).toHaveLength(0);
   });
 
-  it("한 단지에 평형이 여럿이어도 마커는 하나이고, 팝업에 평형이 모두 담긴다", async () => {
-    const { naverGlobal, markers, infoWindows } = fakeNaverMaps();
+  it("한 단지에 평형이 여럿이어도 마커는 하나다", async () => {
+    const { naverGlobal, markers } = fakeNaverMaps();
     vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(naverGlobal as unknown as typeof naver);
 
     // 같은 단지(complexKey 동일)의 두 평형. 좌표는 단지 단위라 하나뿐이므로,
     // 평형마다 마커를 만들면 정확히 같은 자리에 겹쳐 쌓이고 맨 위 하나만
     // 눌린다 — 나머지 평형은 지도에 있는데 열어볼 수 없다.
+    //
+    // 평형별 정보는 이제 단지 상세가 낸다(평형 선택기·실거래 내역 표) —
+    // 예전에는 이 자리에서 팝업이 평형 줄을 모두 담는지도 함께 봤다.
     const units = [
       unit({ areaBucket: 84, minPrice: 900_000_000, maxPrice: 1_000_000_000, tradeCount: 3 }),
       unit({ areaBucket: 59, minPrice: 700_000_000, maxPrice: 750_000_000, tradeCount: 2 }),
@@ -464,42 +477,17 @@ describe("ComplexMap", () => {
     render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
 
     await screen.findByRole("region", { name: "단지 지도" });
-    await vi.waitFor(() => expect(infoWindows).toHaveLength(1));
-    expect(markers).toHaveLength(1);
-
-    const content = infoWindows[0]!.content;
-    expect(content).toContain("84㎡");
-    expect(content).toContain("59㎡");
-    expect(content).toContain("거래 3건");
-    expect(content).toContain("거래 2건");
-    // 단지 이름은 맨 위에 한 번만 — 평형마다 반복하지 않는다.
-    expect(content.match(/테스트아파트/g)).toHaveLength(1);
-    // 평형이 여러 줄이 돼도 단일 "적정가" 숫자로 접히지 않는다(부모 스펙 §6).
-    expect(content).not.toMatch(/적정가/);
+    await vi.waitFor(() => expect(markers).toHaveLength(1));
+    expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(1);
   });
 
-  it("단지 이름에 마크업이 섞여 있어도 글자로 보여준다 — HTML로 실행되지 않는다", async () => {
-    const { naverGlobal, infoWindows } = fakeNaverMaps();
-    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(naverGlobal as unknown as typeof naver);
-
-    // complexName은 국토부 API의 aptNm에서 그대로 온다. 이 팝업은 이 앱에서
-    // 유일하게 React를 거치지 않는 HTML 문자열이라, 여기서 이스케이프하지
-    // 않으면 이 앱의 유일한 스크립트 주입 지점이 된다.
-    const units = [unit({ complexName: '<img src=x onerror=alert(1)>' })];
-    const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
-
-    await screen.findByRole("region", { name: "단지 지도" });
-    await vi.waitFor(() => expect(infoWindows).toHaveLength(1));
-
-    const content = infoWindows[0]!.content;
-    expect(content).not.toContain("<img");
-    expect(content).toContain("&lt;img src=x onerror=alert(1)&gt;");
-    // 이스케이프된 문자열을 실제로 파싱해 봐도 요소가 하나도 생기지 않아야 한다.
-    const probe = document.createElement("div");
-    probe.innerHTML = content;
-    expect(probe.querySelector("img")).toBeNull();
-  });
+  /*
+   * 예전에는 여기 팝업의 HTML 이스케이프 검사가 있었다. 팝업이 사라지며
+   * **그 방어선의 자리도 옮겨졌다** — 이 앱에서 React를 거치지 않는 HTML
+   * 문자열은 이제 마커 라벨 하나뿐이고, 그쪽은 아래
+   * "마커 라벨의 단지 이름도 escapeHtml을 거친다"가 같은 공격 문자열로
+   * 검사한다. 검사를 지운 것이 아니라 남은 자리 하나로 모은 것이다.
+   */
 
   it("지도 로드가 실패해도 예외 없이 렌더링되고, 실패를 눈에 보이게 알린다", async () => {
     vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockRejectedValue(

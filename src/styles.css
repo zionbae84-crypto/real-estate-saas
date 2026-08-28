@@ -2358,36 +2358,16 @@ body {
 }
 
 /*
- * 마커를 눌렀을 때 뜨는 InfoWindow 안의 내용. 이 마크업만은 React가
- * 아니라 SDK가 그리므로(ComplexMap.tsx가 HTML 문자열을 넘긴다) 앱의
- * 폰트·여백을 여기서 직접 준다.
- *
- * 한 단지에 평형이 여럿이면 줄이 여러 개 온다 — 세로로 길어질 수 있어
- * 최대 높이를 두고 넘치면 스크롤한다.
+ * 예전에는 여기 `.complex-map-popup`(마커를 누르면 뜨던 흰 InfoWindow
+ * 안의 내용)이 있었다. **사용자 지시로 없앴다 — 내용이 중복이었다.**
+ * 아래 마커 라벨이 이미 단지명과 가격 범위를 적고, 평형별 줄과 거래
+ * 건수는 단지 상세가 훨씬 자세히 보여준다(ComplexMap.tsx 주석 참고).
  */
-.complex-map-popup {
-  padding: 0.625rem 0.75rem;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  max-width: 16rem;
-  max-height: 12rem;
-  overflow-y: auto;
-}
-
-.complex-map-popup .complex-map-popup-name {
-  display: block;
-  font-weight: 700;
-  margin-bottom: 0.25rem;
-}
-
-.complex-map-popup .complex-map-popup-row {
-  display: block;
-  margin: 0.15rem 0;
-}
 
 /*
  * 마커 위에 항상 보이는 라벨 — **단지명과 가격 범위, 둘뿐이다.**
- * 클릭 전에도 보여야 해서 InfoWindow와 달리 지도에 바로 얹힌다.
+ * 이제 지도 위에서 눌러서 열리는 상자는 없고, 이 라벨이 지도가 말하는
+ * 전부다(누르면 목록·상세 쪽 선택이 움직인다).
  *
  * 사용자 지시로 면적·거래 건수·부담 수준 문구가 빠졌고, 그와 함께
  * **색이 무엇도 분류하지 않게 됐다** — 부담 수준 2분류(파랑 "대출 없이" /
