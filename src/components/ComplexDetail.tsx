@@ -17,7 +17,7 @@ import { rules } from "../state/useAffordability";
 import { locationRules } from "../state/useLocationFacts";
 import { priceRules } from "../state/usePriceCheck";
 import { BindingLimitTable } from "./BindingExplainer";
-import { CostBreakdown } from "./CostBreakdown";
+import { CostBreakdownTable } from "./CostBreakdown";
 import { DetailViewIcon } from "./DetailViewIcon";
 import { LandLeaseNote } from "./LandLeaseNote";
 import { LoanCalculator } from "./LoanCalculator";
@@ -43,7 +43,7 @@ export interface ComplexDetailProps {
   onSelectUnit: (unit: ComplexUnit) => void;
   /**
    * 부대비용의 취득세 줄에 붙는 주택 수 고지. 호출부가
-   * `householdCountNoteFor`로 골라 넘긴다({@link CostBreakdown} 참고).
+   * `householdCountNoteFor`로 골라 넘긴다({@link CostBreakdownTable} 참고).
    */
   householdCountNote: string;
   /**
@@ -223,7 +223,9 @@ export function ComplexDetail({
   }, [profile, askingPrice, unit.landLeasehold]);
 
   /**
-   * 한도 결정 내역 팝업이 화면 어디에 뜰지(뷰포트 좌표).
+   * "상세보기" 팝업(한도 결정 내역·부대비용 내역, 아래 두 자리)이 화면
+   * 어디에 뜰지(뷰포트 좌표). 자리마다 독립된 상태다 — 두 팝업을 같은
+   * 좌표로 묶으면 하나를 열어 잰 위치가 다른 하나에도 그대로 남는다.
    *
    * ⚠ **사이드바 카드 안이 아니라 뷰포트 기준으로 띄운다**(사용자
    * 지시: "지금 팝업이 사이드바 위치에 생겨서 내용을 가리는데 오른쪽
@@ -243,6 +245,7 @@ export function ComplexDetail({
    * 정도가 스크롤마다 위치를 다시 재는 복잡도보다 싸다.
    */
   const [bindingPopupPos, setBindingPopupPos] = useState({ top: 0, left: 0 });
+  const [costPopupPos, setCostPopupPos] = useState({ top: 0, left: 0 });
 
   /**
    * `<details>`의 네이티브 toggle 이벤트로 여닫힘을 안다 — 별도 상태로
@@ -250,13 +253,22 @@ export function ComplexDetail({
    * 인쇄에서 `<details>`를 강제로 펼치는 `::details-content` 규칙이
    * 그대로 걸린다(제어 컴포넌트로 바꾸면 그 규칙이 보는 `open` 속성과
    * 리액트 상태가 어긋날 수 있다).
+   *
+   * 두 팝업(한도 결정 내역·부대비용 내역)이 **같은 계산**을 쓴다(사용자
+   * 지시: "동일하게 만들어줘") — `setPos`만 갈아 끼워 위 두 상태 중
+   * 어느 쪽을 채울지 고른다. `querySelector`는 `event.currentTarget`
+   * (그 `<details>` 자신) 안에서만 찾으므로, 두 트리거가 같은 클래스
+   * (`.detail-binding-toggle`)를 써도 서로 섞이지 않는다.
    */
-  function handleBindingToggle(event: SyntheticEvent<HTMLDetailsElement>) {
+  function handleDetailBindingToggle(
+    event: SyntheticEvent<HTMLDetailsElement>,
+    setPos: (pos: { top: number; left: number }) => void,
+  ) {
     if (!event.currentTarget.open) return;
     const trigger = event.currentTarget.querySelector(".detail-binding-toggle");
     const rect = trigger?.getBoundingClientRect();
     if (rect === undefined) return;
-    setBindingPopupPos({ top: rect.top, left: rect.right + 8 });
+    setPos({ top: rect.top, left: rect.right + 8 });
   }
 
   return (
@@ -373,16 +385,58 @@ export function ComplexDetail({
         <>
           <section className="detail-block detail-block--costs">
             <h3 className="detail-stat-label">취득시 부대비용</h3>
-            <div className="detail-stat-line">
+            {/*
+              금액과 "상세보기" 트리거를 한 줄에 두고, 트리거를 카드
+              오른쪽 끝까지 민다 — 최대 대출 카드(아래 `.detail-value-row`)
+              와 **똑같은 장치**다(사용자 지시: "취득시 부대비용 카드의
+              상세보기도 첨부한 사진처럼 동일하게 만들어줘 — 아이콘 형태,
+              팝업형식, 자연스러운 연결, 글자크기 축소 등 동일하게"). 그래서
+              같은 CSS 클래스(`.detail-value-row`)를 그대로 쓴다 — 이름 하나
+              가 두 자리 모두를 가리켜도, 이 클래스가 뜻하는 것은 "값과
+              상세보기 트리거를 한 줄에, 트리거는 오른쪽 끝에" 뿐이라
+              어느 값이든 같은 뜻으로 읽힌다.
+            */}
+            <div className="detail-value-row">
               <p className="detail-stat-value">
                 {formatWonRoundedToMan(atPrice.costs.total)}
               </p>
-              <CostBreakdown
-                costs={atPrice.costs}
-                householdCountNote={householdCountNote}
-                brokerageFeeRate={brokerageFeeRateFor(askingPrice ?? 0, rules)}
-                repeatTotal={false}
-              />
+              {/*
+                무엇이 이 합계를 이뤘는지(취득세·중개보수·법무사 비용
+                등) 보여주는 팝업. 최대 대출 카드의 "한도 결정 내역"
+                팝업과 **같은 컴포넌트 조합**이다: `<details>`(인쇄에서
+                `::details-content`가 강제로 펼쳐 준다 — `<dialog>`를
+                쓰지 않는 이유는 그 팝업 문서 참고) + `DetailViewIcon`
+                트리거 + `.detail-binding-popup`(뷰포트 기준
+                `position: fixed`로 지도 위에 뜬다). 표 내용만
+                `BindingLimitTable` 대신 `CostBreakdownTable`이다.
+
+                `onToggle`이 열릴 때 아이콘의 화면 좌표를 재서
+                `costPopupPos`에 담는다 — 두 팝업이 같은 계산
+                (`handleDetailBindingToggle`)을 쓰지만 좌표 상태는
+                따로다(위 `costPopupPos` 문서 참고).
+              */}
+              <details
+                className="detail-binding"
+                onToggle={(e) => handleDetailBindingToggle(e, setCostPopupPos)}
+              >
+                <summary
+                  className="fold-more-hint detail-binding-toggle"
+                  aria-label="취득시 부대비용 내역 상세보기"
+                >
+                  <DetailViewIcon />
+                </summary>
+                <div
+                  className="detail-binding-popup"
+                  style={{ top: costPopupPos.top, left: costPopupPos.left }}
+                >
+                  <p className="detail-binding-title">부대비용 내역</p>
+                  <CostBreakdownTable
+                    costs={atPrice.costs}
+                    householdCountNote={householdCountNote}
+                    brokerageFeeRate={brokerageFeeRateFor(askingPrice ?? 0, rules)}
+                  />
+                </div>
+              </details>
             </div>
           </section>
 
@@ -486,10 +540,10 @@ export function ComplexDetail({
                 </p>
                 {/*
                   금액과 "결정 내역" 트리거를 **한 줄**에 둔다 — 위
-                  부대비용 블록이 큰 금액 옆에 내역 아이콘을 두는 것과
-                  같은 장치다(`.detail-stat-line`).
+                  부대비용 블록이 큰 금액 옆에 상세보기 아이콘을 두는
+                  것과 **같은 클래스**다(`.detail-value-row`).
                 */}
-                <div className="detail-max-loan-line">
+                <div className="detail-value-row">
                   <strong className="detail-max-loan-amount">
                     {formatWonRoundedToMan(atPrice.maxLoan.amount)}
                   </strong>
@@ -519,7 +573,7 @@ export function ComplexDetail({
                   */}
                   <details
                     className="detail-binding"
-                    onToggle={handleBindingToggle}
+                    onToggle={(e) => handleDetailBindingToggle(e, setBindingPopupPos)}
                   >
                     <summary
                       className="fold-more-hint detail-binding-toggle"

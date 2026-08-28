@@ -296,9 +296,9 @@ body {
  * "result-step--fold">`)이 사라지면서 이 summary가 카드의 제목이 됐다 —
  * 두 카드가 같은 크기·굵기로 맞추고, 누를 수 있다는 것은 커서가 말한다.
  *
- * `.detail-stat-line` 쪽(단지 상세)은 summary가 아이콘 하나짜리 다른
- * 갈래(`repeatTotal={false}`)라 이 규칙에 닿지 않는다 — 선택자를
- * `.budget-result >`로 좁혀 둔 이유다.
+ * 단지 상세(`ComplexDetail.tsx`)는 `CostBreakdown`을 아예 쓰지 않고
+ * 자기만의 "상세보기" 아이콘 팝업(`.detail-binding`)을 그리므로 이
+ * 규칙에 닿지 않는다 — 선택자를 `.budget-result >`로 좁혀 둔 이유다.
  *
  * ⚠ 색은 **폴백 없는 `var()` 하나**로 적는다. `scripts/seed-semantic-tokens.test.ts`
  * 의 대비 전수 검사는 `var(--a, --b)` 형태를 hex로 풀지 못해 "못 푸는 값"으로
@@ -495,7 +495,7 @@ body {
 }
 
 /*
- * 표 관행은 `.cost-breakdown dl`·`.binding-limit-table`과 같다(라벨
+ * 표 관행은 `.cost-breakdown-table`·`.binding-limit-table`과 같다(라벨
  * 왼쪽, 금액 오른쪽, tabular-nums, 줄마다 옅은 구분선) — 사용자 지시:
  * "위에 다른내용 처럼 표 형식으로... 다른 내용의 형식과 균형을
  * 맞춰줘".
@@ -537,7 +537,7 @@ body {
   white-space: nowrap;
 }
 
-/* 항목 아래 붙는 고지. `.cost-breakdown dt .hint`와 같은 요령으로 줄 전체 폭을 쓴다. */
+/* 항목 아래 붙는 고지. `.cost-breakdown-table dt .hint`와 같은 요령으로 줄 전체 폭을 쓴다. */
 .price-slider-burden-table dt .hint {
   display: block;
   width: calc(100% + var(--burden-amount-col) + var(--burden-col-gap));
@@ -591,7 +591,7 @@ body {
 
 /*
  * 대출 한도 네 가지 표(사용자 지시: "표로 정리해서 4가지 한도중 결정된
- * 것 표시"). `.cost-breakdown dl`과 같은 표 관행(라벨 왼쪽, 금액 오른쪽,
+ * 것 표시"). `.cost-breakdown-table`과 같은 표 관행(라벨 왼쪽, 금액 오른쪽,
  * tabular-nums)을 따른다.
  */
 .binding-limit-table {
@@ -599,7 +599,7 @@ body {
 }
 
 .binding-limit-table > div {
-  /* `.cost-breakdown dl > div`와 같은 이름의 변수를 같은 목적으로 쓴다 — 힌트 줄이 이 칸 너비를 다시 계산할 때 쓴다(아래 `.binding-limit-table dt .hint`). */
+  /* `.cost-breakdown-table > div`와 같은 이름의 변수를 같은 목적으로 쓴다 — 힌트 줄이 이 칸 너비를 다시 계산할 때 쓴다(아래 `.binding-limit-table dt .hint`). */
   --binding-amount-col: 7rem;
   --binding-col-gap: 0.75rem;
 
@@ -621,14 +621,14 @@ body {
 }
 
 /*
- * LTV 기준에 대한 간단 언급(사용자 지시) — `.cost-breakdown dt .hint`와
+ * LTV 기준에 대한 간단 언급(사용자 지시) — `.cost-breakdown-table dt .hint`와
  * 같은 자리·같은 역할이다. LTV 행에만 붙는다: 대부분의 실거주 구매자를
  * 실제로 묶는 제약이라 이 표에서 유일하게 "왜 이 숫자인지"를 짧게라도
  * 밝힐 필요가 있다.
  *
  * **줄 전체 폭을 쓴다**(사용자 지시: "설명을 숫자 아래부분까지 이어서
  * 적어줘") — `dt` 칸(`minmax(0,1fr)`)에 가두면 오른쪽 금액 칸만큼
- * 폭을 못 쓰고 좁게 줄바꿈한다. `.cost-breakdown dt .hint`와 같은
+ * 폭을 못 쓰고 좁게 줄바꿈한다. `.cost-breakdown-table dt .hint`와 같은
  * 요령으로, 금액 칸 폭과 칸 사이 간격만큼을 되찾는다.
  */
 .binding-limit-table dt .hint {
@@ -1294,7 +1294,7 @@ body {
 
 /*
  * 실거래 내역 표(사용자 지시: "타입을 선택하면 거래가, 거래일을
- * 볼수있도록"). `.cost-breakdown dl`과 같은 표 관행을 쓴다 — 금액은
+ * 볼수있도록"). `.cost-breakdown-table`과 같은 표 관행을 쓴다 — 금액은
  * 오른쪽 정렬·tabular-nums, 줄마다 옅은 구분선.
  *
  * 진짜 `<table>`인 이유: 이건 세 열이 각각 뜻을 지는 **표 데이터**라
@@ -1395,7 +1395,7 @@ body {
 /*
  * 아래 패딩을 16px에서 12px로 줄였다(사용자 지시: "부대비용의 카드의
  * 아래 공간을 줄이고"). 나머지 대부분은 바로 위 내역 아이콘이
- * `2.1rem`에서 `1.5rem`으로 줄며 함께 사라졌다(`.cost-breakdown-toggle`
+ * `2.1rem`에서 `1.5rem`으로 줄며 함께 사라졌다(`.detail-binding-toggle`
  * 규칙 참고) — 아이콘이 값의 줄높이에 거의 맞아떨어져 행 자체가
  * 예전만큼 늘어나지 않는다.
  */
@@ -1411,67 +1411,36 @@ body {
 }
 
 /*
- * 값 한 줄 + 그 옆의 내역 아이콘(`.detail-block--costs`에만 있다).
+ * 내역을 펼치는 **아이콘 버튼**(부대비용·최대 대출 두 카드의
+ * "상세보기" 트리거, `.detail-binding-toggle`).
  *
- * 두 항목을 **같은 그리드 행에 겹쳐** 둔다: 값은 1열, `<details>`는
- * 1~2열 전체를 지난다. 그래서 닫혔을 때는 아이콘(summary)이 값의
- * 오른쪽 끝에 서고, 열었을 때 `<dl>`은 값 아래에서 **카드 전체 폭**을
- * 쓴다 — `<summary>`는 `<details>` 안에서만 살 수 있어서, 트리거를
- * 값 옆에 두면서 표를 넓게 펴려면 이 겹침이 필요하다.
- *
- * `<details>`를 좁은 2열 안에 가두는 방법도 있었지만 그러면 펼친 표가
- * 100px 남짓한 열에 눌린다.
- */
-.detail-stat-line {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  align-items: start;
-}
-
-.detail-stat-line > .detail-stat-value {
-  grid-area: 1 / 1;
-}
-
-.detail-stat-line > .cost-breakdown,
-.detail-stat-line > .loan-calc {
-  grid-area: 1 / 1 / auto / 3;
-}
-
-/*
- * 내역을 펼치는 **아이콘 버튼**(`CostBreakdown`의 summary,
- * `repeatTotal={false}`인 자리 — 단지 상세의 ① 블록뿐이다).
- *
- * 사용자 지시 ③: "안에 내용은 … 옆에 상세보기 아이콘 으로 누르면
+ * 사용자 지시: "안에 내용은 … 옆에 상세보기 아이콘 으로 누르면
  * 볼수있게 해줘." 예전에는 "내역 보기"라는 텍스트 링크였다.
  *
  * ⚠ **클릭 가능 영역은 `<summary>` 그대로다.** 버튼처럼 보이게만
  * 만들고 `<button>`으로 바꾸지 않는다 — 네이티브 `<details>`의 토글이
  * 이미 그 일을 하고, 인쇄에서 내용을 펼치는 규칙이 그 태그에 걸린다.
  *
- * `width: fit-content`가 아니라 고정 크기 알약인 이유: 이 summary는
- * 그리드에서 `<details>`의 첫 줄이고, 값(`.detail-stat-value`)과 같은
- * 줄에 겹쳐 앉는다. 값의 한 줄 높이(1.75rem × 1.2)와 같은 높이를 줘야
- * 펼친 `<dl>`이 값 **아래**에서 시작한다.
+ * `width: fit-content`가 아니라 고정 크기 알약인 이유: `.detail-value-row`
+ * (`flex`)가 값과 이 트리거를 한 줄 양 끝에 세우는데, 트리거의 높이가
+ * 값의 한 줄 높이와 다르면 그 줄이 큰 쪽 높이로 늘어나 값 옆에 빈
+ * 공간이 남는다.
  *
- * `margin-left: auto`가 아이콘을 카드 오른쪽 끝으로 민다 — 그래야
- * summary 상자가 큰 금액 위를 덮지 않는다(덮으면 숫자를 누를 때마다
- * 표가 열린다).
+ * `.detail-binding` 자신은 `position: static`이라 흐름에 자리를 차지하지
+ * 않고(팝업만 `position: fixed`로 뜬다) 남는 것은 이 트리거(summary)
+ * 하나뿐이라, `.detail-value-row`의 `justify-content: space-between`이
+ * 이미 오른쪽 끝에 세운다 — `margin-left: auto`는 `.loan-calc-toggle`
+ * 처럼 flex가 아닌 자리에서도 같은 규칙을 그대로 쓸 수 있게 남겨 둔
+ * 보험이다.
  */
 /*
- * `.loan-calc-toggle`이 **같은 규칙에 함께 앉는다** — 세 트리거는 같은
- * 화면의 같은 열에서 같은 약속("이 숫자가 왜 이런지 보여준다")을
- * 하므로, 값을 두 벌로 두면 한쪽만 움직이는 날 같은 카드 위에서 서로
- * 다른 버튼이 뜬다.
- *
  * ⚠ **`2.1rem`(33.6px)에서 `1.5rem`(24px)으로 줄였다**(사용자 지시:
- * "부대비용의 카드의 아래 공간을 줄이고 토글도 맞춰서 수정해줘"). 이
- * `<details>`는 값(`.detail-stat-value`, 18px/700, 실측 줄높이 약
- * 23.4px)과 같은 그리드 행에 겹쳐 앉는데(`.detail-stat-line`), 아이콘
- * 버튼이 그보다 크면 행 자체가 아이콘 높이로 늘어나 값 아래에 빈
- * 공간이 남았다. 24px는 그 줄높이에 거의 맞으면서 WCAG의 최소 탭
- * 영역(24px CSS px)도 지킨다.
+ * "부대비용의 카드의 아래 공간을 줄이고 토글도 맞춰서 수정해줘"). 값
+ * (`.detail-stat-value`, 18px/700, 실측 줄높이 약 23.4px)과 나란히 서는
+ * 자리라, 아이콘 버튼이 그보다 크면 줄 자체가 아이콘 높이로 늘어나
+ * 값 옆에 빈 공간이 남았다. 24px는 그 줄높이에 거의 맞으면서 WCAG의
+ * 최소 탭 영역(24px CSS px)도 지킨다.
  */
-.cost-breakdown-toggle,
 .loan-calc-toggle,
 .detail-binding-toggle {
   /* 기본 삼각형 마커를 지운다 — 보이는 것은 아이콘 하나여야 한다 */
@@ -1500,13 +1469,11 @@ body {
  * 가두지 않는다" 가드가 `::`가 붙은 선택자를 세지 않는 이유가 정확히
  * 이 규칙이다(그 가드 주석 참고).
  */
-.cost-breakdown-toggle::-webkit-details-marker,
 .loan-calc-toggle::-webkit-details-marker,
 .detail-binding-toggle::-webkit-details-marker {
   display: none;
 }
 
-.cost-breakdown-toggle:hover,
 .loan-calc-toggle:hover,
 .detail-binding-toggle:hover {
   border-color: var(--result-signal);
@@ -1534,22 +1501,26 @@ body {
 }
 
 /*
- * 부대비용 내역을 **두 칸 표**로 세운다(사용자 지시 ②: "카드형식의 표").
+ * 부대비용 내역을 **두 칸 표**로 세운다(사용자 지시: "카드형식의 표").
  *
  * `<dl>`을 `<table>`로 바꾸지 않았다 — 이 정보(이름 하나에 값 하나)에는
  * `<dl>`이 이미 맞는 시맨틱이고, 태그를 갈아엎으면 인쇄 계약과 기존
  * 검사가 함께 흔들린다. 표처럼 보이게 하는 것은 여기서 한다: 라벨
  * 왼쪽, 금액 오른쪽(`tabular-nums`로 자릿수를 세로로 맞춘다).
  *
- * 이 규칙은 `BudgetResult`의 같은 컴포넌트에도 걸린다 — 같은 표를 두
- * 화면이 다르게 그릴 이유가 없다. 그 화면은 `--result-*` 스코프 밖일
- * 수 있어 선 색에 전역 `--border` 폴백을 함께 적는다.
+ * ⚠ **`.cost-breakdown` 안이 아니라 독립된 클래스다**(`BindingLimitTable`
+ * 의 `.binding-limit-table`과 같은 모양) — `CostBreakdownTable`이
+ * `CostBreakdown`(예산 상세의 카드, `<details className="cost-breakdown">`)
+ * 과 단지 상세의 뜨는 팝업(`.detail-binding-popup`) **양쪽**에서 쓰이는데,
+ * 뒤쪽은 조상에 `.cost-breakdown`이 없다. 두 자리가 같은 표를 다르게
+ * 그릴 이유가 없으므로 규칙은 하나다. `--result-*` 스코프 밖일 수 있어
+ * 선 색에 전역 `--border` 폴백을 함께 적는다.
  */
-.cost-breakdown dl {
+.cost-breakdown-table {
   margin: 0.5rem 0 0;
 }
 
-.cost-breakdown dl > div {
+.cost-breakdown-table > div {
   /*
    * 금액 칸에 **최소 폭**을 준다. 그래야 항목마다 자릿수가 달라도
    * 숫자의 오른쪽 끝이 한 줄로 선다(그게 "표"의 실제 효용이다).
@@ -1568,17 +1539,26 @@ body {
   border-bottom: 1px solid var(--result-rule, var(--border));
 }
 
-.cost-breakdown dl > div:last-child {
+.cost-breakdown-table > div:last-child {
   border-bottom: none;
 }
 
-.cost-breakdown dt {
+.cost-breakdown-table dt {
   font-size: 0.875rem;
   line-height: 1.45;
 }
 
-.cost-breakdown dd {
+/*
+ * ⚠ **`font-size`를 명시한다**(사용자 지시: "취득시 부대비용 카드의
+ * 상세보기도 … 글자크기 축소 등 동일하게" — 대출 한도 팝업의
+ * `.binding-limit-table dd`를 줄인 것과 같은 자리). 예전에는 이 값이
+ * 없어 주변보다 큰 본문 크기를 그대로 물려받아 같은 표 안에서 `dt`
+ * (0.875rem)와 `dd`의 크기가 어긋났다 — `dt`와 같은 크기로 맞추고
+ * 굵기(`font-weight: 600`)는 그대로 둔다.
+ */
+.cost-breakdown-table dd {
   margin: 0;
+  font-size: 0.875rem;
   text-align: right;
   font-variant-numeric: tabular-nums;
   font-weight: 600;
@@ -1593,17 +1573,17 @@ body {
 /*
  * 항목 아래 붙는 고지(취득세의 주택 수 고지·국민주택채권 추정치 안내).
  *
- * **줄 전체 폭을 쓴다.** 이 고지들은 문장이고 사이드바는 298px다 —
- * 라벨 칸(금액 칸을 뺀 나머지)에 가두면 한 줄에 두세 글자만 들어가
- * 세로로 길게 흘러 읽히지 않는다(브라우저로 실측해서 고친 자리다).
- * `<p>`가 `<dt>` 안에 있어야 하는 것은 `<dl>`의 콘텐츠 모델 때문이라
- * (dt/dd 말고는 못 넣는다) 칸 밖으로 꺼낼 수 없다 — 대신 폭으로
- * 금액 칸과 칸 사이 간격만큼을 되찾는다.
+ * **줄 전체 폭을 쓴다.** 이 고지들은 문장이고 이 표가 서는 자리(사이드바
+ * 카드·19rem 팝업)는 둘 다 폭이 좁다 — 라벨 칸(금액 칸을 뺀 나머지)에
+ * 가두면 한 줄에 두세 글자만 들어가 세로로 길게 흘러 읽히지 않는다
+ * (브라우저로 실측해서 고친 자리다). `<p>`가 `<dt>` 안에 있어야 하는
+ * 것은 `<dl>`의 콘텐츠 모델 때문이라(dt/dd 말고는 못 넣는다) 칸 밖으로
+ * 꺼낼 수 없다 — 대신 폭으로 금액 칸과 칸 사이 간격만큼을 되찾는다.
  *
  * 금액 칸이 `max-content`로 늘어난 경우에는 이 폭이 조금 모자라게
  * 되지만, 그건 문장이 오른쪽 끝까지 못 닿는 것뿐이라 안전한 쪽이다.
  */
-.cost-breakdown dt .hint {
+.cost-breakdown-table dt .hint {
   width: calc(100% + var(--cost-amount-col) + var(--cost-col-gap));
   margin: 0.15rem 0 0;
 }
@@ -1699,8 +1679,15 @@ body {
   color: var(--seed-color-fg-neutral-muted);
 }
 
-/* 금액과 결정 내역 트리거를 한 줄에 — `.detail-stat-line`과 같은 장치다 */
 /*
+ * 값 한 줄 + 그 오른쪽 끝의 "상세보기" 트리거. **최대 대출 카드와
+ * 부대비용 카드가 함께 쓴다**(사용자 지시: "취득시 부대비용 카드의
+ * 상세보기도 … 동일하게 만들어줘") — 두 자리 모두 "값이 있고, 그
+ * 값을 이룬 내역을 오른쪽 아이콘을 눌러 뜨는 팝업으로 본다"는 같은
+ * 구조라 클래스 하나로 같이 움직인다. 예전 이름(`.detail-max-loan-line`)
+ * 은 최대 대출 자리 하나에만 맞았는데, 두 번째 자리가 생기며 그 이름이
+ * 더 이상 맞지 않아 일반화했다.
+ *
  * 아이콘을 **줄 오른쪽 끝까지** 민다(사용자 지시: "아이콘을 최대한
  * 오른쪽으로 이동해서 아이콘과 팝업이 자연스럽게 연결되게"). 예전에는
  * 금액 바로 옆에 작은 간격만 두고 붙어 있었다 — `justify-content:
@@ -1709,7 +1696,7 @@ body {
  * 뜨므로(`.detail-binding-popup` 문서), 아이콘이 카드 오른쪽 끝(=지도
  * 칸과 맞닿는 경계)에 가까울수록 팝업이 지도 위로 자연스럽게 이어진다.
  */
-.detail-max-loan-line {
+.detail-value-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1895,8 +1882,8 @@ body {
  * (`.budget-panel`·`.detail-fold`가 이미 두 번 막은 사고).
  * `scripts/printCss.test.ts`가 그 사실을 검사한다.
  *
- * 여닫는 트리거(`.loan-calc-toggle`)의 모양은 위 `.cost-breakdown-toggle`
- * 과 **같은 규칙**에서 온다 — 같은 열의 두 카드가 같은 버튼을 쓴다.
+ * 여닫는 트리거(`.loan-calc-toggle`)의 모양은 위 `.detail-binding-toggle`
+ * 과 **같은 규칙**에서 온다 — 같은 열의 카드들이 같은 버튼을 쓴다.
  */
 .loan-calc-body {
   margin: 0.75rem 0 0;

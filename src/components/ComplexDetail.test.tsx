@@ -378,14 +378,22 @@ describe("ComplexDetail — 예상 매수금액이 아래 전부를 움직인다
     const { container } = renderDetail();
     await enterPrice("120000");
 
-    const toggle = container.querySelector(".detail-binding-toggle");
+    // ⚠ **`.detail-max-loan` 안으로 좁힌다.** 부대비용 카드도 같은
+    // `.detail-binding-toggle` 클래스를 쓰는 "상세보기" 아이콘을 자기
+    // 카드 안에 가지고 있어서(사용자 지시로 "동일하게" 만들었다), 좁히지
+    // 않으면 DOM에서 먼저 나오는 부대비용 쪽 아이콘을 잘못 집는다.
+    const loanBlock = container.querySelector(".detail-max-loan");
+    expect(loanBlock).not.toBeNull();
+    if (loanBlock === null) return;
+
+    const toggle = loanBlock.querySelector(".detail-binding-toggle");
     expect(toggle).not.toBeNull();
     // 아이콘 하나뿐이라 이름은 `aria-label`이 진다. 사용자 지시로
     // "상세보기"를 담게 바뀌었다.
     expect(toggle).toHaveAttribute("aria-label", "한도 결정 내역 상세보기");
 
     // 네 가지 한도가 모두 있고, 결정된 것이 표시된다.
-    const table = container.querySelector(".detail-binding-popup .binding-limit-table");
+    const table = loanBlock.querySelector(".detail-binding-popup .binding-limit-table");
     expect(table).not.toBeNull();
     expect(table).toHaveTextContent("담보 가치(LTV)");
     expect(table).toHaveTextContent("상환 능력(DSR)");
@@ -407,7 +415,9 @@ describe("ComplexDetail — 예상 매수금액이 아래 전부를 움직인다
     const { container } = renderDetail();
     await enterPrice("120000");
 
-    const fold = container.querySelector(".detail-binding");
+    const fold = container
+      .querySelector(".detail-max-loan")
+      ?.querySelector(".detail-binding");
     expect(fold?.tagName).toBe("DETAILS");
     expect(container.querySelector("dialog")).toBeNull();
     // 기본은 닫힘 — 누르면 열린다.
@@ -430,14 +440,81 @@ describe("ComplexDetail — 예상 매수금액이 아래 전부를 움직인다
     const { container } = renderDetail();
     await enterPrice("120000");
 
-    const toggle = container.querySelector(".detail-binding-toggle");
-    expect(toggle).not.toBeNull();
-    if (toggle === null) return;
+    const toggle = container
+      .querySelector(".detail-max-loan")
+      ?.querySelector(".detail-binding-toggle");
+    expect(toggle).not.toBeUndefined();
+    if (toggle === undefined || toggle === null) return;
     await userEvent.click(toggle);
 
-    const popup = container.querySelector(
-      ".detail-binding-popup",
-    ) as HTMLElement | null;
+    // ⚠ 부대비용 카드에도 같은 `.detail-binding-popup`이 있으므로(항상
+    // 열리지 않은 채로도 DOM에 존재한다) `.detail-max-loan` 안으로 좁혀
+    // 방금 연 팝업을 정확히 집는다 — 안 좁히면 안 열어 본 팝업의(top:0px
+    // 그대로인) 인라인 스타일을 우연히 통과시킬 수 있다.
+    const popup = container
+      .querySelector(".detail-max-loan")
+      ?.querySelector(".detail-binding-popup") as HTMLElement | null | undefined;
+    expect(popup).not.toBeUndefined();
+    expect(popup).not.toBeNull();
+    expect(popup?.style.top).not.toBe("");
+    expect(popup?.style.left).not.toBe("");
+  });
+
+  /**
+   * 사용자 지시: "취득시 부대비용 카드의 상세보기도 첨부한 사진처럼
+   * 동일하게 만들어줘(아이콘 형태, 팝업형식, 자연스러운 연결, 글자크기
+   * 축소 등 동일하게)" — 최대 대출 카드의 "한도 결정 내역" 팝업과 같은
+   * 조합(`DetailViewIcon` 트리거 + `<details>` + `.detail-binding-popup`)
+   * 이어야 한다. 표 자체는 예산 상세와 **같은 컴포넌트**
+   * (`CostBreakdownTable`)라 두 화면이 같은 부대비용을 두고 다른 숫자를
+   * 말할 수 없다 — 여기서 검사하는 것은 배선이다.
+   */
+  it("부대비용 옆 아이콘으로 상세 내역을 열어 볼 수 있다", async () => {
+    const { container } = renderDetail();
+    await enterPrice("120000");
+
+    // ⚠ **`.detail-block--costs` 안으로 좁힌다.** 최대 대출 카드도 같은
+    // `.detail-binding-toggle`을 쓰므로, 안 좁히면 그쪽 아이콘을 잘못
+    // 집을 수 있다.
+    const costBlock = container.querySelector(".detail-block--costs");
+    expect(costBlock).not.toBeNull();
+    if (costBlock === null) return;
+
+    const toggle = costBlock.querySelector(".detail-binding-toggle");
+    expect(toggle).not.toBeNull();
+    expect(toggle).toHaveAttribute("aria-label", "취득시 부대비용 내역 상세보기");
+
+    // `<dialog>`가 아니라 `<details>`다 — 인쇄에서 `::details-content`가
+    // 강제로 펼쳐 준다(최대 대출 팝업과 같은 이유).
+    const fold = costBlock.querySelector(".detail-binding");
+    expect(fold?.tagName).toBe("DETAILS");
+    expect(container.querySelector("dialog")).toBeNull();
+
+    // 항목별 표(부대비용 카드와 같은 표, `CostBreakdownTable`)가 담겨 있다.
+    const table = costBlock.querySelector(".detail-binding-popup .cost-breakdown-table");
+    expect(table).not.toBeNull();
+    expect(table).toHaveTextContent("취득세 (지방교육세·농특세 포함)");
+    expect(table).toHaveTextContent("중개보수 (부가세 포함)");
+    expect(table).toHaveTextContent("법무사 비용");
+    expect(table).toHaveTextContent("이사 비용");
+    expect(table).toHaveTextContent(/국민주택채권/);
+  });
+
+  it("부대비용 상세 내역을 열면 아이콘 좌표를 팝업에 인라인으로 넘긴다", async () => {
+    const { container } = renderDetail();
+    await enterPrice("120000");
+
+    const toggle = container
+      .querySelector(".detail-block--costs")
+      ?.querySelector(".detail-binding-toggle");
+    expect(toggle).not.toBeUndefined();
+    if (toggle === undefined || toggle === null) return;
+    await userEvent.click(toggle);
+
+    const popup = container
+      .querySelector(".detail-block--costs")
+      ?.querySelector(".detail-binding-popup") as HTMLElement | null | undefined;
+    expect(popup).not.toBeUndefined();
     expect(popup).not.toBeNull();
     expect(popup?.style.top).not.toBe("");
     expect(popup?.style.left).not.toBe("");

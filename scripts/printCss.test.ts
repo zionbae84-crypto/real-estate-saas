@@ -1014,7 +1014,7 @@ describe("인쇄 CSS", () => {
    * 조용히 "찾지 못함"으로 깨졌다).
    */
   describe("아이콘 트리거가 인쇄에서 실제로 지워진다", () => {
-    const TOGGLES = [".cost-breakdown-toggle", ".loan-calc-toggle"];
+    const TOGGLES = [".detail-binding-toggle", ".loan-calc-toggle"];
 
     /** 이 선택자가 규칙 목록의 한 항목으로 등장하는 자리(`,` 또는 `{` 앞) */
     function selectorHeadIndex(selector: string): number {

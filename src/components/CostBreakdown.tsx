@@ -1,8 +1,7 @@
 import { formatWon, formatWonRoundedToMan } from "../format/won";
 import type { CostBreakdown as CostBreakdownData } from "../lib/finance";
-import { CalcBasisIcon } from "./CalcBasisIcon";
 
-export interface CostBreakdownProps {
+export interface CostBreakdownTableProps {
   costs: CostBreakdownData;
   /**
    * 취득세 줄에 붙는 주택 수 고지. **호출부가 `householdCountNoteFor`로
@@ -21,36 +20,9 @@ export interface CostBreakdownProps {
    * 넘긴다(`lib/finance`) — 이 컴포넌트는 가격도 룰셋도 받지 않는다.
    */
   brokerageFeeRate: number;
-  /**
-   * summary가 합계를 한 번 더 적을 것인가. 기본은 적는다
-   * ("부대비용 850만원" — 사용자 지시로 만원 단위까지만 보여준다).
-   *
-   * `false`를 주는 자리는 하나뿐이다: 단지 상세의 ① 블록(design.md
-   * §6). 그 화면은 바로 위에서 같은 합계를 "취득시 부대비용"으로
-   * 크게 내므로, summary가 같은 숫자를 되풀이하면 한 화면에 같은
-   * 금액이 두 번 박힌다. 그때 summary는 **아이콘 하나**가 된다
-   * (사용자 지시 ③, 아래 렌더링 주석 참고) — 큰 금액 옆에 붙는
-   * 작은 상세보기 버튼이고, 뜻은 `aria-label`이 진다.
-   *
-   * **계산은 어느 쪽에서도 달라지지 않는다.** 이 prop이 정하는 것은
-   * summary에 보이는 것 하나뿐이고, 표(`<dl>`) 안의 항목·금액은 그대로
-   * **정확한 원 단위**다 — 항목을 더하면 이 요약이 낸 합계와 맞아야
-   * 하는 감사 근거라, 여기서만 반올림을 걸지 않는다
-   * (`formatWonRoundedToMan` 참고).
-   */
-  repeatTotal?: boolean;
 }
 
-/*
- * 내역을 펼치는 아이콘은 `./CalcBasisIcon`에서 온다(사용자 지시:
- * "산출근거 아이콘으로 수정해줘"). 예전에는 아래로 펼쳐지는 화살표
- * (`ChevronIcon`)였다 — 그 판단은 이 트리거가 "이 자리에서 카드를
- * 접었다 폈다" 하는 것이라는 전제였는데, 사용자가 이 내역을 "산출근거"
- * (숫자가 왜 이런지 설명)로 부르면서 그 전제가 바뀌었다. 대출 한도의
- * 같은 성격 트리거(`ComplexDetail`의 `.detail-binding-toggle`)와
- * 같은 아이콘을 쓴다 — 한 화면에 "이 숫자 설명 보기" 버튼이 둘일 때
- * 서로 다른 그림이면 같은 뜻이 다르게 읽힌다.
- */
+export interface CostBreakdownProps extends CostBreakdownTableProps {}
 
 type CostKey = keyof Omit<CostBreakdownData, "total">;
 
@@ -107,92 +79,98 @@ function formatFeeRate(rate: number): string {
   return `${Number((rate * 100).toFixed(2))}%`;
 }
 
+/**
+ * 부대비용 항목별 표 자체. **카드에서 떼어 냈다** — 단지 상세의
+ * "상세보기" 팝업이 최대 대출 카드의 "한도 결정 내역" 팝업과 같은
+ * 방식으로 이 표를 띄워야 하는데(사용자 지시: "동일하게 만들어줘"),
+ * 표를 두 벌 적으면 두 자리가 같은 항목을 두고 다른 숫자를 말하게 되는
+ * 날이 온다. `BindingExplainer`가 `BindingLimitTable`을 떼어 낸 것과
+ * 같은 이유·같은 모양이다.
+ *
+ * 감싸는 껍질(카드의 `<details>`/팝업의 `<details>`)은 쓰는 쪽이 정하고,
+ * 이 컴포넌트는 표만 그린다.
+ */
+export function CostBreakdownTable({
+  costs,
+  householdCountNote,
+  brokerageFeeRate,
+}: CostBreakdownTableProps) {
+  return (
+    <dl className="cost-breakdown-table">
+      {ROW_ORDER.map((key) => {
+        const { label } = ROW_META[key];
+
+        if (key === "brokerageFee") {
+          // 부가세(costs.brokerageVat)를 이 줄에 합쳐 보여준다 — 사용자
+          // 지시로 부가세는 별도 줄로 두지 않는다. 대신 이 줄의 note가
+          // 적용 요율과 "협의 가능"이라는 사실을 밝힌다: 표에 보이는
+          // 금액이 상한요율 기준 추정치일 뿐 확정 계약가가 아니라는
+          // 뜻이다.
+          const amount = costs.brokerageFee + costs.brokerageVat;
+          return (
+            <div key={key}>
+              <dt>
+                {label}
+                <p className="hint">
+                  {`적용 요율 ${formatFeeRate(brokerageFeeRate)}(상한) · 중개보수는 협의할 수 있어요.`}
+                </p>
+              </dt>
+              <dd>{formatWon(amount)}</dd>
+            </div>
+          );
+        }
+
+        // 취득세만 프로필에 따라 문구가 갈린다. 나머지는 고정 문구다.
+        const note =
+          key === "acquisitionTax" ? householdCountNote : ROW_META[key].note;
+        return (
+          <div key={key}>
+            <dt>
+              {label}
+              {note !== undefined && <p className="hint">{note}</p>}
+            </dt>
+            <dd>{formatWon(costs[key])}</dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+/**
+ * 부대비용 카드(예산 상세 패널, `BudgetResult.tsx`). summary에 합계를
+ * 적고, 펼치면 `CostBreakdownTable`이 항목별 내역을 보여준다.
+ *
+ * 단지 상세(`ComplexDetail.tsx`)는 이 컴포넌트를 쓰지 않는다 — 그
+ * 화면은 합계를 이미 큰 글씨로 한 번 적으므로, 대신 `CostBreakdownTable`을
+ * 직접 가져다 "상세보기" 아이콘 + 뜨는 팝업(최대 대출 카드의
+ * `.detail-binding`과 같은 모양)으로 감싼다.
+ */
 export function CostBreakdown({
   costs,
   householdCountNote,
   brokerageFeeRate,
-  repeatTotal = true,
 }: CostBreakdownProps) {
   /*
     ⚠ **`<details>`/`<summary>`는 그대로 둔다.** 인쇄에서 접힌 내용을
     강제로 펼치는 규칙(`details:not([open])::details-content`,
     styles.css의 @media print)이 이 태그에만 걸리므로, 커스텀 토글
     (useState·모달)로 갈아엎으면 부대비용 내역이 종이에서 통째로
-    사라진다. 아래에서 바뀌는 것은 **summary 안에 보이는 것**뿐이고,
-    새 상태도 이벤트 핸들러도 만들지 않는다 — 네이티브 토글이 이미 그
-    일을 한다(`scripts/printCss.test.ts`·`ComplexDetail.test.tsx`가 이
-    형태를 잠근다).
+    사라진다.
   */
   return (
     <details className="cost-breakdown">
-      {repeatTotal ? (
-        <summary>
-          부대비용{" "}
-          <span className="cost-total">
-            {formatWonRoundedToMan(costs.total)}
-          </span>
-        </summary>
-      ) : (
-        /*
-          합계는 바로 위에서 이미 크게 적혔다. 그래서 이 자리는 글자
-          없이 **아이콘 하나**다(사용자 지시: "옆에 상세보기 아이콘
-          으로 누르면 볼수있게 해줘"). 뜻은 `aria-label`이 진다 —
-          아이콘만 남기고 이름을 주지 않으면 스크린리더에서는 이름
-          없는 버튼이 된다.
-
-          **summary 자체가 `.fold-more-hint`다.** 인쇄에서 <details>는
-          강제로 펼쳐지므로 트리거는 죽은 장치가 된다(종이에서는 누를
-          수 없다) — 텍스트였을 때 접미사("보기")만 이 클래스로 감쌌던
-          것과 같은 이유이고, 지금은 보이는 것이 트리거뿐이라 감싸는
-          범위가 summary 전체다. `.fold-more-hint`는 인쇄에서 지워지는
-          유일한 출처(`src/print/hiddenInPrint.ts`)이며, 그 규칙은
-          summary만 지우고 <dl>은 건드리지 않는다.
-        */
-        <summary
-          className="fold-more-hint cost-breakdown-toggle"
-          aria-label="취득시 부대비용 내역 보기"
-        >
-          <CalcBasisIcon />
-        </summary>
-      )}
-      <dl>
-        {ROW_ORDER.map((key) => {
-          const { label } = ROW_META[key];
-
-          if (key === "brokerageFee") {
-            // 부가세(costs.brokerageVat)를 이 줄에 합쳐 보여준다 — 사용자
-            // 지시로 부가세는 별도 줄로 두지 않는다. 대신 이 줄의 note가
-            // 적용 요율과 "협의 가능"이라는 사실을 밝힌다: 표에 보이는
-            // 금액이 상한요율 기준 추정치일 뿐 확정 계약가가 아니라는
-            // 뜻이다.
-            const amount = costs.brokerageFee + costs.brokerageVat;
-            return (
-              <div key={key}>
-                <dt>
-                  {label}
-                  <p className="hint">
-                    {`적용 요율 ${formatFeeRate(brokerageFeeRate)}(상한) · 중개보수는 협의할 수 있어요.`}
-                  </p>
-                </dt>
-                <dd>{formatWon(amount)}</dd>
-              </div>
-            );
-          }
-
-          // 취득세만 프로필에 따라 문구가 갈린다. 나머지는 고정 문구다.
-          const note =
-            key === "acquisitionTax" ? householdCountNote : ROW_META[key].note;
-          return (
-            <div key={key}>
-              <dt>
-                {label}
-                {note !== undefined && <p className="hint">{note}</p>}
-              </dt>
-              <dd>{formatWon(costs[key])}</dd>
-            </div>
-          );
-        })}
-      </dl>
+      <summary>
+        부대비용{" "}
+        <span className="cost-total">
+          {formatWonRoundedToMan(costs.total)}
+        </span>
+      </summary>
+      <CostBreakdownTable
+        costs={costs}
+        householdCountNote={householdCountNote}
+        brokerageFeeRate={brokerageFeeRate}
+      />
     </details>
   );
 }

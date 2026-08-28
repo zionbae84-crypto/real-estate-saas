@@ -536,7 +536,7 @@ describe("상세 블록 카드 — 목록 카드와 같은 값을 쓴다", () =>
       ".detail-block",
       ".detail-block--costs",
       ".detail-block--monthly",
-      ".detail-stat-line",
+      ".detail-value-row",
       ".detail-stat-value",
       ".cost-breakdown",
     ]) {
@@ -558,11 +558,11 @@ describe("상세 블록 카드 — 목록 카드와 같은 값을 쓴다", () =>
    * 흔들린다. 표처럼 보이게 하는 것은 CSS의 일이다.
    */
   it("내역이 두 칸 표로 정렬된다 — 금액은 오른쪽·tabular-nums", () => {
-    expect(declared(".cost-breakdown dl > div", "display")).toMatch(
+    expect(declared(".cost-breakdown-table > div", "display")).toMatch(
       /grid|flex/,
     );
-    expect(declared(".cost-breakdown dd", "text-align")).toBe("right");
-    expect(declared(".cost-breakdown dd", "font-variant-numeric")).toBe(
+    expect(declared(".cost-breakdown-table dd", "text-align")).toBe("right");
+    expect(declared(".cost-breakdown-table dd", "font-variant-numeric")).toBe(
       "tabular-nums",
     );
   });
