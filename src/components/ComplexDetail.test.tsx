@@ -282,13 +282,26 @@ describe("ComplexDetail — 매물가격이 아래 전부를 움직인다", () =
   });
 
   /** 사용자 지시: "매달 나가는 돈은 최대 대출가능 금액을 알려주면" */
-  it("이 가격에서 받을 수 있는 최대 대출액을 알려준다", async () => {
-    renderDetail();
+  /**
+   * 사용자 지시로 이 줄은 **금액이 줄을 바꿔 크게 선다** — 아래 계산기에
+   * 얼마를 넣을지 정하는 기준이라 문장에 섞이면 안 된다. 그리고 금액은
+   * 만원 단위까지만 적는다.
+   */
+  it("이 가격에서 받을 수 있는 최대 대출액을 만원 단위로 알려준다", async () => {
+    const { container } = renderDetail();
     await enterPrice("120000");
 
-    expect(
-      screen.getByText(/이 가격에서 받을 수 있는 최대 대출은/),
-    ).toBeInTheDocument();
+    const line = container.querySelector(".detail-max-loan");
+    expect(line).toHaveTextContent("이 가격에 매수할 경우 최대 대출은");
+
+    // 금액은 문장과 **다른 요소**여야 한다(줄바꿈·굵기·크기가 거기 걸린다).
+    const amount = container.querySelector(".detail-max-loan-amount");
+    expect(amount).not.toBeNull();
+
+    // 만원 단위까지만 — 원 단위 잔돈이 남아 있으면 안 된다.
+    // (`formatWonRoundedToMan`은 만원 미만을 반올림해 지운다.)
+    expect(amount?.textContent).toMatch(/^[\d억,\s만]+원$/);
+    expect(amount?.textContent).not.toMatch(/만\s*[\d,]+원$/);
   });
 
   /**

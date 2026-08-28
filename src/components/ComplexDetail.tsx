@@ -345,9 +345,22 @@ export function ComplexDetail({
               </p>
             ) : (
               <>
-                <p className="detail-stat-note">
-                  이 가격에서 받을 수 있는 최대 대출은{" "}
-                  <strong>{formatWon(atPrice.maxLoan.amount)}</strong>이에요.
+                {/*
+                  최대 대출 가능 금액. **이 블록에서 가장 중요한 숫자다**
+                  (사용자 지시) — 아래 계산기에 얼마를 넣을지 정하는
+                  기준이라, 문장 안에 섞이지 않고 줄을 바꿔 크게 선다.
+
+                  금액은 만원 단위까지만 적는다(사용자 지시). 이 자리는
+                  "얼마쯤 빌릴 수 있나"를 가늠하는 자리이지 원 단위까지
+                  맞춰야 하는 자리가 아니고, 정확한 값은 계산기가 한도를
+                  넘겼을 때 안내에 그대로 적는다.
+                */}
+                <p className="detail-max-loan">
+                  이 가격에 매수할 경우 최대 대출은
+                  <strong className="detail-max-loan-amount">
+                    {formatWonRoundedToMan(atPrice.maxLoan.amount)}
+                  </strong>
+                  이에요.
                 </p>
                 {/*
                   **평형·가격별 `key`를 준다.** 평형을 갈아타거나

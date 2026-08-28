@@ -15,7 +15,6 @@ import { formatRatio } from "./SafetyBadge";
 
 export { MAX_RATE_PERCENT };
 
-const MONEY_HINT = "단위를 안 쓰면 만원으로 읽어요. '3억5000'처럼 써도 돼요.";
 
 /** 만원 단위(10,000원)로 올림/내림. 입력란 기본값을 읽을 수 있는 수로 맞춘다 */
 const MAN = 10_000;
@@ -176,16 +175,27 @@ export function LoanCalculator({
         (`LoanCalculator.test.tsx`가 그 봉인을 검사한다).
       */}
       <form className="loan-input-form" onSubmit={(e) => e.preventDefault()}>
+        {/*
+          **힌트도 한도 안내도 여기서는 내지 않는다**(사용자 지시: "이부분은
+          중복되니 제거해줘"). 둘 다 이 입력란 바로 위에서 이미 말했다:
+
+          - "단위를 안 쓰면 만원으로 읽어요…"는 같은 화면 위쪽 매물가격
+            입력란이 이미 적는다. 한 화면에서 같은 입력 규칙을 두 번
+            가르칠 필요가 없다.
+          - "받을 수 있는 최대 대출액은 …이에요"는 이 계산기 바로 위의
+            `.detail-max-loan`이 줄을 바꿔 크게 적는다.
+
+          ⚠ **잃는 정보는 없다.** 한도를 실제로 넘겨 입력했을 때는
+          `guidanceFor`가 정확한 금액과 함께 "그보다 큰 금액으로는
+          계산하지 않았어요"를 낸다 — 안내가 필요한 순간에 필요한
+          자리에서 나온다.
+        */}
         <MoneyInput
           id="loan-calc-amount"
           label="대출금액"
-          hint={MONEY_HINT}
           value={amount}
           onChange={setAmount}
         />
-        <p className="hint">
-          받을 수 있는 최대 대출액은 {formatWon(maxLoan.amount)}이에요.
-        </p>
 
         <div className="loan-input-field">
           <label htmlFor="loan-calc-rate">금리 (연 %)</label>

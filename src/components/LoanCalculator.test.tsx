@@ -113,6 +113,27 @@ describe("LoanCalculator", () => {
     );
   });
 
+  /**
+   * 사용자 지시로 입력란 옆 안내 두 줄을 지웠다 — 둘 다 이 계산기 **바로
+   * 위**가 이미 말하고 있었다(매물가격 입력란의 같은 힌트, `.detail-max-loan`의
+   * 한도 안내). 아래 "한도를 넘겨 입력하면 …" 검사가 잃는 정보가 없다는
+   * 쪽 절반을 맡는다: 안내가 필요한 순간에는 여전히 정확한 금액과 함께 나온다.
+   */
+  describe("중복 안내를 내지 않는다", () => {
+    it("입력 규칙 힌트를 여기서 다시 적지 않는다", () => {
+      const { container } = renderCalc();
+      expect(container.textContent).not.toMatch(/단위를 안 쓰면 만원으로 읽어요/);
+    });
+
+    it("한도를 넘기지 않은 동안에는 한도 안내를 적지 않는다", () => {
+      const { container } = renderCalc({
+        neededLoan: 128_000_000,
+        maxLoanAmount: 300_000_000,
+      });
+      expect(container.textContent).not.toMatch(/받을 수 있는 최대 대출액은/);
+    });
+  });
+
   it("기본 상환방식은 원리금균등이다 — 계산기를 열기 전 숫자와 같은 방식이다", () => {
     renderCalc();
     expect((screen.getByLabelText("원리금균등") as HTMLInputElement).checked).toBe(
