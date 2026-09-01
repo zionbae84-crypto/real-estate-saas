@@ -203,37 +203,6 @@ export function includesAreaAboveThreshold(
 }
 
 /**
- * 고른 평형대가 임계값을 **가로지르는가** — 초과와 이하를 함께 품는가.
- *
- * ⚠ **{@link includesAreaAboveThreshold}와 다른 질문이다.** 저쪽은
- * "헤드라인을 어느 전제로 계산할까"를 정하고, 이쪽은 **"헤드라인의
- * 전제와 목록의 각 줄이 서로 다를 수 있는가"**를 정한다.
- *
- * 화면 두 곳이 "목록에 85㎡ 이하인 줄이 나오면 부담이 이보다 적어요"·
- * "그보다 비싼 집이 여기 보일 수 있어요"라고 약속한다
- * (`AssumptionLine`·`ComplexList`의 기준 안내). 목록은 고른 평형대로
- * 걸러진 뒤이므로(App.tsx의 `areaFilteredUnits`) **중대형만 골랐다면
- * 그런 줄은 하나도 나올 수 없다** — 그때 그 약속은 존재할 수 없는 줄을
- * 가리키고, 헤드라인과 각 줄은 실제로 같은 전제(전부 초과) 위에 있다.
- *
- * 임계값 이하만 골랐을 때 거짓인 것도 같은 이유다 — 가로지를 초과가
- * 아예 없다. 두 방향 모두에서 "밝힐 차이가 있을 때만 밝힌다".
- */
-export function mixesAreaAcrossThreshold(
-  bands: readonly AreaBand[],
-  ruralTaxAreaThresholdSqm: number,
-): boolean {
-  if (!includesAreaAboveThreshold(bands, ruralTaxAreaThresholdSqm)) return false;
-  return areaBandRanges(ruralTaxAreaThresholdSqm).some((range) => {
-    if (!bands.includes(range.band)) return false;
-    // 아래로 열려 있으면 임계값 이하를 품는다. 닫혀 있으면 그 하한이
-    // 임계값보다 작을 때만 품는다 — 하한이 임계값이고 그 값을 포함하지
-    // 않는 구간(중대형)은 "초과"라 품지 않는다.
-    return range.from === null || range.from.sqm < ruralTaxAreaThresholdSqm;
-  });
-}
-
-/**
  * 고른 평형대를 종이에 적을 한 줄로 만든다(`PrintSummary`).
  *
  * 전부 고르면 "전체"라고 적는다 — 세 구간을 다 나열하면 종이에서 뜻이

@@ -17,7 +17,7 @@ import {
   AGGREGATION_WINDOW_LABEL,
   type ComplexUnit,
 } from "./data/complexes";
-import { matchesAreaBands, mixesAreaAcrossThreshold } from "./lib/area-band";
+import { matchesAreaBands } from "./lib/area-band";
 import { buildComplexList, burdenTierOf } from "./lib/complex-list";
 import { regionNameByCode } from "./data/regions";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
@@ -1655,33 +1655,6 @@ export function App() {
                                   값을 본다(위 `focusedComplexKey` 주석).
                                 */
                                 focusedComplexKey={focusedComplexKey}
-                                /*
-                                  헤드라인의 면적 전제가 이 목록의 줄과
-                                  다를 수 있는가. 참일 때만 목록 위에
-                                  기준 안내가 붙는다 — 거짓이면 헤드라인과
-                                  각 줄이 같은 전제 위에 있어 밝힐 차이가
-                                  없다(사실과 다른 겸양은 노이즈다).
-
-                                  ⚠ `includesAreaAboveThreshold`가 아니라
-                                  `mixesAreaAcrossThreshold`다. 중대형만
-                                  고르면 헤드라인은 초과 기준으로 계산되지만
-                                  목록도 전부 초과라, 안내가 약속하는 "그보다
-                                  비싼 집"이 나올 수 없다.
-
-                                  `selectedUnit`을 함께 보는 이유는
-                                  `AssumptionLine`의 `areaOverridden`과
-                                  같다 — 상세가 열려 있으면 헤드라인이
-                                  이미 그 평형의 **실제** 면적으로
-                                  계산되므로 가정을 말하면 거짓말이 된다.
-                                */
-                                headlineBasisDiffersFromRows={
-                                  selectedUnit === null &&
-                                  mixesAreaAcrossThreshold(
-                                    state.areaBands,
-                                    rules.acquisitionTax
-                                      .ruralTaxAreaThresholdSqm,
-                                  )
-                                }
                               />
                             )
                           )}

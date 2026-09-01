@@ -1082,7 +1082,6 @@ body {
 }
 
 .complex-empty,
-.complex-list-note,
 .complex-freshness,
 .complex-map-caveat {
   color: var(--result-gray);
@@ -1103,10 +1102,6 @@ body {
   color: var(--result-gray);
   font-size: 0.9rem;
   margin: 0;
-}
-
-.complex-list-note {
-  margin: 0 8px 8px;
 }
 
 /*

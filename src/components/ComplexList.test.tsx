@@ -224,42 +224,6 @@ describe("ComplexList", () => {
     expect(onSelect).toHaveBeenCalledWith(u);
   });
 
-  describe("목록이 어느 면적 기준인지 밝힌다 — 밝힐 것이 있을 때만", () => {
-    it("헤드라인이 85㎡ 초과를 가정했으면 그 차이를 말한다", () => {
-      // 그 경우 헤드라인은 농특세가 붙는 전제로 계산되고, 85㎡ 이하
-      // 행은 농특세가 붙지 않아 헤드라인 실구매 가능 가격보다 비싼
-      // 가격까지 통과한다. 그 차이를 밝히지 않으면 화면이 서로 모순돼
-      // 보인다.
-      const { container } = renderList(
-        { withinSafe: [entry(unit())] },
-        { headlineBasisDiffersFromRows: true },
-      );
-      const note = container.querySelector(".complex-list-note")?.textContent ?? "";
-      expect(note).toMatch(/실제 전용면적/);
-      expect(note).toMatch(/가정/);
-    });
-
-    /**
-     * ⚠ **고른 평형대가 전부 85㎡ 이하이면 헤드라인과 각 줄이 같은
-     * 전제 위에 있다.** 그때 "가정한 면적 기준이라 그보다 비싼 집이 보일
-     * 수 있어요"는 **사실이 아니다** — 사실과 다른 겸양은 노이즈이고,
-     * 사용자가 진짜 가정을 읽을 자리를 뺏는다.
-     */
-    it("헤드라인이 고른 평형대와 같은 전제면 이 안내를 내지 않는다", () => {
-      const { container } = renderList({ withinSafe: [entry(unit())] });
-      expect(container.querySelector(".complex-list-note")).toBeNull();
-    });
-
-    it("0개일 때는 이 안내를 붙이지 않는다", () => {
-      // 보여줄 행이 없으면 기준을 밝힐 행도 없다.
-      const { container } = renderList(
-        undefined,
-        { headlineBasisDiffersFromRows: true },
-      );
-      expect(container.querySelector(".complex-list-note")).toBeNull();
-    });
-  });
-
   describe("리뷰 수정: 버튼 안의 마크업이 유효하다", () => {
     it("행 버튼 안에 <p>가 없다", () => {
       // button의 콘텐츠 모델은 phrasing content라 <p>는 유효하지 않다.
