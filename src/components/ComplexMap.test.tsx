@@ -1,7 +1,7 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as loadNaverMapsModule from "../lib/loadNaverMaps";
-import { ComplexMap, MARKER_ANCHOR, burdenTiers } from "./ComplexMap";
+import { ComplexMap, MARKER_ANCHOR, burdenTiers, markerDetailForZoom } from "./ComplexMap";
 import { unitKey } from "./ComplexList";
 import type { ComplexUnit } from "../data/complexes";
 
@@ -37,7 +37,10 @@ function fakeNaverMaps() {
   }> = [];
   const infoWindows: Array<{ content: string; opened: boolean; removed: boolean }> = [];
   const destroyedMaps: unknown[] = [];
-  const createdMaps: Array<{ options: { center?: { lat: number; lng: number } } }> = [];
+  const createdMaps: Array<{
+    options: { center?: { lat: number; lng: number } };
+    setZoom(next: number): void;
+  }> = [];
   const fitBoundsCalls: Array<{ bounds: unknown; options?: unknown }> = [];
   // 실제 SDK의 panTo — 고른 단지로 지도를 옮길 때 쓴다(지도를 다시
   // 만들지 않는다).
@@ -52,10 +55,26 @@ function fakeNaverMaps() {
       Map: class {
         destroyed = false;
         options: { center?: { lat: number; lng: number } } = {};
-        constructor(el: HTMLElement, opts: { center?: { lat: number; lng: number } }) {
+        /**
+         * 지금 줌. 실제 SDK와 같이 `getZoom()`으로 읽는다 — 마커 상세도가
+         * 이 값으로 갈린다(`markerDetailForZoom`). 테스트는
+         * `setZoom(n)`으로 줌을 움직여 `zoom_changed`를 직접 쏜다.
+         */
+        zoom = 14;
+        listeners: Record<string, () => void> = {};
+        constructor(el: HTMLElement, opts: { center?: { lat: number; lng: number }; zoom?: number }) {
           mapContainerEl = el;
           this.options = opts;
+          if (opts.zoom !== undefined) this.zoom = opts.zoom;
           createdMaps.push(this);
+        }
+        getZoom() {
+          return this.zoom;
+        }
+        /** 테스트 전용 — 줌을 옮기고 실제 SDK처럼 zoom_changed를 쏜다. */
+        setZoom(next: number) {
+          this.zoom = next;
+          this.listeners.zoom_changed?.();
         }
         // 실제 SDK의 fitBounds. 여러 단지를 한 화면에 담기 위해 호출한다.
         fitBounds(bounds: unknown, options?: unknown) {
@@ -113,6 +132,19 @@ function fakeNaverMaps() {
             else el.appendChild(opts.icon.content);
             mapContainerEl.appendChild(el);
             this.el = el;
+          }
+        }
+        /*
+         * 실제 SDK의 setIcon — 아이콘 DOM을 통째로 갈아 끼운다. 줌이
+         * 상세도 경계를 넘을 때 ComplexMap이 이걸 부른다. **기존 엘리먼트
+         * 안을 갈아 끼운다**(새 엘리먼트를 붙이지 않는다) — 실제 SDK도
+         * 마커 하나가 DOM 하나를 유지하고, 여기서 새로 붙이면 마커 수가
+         * 늘어난 것처럼 보여 테스트가 거짓으로 통과한다.
+         */
+        setIcon(icon: { content?: string | HTMLElement; anchor?: { x: number; y: number } }) {
+          this.anchor = icon.anchor;
+          if (this.el !== null && typeof icon.content === "string") {
+            this.el.innerHTML = icon.content;
           }
         }
         // 실제 SDK의 Marker는 OverlayView를 상속해 setMap(null)로 지도에서 뗀다.
@@ -277,6 +309,11 @@ describe("ComplexMap", () => {
    * 가리키는 말이지 평가액이 아니다.
    */
   it("마커 라벨은 단지명·가격 범위를 낸다 — 면적·거래건수·부담 수준 문구는 없다", async () => {
+    const { naverGlobal, createdMaps, markers } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+      naverGlobal as unknown as typeof naver,
+    );
+
     const units = [
       unit({
         complexKey: "1",
@@ -299,7 +336,11 @@ describe("ComplexMap", () => {
       />,
     );
 
-    await screen.findByText("라벨아파트");
+    // 가격은 확대한 줌에서만 나온다(`markerDetailForZoom`) — 라벨이 무엇을
+    // 담는지 보려면 그 줌으로 옮겨야 한다.
+    await vi.waitFor(() => expect(markers).toHaveLength(1));
+    createdMaps[0]!.setZoom(16);
+
     const marker = document.querySelector(".complex-map-marker");
     expect(marker?.textContent).toContain("라벨아파트");
     expect(marker?.textContent).toContain("23억 5,000만원");
@@ -385,10 +426,13 @@ describe("ComplexMap", () => {
     );
     await vi.waitFor(() => expect(markers).toHaveLength(1));
 
-    expect(markers[0]!.anchor).toEqual({ x: MARKER_ANCHOR.x, y: MARKER_ANCHOR.y });
+    // 기본 줌 14 → "name" 상세도(markerDetailForZoom).
+    expect(markers[0]!.anchor).toEqual(MARKER_ANCHOR.name);
     // 옛 버그를 이름으로 못박는다: 두 값이 다 0이면 라벨의 왼쪽 위
-    // 모서리가 좌표에 앉는다.
-    expect(MARKER_ANCHOR.y).toBeGreaterThan(0);
+    // 모서리가 좌표에 앉는다. **세 상세도 모두** 그 자리가 아니어야 한다.
+    for (const detail of ["full", "name", "dot"] as const) {
+      expect(MARKER_ANCHOR[detail].y).toBeGreaterThan(0);
+    }
   });
 
   it("단지가 여럿이면 전부 화면에 들어오도록 fitBounds를 부르고, 중심은 평균 좌표다", async () => {
@@ -533,7 +577,12 @@ describe("ComplexMap", () => {
     expect(destroyedMaps).toHaveLength(1);
   });
 
-  it("마커에 거래건수가 가장 많은 평형의 가격 범위가 항상 보인다(클릭 전에도)", async () => {
+  it("마커에 거래건수가 가장 많은 평형의 가격 범위가 보인다(클릭 전에도)", async () => {
+    const { naverGlobal, createdMaps, markers } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+      naverGlobal as unknown as typeof naver,
+    );
+
     const units = [
       unit({ complexKey: "1", areaBucket: 59, tradeCount: 2, minPrice: 500_000_000, maxPrice: 550_000_000 }),
       unit({ complexKey: "1", areaBucket: 84, tradeCount: 5, minPrice: 700_000_000, maxPrice: 750_000_000 }),
@@ -542,10 +591,13 @@ describe("ComplexMap", () => {
 
     render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
 
+    await vi.waitFor(() => expect(markers).toHaveLength(1));
+    createdMaps[0]!.setZoom(16); // 가격이 나오는 상세도로 옮긴다.
+
     // 대표 평형은 거래건수 최다인 84㎡ — 면적은 라벨에 적지 않지만,
     // **그 평형의** 가격 범위가 보여야 한다(59㎡의 5억대가 아니다).
-    expect(await screen.findByText(/7억/)).toBeInTheDocument(); // formatRange(700_000_000, 750_000_000)
     const marker = document.querySelector(".complex-map-marker");
+    expect(marker?.textContent).toMatch(/7억/); // formatRange(700_000_000, 750_000_000)
     expect(marker?.textContent).not.toContain("5억");
   });
 
@@ -570,10 +622,13 @@ describe("ComplexMap", () => {
     expect(document.querySelector(".complex-map-marker img")).toBeNull();
   });
 
-  it("단지가 30개를 넘으면 30개만 그리고, 못 그린 개수를 화면에 적는다", async () => {
-    // 라벨은 nowrap이라 실제 폭이 120~230px에 이른다. 구 하나가 들어오는
-    // 줌에서 수백 개를 그리면 지도가 글자 벽이 된다(노원구 실측: 마커
-    // 255개, 겹치는 쌍 11,537개, 255개 전부가 무언가와 겹침).
+  /**
+   * 사용자 지시: "지도 데이터는 해당지역의 데이터를 모두 표시해줘." —
+   * 예전 30개 상한(`MARKER_LIMIT`)과 "N개만 표시했어요" 캐비앗을 없앴다.
+   * 상한의 근거(수백 개를 펼치면 글자 벽)는 줌 상세도가 대신 가져갔다
+   * (아래 줌 테스트).
+   */
+  it("좌표를 아는 단지는 30개를 넘어도 전부 그리고, 잘랐다는 문구를 내지 않는다", async () => {
     const units = Array.from({ length: 42 }, (_, i) =>
       unit({ complexKey: `k${i}`, complexName: `단지${i}`, minPrice: 100_000_000 + i, maxPrice: 200_000_000 + i }),
     );
@@ -583,23 +638,128 @@ describe("ComplexMap", () => {
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() =>
-      expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(30),
-    );
-    // 말없이 자르면 "이 지역엔 이만큼뿐"으로 읽힌다.
-    await screen.findByText(/30개만 표시했어요/);
-    await screen.findByText(/12개가 더 있고/);
-  });
-
-  it("30개 이하면 자르지 않고, 잘랐다는 문구도 뜨지 않는다", async () => {
-    const units = Array.from({ length: 5 }, (_, i) => unit({ complexKey: `k${i}` }));
-    const coordinates = new Map(units.map((u, i) => [u.complexKey, { lat: 37 + i * 0.01, lon: 127 + i * 0.01 }]));
-
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
-
-    await vi.waitFor(() =>
-      expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(5),
+      expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(42),
     );
     expect(screen.queryByText(/개만 표시했어요/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/개가 더 있고/)).not.toBeInTheDocument();
+  });
+
+  describe("줌에 따른 마커 상세도", () => {
+    it("markerDetailForZoom이 세 구간으로 갈린다", () => {
+      // 확대할수록 많이 말한다. 경계값을 양쪽에서 못박는다.
+      expect(markerDetailForZoom(21)).toBe("full");
+      expect(markerDetailForZoom(15)).toBe("full");
+      expect(markerDetailForZoom(14)).toBe("name");
+      expect(markerDetailForZoom(13)).toBe("name");
+      expect(markerDetailForZoom(12)).toBe("dot");
+      expect(markerDetailForZoom(6)).toBe("dot");
+    });
+
+    /**
+     * 사용자 지시: "지도를 확대할 경우 지금처럼 모든 정보가 보이도록하고,
+     * 지도를 축소할 경우 마커나 이름 정도만 나오도록 해줘."
+     *
+     * 세 상세도를 **같은 지도에서 줌만 움직여** 확인한다 — 지도를 다시
+     * 만들면 안 된다(사용자가 맞춰 둔 줌·중심이 날아간다). `createdMaps`가
+     * 하나로 유지되는지도 함께 본다.
+     */
+    it("확대하면 이름+가격, 중간은 이름만, 축소하면 점만 남는다", async () => {
+      const { naverGlobal, createdMaps, markers } = fakeNaverMaps();
+      vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+        naverGlobal as unknown as typeof naver,
+      );
+
+      const units = [
+        unit({ complexKey: "a", complexName: "줌테스트단지", minPrice: 700_000_000, maxPrice: 750_000_000 }),
+      ];
+      render(
+        <ComplexMap
+          units={units}
+          coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+          burdenByUnit={new Map()}
+          naverMapClientId="test"
+        />,
+      );
+      await vi.waitFor(() => expect(markers).toHaveLength(1));
+      const map = createdMaps[0]!;
+      const marker = () => document.querySelector(".complex-map-marker")!;
+
+      // 기본 줌 14 — 이름만, 가격은 없다.
+      expect(marker().textContent).toContain("줌테스트단지");
+      expect(marker().textContent).not.toMatch(/7억/);
+      expect(markers[0]!.anchor).toEqual(MARKER_ANCHOR.name);
+
+      // 확대 — 가격까지 나온다.
+      map.setZoom(16);
+      expect(marker().textContent).toContain("줌테스트단지");
+      expect(marker().textContent).toMatch(/7억/);
+      expect(markers[0]!.anchor).toEqual(MARKER_ANCHOR.full);
+
+      // 축소 — 글자가 통째로 사라지고 점만 남는다.
+      map.setZoom(11);
+      expect(document.querySelector(".complex-map-dot")).not.toBeNull();
+      expect(marker().textContent).toBe("");
+      expect(markers[0]!.anchor).toEqual(MARKER_ANCHOR.dot);
+
+      // 그동안 지도는 한 번만 만들어졌다 — 줌마다 재생성하면 사용자가
+      // 맞춰 둔 줌·중심이 그 자리에서 날아간다.
+      expect(createdMaps).toHaveLength(1);
+      // 마커도 새로 만들지 않고 아이콘만 갈아 끼웠다.
+      expect(markers).toHaveLength(1);
+    });
+
+    it("점으로 접혀도 단지를 가리키는 배선은 남는다 — 클래스·키·티어", async () => {
+      const { naverGlobal, createdMaps, markers } = fakeNaverMaps();
+      vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+        naverGlobal as unknown as typeof naver,
+      );
+
+      const units = [unit({ complexKey: "a", complexName: "점단지" })];
+      render(
+        <ComplexMap
+          units={units}
+          coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+          burdenByUnit={new Map([[unitKey(units[0]!), "no-loan" as const]])}
+          naverMapClientId="test"
+        />,
+      );
+      await vi.waitFor(() => expect(markers).toHaveLength(1));
+      createdMaps[0]!.setZoom(11);
+
+      const dot = document.querySelector(".complex-map-dot") as HTMLElement;
+      expect(dot).not.toBeNull();
+      // 선택 강조와 클릭이 이 둘로 마커를 찾는다 — 점이어도 눌려야 한다.
+      expect(dot.classList.contains("complex-map-marker")).toBe(true);
+      expect(dot.dataset.complexKey).toBe("a");
+      // 색 분류도 그대로다.
+      expect(dot.closest(".complex-map-pin")?.className).toContain("complex-map-pin--no-loan");
+    });
+
+    it("상세도가 바뀌어도 고른 단지의 강조가 남는다 — setIcon이 DOM을 갈아 끼운다", async () => {
+      const { naverGlobal, createdMaps, markers } = fakeNaverMaps();
+      vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+        naverGlobal as unknown as typeof naver,
+      );
+
+      render(
+        <ComplexMap
+          units={[unit({ complexKey: "a" })]}
+          coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+          burdenByUnit={new Map()}
+          focusedComplexKey="a"
+          naverMapClientId="test"
+        />,
+      );
+      await vi.waitFor(() =>
+        expect(document.querySelectorAll(".complex-map-marker--focused")).toHaveLength(1),
+      );
+
+      createdMaps[0]!.setZoom(11);
+      expect(markers).toHaveLength(1);
+      // setIcon이 아이콘 DOM을 통째로 갈았으니 강조 클래스도 날아갔다 —
+      // 리스너가 곧바로 다시 입히지 않으면 여기서 0이 된다.
+      expect(document.querySelectorAll(".complex-map-marker--focused")).toHaveLength(1);
+    });
   });
 
   /**

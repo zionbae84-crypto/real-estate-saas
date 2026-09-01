@@ -1363,6 +1363,13 @@ describe("App - 단지 상세(화면 4)", () => {
         {
           maps: {
             Map: class {
+              // 지도에도 리스너가 붙는다(zoom_changed) — 이 필드가 없으면
+              // Event.addListener가 undefined에 쓰려다 던진다.
+              listeners: Record<string, () => void> = {};
+              // 마커 상세도가 줌으로 갈리므로 ComplexMap이 getZoom()을 읽는다.
+              getZoom() {
+                return 14;
+              }
               fitBounds() {}
               panTo() {}
               destroy() {}
@@ -1781,6 +1788,10 @@ describe("App - 지도", () => {
           constructor(el: HTMLElement) {
             mapContainer = el;
           }
+          listeners: Record<string, () => void> = {};
+          getZoom() {
+            return 14;
+          }
           fitBounds() {}
           destroy() {}
         },
@@ -1982,6 +1993,10 @@ describe("전체화면 결과 셸", () => {
         Map: class {
           constructor(el: HTMLElement) {
             mapContainer = el;
+          }
+          listeners: Record<string, () => void> = {};
+          getZoom() {
+            return 14;
           }
           fitBounds() {}
           panTo(coord: unknown) {

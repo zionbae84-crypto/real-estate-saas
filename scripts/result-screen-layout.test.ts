@@ -443,7 +443,7 @@ describe("지도 마커", () => {
    * **같은 산수를 다시 해서** `MARKER_ANCHOR.y`와 대조한다 — CSS와 상수
    * 중 하나만 움직이면 여기서 깨진다.
    */
-  it("앵커 y가 styles.css의 실제 박스 모델 높이와 같다", () => {
+  it("앵커 y가 styles.css의 실제 박스 모델 높이와 같다 — 세 상세도 모두", () => {
     const px = (selector: string, property: string) => {
       const value = declared(selector, property);
       expect(value, `${selector} { ${property} } 선언이 없습니다`).toBeDefined();
@@ -469,25 +469,45 @@ describe("지도 마커", () => {
     const priceVerticalPadding =
       Number.parseInt(pricePadding[0]!, 10) + Number.parseInt(pricePadding[2]!, 10);
 
-    expect(
-      verticalBorder +
-        nameVerticalPadding +
-        px(".complex-map-marker-name", "line-height") +
-        priceVerticalPadding +
-        px(".complex-map-marker-price", "line-height") +
-        px(".complex-map-marker-tail", "height"),
+    const tail = px(".complex-map-marker-tail", "height");
+    // 이름만 낼 때는 가격 두 줄(패딩 + line-height)이 통째로 빠진다.
+    const nameOnly =
+      verticalBorder + nameVerticalPadding + px(".complex-map-marker-name", "line-height") + tail;
+    const full =
+      nameOnly + priceVerticalPadding + px(".complex-map-marker-price", "line-height");
+
+    const mismatch =
       "앵커 y와 마커의 실제 높이가 갈라졌습니다 — 마커가 가리키는 자리가 " +
-        "틀어집니다(ComplexMap.tsx의 MARKER_ANCHOR 주석 참고).",
-    ).toBe(MARKER_ANCHOR.y);
+      "틀어집니다(ComplexMap.tsx의 MARKER_ANCHOR 주석 참고).";
+    expect(full, mismatch).toBe(MARKER_ANCHOR.full.y);
+    expect(nameOnly, mismatch).toBe(MARKER_ANCHOR.name.y);
+
+    /*
+     * 점은 꼬리가 없다 — 원의 **한가운데**가 좌표다. `box-sizing:
+     * border-box`가 있어야 흰 테가 지름에 더해지지 않고, 그래야 절반이
+     * 실제 한가운데다.
+     */
+    expect(
+      declared(".complex-map-dot", "box-sizing"),
+      ".complex-map-dot에 box-sizing: border-box가 없습니다 — 흰 테 2px이 " +
+        "지름에 더해져 앵커가 원의 한가운데를 벗어납니다(이 파일에는 전역 " +
+        "box-sizing이 없습니다).",
+    ).toBe("border-box");
+    const dotSize = px(".complex-map-dot", "height");
+    expect(px(".complex-map-dot", "width"), "점이 원이 아닙니다").toBe(dotSize);
+    expect(dotSize % 2, "점 지름이 홀수라 한가운데가 정수 px이 아닙니다").toBe(0);
+    expect(dotSize / 2, mismatch).toBe(MARKER_ANCHOR.dot.y);
   });
 
   /**
-   * x=0의 근거는 폭 0짜리 세로 flex 상자다 — 자식(라벨·꼬리)이 그 축을
+   * x=0의 근거는 폭 0짜리 세로 flex 상자다 — 자식(라벨·꼬리·점)이 그 축을
    * 기준으로 좌우 대칭으로 넘쳐 나므로, 단지 이름이 길든 짧든 꼬리
    * 꼭짓점의 x가 정확히 0이다. 폭을 주는 순간 그 산수가 깨진다.
    */
   it("앵커 x=0의 근거인 폭 0 세로 flex 상자가 그대로다", () => {
-    expect(MARKER_ANCHOR.x).toBe(0);
+    for (const detail of ["full", "name", "dot"] as const) {
+      expect(MARKER_ANCHOR[detail].x).toBe(0);
+    }
     expect(declared(".complex-map-pin", "width")).toBe("0");
     expect(declared(".complex-map-pin", "flex-direction")).toBe("column");
     expect(declared(".complex-map-pin", "align-items")).toBe("center");

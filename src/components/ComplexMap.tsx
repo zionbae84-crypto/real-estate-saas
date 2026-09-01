@@ -127,21 +127,52 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
 }
 
 /**
- * 마커 아이콘 안에서 **좌표가 실제로 앉는 점**(`naver.maps.Point`).
+ * 마커가 한 번에 얼마나 말하는가 — 줌에 따라 갈린다.
  *
- * ⚠ **예전 값은 `(0, 0)`이었고, 그게 이번에 고치는 버그다.** 그때 이
+ * 사용자 지시: "지도를 확대할 경우 지금처럼 모든 정보가 보이도록하고,
+ * 지도를 축소할 경우 마커나 이름 정도만 나오도록 해줘."
+ *
+ * 이 단계가 있어야 {@link MARKER_LIMIT} 없이 지역 전체를 그릴 수 있다.
+ * 예전엔 라벨이 늘 펼쳐져 있어 구 하나가 화면에 들어오는 줌에서 마커
+ * 수백 개가 글자 벽이 됐고, 그래서 30개 상한을 뒀다 — 지금은 그 줌에서
+ * 마커가 점으로 접히므로 상한 없이도 지도가 읽힌다.
+ */
+export type MarkerDetail = "full" | "name" | "dot";
+
+/**
+ * 줌 → 마커 상세도. 경계는 네이버지도 줌 레벨 기준이다(6~21).
+ *
+ * - 15 이상: 한 블록~단지 몇 개가 화면을 채운다 — 이름과 가격을 다 낸다.
+ * - 13~14: 동 몇 개가 들어온다 — 이름만. 가격까지 두면 라벨이 서로 겹친다.
+ * - 12 이하: 구 전체 이상 — 점만. 이 줌에서 글자는 어차피 서로 가린다.
+ *
+ * 경계에서만 다시 그린다(아래 zoom_changed 리스너) — 줌 한 칸마다
+ * 마커 수백 개의 아이콘을 갈아 끼우지 않는다.
+ */
+export function markerDetailForZoom(zoom: number): MarkerDetail {
+  if (zoom >= 15) return "full";
+  if (zoom >= 13) return "name";
+  return "dot";
+}
+
+/**
+ * 마커 아이콘 안에서 **좌표가 실제로 앉는 점**(`naver.maps.Point`).
+ * 상세도마다 아이콘 높이가 다르므로 **앵커도 상세도마다 다르다.**
+ *
+ * ⚠ **예전 값은 `(0, 0)`이었고, 그게 한 번 고친 버그다.** 그때 이
  * 아이콘은 떠 있는 라벨 상자 하나뿐이었고, `(0, 0)`은 그 상자의 **왼쪽
  * 위 모서리**를 좌표에 앉힌다 — 상자는 거기서 오른쪽 아래로 자라날
  * 뿐이라 "정확히 이 지점"을 가리키는 뾰족한 자리가 아예 없었다. 사용자
  * 지시("명확하게 단지가 어디인지 표기가 될수 있도록")가 가리킨 것이
  * 바로 이 모호함이다.
  *
- * 지금 아이콘은 **말풍선**이다(라벨 상자 + 그 아래 삼각 꼬리, 아래
- * {@link markerLabel} 참고). 좌표에 앉아야 하는 점은 그 **꼬리 끝**이다.
+ * `full`·`name`은 **말풍선**이다(라벨 상자 + 그 아래 삼각 꼬리, 아래
+ * {@link markerLabel} 참고) — 좌표에 앉아야 하는 점은 그 **꼬리 끝**이다.
+ * `dot`은 꼬리가 없는 원이라 **원의 한가운데**가 그 점이다.
  *
- * ── x = 0 인 근거 ──────────────────────────────────────────────
+ * ── x = 0 인 근거 (세 상세도 공통) ─────────────────────────────
  * 바깥 상자(`.complex-map-pin`)는 `width: 0`짜리 세로 flex 상자이고
- * `align-items: center`다. 자식(라벨·꼬리)은 그 폭 0인 축을 기준으로
+ * `align-items: center`다. 자식(라벨·꼬리·점)은 그 폭 0인 축을 기준으로
  * 좌우로 똑같이 넘쳐 나므로, **라벨 글자가 길든 짧든** 꼬리 꼭짓점의
  * x는 언제나 상자의 x=0이다. 이름 길이에 따라 폭이 변하는 상자를
  * 재지 않아도 되는 이유가 이것이다.
@@ -150,32 +181,37 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * 세로는 자식이 순서대로 쌓이므로 아이콘 높이가 곧 꼬리 끝의 y다.
  * `styles.css`가 그 성분을 전부 px로 못박아 둔다:
  *
- *     라벨 상자 테두리 위/아래     1 + 1 = 2   (.complex-map-marker border)
- *     단지명 위/아래 패딩        3 + 3 = 6   (.complex-map-marker-name padding)
- *     단지명 줄                 15          (.complex-map-marker-name line-height)
- *     가격 위/아래 패딩          3 + 4 = 7   (.complex-map-marker-price padding)
- *     가격 줄                   16          (.complex-map-marker-price line-height)
- *     꼬리                       7          (.complex-map-marker-tail height)
- *     ─────────────────────────
- *     합                        53
+ *   full  라벨 상자 테두리 위/아래   1 + 1 = 2  (.complex-map-marker border)
+ *         단지명 위/아래 패딩       3 + 3 = 6  (.complex-map-marker-name padding)
+ *         단지명 줄                15         (.complex-map-marker-name line-height)
+ *         가격 위/아래 패딩         3 + 4 = 7  (.complex-map-marker-price padding)
+ *         가격 줄                  16         (.complex-map-marker-price line-height)
+ *         꼬리                      7         (.complex-map-marker-tail height)
+ *         ────────────────────────────────
+ *         합                       53
+ *
+ *   name  위에서 가격 두 줄(7 + 16)을 뺀 값       = 30
+ *
+ *   dot   원 지름의 절반 — 한가운데가 좌표다      = 6
+ *         (`.complex-map-dot`는 `box-sizing: border-box`라 흰 테두리를
+ *          더해도 지름이 12px 그대로다.)
  *
  * `rem`이 아니라 px로 적은 것도 이 산수를 위해서다: 루트 글꼴 크기가
  * 바뀌어도 앵커와 실제 높이가 갈라지지 않는다.
  *
- * **사용자 지시로 마커가 사각 배지(흰 바탕 + 색 테두리, 단지명은 색
- * 탭·가격은 흰 바탕)로 다시 바뀌며 패딩이 라벨 상자 하나가 아니라
- * 단지명·가격 두 줄에 나뉘어 붙었고, 그 대신 테두리 2px이 새로 늘었다** —
- * 부담 수준 글자 줄(옛 13px)은 마커에서 빠지고 지도 좌측 하단 범례
- * (`.complex-map-legend`, 아래 참고)로 옮겨 갔다.
- *
  * `scripts/result-screen-layout.test.ts`의 "앵커 y가 styles.css의 실제
- * 박스 모델 높이와 같다"가 위 값들을 CSS에서 직접 읽어 이 합을 다시
- * 계산한다 — CSS와 이 상수 중 하나만 움직이면 거기서 깨진다. (그 검사가
- * `src/`가 아니라 `scripts/`에 있는 이유: `src/` 트리는 파일 시스템
- * 모듈을 임포트할 수 없다 — `src/no-network.test.ts`가 그 금지를
- * 전수로 잡고, 이 검사는 styles.css를 읽어야 한다.)
+ * 박스 모델 높이와 같다"가 위 값들을 CSS에서 직접 읽어 이 합을 **세
+ * 상세도 모두** 다시 계산한다 — CSS와 이 상수 중 하나만 움직이면
+ * 거기서 깨진다. (그 검사가 `src/`가 아니라 `scripts/`에 있는 이유:
+ * `src/` 트리는 파일 시스템 모듈을 임포트할 수 없다 —
+ * `src/no-network.test.ts`가 그 금지를 전수로 잡고, 이 검사는
+ * styles.css를 읽어야 한다.)
  */
-export const MARKER_ANCHOR = { x: 0, y: 53 } as const;
+export const MARKER_ANCHOR: Record<MarkerDetail, { x: number; y: number }> = {
+  full: { x: 0, y: 53 },
+  name: { x: 0, y: 30 },
+  dot: { x: 0, y: 6 },
+};
 
 /**
  * 마커 위에 항상 보이는 라벨. **단지명·가격 범위, 둘이다.**
@@ -209,24 +245,51 @@ export const MARKER_ANCHOR = { x: 0, y: 53 } as const;
  * 높이 산수가 성립하고, `scripts/map-overlay-guard.test.ts`가 지키는
  * "지도 위 절대 배치 상자는 클릭을 통과시킨다" 규칙에 마커가 걸리지도
  * 않는다(마커는 눌려야 하는 것이다).
+ *
+ * ── 상세도(`detail`) ──────────────────────────────────────────
+ * 줌에 따라 셋 중 하나를 낸다({@link markerDetailForZoom}). **세 상세도
+ * 모두 `.complex-map-marker`와 `data-complex-key`를 그대로 유지한다** —
+ * 선택 강조(`applyFocus`)와 클릭이 그 둘로 마커를 찾기 때문이다. 점으로
+ * 접혀도 여전히 누를 수 있어야 한다.
  */
 function markerLabel(
   complexKey: string,
   representative: ComplexUnit,
   tier: BurdenTier,
+  detail: MarkerDetail,
 ): string {
+  const key = escapeHtml(complexKey);
   const name = escapeHtml(representative.complexName);
   const range = escapeHtml(formatRange(representative.minPrice, representative.maxPrice));
-  return (
-    `<div class="complex-map-pin complex-map-pin--${tier}">` +
-    `<div class="complex-map-marker" data-complex-key="${escapeHtml(complexKey)}">` +
-    `<span class="complex-map-marker-name">${name}</span>` +
-    `<span class="complex-map-marker-price">${range}</span>` +
-    `</div>` +
+  const open = `<div class="complex-map-pin complex-map-pin--${tier}">`;
+  const tail =
     `<svg class="complex-map-marker-tail" width="14" height="7" viewBox="0 0 14 7" ` +
     `aria-hidden="true" focusable="false">` +
     `<path d="M0 0 L7 7 L14 0 Z" fill="currentColor" />` +
-    `</svg>` +
+    `</svg>`;
+
+  if (detail === "dot") {
+    /*
+     * 점에는 단지명이 없다 — 이 줌에서는 글자가 어차피 서로 가린다.
+     * 이름을 `title`로도 넣지 않는다: 지도 마커의 네이티브 툴팁은
+     * 터치에서 뜨지 않아 "여기 정보가 있다"는 약속만 하고 지키지
+     * 못한다. 알고 싶으면 확대하거나 누르면 된다(누르면 목록·상세가
+     * 그 단지로 움직인다).
+     */
+    return (
+      `${open}<div class="complex-map-marker complex-map-dot" data-complex-key="${key}"></div></div>`
+    );
+  }
+
+  const price =
+    detail === "full" ? `<span class="complex-map-marker-price">${range}</span>` : "";
+  return (
+    `${open}` +
+    `<div class="complex-map-marker" data-complex-key="${key}">` +
+    `<span class="complex-map-marker-name">${name}</span>` +
+    price +
+    `</div>` +
+    tail +
     `</div>`
   );
 }
@@ -266,34 +329,26 @@ export function burdenTiers(
   );
 }
 
-/**
- * 한 번에 그리는 마커 수의 상한.
+/*
+ * 예전에는 여기 `MARKER_LIMIT = 30`(한 번에 그리는 마커 수의 상한)이
+ * 있었다. **사용자 지시로 없앴다** — "지도 데이터는 해당지역의 데이터를
+ * 모두 표시해줘."
  *
- * 마커 라벨은 `white-space: nowrap`으로 늘 펼쳐져 있다. 구 하나가
- * 화면에 들어오는 줌에서 이런 상자를 수백 개 그리면 지도가 아니라
- * 글자 벽이 된다 — 노원구·예산 18억으로 실측했을 때 마커 255개가
- * 816×602 지도 위에서 겹치는 쌍이 11,537개였고, **255개 전부가**
- * 무언가와 겹쳤다. 목록이 10개씩 끊어 보여주는 것과 같은 이유로
- * 여기도 상한을 둔다.
+ * 그 상한의 근거는 실측이었다: 라벨이 `white-space: nowrap`으로 늘
+ * 펼쳐져 있어서, 구 하나가 화면에 들어오는 줌에서 마커 255개를 그리면
+ * 816×602 지도 위에서 겹치는 쌍이 11,537개였고 **255개 전부가** 무언가와
+ * 겹쳤다. 지도가 아니라 글자 벽이었다.
  *
- * 그 실측은 라벨이 한 줄에 "60㎡ 3억 9,000만원 ~ 5억 4,500만원"을 담아
- * 120~230px이던 시절 것이다. 라벨이 단지명+가격 두 줄로 바뀌며 폭은
- * 줄고 높이는 늘었으니 겹침의 **모양**은 달라졌지만, 수백 개를 한
- * 화면에 그리면 글자 벽이 된다는 결론은 그대로다 — 상한을 유지한다.
+ * 그 근거를 **{@link markerDetailForZoom}이 대신 가져갔다.** 겹침이
+ * 일어나던 바로 그 줌(12 이하)에서 마커는 이제 점으로 접히고, 라벨이
+ * 펼쳐지는 줌(15 이상)에서는 화면에 단지 몇 개뿐이라 겹칠 것이 없다.
+ * 상한 대신 **상세도**로 같은 문제를 푼 것이라, 잘라낸 개수를 적던 캐비앗
+ * 문구도 함께 사라졌다(잘라내지 않으니 적을 것이 없다).
  *
- * **어느 30개인가**: `units`가 들어온 순서 그대로 앞에서부터다. 그
- * 순서는 목록이 쓰는 순서(부담이 낮은 것부터, `buildComplexList`)라,
- * 지도에 남는 30개는 목록 맨 위 30개와 같은 단지들이다 — 두 창이
- * 여기서도 어긋나지 않는다.
- *
- * **잘라낸 개수는 반드시 화면에 적는다.** 말없이 자르면 "이 지역엔
- * 이만큼뿐"으로 읽힌다.
- *
- * 클러스터링(가까운 마커를 묶어 숫자로 표시)은 여기서 만들지 않는다 —
+ * 클러스터링(가까운 마커를 묶어 숫자로 표시)은 여전히 만들지 않는다 —
  * 줌마다 다시 묶고 풀어야 하고, 묶인 마커에 어느 단지의 이름·가격을
  * 적을지부터 새 결정이 줄줄이 따라온다. 이 화면이 감당할 크기가 아니다.
  */
-const MARKER_LIMIT = 30;
 
 /**
  * 좌표를 아는 단지만 지도에 아이콘으로 그린다. 클릭하면 이름·가격
@@ -343,8 +398,6 @@ export function ComplexMap({
    * 없이 빈 600px 상자만 남으면 사용자에겐 고장과 구분되지 않는다.
    */
   const [noneLocated, setNoneLocated] = useState(false);
-  /** {@link MARKER_LIMIT}에 걸려 지도에 그리지 못한 단지 수 */
-  const [hiddenCount, setHiddenCount] = useState(0);
 
   /**
    * 고른 단지의 마커에 강조 클래스를 붙이고 나머지에서 뗀다.
@@ -394,22 +447,19 @@ export function ComplexMap({
     const cleanupFns: Array<() => void> = [];
     setLoadFailed(false);
     setNoneLocated(false);
-    setHiddenCount(0);
 
     loadNaverMaps(naverMapClientId)
       .then((naverGlobal) => {
         if (cancelled || containerRef.current === null) return;
         naverRef.current = naverGlobal;
 
-        const withCoords = groupWithCoords(units, coordinates);
-        if (withCoords.length === 0) {
+        // 좌표를 아는 단지는 **전부** 그린다 — 상한을 없앤 이유는 위
+        // MARKER_LIMIT 자리의 주석 참고(줌 상세도가 그 몫을 가져갔다).
+        const drawn = groupWithCoords(units, coordinates);
+        if (drawn.length === 0) {
           setNoneLocated(true);
           return;
         }
-
-        // 상한을 넘는 단지는 그리지 않고, 몇 개를 못 그렸는지만 남긴다.
-        const drawn = withCoords.slice(0, MARKER_LIMIT);
-        setHiddenCount(withCoords.length - drawn.length);
 
         const coords = drawn.map((g) => coordinates.get(g.complexKey)!);
         /*
@@ -471,22 +521,59 @@ export function ComplexMap({
         }));
         const tiers = burdenTiers(groupsWithRepresentative, burdenByUnit);
 
+        /*
+         * 지금 줌이 요구하는 상세도. `fitBounds` **뒤에** 읽는다 — 그
+         * 호출이 줌을 바꾸므로, 앞에서 읽으면 초기 화면이 한 단계 어긋난
+         * 상세도로 그려진다.
+         */
+        let detail = markerDetailForZoom(map.getZoom());
+
+        /*
+         * 상세도를 갈아 끼울 때 필요한 것들을 마커와 함께 들고 있는다.
+         * **리액트 상태로 올리지 않는다** — 이 effect의 의존성이 되어
+         * 줌 한 번에 지도가 통째로 destroy → 재생성되고, 사용자가 맞춰
+         * 둔 줌·중심이 그 자리에서 날아간다. `applyFocus`가 클래스를
+         * 직접 토글하는 것과 같은 이유다.
+         */
+        const drawnMarkers: Array<{
+          marker: naver.maps.Marker;
+          complexKey: string;
+          representative: ComplexUnit;
+          tier: BurdenTier;
+        }> = [];
+
+        const iconFor = (
+          complexKey: string,
+          representative: ComplexUnit,
+          tier: BurdenTier,
+          forDetail: MarkerDetail,
+        ) => ({
+          content: markerLabel(complexKey, representative, tier, forDetail),
+          /*
+           * 말풍선 **꼬리 끝**(점이면 원의 한가운데)을 좌표에 앉힌다.
+           * 예전 `(0, 0)`은 라벨 상자의 왼쪽 위 모서리를 앉혀 아무 데도
+           * 가리키지 않았다 — 위 {@link MARKER_ANCHOR}의 계산 근거 참고.
+           * **상세도마다 아이콘 높이가 다르므로 앵커도 함께 바뀐다.**
+           */
+          anchor: new naverGlobal.maps.Point(
+            MARKER_ANCHOR[forDetail].x,
+            MARKER_ANCHOR[forDetail].y,
+          ),
+        });
+
         for (const group of groupsWithRepresentative) {
           const coord = coordinates.get(group.complexKey)!;
           const tier = tiers.get(group.complexKey) ?? "loan";
-          const labelHtml = markerLabel(group.complexKey, group.representative, tier);
           const marker = new naverGlobal.maps.Marker({
             position: new naverGlobal.maps.LatLng(coord.lat, coord.lon),
             map,
-            icon: {
-              content: labelHtml,
-              /*
-               * 말풍선 **꼬리 끝**을 좌표에 앉힌다. 예전 `(0, 0)`은 라벨
-               * 상자의 왼쪽 위 모서리를 앉혀 아무 데도 가리키지 않았다 —
-               * 위 {@link MARKER_ANCHOR}의 계산 근거 참고.
-               */
-              anchor: new naverGlobal.maps.Point(MARKER_ANCHOR.x, MARKER_ANCHOR.y),
-            },
+            icon: iconFor(group.complexKey, group.representative, tier, detail),
+          });
+          drawnMarkers.push({
+            marker,
+            complexKey: group.complexKey,
+            representative: group.representative,
+            tier,
           });
           const clickListener = naverGlobal.maps.Event.addListener(marker, "click", () => {
             /*
@@ -507,6 +594,28 @@ export function ComplexMap({
             marker.setMap(null);
           });
         }
+
+        /*
+         * 줌이 상세도 경계를 넘으면 마커 아이콘을 갈아 끼운다.
+         *
+         * **경계를 넘을 때만 갈아 끼운다**(`next === detail`이면 즉시
+         * 반환) — 줌 한 칸마다 마커 수백 개의 `setIcon`을 부르면 그 자체가
+         * 지도를 버벅이게 한다. 상한을 없앤 지금 마커 수가 실제로 수백
+         * 개일 수 있어서 이 가드가 장식이 아니다.
+         *
+         * `setIcon`은 마커의 DOM을 통째로 갈아 끼우므로 `applyFocus`가
+         * 붙여 둔 강조 클래스도 함께 날아간다 — 그래서 바로 다시 입힌다.
+         */
+        const zoomListener = naverGlobal.maps.Event.addListener(map, "zoom_changed", () => {
+          const next = markerDetailForZoom(map.getZoom());
+          if (next === detail) return;
+          detail = next;
+          for (const m of drawnMarkers) {
+            m.marker.setIcon(iconFor(m.complexKey, m.representative, m.tier, next));
+          }
+          applyFocus(focusedRef.current);
+        });
+        cleanupFns.push(() => naverGlobal.maps.Event.removeListener(zoomListener));
 
         /*
          * 마커를 방금 새로 그렸다 — 그리기 전에 고른 단지가 있었다면
@@ -585,35 +694,13 @@ export function ComplexMap({
       </ul>
     )}
     </div>
-    {hiddenCount > 0 && (
-      /*
-        잘라낸 개수를 반드시 적는다 — 말없이 자르면 "이 지역엔 이만큼
-        뿐"으로 읽힌다. 지도 **밖**에 두는 이유는 지도가 실제로 떠 있는
-        상태이기 때문이다(위 두 문구는 지도가 없을 때만 뜬다).
-        `.complex-map-caveat`를 함께 쓴다 — 같은 성격의 한 줄이고,
-        인쇄에서 지우는 이유도 같다.
-
-        리뷰 수정(Important 1): `hiddenCount`는 `withCoords`(좌표를 아는
-        단지)를 기준으로 셌는데, 예전 문구는 "조건에 맞는 단지"라고
-        말해 목록 전체(좌표 미확인 포함)를 가리키는 것처럼 읽혔다. 예:
-        조건에 맞는 42개 중 35개만 지오코딩에 성공하면, 잘린 12개
-        옆에서도 "5개가 더 있고"처럼 실제보다 적게 말할 수 있었다 — 이
-        앱이 이미 다섯 번 겪은 "A 창의 말을 B 창의 다른 필터링 결과로
-        낸다" 오류와 같은 모양이다. 숫자는 그대로 두고("지도에 표시할
-        수 있는 단지"), 그 숫자가 실제로 재는 대상에 맞춰 말을 바꿨다.
-
-        리뷰 수정(Minor 5): 잘린 30개는 임의가 아니라 목록과 같은 순서
-        (부담이 낮은 것부터, `groupByComplex`가 `units` 순서를 그대로
-        보존하고 `units`는 부담 오름차순이다)의 맨 위 30개다. "부담이
-        낮은"을 넣어 그 사실을 짧게 밝힌다 — 안 밝히면 어느 30개가
-        남았는지 임의로 잘린 것처럼 읽힌다.
-      */
-      <p className="complex-map-caveat">
-        지도가 어지러워지지 않게 부담이 낮은 {MARKER_LIMIT}개만 표시했어요.
-        지도에 표시할 수 있는 단지 {hiddenCount}개가 더 있고, 목록에서 전부
-        볼 수 있어요.
-      </p>
-    )}
+    {/*
+      예전에는 여기 "부담이 낮은 30개만 표시했어요" 캐비앗이 있었다.
+      상한을 없애며(사용자 지시, 위 MARKER_LIMIT 자리의 주석 참고)
+      **잘라내는 것이 없어져 적을 것도 없어졌다** — 좌표를 아는 단지는
+      이제 전부 그린다. 좌표를 못 찾은 단지가 있을 때의 캐비앗은 지도
+      **밖**(App.tsx)에 그대로 있다.
+    */}
     </>
   );
 }

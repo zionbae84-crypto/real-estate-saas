@@ -2830,6 +2830,45 @@ body {
 }
 
 /*
+ * 가장 축소한 줌(12 이하)의 마커 — 이름도 가격도 없는 점 하나
+ * (`markerDetailForZoom`의 `"dot"`). 사용자 지시: "지도를 축소할 경우
+ * 마커나 이름 정도만 나오도록 해줘."
+ *
+ * ⚠ **`box-sizing: border-box`를 반드시 명시한다.** 이 파일에는 전역
+ * `box-sizing`이 없어서(위 2563 근처 주석), 이걸 빼면 흰 테 2px이 지름에
+ * 더해져 실제 크기가 16px이 되고 `MARKER_ANCHOR.dot.y`(지름의 절반)가
+ * 실제 한가운데를 벗어난다 — 점이 가리키는 자리가 틀어진다.
+ *
+ * 점은 `.complex-map-marker` 클래스를 그대로 달고 있다(markerLabel 참고)
+ * — 선택 강조(`.complex-map-marker--focused`)와 클릭이 그 클래스·
+ * `data-complex-key`로 마커를 찾기 때문이다. 그래서 여기서는 그 기본
+ * 규칙의 사각 배지 모양만 덮어쓴다.
+ */
+.complex-map-dot {
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  border-radius: 50%;
+}
+
+/*
+ * 점의 채움은 티어 색, 테는 흰색이다 — 지도 타일 위에서 색점 하나만
+ * 두면 배경과 섞여 잘 안 보인다. 배지의 "흰 바탕 + 색 테두리"와 안팎이
+ * 뒤집힌 모양인데, 이 크기에서는 색이 면으로 있어야 분류가 읽힌다.
+ * 범례 견본(`.complex-map-legend-swatch--*`)과 같은 토큰을 쓴다.
+ */
+.complex-map-pin--no-loan .complex-map-dot {
+  background: var(--result-signal);
+  border-color: var(--result-paper);
+}
+
+.complex-map-pin--loan .complex-map-dot {
+  background: var(--result-warn);
+  border-color: var(--result-paper);
+}
+
+/*
  * 지도 좌측 하단 마커 색 안내(design.md §4의 옛 범례 자리를 되살렸다).
  * 부담 수준 글자가 마커 밖으로 옮겨 오며(위 참고) 색이 무슨 뜻인지
  * 알릴 자리가 필요해졌다. 색은 덧말이고 같은 뜻이 여기 글자로도
