@@ -9,6 +9,8 @@ import { ErrorBoundary } from "./components/ErrorBoundary";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaBasis } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
+import { MoneyInput } from "./components/MoneyInput";
+import { RegionQuickSelect } from "./components/RegionQuickSelect";
 import { RegulationBadge } from "./components/RegulationBadge";
 import { ResultShell, ResultSummaryItem } from "./components/ResultShell";
 import { RegionSelect } from "./components/RegionSelect";
@@ -1050,18 +1052,46 @@ export function App() {
               panelOpen={budgetPanelOpen}
               summary={
                 <>
-                  {state.cash !== null && (
-                    <ResultSummaryItem
+                  {/*
+                    현금·소득은 **읽는 값이 아니라 고치는 자리**다(사용자
+                    지시: "지도페이지 들어온 후 조건변경은 상단 사이드
+                    바에서 직접하고싶어"). 그래서 `ResultSummaryItem`
+                    (라벨+값을 읽기 전용으로 내는 칸)이 아니라 입력 화면과
+                    **같은 `MoneyInput`**을 둔다 — 만원 기본 해석과 그
+                    오해를 잡는 되비추기가 여기서도 그대로 필요하고, 그
+                    규칙을 두 번 구현하면 두 자리가 언젠가 다른 값을
+                    읽는다.
+
+                    `commitOn="blur"`인 이유: 타이핑 중간값("1" → "15" →
+                    "150"…)이 매번 확정되면 그 값에 딸린 계산 전부(실구매
+                    가능 가격·목록·지도 마커)가 글자 하나마다 다시 돈다.
+                    입력란을 벗어날 때만 확정한다.
+
+                    라벨은 이 컴포넌트가 스스로 낸다(SEED TextField) —
+                    그래서 `ResultSummaryItem`의 라벨과 겹치지 않게 칸
+                    자체를 바꿔 끼웠다. 입력 화면의 라벨("얼마 있어요?")과
+                    **다른 문구**를 쓰는 것도 의도다: 두 화면이 동시에
+                    마운트돼 있어(phase는 감추기만 한다) 같은 문구면
+                    접근성 질의가 애매해진다.
+                  */}
+                  <div className="result-topbar-item result-topbar-item--field">
+                    <MoneyInput
+                      id="topbar-cash"
                       label="사용가능 현금 예산"
-                      value={formatWon(state.cash)}
+                      value={state.cash}
+                      onChange={(won) => setField("cash", won)}
+                      commitOn="blur"
                     />
-                  )}
-                  {state.annualIncome !== null && (
-                    <ResultSummaryItem
+                  </div>
+                  <div className="result-topbar-item result-topbar-item--field">
+                    <MoneyInput
+                      id="topbar-income"
                       label="연 소득(세전)"
-                      value={formatWon(state.annualIncome)}
+                      value={state.annualIncome}
+                      onChange={(won) => setField("annualIncome", won)}
+                      commitOn="blur"
                     />
-                  )}
+                  </div>
                   {/*
                     design.md §4의 그림은 이 자리를 "한도"라 부르지만,
                     이 숫자는 대출 한도가 아니라 부대비용까지 뺀 매매가다
@@ -1127,17 +1157,69 @@ export function App() {
                     지역 이름은 코드가 아니라 이름으로 적는다(위
                     `currentRegionName` 주석 참고).
                   */}
-                  {currentRegionName !== null && (
-                    <ResultSummaryItem
-                      label="지역"
-                      value={currentRegionName}
-                      badge={
+                  {currentRegionName !== null && currentRegionCode !== null && (
+                    <div className="result-topbar-item result-topbar-item--field">
+                      <span className="result-topbar-item-label">지역</span>
+                      <span className="result-topbar-item-value-row">
+                        <span className="result-topbar-item-value">
+                          {currentRegionName}
+                        </span>
                         <RegulationBadge
                           determined={state.touched.includes("regulatedArea")}
                           isRegulatedArea={state.isRegulatedArea}
                         />
-                      }
-                    />
+                      </span>
+                      {/*
+                        지금 지역을 **읽는 줄 아래**에 바꾸는 자리를 둔다 —
+                        고른 지역이 무엇인지는 여전히 한 줄로 읽히고
+                        (규제 배지도 그 줄에 붙어 있다), 바꾸는 것은 그
+                        아래에서 한다. 조회 중에는 잠근다: 연달아 고르면
+                        응답 순서가 엉켜 화면이 마지막에 고른 지역과 다른
+                        결과를 낼 수 있다(useRegionComplexes의
+                        `lastRegionCode` 가드가 막아 주지만, 잠그는 편이
+                        무엇이 진행 중인지도 함께 말한다).
+                      */}
+                      <RegionQuickSelect
+                        regionCode={currentRegionCode}
+                        onSelect={handleRegionSelect}
+                        disabled={regionComplexes.status === "loading"}
+                      />
+                    </div>
+                  )}
+                  {/*
+                    상단바에서 지역을 바꾸면 조회가 이 화면 **위에서**
+                    일어난다 — 그런데 로딩·실패 안내는 여태 입력 화면
+                    안에만 있었다(그쪽은 첫 조회를 여는 자리다). 그대로
+                    두면 상단바에서 지역을 바꿨을 때 아무 일도 안 일어난
+                    것처럼 보이다가 목록이 통째로 갈린다.
+                  */}
+                  {/*
+                    ⚠ **입력 화면의 같은 두 문구와 글자가 겹치지 않아야
+                    한다.** 두 화면은 함께 마운트돼 있어서(phase는 감추기만
+                    한다) "지역 실거래가를 조회하고 있어요…"·"지금 실거래가를
+                    불러오지 못했어요."가 문서에 그대로 남아 있다 — 같은
+                    표현을 쓰면 글자로 찾는 자리가 어느 화면인지 못 고른다.
+                    문구가 실제로 가리키는 상황도 다르다: 저쪽은 첫 조회이고
+                    이쪽은 **보고 있던 지역을 바꾼** 조회다.
+                  */}
+                  {regionComplexes.status === "loading" && (
+                    <p className="result-topbar-status" role="status">
+                      새 지역을 불러오는 중이에요…
+                    </p>
+                  )}
+                  {regionComplexes.status === "error" && (
+                    <p className="result-topbar-status result-topbar-status--error" role="alert">
+                      새 지역 조회에 실패했어요.{" "}
+                      {/*
+                        입력 화면의 재시도 버튼과 **다른 이름**이어야 한다 —
+                        두 화면이 함께 마운트돼 있어(phase는 감추기만 한다)
+                        같은 "다시 시도"면 문서에 두 벌이 생기고, 이름으로
+                        버튼을 찾는 자리가 어느 쪽인지 못 고른다.
+                      */}
+                      <button type="button" onClick={() => regionComplexes.retry()}>
+                        실거래가 다시 불러오기
+                      </button>
+                    </p>
                   )}
                 </>
               }

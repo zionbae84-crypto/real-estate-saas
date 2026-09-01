@@ -2284,6 +2284,140 @@ body {
 }
 
 /*
+ * 상단바에서 **그 자리에서 고치는** 칸(현금·소득·지역). 사용자 지시:
+ * "지도페이지 들어온 후 조건변경은 상단 사이드 바에서 직접하고싶어."
+ *
+ * 읽기 전용 칸(`.result-topbar-item`)은 `white-space: nowrap`으로 한 줄에
+ * 붙어 있지만, 입력란과 select는 자기 폭이 필요하다 — 그 상속을 여기서
+ * 푼다. 폭을 고정하지 않고 상한만 두어, 좁은 화면에서는 상단바의
+ * `flex-wrap`이 이 칸을 아랫줄로 접는다.
+ */
+.result-topbar-item--field {
+  white-space: normal;
+  max-width: 15rem;
+}
+
+/*
+ * 상단바의 MoneyInput은 입력 화면(`.entry-screen`)의 그것보다 작다 —
+ * 여기서는 결과를 보는 중에 곁눈으로 고치는 자리라, 폼처럼 커지면
+ * 상단바가 무대(지도·목록)를 밀어낸다. 라벨은 읽기 전용 칸의 라벨
+ * (`.result-topbar-item-label`)과 같은 크기로 맞춰 두 칸이 한 줄에서
+ * 서로 어긋나 보이지 않게 한다.
+ */
+.result-topbar-item--field .money-input label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--result-gray);
+}
+
+/*
+ * SEED TextInput의 기본 크기는 폼용(높이 52px, 좌우 여백 16px)이라 상단바
+ * 한 줄에 그대로 두면 상단바가 두 배로 자라 무대(지도·목록)를 밀어낸다.
+ * 입력 화면의 그것은 그대로 두고 **이 자리에서만** 줄인다 — 그래서
+ * `.result-topbar-item--field` 아래로 스코프를 좁혔다.
+ *
+ * `--seed-*` 변수가 아니라 실제 클래스를 직접 짚는 이유: 설치된
+ * @seed-design/css의 text-input 레시피에는 크기를 바깥에서 줄일 수 있는
+ * 변수 훅이 없다(높이·여백이 `size_large` 레시피에 박혀 있다).
+ */
+.result-topbar-item--field .money-input .seed-text-input__root {
+  min-height: 0;
+  height: 32px;
+}
+
+.result-topbar-item--field .money-input .seed-text-input__value {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 상단바에서는 라벨과 입력란 사이 여백도 읽기 전용 칸(3px)에 맞춘다. */
+.result-topbar-item--field .money-input .seed-field__root {
+  gap: 3px;
+}
+
+/*
+ * 지역 바꾸기 — 지금 지역을 읽는 줄 **아래**에 놓는 두 select.
+ * `RegionQuickSelect.tsx` 참고(입력 화면의 `RegionSelect`와 별도
+ * 컴포넌트인 이유가 거기 적혀 있다).
+ */
+.region-quick-select {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.region-quick-select-field {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+/*
+ * 두 select의 라벨은 화면에서 숨긴다 — 바로 위 "지역" 라벨과 그 아래
+ * 지역 이름이 이미 이 자리가 무엇인지 말하고 있어서, 여기 또 적으면
+ * 좁은 상단바에 같은 말이 세 줄로 쌓인다. **DOM에서 지우지는 않는다** —
+ * 스크린 리더에는 두 select가 각각 무엇을 고르는 것인지 남아야 한다
+ * (`clip` 방식은 이 저장소가 다른 자리에서도 쓰는 시각적 숨김이다).
+ */
+.region-quick-select-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.region-quick-select select {
+  font: inherit;
+  font-size: 0.75rem;
+  max-width: 7rem;
+  padding: 2px 4px;
+  color: var(--result-ink);
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 0.25rem;
+}
+
+.region-quick-select select:disabled {
+  color: var(--result-gray);
+}
+
+/*
+ * 상단바에서 지역을 바꾸면 조회가 이 화면 위에서 일어난다 — 그 진행과
+ * 실패를 여기서 말한다(예전에는 입력 화면 안에만 있었다). `role`은
+ * 진행이면 `status`, 실패면 `alert`다(App.tsx) — 실패만 즉시 읽히게
+ * 한다.
+ */
+.result-topbar-status {
+  margin: 0;
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--result-gray);
+}
+
+.result-topbar-status--error {
+  color: var(--result-warn-ink);
+}
+
+.result-topbar-status button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--result-signal-ink);
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/*
  * 규제 여부 배지("지역" 칸에서만 쓰인다 — RegulationBadge.tsx).
  * 아이콘·글자를 함께 넣어 색으로만 뜻을 전하지 않는다. 세 상태
  * (확정 규제/확정 비규제/가정)를 배경색이 아니라 **테두리 실선·점선**

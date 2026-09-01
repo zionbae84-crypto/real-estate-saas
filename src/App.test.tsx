@@ -2194,9 +2194,16 @@ describe("전체화면 결과 셸", () => {
     const topbar = container.querySelector(".result-topbar");
 
     expect(topbar?.textContent).toContain("사용가능 현금 예산");
-    expect(topbar?.textContent).toContain("15억");
     expect(topbar?.textContent).toContain("연 소득(세전)");
     expect(topbar?.textContent).toContain("실구매 가능 가격");
+    /*
+     * 현금·소득은 **고칠 수 있는 입력란**이라(사용자 지시로 상단바에서
+     * 직접 바꾼다) 값이 textContent가 아니라 `input.value`에 있다.
+     * `commitOn="blur"`의 계약대로 확정 표기(`formatWon`)로 적혀 있다 —
+     * 사용자에게 보이는 글자는 예전과 같다.
+     */
+    expect(screen.getByLabelText("사용가능 현금 예산")).toHaveValue("15억원");
+    expect(screen.getByLabelText("연 소득(세전)")).toHaveValue("1억 5,000만원");
     // 금액이 있는 프로필에서는 그 자리가 황동 강조다 — 아래 0원 테스트의 대조군.
     expect(
       topbar?.querySelector(".result-topbar-item-value--money"),
@@ -2208,6 +2215,101 @@ describe("전체화면 결과 셸", () => {
     expect(
       topbar?.contains(screen.getByRole("button", { name: "조건 다시 넣기" })),
     ).toBe(true);
+  });
+
+  /*
+   * 사용자 지시: "지도페이지 들어온 후 조건변경은 상단 사이드 바에서
+   * 직접하고싶어, 사용가능 현금예산, 연소득, 지역을 직접 변경할 수 있도록
+   * 해줘." — 아래 셋이 그 세 자리다.
+   */
+  describe("상단바에서 조건을 그 자리에서 바꾼다", () => {
+    it("현금을 고쳐 벗어나면 실구매 가능 가격이 다시 계산된다", async () => {
+      const { container } = await renderResults();
+      const topbar = () => container.querySelector(".result-topbar")!;
+      const before = topbar().textContent ?? "";
+
+      const cash = screen.getByLabelText("사용가능 현금 예산");
+      await userEvent.clear(cash);
+      await userEvent.type(cash, "50000"); // 5억
+      /*
+       * `commitOn="blur"`라 **벗어나야** 확정된다 — 타이핑 중간값마다
+       * 아래 계산 전부가 다시 도는 것을 막는 계약이다.
+       */
+      expect(topbar().textContent).toBe(before);
+
+      await userEvent.tab();
+      // 확정되면 입력란 자신이 사람이 읽는 표기로 바뀐다.
+      expect(cash).toHaveValue("5억원");
+      expect(topbar().textContent).not.toBe(before);
+    });
+
+    it("소득을 고쳐 벗어나면 그 값이 확정 표기로 남는다", async () => {
+      await renderResults();
+      const income = screen.getByLabelText("연 소득(세전)");
+      await userEvent.clear(income);
+      await userEvent.type(income, "9000");
+      await userEvent.tab();
+      expect(income).toHaveValue("9,000만원");
+    });
+
+    /**
+     * 지역은 고르는 순간 조회가 나간다 — 결과를 이미 보고 있는 중이라
+     * 버튼을 한 번 더 누르게 하면 "직접 변경"이 아니다
+     * (`RegionQuickSelect` 주석 참고).
+     *
+     * **입력 화면의 지역 select와 라벨이 달라야 한다** — 두 화면이 함께
+     * 마운트돼 있어서, 같은 라벨이면 이 질의가 어느 화면인지 못 고른다.
+     */
+    it("상단바에서 자치구를 고르면 그 지역으로 곧바로 다시 조회한다", async () => {
+      await renderResults();
+      const spy = vi.spyOn(regionQuery, "fetchRegionComplexes");
+      spy.mockClear();
+
+      await userEvent.selectOptions(screen.getByLabelText("시·군·구 바꾸기"), "11650");
+
+      await vi.waitFor(() => expect(spy).toHaveBeenCalledWith("11650", null));
+      // 입력 화면의 라벨은 그대로 하나뿐이다(문서에 두 벌이 생기지 않았다).
+      expect(screen.getByLabelText("자치구")).toBeInTheDocument();
+    });
+
+    it("조회 중에는 지역 select가 잠기고, 진행을 말한다", async () => {
+      await renderResults();
+      // 응답을 붙잡아 두어 loading 상태를 관찰한다.
+      let release: (() => void) | undefined;
+      vi.spyOn(regionQuery, "fetchRegionComplexes").mockImplementation(
+        () => new Promise((resolve) => {
+          release = () =>
+            resolve({ units: [], isRegulatedArea: null, dataAsOf: "2026-01" });
+        }),
+      );
+
+      await userEvent.selectOptions(screen.getByLabelText("시·군·구 바꾸기"), "11650");
+
+      await screen.findByText("새 지역을 불러오는 중이에요…");
+      expect(screen.getByLabelText("시·군·구 바꾸기")).toBeDisabled();
+      expect(screen.getByLabelText("시·도 바꾸기")).toBeDisabled();
+      release?.();
+    });
+
+    /**
+     * 실패 안내가 **이 화면에도** 있어야 한다. 입력 화면에도 같은 성격의
+     * 안내가 있지만 그쪽은 `phase === "결과"` 동안 감춰져 있어, 상단바에서
+     * 지역을 바꿨다가 실패하면 아무 일도 안 일어난 것처럼 보였다.
+     */
+    it("조회가 실패하면 상단바가 그 사실을 말하고 다시 시도할 수 있다", async () => {
+      await renderResults();
+      vi.spyOn(regionQuery, "fetchRegionComplexes").mockRejectedValue(
+        new Error("네트워크 오류"),
+      );
+
+      await userEvent.selectOptions(screen.getByLabelText("시·군·구 바꾸기"), "11650");
+
+      await screen.findByText(/새 지역 조회에 실패했어요/);
+      // 입력 화면의 "다시 시도"와 **다른 이름**이라야 둘을 가려낼 수 있다.
+      expect(
+        screen.getByRole("button", { name: "실거래가 다시 불러오기" }),
+      ).toBeInTheDocument();
+    });
   });
 
   it("셸이 서 있는 동안 문서 스크롤이 잠기고, 셸이 사라지면 풀린다", async () => {
