@@ -72,23 +72,25 @@ describe("등급색 대비율 — 흰 배경(#ffffff), 본문 크기 기준 4.5:
 });
 
 /**
- * 지도 마커 가격 3분위(low/mid/high) 배경-텍스트 대비율.
- * src/styles.css .complex-map-marker--{low,mid,high}와 src/seed-brand.css의
- * 실제 값을 그대로 옮겨 계산한다. 예전 값(low #7cc4f5 + 흰 텍스트 ~1.9:1,
- * mid bg-brand-solid #3ba6f1 + 흰 텍스트 ~2.7:1, high
- * bg-brand-solid-pressed #3398e1 + 흰 텍스트 ~3.1:1)은 셋 다 이 기준을
- * 못 넘었다(review 발견) — 지금은 low/mid를 옅은 배경+어두운 글자로,
- * high를 진한 배경+흰 글자로 바꿔 셋 다 넘긴다.
+ * 지도 마커 대출필요여부 색(no-loan/loan-needed) 대비율.
+ * src/styles.css .complex-map-marker--{no-loan,loan-needed}의 실제 hex를
+ * 그대로 옮겨 계산한다. 상단 컬러 탭(흰 글자)·하단 흰 배경(색 글자)
+ * 양쪽 다 이 두 색을 쓰므로, 흰색과의 대비율 하나면 두 자리 모두를
+ * 검사한 것과 같다(WCAG 대비율 공식은 방향에 무관하다).
+ *
+ * "더 밝은 블루·주황"으로 바꿔 달라는 요청으로 기존 SEED 토큰
+ * (tier-high #0f5f96, warning-contrast #b45309)보다 밝은 값을 새로
+ * 골랐다 — 이 테스트가 그 값이 여전히 4.5:1(WCAG AA 본문 크기)을
+ * 넘는지 못박는다. 예전에 지도 마커 티어(low/mid/high) 색을 흰
+ * 텍스트와 맞춰 보지 않고 바꿨다가 대비가 무너진 적이 있었다
+ * (review 발견, git 이력 참고) — 같은 실수를 여기서 반복하지 않는다.
  */
-describe("지도 마커 티어 대비율 — 배경 대비 텍스트, 본문 크기 기준 4.5:1", () => {
-  it("low: bg #c1e1f7(bg-brand-weak) / text #0c0a09(fg-neutral)", () => {
-    expect(contrastRatio("#c1e1f7", "#0c0a09")).toBeGreaterThanOrEqual(4.5);
+describe("지도 마커 대출필요여부 대비율 — 흰색과의 대비, 본문 크기 기준 4.5:1", () => {
+  it("no-loan(#2563eb)", () => {
+    expect(contrastRatio("#2563eb", "#ffffff")).toBeGreaterThanOrEqual(4.5);
   });
-  it("mid: bg #3ba6f1(bg-brand-solid) / text #0c0a09(fg-neutral)", () => {
-    expect(contrastRatio("#3ba6f1", "#0c0a09")).toBeGreaterThanOrEqual(4.5);
-  });
-  it("high: bg #0f5f96(bg-tier-high, 신규) / text #ffffff(palette-static-white)", () => {
-    expect(contrastRatio("#0f5f96", "#ffffff")).toBeGreaterThanOrEqual(4.5);
+  it("loan-needed(#cb4a0d)", () => {
+    expect(contrastRatio("#cb4a0d", "#ffffff")).toBeGreaterThanOrEqual(4.5);
   });
 });
 

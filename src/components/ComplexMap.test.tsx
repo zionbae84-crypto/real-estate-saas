@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as loadNaverMapsModule from "../lib/loadNaverMaps";
-import { ComplexMap, priceTiers } from "./ComplexMap";
-import type { ComplexUnit } from "../data/complexes";
+import { ComplexMap } from "./ComplexMap";
+import type { ComplexMapUnit } from "./ComplexMap";
 
-function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
+function unit(over: Partial<ComplexMapUnit> = {}): ComplexMapUnit {
   return {
     complexKey: "11680-1",
     complexName: "테스트아파트",
@@ -21,57 +21,10 @@ function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
     maxFloor: 15,
     unknownFloorCount: 0,
     lowConfidence: false,
+    needsLoan: false,
     ...over,
   };
 }
-
-/** priceTiers 테스트용 최소 그룹 — complexKey와 minPrice만 채운다. */
-function tierGroup(complexKey: string, minPrice: number) {
-  return { complexKey, representative: unit({ complexKey, minPrice }) };
-}
-
-describe("priceTiers", () => {
-  // 실제 알고리즘: Math.ceil(n/3)을 third로 두고 정렬된 순서에서
-  // 앞 third개는 low, 다음 third개는 mid, 나머지는 high. n<3이면 이
-  // 분위 계산 자체를 건너뛰고 전부 mid로 통일한다(부모 스펙 §1.4 —
-  // 3개 미만은 "낮다/높다"를 가를 만한 표본이 아니라는 뜻).
-  it("단지가 0개면 빈 맵을 돌려준다", () => {
-    expect(priceTiers([]).size).toBe(0);
-  });
-
-  it("단지가 1개면 3개 미만 폴백으로 mid 하나가 된다", () => {
-    const tiers = priceTiers([tierGroup("a", 1_000)]);
-    expect(tiers.get("a")).toBe("mid");
-  });
-
-  it("단지가 2개면 3개 미만 폴백으로 둘 다 mid가 된다", () => {
-    const tiers = priceTiers([tierGroup("a", 1_000), tierGroup("b", 2_000)]);
-    expect(tiers.get("a")).toBe("mid");
-    expect(tiers.get("b")).toBe("mid");
-  });
-
-  it("단지가 3개면 가격 오름차순으로 low·mid·high가 정확히 하나씩 나뉜다", () => {
-    // 입력 순서를 일부러 섞어서 정렬이 minPrice 기준으로 실제 일어나는지도 함께 확인한다.
-    const tiers = priceTiers([tierGroup("c", 3_000), tierGroup("a", 1_000), tierGroup("b", 2_000)]);
-    expect(tiers.get("a")).toBe("low");
-    expect(tiers.get("b")).toBe("mid");
-    expect(tiers.get("c")).toBe("high");
-  });
-
-  it("단지가 4개면 Math.ceil(4/3)=2개씩 low·mid로 채워지고 high는 비어버린다 — 이 알고리즘의 실제 동작이며 의도적으로 고치지 않는다", () => {
-    const tiers = priceTiers([
-      tierGroup("a", 1_000),
-      tierGroup("b", 2_000),
-      tierGroup("c", 3_000),
-      tierGroup("d", 4_000),
-    ]);
-    expect(tiers.get("a")).toBe("low");
-    expect(tiers.get("b")).toBe("low");
-    expect(tiers.get("c")).toBe("mid");
-    expect(tiers.get("d")).toBe("mid");
-    expect([...tiers.values()].filter((t) => t === "high")).toHaveLength(0);
-  });
-});
 
 function fakeNaverMaps() {
   const markers: Array<{ position: unknown; listeners: Record<string, () => void>; removed: boolean }> = [];
@@ -227,17 +180,17 @@ describe("ComplexMap", () => {
     expect(region.textContent).not.toContain("지도를 표시하지 못했어요.");
   });
 
-  it("마커 라벨에 거래 건수가 함께 나온다 — 단서 없는 가격 숫자 하나로 뜨지 않는다", async () => {
-    // formatRange는 min===max면 숫자 하나로 접힌다. 그 숫자가 아무 단서
-    // 없이 지도에 늘 떠 있으면 감정평가·적정가로 읽힌다(부모 스펙 §6).
-    const units = [unit({ complexKey: "1", areaBucket: 84, tradeCount: 7, minPrice: 2_350_000_000, maxPrice: 2_350_000_000 })];
+  it("마커 라벨엔 단지명과 가격만 나온다 — 거래 건수·면적은 보이지 않는다", async () => {
+    const units = [unit({ complexKey: "1", complexName: "테스트아파트", areaBucket: 84, tradeCount: 7, minPrice: 2_350_000_000, maxPrice: 2_350_000_000 })];
     const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
 
     render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
 
-    await screen.findByText(/84㎡/);
+    await screen.findByText("테스트아파트");
     const marker = document.querySelector(".complex-map-marker");
-    expect(marker?.textContent).toContain("거래 7건");
+    expect(marker?.textContent).toMatch(/23억/);
+    expect(marker?.textContent).not.toContain("거래");
+    expect(marker?.textContent).not.toContain("㎡");
   });
 
   it("단지가 여럿이면 전부 화면에 들어오도록 fitBounds를 부르고, 중심은 평균 좌표다", async () => {
@@ -392,7 +345,7 @@ describe("ComplexMap", () => {
     expect(destroyedMaps).toHaveLength(1);
   });
 
-  it("마커에 거래건수가 가장 많은 평형의 면적+가격범위가 항상 보인다(클릭 전에도)", async () => {
+  it("마커엔 거래건수가 가장 많은 평형의 가격범위가 항상 보인다(클릭 전에도)", async () => {
     const units = [
       unit({ complexKey: "1", areaBucket: 59, tradeCount: 2, minPrice: 500_000_000, maxPrice: 550_000_000 }),
       unit({ complexKey: "1", areaBucket: 84, tradeCount: 5, minPrice: 700_000_000, maxPrice: 750_000_000 }),
@@ -401,12 +354,12 @@ describe("ComplexMap", () => {
 
     render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
 
-    // 대표 평형은 거래건수 최다인 84㎡ — 마커 라벨에 그 평형의 가격범위가 보여야 한다.
-    expect(await screen.findByText(/84㎡/)).toBeInTheDocument();
-    expect(screen.getByText(/7억/)).toBeInTheDocument(); // formatRange(700_000_000, 750_000_000)
+    // 대표 평형은 거래건수 최다인 84㎡ — 마커 라벨엔 그 평형의 가격범위가 보여야 한다.
+    expect(await screen.findByText(/7억/)).toBeInTheDocument(); // formatRange(700_000_000, 750_000_000)
+    expect(screen.queryByText(/5억/)).not.toBeInTheDocument();
   });
 
-  it("마커 라벨의 단지 유래 텍스트도 escapeHtml을 거친다", async () => {
+  it("마커 라벨의 단지 이름도 escapeHtml을 거친다", async () => {
     const units = [
       unit({ complexKey: "1", complexName: "<img src=x onerror=alert(1)>", areaBucket: 59, tradeCount: 1 }),
     ];
@@ -414,11 +367,11 @@ describe("ComplexMap", () => {
 
     render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
 
-    // 마커 라벨 자체는 이름을 넣지 않지만(면적+가격만), 혹시 넣게 되면
-    // 이스케이프가 적용되는지 이 테스트가 회귀를 잡는다.
-    await screen.findByText(/59㎡/);
+    await screen.findByRole("region", { name: "단지 지도" });
+    await vi.waitFor(() => expect(document.querySelector(".complex-map-marker")).not.toBeNull());
     const markerHtml = document.querySelector(".complex-map-marker")?.innerHTML ?? "";
     expect(markerHtml).not.toContain("<img");
+    expect(markerHtml).toContain("&lt;img src=x onerror=alert(1)&gt;");
   });
 
   it("단지가 30개를 넘으면 30개만 그리고, 못 그린 개수를 화면에 적는다", async () => {
@@ -453,55 +406,28 @@ describe("ComplexMap", () => {
     expect(screen.queryByText(/개만 표시했어요/)).not.toBeInTheDocument();
   });
 
-  it("가격 3분위는 잘라내고 **실제로 그린** 단지들 안에서만 매긴다", async () => {
-    // 그리지도 않은 단지가 분위 경계를 흔들면, 화면의 색이 화면에 없는
-    // 것을 근거로 삼게 된다.
-    const units = Array.from({ length: 33 }, (_, i) =>
-      unit({ complexKey: `k${i}`, minPrice: 100_000_000 + i * 1_000_000, maxPrice: 200_000_000 + i * 1_000_000 }),
-    );
-    const coordinates = new Map(units.map((u, i) => [u.complexKey, { lat: 37 + i * 0.001, lon: 127 + i * 0.001 }]));
-
-    render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test" />);
-
-    await vi.waitFor(() =>
-      expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(30),
-    );
-    // 30개를 Math.ceil(30/3)=10씩 셋으로 나눈다 — 33개 기준이었다면
-    // 11/11/8이 되어 개수가 달라진다.
-    expect(document.querySelectorAll(".complex-map-marker--low")).toHaveLength(10);
-    expect(document.querySelectorAll(".complex-map-marker--mid")).toHaveLength(10);
-    expect(document.querySelectorAll(".complex-map-marker--high")).toHaveLength(10);
-  });
-
-  it("단지가 3개 이상이면 가격 3분위 티어 클래스가 실제 마커 DOM에 반영된다", async () => {
-    // markerLabel(representative, tier)가 클래스 목록을 직접 조립하므로(더 이상
-    // 호출부의 .replace() 문자열 치환에 의존하지 않는다), 이 테스트는 그 배선이
-    // 렌더링 결과까지 실제로 이어지는지 DOM에서 확인한다.
+  it("대출필요여부에 따라 마커 색 클래스가 갈린다 — 문구가 아니라 색으로만 구분한다", async () => {
     const units = [
-      unit({ complexKey: "low-key", complexName: "저가단지", areaBucket: 59, minPrice: 300_000_000, maxPrice: 320_000_000, tradeCount: 1 }),
-      unit({ complexKey: "mid-key", complexName: "중가단지", areaBucket: 59, minPrice: 600_000_000, maxPrice: 620_000_000, tradeCount: 1 }),
-      unit({ complexKey: "high-key", complexName: "고가단지", areaBucket: 59, minPrice: 900_000_000, maxPrice: 920_000_000, tradeCount: 1 }),
+      unit({ complexKey: "a", complexName: "리버뷰단지", needsLoan: false }),
+      unit({ complexKey: "b", complexName: "파크뷰단지", needsLoan: true }),
     ];
     const coordinates = new Map([
-      ["low-key", { lat: 37.1, lon: 127.1 }],
-      ["mid-key", { lat: 37.2, lon: 127.2 }],
-      ["high-key", { lat: 37.3, lon: 127.3 }],
+      ["a", { lat: 37.1, lon: 127.1 }],
+      ["b", { lat: 37.2, lon: 127.2 }],
     ]);
 
     render(<ComplexMap units={units} coordinates={coordinates} naverMapClientId="test-id" />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => {
-      expect(document.querySelectorAll(".complex-map-marker--low")).toHaveLength(1);
-      expect(document.querySelectorAll(".complex-map-marker--mid")).toHaveLength(1);
-      expect(document.querySelectorAll(".complex-map-marker--high")).toHaveLength(1);
+      expect(document.querySelectorAll(".complex-map-marker--no-loan")).toHaveLength(1);
+      expect(document.querySelectorAll(".complex-map-marker--loan-needed")).toHaveLength(1);
     });
 
-    // 가장 저렴한 단지가 low, 가장 비싼 단지가 high 클래스를 받아야 한다.
-    expect(document.querySelector(".complex-map-marker--low")?.textContent).toContain("59㎡");
-    expect(document.querySelector(".complex-map-marker--high")?.textContent).toContain("59㎡");
-    // 클래스가 하나가 아니라 여러 개(base + tier) 동시에 붙어 있는지도 확인한다.
-    const highEl = document.querySelector(".complex-map-marker--high");
-    expect(highEl?.classList.contains("complex-map-marker")).toBe(true);
+    expect(document.querySelector(".complex-map-marker--no-loan")?.textContent).toContain("리버뷰단지");
+    expect(document.querySelector(".complex-map-marker--loan-needed")?.textContent).toContain("파크뷰단지");
+    // "대출 필요"/"대출 없이" 같은 문구는 어느 마커에도 없어야 한다 — 색으로만 구분한다.
+    expect(document.querySelector(".complex-map-marker--no-loan")?.textContent).not.toMatch(/대출/);
+    expect(document.querySelector(".complex-map-marker--loan-needed")?.textContent).not.toMatch(/대출/);
   });
 });

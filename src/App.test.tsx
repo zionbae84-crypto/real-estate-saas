@@ -1242,8 +1242,8 @@ describe("App - 지도", () => {
     await vi.waitFor(() => expect(markerEls.length).toBeGreaterThan(0));
 
     const labels = markerEls.map((el) => el.textContent ?? "").join("|");
-    expect(labels).toContain("90㎡"); // 목록에 뜨는 단지
-    expect(labels).not.toContain("130㎡"); // 예산을 넘어 목록에 없는 단지
+    expect(labels).toContain("테스트단지"); // 목록에 뜨는 단지
+    expect(labels).not.toContain("비싼단지"); // 예산을 넘어 목록에 없는 단지
     expect(markerEls).toHaveLength(1);
 
     // 목록 쪽도 같은 집합인지 확인한다 — 한쪽만 보면 두 창이 어긋나도 통과한다.

@@ -323,6 +323,12 @@ export function App() {
    * 세 덩어리를 모두 넣는다 — 목록도 셋을 모두 그린다(무리 없음·
    * 확인 필요·부담이 큼). 지도에서 `withinSafe`만 그리면 지도가
    * 목록보다 낙관적으로 말하게 된다.
+   *
+   * `entry.burden.neededLoan`(현금·소득으로 이미 계산돼 있음)에서
+   * `needsLoan`을 얹어 보낸다 — 마커 색이 이 값으로 정해진다
+   * (ComplexMap.tsx의 ComplexMapUnit 참고). 목록 행이 "대출 없이"를
+   * 판단하는 것과 같은 조건(`burden.neededLoan === 0`)을 그대로 쓴다 —
+   * 여기서 다시 계산하면 두 창이 언젠가 다른 기준으로 어긋난다.
    */
   const mappedUnits = useMemo(
     () =>
@@ -332,7 +338,7 @@ export function App() {
             ...complexList.withinSafe,
             ...complexList.unverified,
             ...complexList.beyondSafe,
-          ].map((entry) => entry.unit),
+          ].map((entry) => ({ ...entry.unit, needsLoan: entry.burden.neededLoan !== 0 })),
     [complexList],
   );
 

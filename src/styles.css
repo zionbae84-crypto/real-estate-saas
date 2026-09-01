@@ -970,60 +970,64 @@ body {
 }
 
 /*
- * 마커 위에 항상 보이는 라벨(면적+가격범위). 클릭 전에도 보여야 해서
- * InfoWindow와 달리 지도에 바로 얹힌다 — 가격 3분위 구간별로 배경색만
- * 다르게 준다.
+ * 마커 위에 항상 보이는 라벨(단지명+가격범위). 클릭 전에도 보여야 해서
+ * InfoWindow와 달리 지도에 바로 얹힌다. 흰 바탕에 색 테두리 — 색은
+ * 대출필요여부만 나타낸다(파랑=대출 없이, 주황=대출 필요). "필요/불필요"
+ * 문구는 따로 적지 않는다(ComplexMap.tsx의 markerLabel 주석 참고).
  *
- * 예전엔 mid(bg-brand-solid, #3ba6f1)와 high(bg-brand-solid-pressed,
- * #3398e1)가 명도 차 ~5%뿐이라 육안으로 거의 구분이 안 됐고(review 발견),
- * 셋 다 흰 텍스트 대비가 4.5:1(WCAG AA 본문 크기)에 못 미쳤다(low
- * ~1.9:1, mid ~2.7:1, high ~3.1:1) — 0.75rem/600 굵기는 large-text
- * 기준(3:1)이 아니라 본문 기준이 적용된다.
- *
- * 지금은 옅은 배경+어두운 글자(low, mid)에서 진한 배경+흰 글자(high)로
- * 명도를 크게 벌려 세 단계가 한눈에 갈린다. 세 색 다 계산된 대비율이
- * 4.5:1을 넘는다(scripts/seed-semantic-tokens.test.ts가 검증):
- *   low  bg #c1e1f7 / text #0c0a09 → 14.47:1
- *   mid  bg #3ba6f1 / text #0c0a09 →  7.44:1
- *   high bg #0f5f96 / text #ffffff →  6.78:1
+ * 상단 컬러 탭(단지명)엔 흰 글자, 하단 흰 배경(가격)엔 색 글자를 쓴다.
+ * 기존 SEED 토큰(tier-high #0f5f96, warning-contrast #b45309)은 어둡게
+ * 가라앉아 있어(요청: "더 밝은 블루·주황") 이 마커 전용 색을 따로 뒀다 —
+ * 흰 배경 위 흰 글자·색 글자 양쪽 다 4.5:1(WCAG AA 본문 크기)을 넘도록
+ * 실측해 골랐다:
+ *   no-loan     #2563eb — 5.17:1
+ *   loan-needed #cb4a0d — 4.64:1 (요청한 밝기(#f97316대)는 2.8:1로 기준을
+ *     크게 벗어나 — 대비 기준을 지키는 선에서 최대한 밝힌 값)
  */
 .complex-map-marker {
-  font-size: 0.75rem;
-  font-weight: 600;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.375rem;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1.5px solid;
+  border-radius: 0.5rem;
   white-space: nowrap;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-/*
- * 마커 라벨 둘째 줄의 거래 건수. 가격 문자열이 min===max에서 숫자
- * 하나로 접히므로(formatRange), 이 줄이 없으면 마커는 아무 단서 없는
- * 가격 하나를 늘 띄우게 된다 — 목록 행·팝업이 늘 달고 있는 "거래 N건"이
- * 여기만 빠져 있었다(ComplexMap.tsx의 markerLabel 주석 참고).
- *
- * 같은 줄이 아니라 아랫줄에 둔다 — 마커 폭이 늘면 서로 겹친다.
- */
-.complex-map-marker-trades {
-  display: block;
-  font-weight: 400;
-  font-size: 0.6875rem;
-  opacity: 0.85;
-}
-
-.complex-map-marker--low {
-  background: var(--seed-color-bg-brand-weak); /* cyan-signal의 옅은 톤 */
-  color: var(--seed-color-fg-neutral); /* ink-black */
-}
-
-.complex-map-marker--mid {
-  background: var(--seed-color-bg-brand-solid); /* cyan-signal */
-  color: var(--seed-color-fg-neutral); /* ink-black */
-}
-
-.complex-map-marker--high {
-  background: var(--seed-color-bg-tier-high); /* cyan-signal보다 훨씬 진한 톤 */
+.complex-map-marker-name {
+  padding: 0.15rem 0.5rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  text-align: center;
   color: var(--seed-color-palette-static-white);
+}
+
+.complex-map-marker-price {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-align: center;
+  background: var(--seed-color-palette-static-white);
+}
+
+.complex-map-marker--no-loan {
+  border-color: #2563eb;
+}
+.complex-map-marker--no-loan .complex-map-marker-name {
+  background: #2563eb;
+}
+.complex-map-marker--no-loan .complex-map-marker-price {
+  color: #2563eb;
+}
+
+.complex-map-marker--loan-needed {
+  border-color: #cb4a0d;
+}
+.complex-map-marker--loan-needed .complex-map-marker-name {
+  background: #cb4a0d;
+}
+.complex-map-marker--loan-needed .complex-map-marker-price {
+  color: #cb4a0d;
 }
 
 /*
@@ -1037,7 +1041,7 @@ body {
   font-weight: 600;
   /*
    * 흰 글자는 배경 토큰(bg-layer-floating)이 아니라 팔레트의 정적
-   * 흰색으로 낸다 — `.complex-map-marker--high`와 같은 토큰을 쓴다.
+   * 흰색으로 낸다 — `.complex-map-marker-name`과 같은 토큰을 쓴다.
    * 배경 토큰을 글자색으로 빌려 쓰면, 그 토큰이 "떠 있는 면의 배경"
    * 이라는 이유로 값이 바뀌는 날 이 글자색이 함께 끌려간다.
    */

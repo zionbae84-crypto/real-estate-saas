@@ -3,8 +3,19 @@ import type { ComplexUnit } from "../data/complexes";
 import { loadNaverMaps } from "../lib/loadNaverMaps";
 import { formatRange } from "./ComplexList";
 
+/**
+ * 지도가 그리려면 가격·좌표 말고도 "대출이 필요한가"를 알아야 한다 —
+ * 마커 색이 그걸로 정해진다(파랑=대출 없이, 주황=대출 필요). 이 값은
+ * 현금·소득(profile)과 가격으로 계산되는 `BurdenAtPrice.neededLoan`에서
+ * 오고, 그 계산은 이미 목록(`ComplexList.tsx`)이 하고 있으므로 여기서
+ * 다시 하지 않는다 — 호출부(App.tsx)가 같은 값을 얹어 넘긴다.
+ */
+export interface ComplexMapUnit extends ComplexUnit {
+  needsLoan: boolean;
+}
+
 export interface ComplexMapProps {
-  units: readonly ComplexUnit[];
+  units: readonly ComplexMapUnit[];
   /** complexKey → 좌표. 여기 없는 단지는 지도에 안 그린다 — 대체 좌표를 만들지 않는다. */
   coordinates: ReadonlyMap<string, { lat: number; lon: number }>;
   naverMapClientId: string;
@@ -42,8 +53,8 @@ function escapeHtml(value: string): string {
  * 같은 자리에 겹쳐 쌓이고, 맨 위 하나만 눌린다. 나머지 평형은 지도에
  * 있지만 열어볼 수 없다.
  */
-function groupByComplex(units: readonly ComplexUnit[]): Array<{ complexKey: string; units: ComplexUnit[] }> {
-  const groups = new Map<string, ComplexUnit[]>();
+function groupByComplex<T extends ComplexUnit>(units: readonly T[]): Array<{ complexKey: string; units: T[] }> {
+  const groups = new Map<string, T[]>();
   for (const unit of units) {
     const existing = groups.get(unit.complexKey);
     if (existing === undefined) groups.set(unit.complexKey, [unit]);
@@ -64,10 +75,10 @@ function groupByComplex(units: readonly ComplexUnit[]): Array<{ complexKey: stri
  * 상태를 끌어올리면 렌더 한 틀 늦게 갱신될 수 있어 이 계산을 그대로
  * 공유하는 쪽을 택했다).
  */
-export function groupWithCoords(
-  units: readonly ComplexUnit[],
+export function groupWithCoords<T extends ComplexUnit>(
+  units: readonly T[],
   coordinates: ReadonlyMap<string, { lat: number; lon: number }>,
-): Array<{ complexKey: string; units: ComplexUnit[] }> {
+): Array<{ complexKey: string; units: T[] }> {
   return groupByComplex(units).filter((g) => coordinates.has(g.complexKey));
 }
 
@@ -94,72 +105,35 @@ function popupContent(units: readonly ComplexUnit[]): string {
  * 단지 그룹(같은 complexKey) 안에서 마커에 표시할 대표 평형을 고른다.
  * 거래건수가 가장 많은 평형 — 동률이면 배열의 첫 번째(그룹핑 순서 그대로).
  */
-function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
+function representativeUnit<T extends ComplexUnit>(units: readonly T[]): T {
   return units.reduce((best, u) => (u.tradeCount > best.tradeCount ? u : best), units[0]!);
 }
 
 /**
- * 마커 위에 항상 보이는 라벨. "면적+가격범위+거래 건수"만 담는다 —
- * 단지 이름은 여기 넣지 않는다(클릭 팝업에만) — 라벨이 길어지면 지도가
- * 어지러워진다. 단일 "적정가" 숫자를 내지 않는다는 원칙은 여기서도
- * 그대로다 — 항상 `formatRange`(범위) 결과만 쓴다.
+ * 마커 위에 항상 보이는 라벨. "단지명+가격범위"만 담는다. 대출필요여부는
+ * 텍스트가 아니라 색으로만 나타낸다(`complex-map-marker--{no-loan|
+ * loan-needed}`) — 사용자 요청으로 배지 문구를 없앤 자리다.
  *
- * **거래 건수를 반드시 함께 낸다.** `formatRange`는 min===max일 때 숫자
- * 하나로 접히므로("23억 5,000만원"), 건수가 없으면 이 라벨은 이 앱에서
- * 유일하게 **아무 단서 없는 가격 숫자 하나가 늘 떠 있는 자리**가 된다 —
- * 목록 행도 팝업도 같은 문자열 옆에 "거래 N건"을 늘 달고 있는데 여기만
- * 빠져 있었다. 단서 없는 숫자 하나는 감정평가·적정가로 읽히고, 그건 이
- * 제품이 절대 하지 않기로 한 말이다(부모 스펙 §6). 폭이 늘어 마커가
- * 서로 겹치는 것을 막으려 같은 줄이 아니라 아랫줄(block span)에 붙인다.
+ * 단일 "적정가" 숫자를 내지 않는다는 원칙은 여기서도 그대로다 — 항상
+ * `formatRange`(범위) 결과만 쓴다. 예전엔 min===max로 범위가 숫자
+ * 하나로 접히는 경우를 대비해 "거래 N건"을 항상 함께 붙였는데(부모 스펙
+ * §6), 대출필요여부 배지를 넣기 위해 그 줄을 뺐다 — 클릭하면 뜨는
+ * {@link popupContent}에는 거래 건수가 그대로 남아 있으니, 숫자 하나만
+ * 보이는 마커를 눌러 보면 바로 근거를 확인할 수 있다.
  *
  * 여기 들어가는 단지 유래 값은 전부 {@link escapeHtml}을 거친다 —
  * 이 파일은 이 앱에서 유일하게 React를 거치지 않는 HTML 문자열 자리다
  * (위 escapeHtml 주석 참고).
- *
- * 티어 클래스(`complex-map-marker--${tier}`)를 여기서 직접 클래스 목록에
- * 넣는다 — 예전엔 이 함수가 `class="complex-map-marker"`만 돌려주고
- * 호출부가 문자열 `.replace()`로 티어 클래스를 끼워 넣었는데, 그러면
- * 여기 클래스 이름이 바뀌는 순간 그 `.replace()`가 조용히 no-op이 돼
- * 모든 마커가 티어 색을 잃어도 타입체커도 테스트도 못 잡는다. `tier`를
- * 파라미터로 받아 템플릿 리터럴 안에서 완성된 클래스 문자열을 만들면
- * 그 실패 경로 자체가 없어진다.
  */
-function markerLabel(representative: ComplexUnit, tier: PriceTier): string {
-  const area = escapeHtml(String(representative.areaBucket));
+function markerLabel(representative: ComplexMapUnit): string {
+  const name = escapeHtml(representative.complexName);
   const range = escapeHtml(formatRange(representative.minPrice, representative.maxPrice));
-  const trades = escapeHtml(String(representative.tradeCount));
+  const tone = representative.needsLoan ? "loan-needed" : "no-loan";
   return (
-    `<div class="complex-map-marker complex-map-marker--${tier}">${area}㎡ ${range}` +
-    `<span class="complex-map-marker-trades">거래 ${trades}건</span></div>`
+    `<div class="complex-map-marker complex-map-marker--${tone}">` +
+    `<span class="complex-map-marker-name">${name}</span>` +
+    `<span class="complex-map-marker-price">${range}</span></div>`
   );
-}
-
-/**
- * 지금 지도에 그려지는 단지들(대표 평형 minPrice 기준) 중 가격 3분위
- * 구간을 매긴다. 단지가 3개 미만이면 전부 중간 톤 하나로 통일한다.
- * 절대 가격대를 하드코딩하지 않는다 — 지역마다 시세가 달라 상대적인
- * 기준이어야 의미가 있다(부모 스펙 §1.4).
- *
- * `Math.ceil(n/3)`으로 3등분하기 때문에 n=4처럼 3으로 안 나뉘는 개수에서는
- * 구간이 고르지 않다 — n=4는 low 2개·mid 2개·high 0개가 된다(low/mid가
- * `third`씩, high는 나머지). 의도된 알고리즘의 실제 동작이라 여기서
- * "고치지" 않는다 — `priceTiers.test.ts`류 경계 테스트가 이 동작을
- * 그대로 문서화한다.
- */
-export type PriceTier = "low" | "mid" | "high";
-
-export function priceTiers(groups: Array<{ complexKey: string; representative: ComplexUnit }>): Map<string, PriceTier> {
-  if (groups.length < 3) {
-    return new Map(groups.map((g) => [g.complexKey, "mid"]));
-  }
-  const sorted = [...groups].sort((a, b) => a.representative.minPrice - b.representative.minPrice);
-  const third = Math.ceil(sorted.length / 3);
-  const tiers = new Map<string, PriceTier>();
-  sorted.forEach((g, i) => {
-    const tier: PriceTier = i < third ? "low" : i < third * 2 ? "mid" : "high";
-    tiers.set(g.complexKey, tier);
-  });
-  return tiers;
 }
 
 /**
@@ -279,20 +253,10 @@ export function ComplexMap({ units, coordinates, naverMapClientId }: ComplexMapP
         // DOM 컨테이너에 새 Map을 또 만들기 전에, 이전 Map을 확실히 치운다.
         cleanupFns.push(() => map.destroy());
 
-        // 가격 3분위는 **실제로 그린 단지들** 안에서 매긴다 — 그리지도
-        // 않은 단지가 분위 경계를 흔들면 화면의 색이 화면에 없는 것을
-        // 근거로 삼게 된다(priceTiers 문서의 "지금 지도에 그려지는
-        // 단지들" 참고).
-        const groupsWithRepresentative = drawn.map((g) => ({
-          ...g,
-          representative: representativeUnit(g.units),
-        }));
-        const tiers = priceTiers(groupsWithRepresentative);
-
-        for (const group of groupsWithRepresentative) {
+        for (const group of drawn) {
           const coord = coordinates.get(group.complexKey)!;
-          const tier = tiers.get(group.complexKey) ?? "mid";
-          const labelHtml = markerLabel(group.representative, tier);
+          const representative = representativeUnit(group.units);
+          const labelHtml = markerLabel(representative);
           const marker = new naverGlobal.maps.Marker({
             position: new naverGlobal.maps.LatLng(coord.lat, coord.lon),
             map,
