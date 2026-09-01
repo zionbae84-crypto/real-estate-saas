@@ -239,37 +239,82 @@ export function ComplexDetail({
    * 되는 이유가 이것이다: DOM 자리는 그대로 `<details>` 안이고,
    * `position`만 바꿨다.
    *
-   * 좌표는 트리거(아이콘)를 열 때 한 번만 잰다 — 계속 스크롤을 추적하지
-   * 않는다. 이 팝업은 열자마자 읽고 곧 닫는 짧은 상호작용이라, 그 사이
-   * 사이드바를 또 스크롤하는 경우는 드물고, 만약 그런다면 살짝 어긋나는
-   * 정도가 스크롤마다 위치를 다시 재는 복잡도보다 싸다.
+   * **사용자 지시로 스크롤을 계속 추적한다** — "스크롤을 이동하면 연결된
+   * 상자도 같이 움직이게 해줘." 예전엔 트리거를 열 때 한 번만 재고
+   * 그쳤다(짧은 상호작용이니 어긋나는 정도가 스크롤마다 다시 재는
+   * 복잡도보다 싸다고 봤다). 실제로는 팝업을 열어 둔 채 목록·사이드바를
+   * 살펴보는 시간이 짧지 않았고, 그동안 트리거가 스크롤을 따라 움직이면
+   * `position: fixed` 팝업만 그 자리에 남아 화살표가 가리키는 것과
+   * 어긋났다. 지금은 열려 있는 동안 계속 다시 잰다(아래 useEffect).
    */
   const [bindingPopupPos, setBindingPopupPos] = useState({ top: 0, left: 0 });
   const [costPopupPos, setCostPopupPos] = useState({ top: 0, left: 0 });
+  /**
+   * 지금 열려 있는 팝업(들). `<details>`의 `open` 속성 자체는 여전히
+   * 리액트가 제어하지 않는다(아래 참고) — 이건 그 상태를 그대로 따라만
+   * 가는 **거울 상태**로, "스크롤을 추적해야 하는가"만 결정한다.
+   */
+  const [bindingPopupOpen, setBindingPopupOpen] = useState(false);
+  const [costPopupOpen, setCostPopupOpen] = useState(false);
+  const bindingDetailsRef = useRef<HTMLDetailsElement>(null);
+  const costDetailsRef = useRef<HTMLDetailsElement>(null);
+
+  function measurePopupPos(
+    details: HTMLDetailsElement | null,
+    setPos: (pos: { top: number; left: number }) => void,
+  ) {
+    const trigger = details?.querySelector(".detail-binding-toggle");
+    const rect = trigger?.getBoundingClientRect();
+    if (rect === undefined) return;
+    setPos({ top: rect.top, left: rect.right + 8 });
+  }
 
   /**
    * `<details>`의 네이티브 toggle 이벤트로 여닫힘을 안다 — 별도 상태로
-   * `open`을 다시 관리(제어 컴포넌트로 만들기)하지 않는다. 그러면
-   * 인쇄에서 `<details>`를 강제로 펼치는 `::details-content` 규칙이
-   * 그대로 걸린다(제어 컴포넌트로 바꾸면 그 규칙이 보는 `open` 속성과
-   * 리액트 상태가 어긋날 수 있다).
+   * `open` **속성**을 다시 관리(제어 컴포넌트로 만들기)하지 않는다.
+   * 그러면 인쇄에서 `<details>`를 강제로 펼치는 `::details-content`
+   * 규칙이 그대로 걸린다(제어 컴포넌트로 바꾸면 그 규칙이 보는 `open`
+   * 속성과 리액트 상태가 어긋날 수 있다). `setOpen`은 그 속성이 아니라
+   * 위 거울 상태만 갱신한다.
    *
    * 두 팝업(한도 결정 내역·부대비용 내역)이 **같은 계산**을 쓴다(사용자
-   * 지시: "동일하게 만들어줘") — `setPos`만 갈아 끼워 위 두 상태 중
-   * 어느 쪽을 채울지 고른다. `querySelector`는 `event.currentTarget`
+   * 지시: "동일하게 만들어줘") — `setPos`·`setOpen`만 갈아 끼워 어느
+   * 쪽을 채울지 고른다. `querySelector`는 `event.currentTarget`
    * (그 `<details>` 자신) 안에서만 찾으므로, 두 트리거가 같은 클래스
    * (`.detail-binding-toggle`)를 써도 서로 섞이지 않는다.
    */
   function handleDetailBindingToggle(
     event: SyntheticEvent<HTMLDetailsElement>,
     setPos: (pos: { top: number; left: number }) => void,
+    setOpen: (open: boolean) => void,
   ) {
-    if (!event.currentTarget.open) return;
-    const trigger = event.currentTarget.querySelector(".detail-binding-toggle");
-    const rect = trigger?.getBoundingClientRect();
-    if (rect === undefined) return;
-    setPos({ top: rect.top, left: rect.right + 8 });
+    const open = event.currentTarget.open;
+    setOpen(open);
+    if (open) measurePopupPos(event.currentTarget, setPos);
   }
+
+  /*
+   * 열려 있는 동안 스크롤·리사이즈를 추적해 팝업 위치를 다시 잰다.
+   *
+   * `window`에 `capture: true`로 건다 — 실제로 스크롤하는 조상은
+   * `.region-results-sidebar`(overflow-y: auto)이지 window가 아니지만,
+   * 캡처 단계로 걸면 그 안 어느 요소가 스크롤되든(사이드바 자신이든
+   * 그 안의 다른 스크롤 상자든) 버블링 전에 여기서 먼저 받는다 —
+   * 스크롤 컨테이너마다 리스너를 따로 찾아 붙이지 않아도 된다.
+   */
+  useEffect(() => {
+    if (!bindingPopupOpen && !costPopupOpen) return;
+    const onScrollOrResize = () => {
+      if (bindingPopupOpen) measurePopupPos(bindingDetailsRef.current, setBindingPopupPos);
+      if (costPopupOpen) measurePopupPos(costDetailsRef.current, setCostPopupPos);
+    };
+    window.addEventListener("scroll", onScrollOrResize, true);
+    window.addEventListener("resize", onScrollOrResize);
+    return () => {
+      window.removeEventListener("scroll", onScrollOrResize, true);
+      window.removeEventListener("resize", onScrollOrResize);
+    };
+  }, [bindingPopupOpen, costPopupOpen]);
 
   return (
     <section
@@ -417,7 +462,8 @@ export function ComplexDetail({
               */}
               <details
                 className="detail-binding"
-                onToggle={(e) => handleDetailBindingToggle(e, setCostPopupPos)}
+                ref={costDetailsRef}
+                onToggle={(e) => handleDetailBindingToggle(e, setCostPopupPos, setCostPopupOpen)}
               >
                 <summary
                   className="fold-more-hint detail-binding-toggle"
@@ -573,7 +619,8 @@ export function ComplexDetail({
                   */}
                   <details
                     className="detail-binding"
-                    onToggle={(e) => handleDetailBindingToggle(e, setBindingPopupPos)}
+                    ref={bindingDetailsRef}
+                    onToggle={(e) => handleDetailBindingToggle(e, setBindingPopupPos, setBindingPopupOpen)}
                   >
                     <summary
                       className="fold-more-hint detail-binding-toggle"

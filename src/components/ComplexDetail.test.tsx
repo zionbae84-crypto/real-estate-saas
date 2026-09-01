@@ -521,6 +521,62 @@ describe("ComplexDetail — 예상 매수금액이 아래 전부를 움직인다
   });
 
   /**
+   * 사용자 지시: "스크롤을 이동하면 연결된 상자도 같이 움직이게 해줘." —
+   * 예전엔 아이콘을 열 때 좌표를 한 번만 쟀다(위 두 테스트가 그 배선을
+   * 잠근다). 이 테스트는 **그 이후로도** 스크롤할 때마다 다시 재는지,
+   * 그리고 팝업을 닫으면 더는 재지 않는지를 본다 — `getBoundingClientRect`를
+   * 호출마다 다른 값을 내도록 흉내 내, 인라인 좌표가 실제로 갱신되는지로
+   * 확인한다.
+   */
+  it("팝업이 열린 동안 스크롤하면 위치를 다시 잰다 — 닫으면 더는 재지 않는다", async () => {
+    const { container } = renderDetail();
+    await enterPrice("120000");
+
+    let rectTop = 100;
+    const getRectSpy = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        rectTop += 10;
+        return {
+          top: rectTop,
+          right: 200,
+          bottom: 0,
+          left: 0,
+          width: 0,
+          height: 0,
+          x: 0,
+          y: 0,
+          toJSON() {},
+        } as DOMRect;
+      });
+
+    const toggle = container
+      .querySelector(".detail-max-loan")
+      ?.querySelector(".detail-binding-toggle");
+    expect(toggle).not.toBeUndefined();
+    if (toggle === undefined || toggle === null) return;
+    await userEvent.click(toggle);
+
+    const popup = () =>
+      container
+        .querySelector(".detail-max-loan")
+        ?.querySelector(".detail-binding-popup") as HTMLElement;
+
+    const openedTop = popup().style.top;
+
+    window.dispatchEvent(new Event("scroll"));
+    await vi.waitFor(() => expect(popup().style.top).not.toBe(openedTop));
+    const scrolledTop = popup().style.top;
+
+    // 닫는다 — 리스너가 떨어져 나가 이후 스크롤은 더 이상 좌표를 갱신하지 않는다.
+    await userEvent.click(toggle);
+    window.dispatchEvent(new Event("scroll"));
+    expect(popup().style.top).toBe(scrolledTop);
+
+    getRectSpy.mockRestore();
+  });
+
+  /**
    * 사용자 리포트: "대출입력하는 모듈이 없어졌어".
    *
    * 원인은 `neededLoan === 0`(현금이 이 가격+부대비용을 다 덮는다)일 때
