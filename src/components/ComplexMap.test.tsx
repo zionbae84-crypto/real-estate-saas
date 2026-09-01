@@ -263,7 +263,11 @@ describe("ComplexMap", () => {
 
   /**
    * 사용자 지시: "지금의 마커에서는 면적, 거래건, 대출없이(색으로 구분)는
-   * 제거하고, 단지명과 금액 레인지만 표시하게 해줘."
+   * 제거하고, 단지명과 금액 레인지만 표시하게 해줘." 그다음 색+글자로
+   * 되돌아왔다가, 사각 배지 시안 적용 때 다시: "대출 필요/없음의 글자는
+   * 삭제, 아래에 맵 좌측하단부에 아이콘 색상을 간단히 설명하는걸
+   * 추가해줘." — 부담 수준 글자는 마커가 아니라 지도 범례(아래 별도
+   * 테스트)의 몫이다.
    *
    * **단서 없는 가격 숫자 하나가 되지 않는다.** `formatRange`는 min===max면
    * 숫자 하나로 접히는데("23억 5,000만원"), 예전에는 그 단서를 거래
@@ -272,7 +276,7 @@ describe("ComplexMap", () => {
    * (부모 스펙 §6), "테스트아파트 23억 5,000만원"은 그 단지 거래가를
    * 가리키는 말이지 평가액이 아니다.
    */
-  it("마커 라벨은 단지명·가격 범위·부담 수준을 낸다 — 면적·거래건수 문구는 없다", async () => {
+  it("마커 라벨은 단지명·가격 범위를 낸다 — 면적·거래건수·부담 수준 문구는 없다", async () => {
     const units = [
       unit({
         complexKey: "1",
@@ -299,9 +303,9 @@ describe("ComplexMap", () => {
     const marker = document.querySelector(".complex-map-marker");
     expect(marker?.textContent).toContain("라벨아파트");
     expect(marker?.textContent).toContain("23억 5,000만원");
-    // 사용자 지시: "마커는 기존처럼 대출없음/대출있음으로 구분해주고
-    // … 아래쪽에 표시해줘." — 색만이 아니라 글자로도 남는다.
-    expect(marker?.textContent).toContain("대출 없이");
+    // 부담 수준 글자는 마커가 아니라 범례로 옮겼다 — 마커 안에는 없다.
+    expect(marker?.textContent).not.toContain("대출 없이");
+    expect(marker?.textContent).not.toContain("대출 필요");
     // 빠진 둘 — 하나라도 남으면 이 변경이 절반만 된 것이다.
     expect(marker?.textContent).not.toContain("84㎡");
     expect(marker?.textContent).not.toContain("㎡");
@@ -337,12 +341,10 @@ describe("ComplexMap", () => {
     const loanPin = pins.find((p) => p.textContent?.includes("대출필요집"));
 
     expect(noLoanPin?.className).toContain("complex-map-pin--no-loan");
-    expect(noLoanPin?.textContent).toContain("대출 없이");
     expect(loanPin?.className).toContain("complex-map-pin--loan");
-    expect(loanPin?.textContent).toContain("대출 필요");
   });
 
-  it("대표 평형이 burdenByUnit에 없으면 보수적으로 '대출 필요'로 접는다", async () => {
+  it("대표 평형이 burdenByUnit에 없으면 보수적으로 '대출 필요' 티어로 접는다", async () => {
     const units = [unit({ complexKey: "1", complexName: "미배선집" })];
     const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
 
@@ -358,7 +360,6 @@ describe("ComplexMap", () => {
     await screen.findByText("미배선집");
     const pin = document.querySelector(".complex-map-pin");
     expect(pin?.className).toContain("complex-map-pin--loan");
-    expect(pin?.textContent).toContain("대출 필요");
   });
 
   /**
@@ -602,45 +603,12 @@ describe("ComplexMap", () => {
   });
 
   /**
-   * 마커 색이 부담 수준을 나타내던 규칙이 사라졌다(사용자 지시:
-   * "대출없이(색으로 구분)는 제거"). 색이 아무것도 분류하지 않으므로
-   * **모든 마커가 한 색**이다 — 이 검사는 티어 클래스가 하나도 남지
-   * 않았는지, 그리고 마커가 전부 같은 클래스 목록인지를 본다.
+   * 부담 수준 글자("대출 없이"/"대출 필요")가 마커 밖 지도 범례로
+   * 옮겨 갔다(사용자 지시 — 위 "마커 라벨은 단지명·가격 범위를 낸다"
+   * 참고). 색으로만 말하는 이 마커 옆에 그 뜻을 여전히 글자로 알리는
+   * 자리가 실제로 뜨는지, 그리고 두 티어를 각각 담는지를 본다.
    */
-  it("마커에 부담 수준 클래스가 하나도 붙지 않는다 — 전부 같은 한 색이다", async () => {
-    const units = [
-      unit({ complexKey: "cash-key", complexName: "현금단지", areaBucket: 59, tradeCount: 1 }),
-      unit({ complexKey: "loan-key", complexName: "대출단지", areaBucket: 84, tradeCount: 1 }),
-    ];
-    const coordinates = new Map([
-      ["cash-key", { lat: 37.1, lon: 127.1 }],
-      ["loan-key", { lat: 37.2, lon: 127.2 }],
-    ]);
-
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
-
-    await screen.findByRole("region", { name: "단지 지도" });
-    await vi.waitFor(() =>
-      expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(2),
-    );
-
-    expect(document.querySelectorAll(".complex-map-marker--no-loan")).toHaveLength(0);
-    expect(document.querySelectorAll(".complex-map-marker--loan")).toHaveLength(0);
-    // 두 마커의 클래스 목록이 글자 그대로 같다 — 색을 가르는 자리가 없다.
-    const classLists = [
-      ...document.querySelectorAll<HTMLElement>(".complex-map-marker"),
-    ].map((el) => el.className);
-    expect(new Set(classLists).size).toBe(1);
-    // 이름은 마커마다 다르다(라벨이 실제로 그 단지를 가리킨다).
-    expect(screen.getByText("현금단지")).toBeInTheDocument();
-    expect(screen.getByText("대출단지")).toBeInTheDocument();
-  });
-
-  /**
-   * 색이 하나가 되면서 범례가 설명할 갈림이 없어졌다 — 통째로 뺐다.
-   * 남겨 두면 지도에 없는 구분을 설명하는 고아 상자가 된다.
-   */
-  it("색 범례를 더 이상 내지 않는다 — 설명할 색 구분이 없다", async () => {
+  it("지도 좌측 하단에 마커 색 안내가 뜬다 — '대출 없이'/'대출 필요' 글자를 낸다", async () => {
     render(
       <ComplexMap
         units={[unit({ complexKey: "a" })]}
@@ -653,7 +621,27 @@ describe("ComplexMap", () => {
     await vi.waitFor(() =>
       expect(document.querySelectorAll(".complex-map-marker")).toHaveLength(1),
     );
-    expect(screen.queryByRole("list", { name: "마커 색 안내" })).not.toBeInTheDocument();
+    const legend = screen.getByRole("list", { name: "마커 색 안내" });
+    expect(legend.textContent).toContain("대출 없이");
+    expect(legend.textContent).toContain("대출 필요");
+  });
+
+  it("지도를 그리지 못한 상태(로드 실패·좌표 미확인)에서는 범례를 내지 않는다", async () => {
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockRejectedValue(
+      new Error("네이버지도 스크립트를 불러오지 못했어요"),
+    );
+
+    render(
+      <ComplexMap
+        units={[unit({ complexKey: "a" })]}
+        coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={new Map()}
+        naverMapClientId="test-id"
+      />,
+    );
+
+    await screen.findByText("지도를 표시하지 못했어요.");
+    // 설명할 마커 자체가 없다 — 범례를 내면 고아 상자가 된다.
     expect(document.querySelector(".complex-map-legend")).toBeNull();
   });
 

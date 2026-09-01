@@ -340,53 +340,79 @@ describe("단지 카드", () => {
 
 /*
  * ══════════════════════════════════════════════════════════════════
- * 4. 지도 마커 — 부담 수준 2색 말풍선, 앵커는 꼬리 끝
+ * 4. 지도 마커 — 부담 수준 2색 사각 배지, 앵커는 꼬리 끝
  * ══════════════════════════════════════════════════════════════════
  *
- * 사용자 지시로 한때 마커가 한 색이 된 적이 있었다(면적·거래건·색
- * 구분을 뺐던 태스크). 이번엔 다시 사용자 지시로 되돌아왔다: "마커는
- * 기존처럼 대출없음/대출있음으로 구분해주고, 색상도 기존처럼
- * 밝은블루/주황으로 수정하고, 아래쪽에 표시해줘." 그래서 여기가
- * 잠그는 것은 세 가지다: **분류가 색+글자로 함께 드러나는가**,
- * **글자는 색만으로 말하지 않는가**, 그리고 **앵커가 실제 아이콘
- * 높이를 가리키는가**(이 부분은 이름 줄이 50% 커지며 높이 산수가
- * 통째로 바뀌었다).
+ * 사용자 지시로 여러 차례 모양이 바뀌었다: 색+글자 2분류 → 한 색으로
+ * 걷어냄 → 색+글자로 되돌림 → 지금은 색 탭(이름)+흰 바탕(가격)의 사각
+ * 배지로, "대출 없이"/"대출 필요" 글자는 마커에서 빠지고 지도 좌측
+ * 하단 범례(`.complex-map-legend`)로 옮겼다("말풍선 핀을 남겨서
+ * 좌표지점을 표기하고, 대출 필요/없음의 글자는 삭제, 아래에 맵
+ * 좌측하단부에 아이콘 색상을 간단히 설명하는걸 추가해줘"). 그래서
+ * 여기가 잠그는 것은 세 가지다: **분류가 색으로 드러나는가**, **범례가
+ * 같은 뜻을 글자로도 지고 있는가**, 그리고 **앵커가 실제 아이콘 높이를
+ * 가리키는가**(패딩이 라벨 상자 하나에서 이름·가격 두 줄로 나뉘고
+ * 테두리가 새로 생기며 높이 산수가 통째로 바뀌었다).
  */
 
 describe("지도 마커", () => {
-  it("두 티어가 각자 채움·꼬리 색을 갖고, 색만으로 말하지 않는다", () => {
-    // 채움은 티어 스코프 규칙에만 있다 — 기본 규칙에 색을 두면 "이
-    // 마커가 어느 티어인지"를 스코프 없이도 주장하게 되어, 스코프
+  it("두 티어가 각자 테두리·이름 탭·가격 글자·꼬리 색을 갖는다", () => {
+    // 테두리·채움은 티어 스코프 규칙에만 있다 — 기본 규칙에 색을 두면
+    // "이 마커가 어느 티어인지"를 스코프 없이도 주장하게 되어, 스코프
     // 규칙과 값이 갈라져도 기본값이 조용히 눈가림한다.
-    expect(declared(".complex-map-marker", "background")).toBeUndefined();
-    expect(declared(".complex-map-marker", "color")).toBeUndefined();
+    expect(declared(".complex-map-marker", "border-color")).toBeUndefined();
+    expect(declared(".complex-map-marker-name", "background")).toBeUndefined();
+    expect(declared(".complex-map-marker-name", "color")).toBeUndefined();
+    expect(declared(".complex-map-marker-price", "color")).toBeUndefined();
 
-    expect(declared(".complex-map-pin--no-loan .complex-map-marker", "background")).toBe(
+    expect(declared(".complex-map-pin--no-loan .complex-map-marker", "border-color")).toBe(
+      "var(--result-signal)",
+    );
+    expect(declared(".complex-map-pin--no-loan .complex-map-marker-name", "background")).toBe(
       "var(--result-signal)",
     );
     expect(
-      declared(".complex-map-pin--no-loan .complex-map-marker", "color"),
+      declared(".complex-map-pin--no-loan .complex-map-marker-name", "color"),
       "채움과 글자색을 **같은 규칙**에 함께 선언해야 대비 검사가 그 " +
         "짝을 실제로 잽니다(seed-semantic-tokens.test.ts).",
     ).toBe("#ffffff");
+    expect(declared(".complex-map-pin--no-loan .complex-map-marker-price", "color")).toBe(
+      "var(--result-signal-ink)",
+    );
 
-    expect(declared(".complex-map-pin--loan .complex-map-marker", "background")).toBe(
+    expect(declared(".complex-map-pin--loan .complex-map-marker", "border-color")).toBe(
       "var(--result-warn)",
     );
-    expect(declared(".complex-map-pin--loan .complex-map-marker", "color")).toBe("#ffffff");
+    expect(declared(".complex-map-pin--loan .complex-map-marker-name", "background")).toBe(
+      "var(--result-warn)",
+    );
+    expect(declared(".complex-map-pin--loan .complex-map-marker-name", "color")).toBe("#ffffff");
+    expect(declared(".complex-map-pin--loan .complex-map-marker-price", "color")).toBe(
+      "var(--result-warn-ink)",
+    );
 
-    for (const dead of [".complex-map-legend", ".complex-map-marker-trades"]) {
-      expect(
-        rulesFor(dead),
-        `${dead} 규칙이 남아 있습니다 — 지도에 없는 것을 꾸미는 죽은 CSS입니다.`,
-      ).toEqual([]);
-    }
+    expect(
+      rulesFor(".complex-map-marker-trades"),
+      ".complex-map-marker-trades 규칙이 남아 있습니다 — 지도에 없는 것을 꾸미는 죽은 CSS입니다.",
+    ).toEqual([]);
+  });
+
+  it("범례가 두 티어를 색 견본+글자로 설명한다 — 색만으로 말하지 않는다", () => {
+    expect(rulesFor(".complex-map-legend").length).toBeGreaterThan(0);
+    expect(declared(".complex-map-legend-swatch--no-loan", "background")).toBe(
+      "var(--result-signal)",
+    );
+    expect(declared(".complex-map-legend-swatch--loan", "background")).toBe(
+      "var(--result-warn)",
+    );
+    // 실제 "대출 없이"/"대출 필요" 글자는 ComplexMap.tsx가 MARKER_LEGEND로
+    // 넣고, ComplexMap.test.tsx가 렌더 결과에서 확인한다.
   });
 
   it("꼬리가 같은 티어 색 계열의 어두운(-ink) 변형을 쓴다 — 밝은 값은 하드 룰이 막는다", () => {
     // `--result-signal`/`--result-warn` 자체를 색으로 쓰면 아래
     // "--result-signal을 글자색으로 쓰지 않는다" 검사가 막는다(예외
-    // 없는 하드 룰). 같은 계열의 -ink 변형을 쓴다 — 알약과 정확히
+    // 없는 하드 룰). 같은 계열의 -ink 변형을 쓴다 — 라벨 상자와 정확히
     // 같은 색은 아니지만 눈으로 갈라지지 않는다.
     expect(declared(".complex-map-pin--no-loan .complex-map-marker-tail", "color")).toBe(
       "var(--result-signal-ink)",
@@ -396,16 +422,10 @@ describe("지도 마커", () => {
     );
   });
 
-  it("마커가 18px 알약이다", () => {
-    expect(declared(".complex-map-marker", "border-radius")).toBe("18px");
-  });
-
-  it("아래쪽 줄이 '대출 없이'/'대출 필요' 글자를 낸다 — 색만으로 말하지 않는다", () => {
-    // 셀렉터가 존재하고 높이가 px로 못박혀 있는지만 CSS에서 잰다.
-    // 실제 글자 내용("대출 없이"/"대출 필요")은 ComplexMap.tsx가
-    // markerLabel의 문자열로 넣고, ComplexMap.test.tsx가 렌더 결과에서
-    // 확인한다 — 여기서는 앵커 산수가 참조하는 자리라는 것만 확인한다.
-    expect(declared(".complex-map-marker-tier", "line-height")).toMatch(/^\d+px$/);
+  it("마커가 흰 바탕 + 색 테두리의 둥근 사각 배지다", () => {
+    expect(declared(".complex-map-marker", "border-radius")).toBe("10px");
+    expect(declared(".complex-map-marker", "background")).toBe("var(--result-paper)");
+    expect(declared(".complex-map-marker", "border")).toBe("1px solid");
   });
 
   /**
@@ -414,8 +434,9 @@ describe("지도 마커", () => {
    * 예전 앵커는 `naver.maps.Point(0, 0)` — 떠 있는 라벨 상자의 **왼쪽 위
    * 모서리**를 좌표에 앉혔고, 상자는 거기서 오른쪽 아래로 자라날 뿐이라
    * "정확히 이 지점"을 가리키는 자리가 아예 없었다. 지금은 말풍선
-   * 꼬리 끝이 좌표에 앉는다 — 이름 줄이 50% 커지고 티어 줄이 새로
-   * 생기며 높이 산수의 항이 늘었지만, 방식은 그대로다.
+   * 꼬리 끝이 좌표에 앉는다 — 패딩이 라벨 상자 하나에서 이름·가격 두
+   * 줄로 나뉘고 테두리가 새로 생기며 높이 산수의 항이 늘었지만, 방식은
+   * 그대로다.
    *
    * jsdom은 레이아웃을 계산하지 않아 마커의 실제 렌더 높이를 물어볼 수
    * 없다. 그래서 `styles.css`가 px로 못박아 둔 박스 모델 성분을 읽어
@@ -434,22 +455,30 @@ describe("지도 마커", () => {
       return Number.parseInt(value!, 10);
     };
 
-    const padding = declared(".complex-map-marker", "padding")!.split(/\s+/);
-    expect(padding[0], "마커 패딩의 세로 값이 px가 아닙니다").toMatch(/^\d+px$/);
-    const verticalPadding = Number.parseInt(padding[0]!, 10) * 2;
+    const border = declared(".complex-map-marker", "border")!;
+    const borderWidthMatch = border.match(/^(\d+)px/);
+    expect(borderWidthMatch, `.complex-map-marker { border: ${border} }가 px 폭으로 시작하지 않습니다`).not.toBeNull();
+    const verticalBorder = Number.parseInt(borderWidthMatch![1]!, 10) * 2;
+
+    const namePadding = declared(".complex-map-marker-name", "padding")!.split(/\s+/);
+    expect(namePadding[0], "단지명 패딩의 세로 값이 px가 아닙니다").toMatch(/^\d+px$/);
+    const nameVerticalPadding = Number.parseInt(namePadding[0]!, 10) * 2;
+
+    const pricePadding = declared(".complex-map-marker-price", "padding")!.split(/\s+/);
+    expect(pricePadding.length, "가격 패딩은 top/좌우/bottom 세 값이어야 합니다").toBe(3);
+    const priceVerticalPadding =
+      Number.parseInt(pricePadding[0]!, 10) + Number.parseInt(pricePadding[2]!, 10);
 
     expect(
-      verticalPadding +
+      verticalBorder +
+        nameVerticalPadding +
         px(".complex-map-marker-name", "line-height") +
+        priceVerticalPadding +
         px(".complex-map-marker-price", "line-height") +
-        px(".complex-map-marker-tier", "line-height") +
         px(".complex-map-marker-tail", "height"),
       "앵커 y와 마커의 실제 높이가 갈라졌습니다 — 마커가 가리키는 자리가 " +
         "틀어집니다(ComplexMap.tsx의 MARKER_ANCHOR 주석 참고).",
     ).toBe(MARKER_ANCHOR.y);
-
-    // 테두리를 더하면 위 합에 2px이 붙는다 — 앵커를 함께 고쳐야 한다.
-    expect(declared(".complex-map-marker", "border")).toBeUndefined();
   });
 
   /**

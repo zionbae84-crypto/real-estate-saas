@@ -136,7 +136,7 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * 지시("명확하게 단지가 어디인지 표기가 될수 있도록")가 가리킨 것이
  * 바로 이 모호함이다.
  *
- * 지금 아이콘은 **말풍선**이다(알약 라벨 + 그 아래 삼각 꼬리, 아래
+ * 지금 아이콘은 **말풍선**이다(라벨 상자 + 그 아래 삼각 꼬리, 아래
  * {@link markerLabel} 참고). 좌표에 앉아야 하는 점은 그 **꼬리 끝**이다.
  *
  * ── x = 0 인 근거 ──────────────────────────────────────────────
@@ -150,21 +150,23 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * 세로는 자식이 순서대로 쌓이므로 아이콘 높이가 곧 꼬리 끝의 y다.
  * `styles.css`가 그 성분을 전부 px로 못박아 둔다:
  *
- *     라벨 위/아래 패딩   4 + 4 = 8   (.complex-map-marker padding)
- *     단지명 줄          21          (.complex-map-marker-name line-height)
- *     가격 줄            15          (.complex-map-marker-price line-height)
- *     부담 수준 줄        13          (.complex-map-marker-tier line-height)
- *     꼬리                7          (.complex-map-marker-tail height)
+ *     라벨 상자 테두리 위/아래     1 + 1 = 2   (.complex-map-marker border)
+ *     단지명 위/아래 패딩        3 + 3 = 6   (.complex-map-marker-name padding)
+ *     단지명 줄                 15          (.complex-map-marker-name line-height)
+ *     가격 위/아래 패딩          3 + 4 = 7   (.complex-map-marker-price padding)
+ *     가격 줄                   16          (.complex-map-marker-price line-height)
+ *     꼬리                       7          (.complex-map-marker-tail height)
  *     ─────────────────────────
- *     합                 64
+ *     합                        53
  *
- * (테두리는 두지 않았다 — 그림자로만 면을 띄운다.) `rem`이 아니라 px로
- * 적은 것도 이 산수를 위해서다: 루트 글꼴 크기가 바뀌어도 앵커와 실제
- * 높이가 갈라지지 않는다.
+ * `rem`이 아니라 px로 적은 것도 이 산수를 위해서다: 루트 글꼴 크기가
+ * 바뀌어도 앵커와 실제 높이가 갈라지지 않는다.
  *
- * 단지명 줄이 14→21(사용자 지시로 글자 크기를 50% 키웠다)로,
- * 부담 수준 줄이 새로 생기며(색 구분을 되살렸다) 합이 44→64로 늘었다 —
- * 어느 쪽이든 이 상수를 CSS와 **함께** 고쳐야 한다.
+ * **사용자 지시로 마커가 사각 배지(흰 바탕 + 색 테두리, 단지명은 색
+ * 탭·가격은 흰 바탕)로 다시 바뀌며 패딩이 라벨 상자 하나가 아니라
+ * 단지명·가격 두 줄에 나뉘어 붙었고, 그 대신 테두리 2px이 새로 늘었다** —
+ * 부담 수준 글자 줄(옛 13px)은 마커에서 빠지고 지도 좌측 하단 범례
+ * (`.complex-map-legend`, 아래 참고)로 옮겨 갔다.
  *
  * `scripts/result-screen-layout.test.ts`의 "앵커 y가 styles.css의 실제
  * 박스 모델 높이와 같다"가 위 값들을 CSS에서 직접 읽어 이 합을 다시
@@ -173,28 +175,19 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * 모듈을 임포트할 수 없다 — `src/no-network.test.ts`가 그 금지를
  * 전수로 잡고, 이 검사는 styles.css를 읽어야 한다.)
  */
-export const MARKER_ANCHOR = { x: 0, y: 64 } as const;
+export const MARKER_ANCHOR = { x: 0, y: 53 } as const;
 
 /**
- * 마커 라벨 아래쪽 줄에 적는 부담 수준 문구.
- *
- * **색만으로 뜻을 지지 않게 하는 자리다.** 채움이 이미 분류(파랑=대출
- * 없이/주황=대출 필요)를 나르지만, 색이 하나도 전달되지 않는 경우(색각
- * 이상·흑백 인쇄)에도 뜻이 남아야 한다.
- */
-const BURDEN_TIER_MARKER_LABEL: Record<BurdenTier, string> = {
-  "no-loan": "대출 없이",
-  loan: "대출 필요",
-};
-
-/**
- * 마커 위에 항상 보이는 라벨. **단지명·가격 범위·부담 수준, 셋이다.**
+ * 마커 위에 항상 보이는 라벨. **단지명·가격 범위, 둘이다.**
  *
  * 사용자 지시: "지금의 마커에서는 면적, 거래건, 대출없이(색으로 구분)는
  * 제거하고, 단지명과 금액 레인지만 표시하게 해줘." 그다음: "마커는
  * 기존처럼 대출없음/대출있음으로 구분해주고, 색상도 기존처럼
- * 밝은블루/주황으로 수정하고, 아래쪽에 표시해줘." — 면적·거래건은
- * 그대로 뺀 채, 부담 수준만 색(채움)과 글자(아래쪽 줄) 둘 다로 돌아왔다.
+ * 밝은블루/주황으로 수정하고, 아래쪽에 표시해줘." 그다음(사각 배지
+ * 시안 적용): "말풍선 핀을 남겨서 좌표지점을 표기하고, 대출 필요/없음의
+ * 글자는 삭제, 아래에 맵 좌측하단부에 아이콘 색상을 간단히 설명하는걸
+ * 추가해줘." — 부담 수준을 알리는 글자는 마커 **밖**(지도 범례)으로
+ * 옮겨 갔고, 마커 자신은 색(채움)만으로 분류를 낸다.
  *
  * **단일 "적정가" 숫자를 내지 않는다는 원칙은 그대로다** — 언제나
  * `formatRange`(범위) 결과만 쓴다. `formatRange`는 min===max일 때 숫자
@@ -205,13 +198,11 @@ const BURDEN_TIER_MARKER_LABEL: Record<BurdenTier, string> = {
  * 여기 들어가는 단지 유래 값은 전부 {@link escapeHtml}을 거친다 —
  * 이 파일은 이 앱에서 유일하게 React를 거치지 않는 HTML 문자열 자리다
  * (`complexName`은 국토부 API의 `aptNm`, 우리가 검증하지 않는 값이다).
- * 부담 수준 문구(`BURDEN_TIER_MARKER_LABEL`)는 우리 자신이 정한 고정
- * 문자열이라 이스케이프가 필요 없다.
  *
  * `.complex-map-pin`에 티어 클래스(`--no-loan`/`--loan`)를 붙인다 —
- * 알약·꼬리 둘 다 그 자손 선택자로 색을 받는다(styles.css). 알약
- * 안이 아니라 바깥 상자에 붙이는 이유는, 알약과 꼬리가 형제 요소라
- * 한쪽에 붙이면 다른 쪽에 CSS 상속으로 안 닿기 때문이다.
+ * 라벨 상자·꼬리 둘 다 그 자손 선택자로 색을 받는다(styles.css). 라벨
+ * 상자 안이 아니라 바깥 상자에 붙이는 이유는, 라벨 상자와 꼬리가 형제
+ * 요소라 한쪽에 붙이면 다른 쪽에 CSS 상속으로 안 닿기 때문이다.
  *
  * 꼬리(삼각형)는 CSS 가상 요소가 아니라 **인라인 SVG**다. `position:
  * absolute`를 쓰지 않고 세로 flex로 쌓아야 위 {@link MARKER_ANCHOR}의
@@ -231,7 +222,6 @@ function markerLabel(
     `<div class="complex-map-marker" data-complex-key="${escapeHtml(complexKey)}">` +
     `<span class="complex-map-marker-name">${name}</span>` +
     `<span class="complex-map-marker-price">${range}</span>` +
-    `<span class="complex-map-marker-tier">${BURDEN_TIER_MARKER_LABEL[tier]}</span>` +
     `</div>` +
     `<svg class="complex-map-marker-tail" width="14" height="7" viewBox="0 0 14 7" ` +
     `aria-hidden="true" focusable="false">` +
@@ -240,6 +230,17 @@ function markerLabel(
     `</div>`
   );
 }
+
+/**
+ * 지도 좌측 하단에 얹는 마커 색 안내. 부담 수준 글자가 마커 밖으로
+ * 옮겨 오며(위 {@link markerLabel} 주석) 색이 무슨 뜻인지 알릴 자리가
+ * 필요해졌다 — 이 상자가 그 자리다. 한 번만 뜨므로 마커마다 글자 줄을
+ * 반복하는 것보다 지도가 덜 어수선하다.
+ */
+const MARKER_LEGEND: ReadonlyArray<{ tier: BurdenTier; label: string }> = [
+  { tier: "no-loan", label: "대출 없이" },
+  { tier: "loan", label: "대출 필요" },
+];
 
 /**
  * 단지 그룹마다 마커에 쓸 부담 수준을 정한다.
@@ -532,9 +533,8 @@ export function ComplexMap({
       아래 `.complex-map`은 `inset` 대신 `width/height: 100%`로 칸을
       채운다), 그 안에 우리 자식을 두면 SDK가 관리하는 DOM과 섞인다.
 
-      예전에는 이 액자가 마커 색 범례를 지도 위에 얹기 위한 기준
-      상자이기도 했다. 마커가 한 색이 되며 범례는 통째로 사라졌지만,
-      액자는 남는다 — 지도 칸의 높이·테두리를 지는 것도 이 상자다.
+      이 액자는 아래 마커 색 안내(`.complex-map-legend`)를 얹는 기준
+      상자이기도 하다 — 지도 칸의 높이·테두리를 지는 것도 이 상자다.
     */}
     <div className="complex-map-frame">
     <div ref={containerRef} className="complex-map" role="region" aria-label="단지 지도">
@@ -567,6 +567,23 @@ export function ComplexMap({
         </p>
       )}
     </div>
+    {/*
+      마커 색 안내(위 {@link MARKER_LEGEND} 참고). 지도가 실제로 그려진
+      때만 뜬다 — 로드 실패·좌표 미확인 상태에서는 설명할 마커 자체가
+      없다. `.complex-map` 밖, `.complex-map-frame` 안에 둔다 — SDK가
+      관리하는 지도 컨테이너 자식으로 넣으면 지도가 다시 그려질 때마다
+      함께 지워진다.
+    */}
+    {!loadFailed && !noneLocated && (
+      <ul className="complex-map-legend" aria-label="마커 색 안내">
+        {MARKER_LEGEND.map(({ tier, label }) => (
+          <li key={tier} className="complex-map-legend-item">
+            <span className={`complex-map-legend-swatch complex-map-legend-swatch--${tier}`} aria-hidden="true" />
+            {label}
+          </li>
+        ))}
+      </ul>
+    )}
     </div>
     {hiddenCount > 0 && (
       /*

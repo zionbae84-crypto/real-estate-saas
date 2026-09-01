@@ -2232,7 +2232,7 @@ describe("전체화면 결과 셸", () => {
    * `ComplexList`가 계속 쓴다 — 이번 변경은 지도만의 일이다. 그 사실을
    * 아래에서 함께 못박는다(목록에서도 사라지면 이 검사가 깨진다).
    */
-  it("마커 라벨이 단지명·가격 범위·부담 수준을 내고, 목록 행과 같은 단지를 가리킨다", async () => {
+  it("마커 라벨이 단지명·가격 범위를 내고, 목록 행과 같은 단지를 가리킨다", async () => {
     const { container } = await renderResults();
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() =>
@@ -2259,9 +2259,10 @@ describe("전체화면 결과 셸", () => {
       expect(marker.textContent).not.toContain("㎡");
       expect(marker.textContent).not.toContain("거래");
     }
-    // 부담 수준은 아래쪽 글자로도 보인다 — 색만으로 말하지 않는다.
-    expect(cash.textContent).toContain("대출 없이");
-    expect(loan.textContent).toContain("대출 필요");
+    // 부담 수준 글자는 마커가 아니라 지도 범례가 낸다 — 색만으로 말하지 않는다.
+    const legend = screen.getByRole("list", { name: "마커 색 안내" });
+    expect(legend.textContent).toContain("대출 없이");
+    expect(legend.textContent).toContain("대출 필요");
     // 색 구분도 살아 있다 — 감싸는 핀(.complex-map-pin)의 티어 클래스가 서로 다르다.
     expect(cash.parentElement?.className).not.toBe(loan.parentElement?.className);
     expect(cash.parentElement?.className).toContain("complex-map-pin--no-loan");
