@@ -6,6 +6,7 @@ import { ComplexList, unitKey } from "./components/ComplexList";
 import { ComplexMap, groupWithCoords } from "./components/ComplexMap";
 import { EntryScreen } from "./components/EntryScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
+import { HomeIcon } from "./components/HomeIcon";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaBasis } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
@@ -1238,14 +1239,22 @@ export function App() {
                     `phase === "결과"`일 때만 보인다 — 프로필은 채웠지만 아직
                     지역을 조회하지 않았을 때(phase가 여전히 "입력")는 이미
                     `EntryScreen`이 화면을 덮고 있어 이 버튼이 뜻이 없다.
+
+                    현금·소득·지역은 상단바에서 바로 바뀌지만(위
+                    `RegionQuickSelect`·`MoneyInput` 참고), 무주택·생애최초·
+                    평형대·구매유형은 아직 화면 1에서만 바꿀 수 있다 — 그래서
+                    이 버튼은 남는다. 아이콘만으로 두면 눌러야 뜻을 알게 되므로
+                    접근 가능한 이름은 `aria-label`로 그대로 "조건 다시
+                    넣기"를 준다(글자를 지운 것은 사용자 지시).
                   */}
                   {phase === "결과" && (
                     <button
                       type="button"
                       className="back-to-entry-button"
                       onClick={handleBackToEntry}
+                      aria-label="조건 다시 넣기"
                     >
-                      조건 다시 넣기
+                      <HomeIcon />
                     </button>
                   )}
                 </>

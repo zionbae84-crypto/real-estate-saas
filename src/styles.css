@@ -2501,27 +2501,31 @@ body {
 }
 
 /*
- * 상단바 오른쪽 버튼(prototype-results.html의 `.ghost`).
+ * 상단바 오른쪽 버튼(prototype-results.html의 `.ghost`에서 시작했으나,
+ * 사용자 지시로 글자 라벨을 홈 아이콘으로 바꿨다 — 접근 가능한 이름은
+ * `App.tsx`의 `aria-label`이 진다). 정사각형에 원형으로, 아이콘을
+ * 가운데 둔다.
  *
- * ⚠ **파랑 채움 위 굵은 흰 글자는 2.65:1로 본문 기준(4.5:1)에 못
- * 미친다.** 사용자가 명시적으로 지시한 조합이고(커밋 `1c47333`),
- * 굵기로는 메워지지 않는다 — 3:1 완화는 18.66px부터인데 이 글자는
- * 13px이다. `scripts/seed-semantic-tokens.test.ts`의 예외 목록이 이
- * 선택자를 이름으로 적고 실측값을 다시 잰다: 채움이 움직이면 거기서
- * 먼저 깨진다. 통과시키는 방법은 채움을 `--result-signal-ink`로
- * 내리는 것이고(흰 글자 5.44:1), 그만큼 지정하신 색에서 멀어진다.
+ * ⚠ **파랑 채움 위 흰 아이콘은 2.65:1이다.** 글자였을 때부터
+ * 사용자가 명시적으로 지시한 채움이고(커밋 `1c47333`) 그 값은 그대로
+ * 옮겨 왔다 — 지금은 비텍스트 콘텐츠라 WCAG 1.4.11의 3:1이 기준이지만
+ * 여전히 못 미친다. `scripts/seed-semantic-tokens.test.ts`의 예외
+ * 목록이 이 선택자를 이름으로 적고 실측값을 다시 잰다: 채움이 움직이면
+ * 거기서 먼저 깨진다. 통과시키는 방법은 채움을 `--result-signal-ink`로
+ * 내리는 것이고(흰 아이콘 5.44:1), 그만큼 지정하신 색에서 멀어진다.
  */
 .back-to-entry-button {
-  padding: 8px 14px;
-  font: inherit;
-  font-size: 0.8125rem;
-  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
   color: #ffffff;
   background: var(--result-signal);
   border: 0;
-  border-radius: 18px;
+  border-radius: 50%;
   cursor: pointer;
-  white-space: nowrap;
 }
 
 .back-to-entry-button:hover {
