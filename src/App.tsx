@@ -105,8 +105,6 @@ export function App() {
   const [currentRegionCode, setCurrentRegionCode] = useState<string | null>(null);
   /** 조회 결과 안에서 행정동으로 더 좁힌 값. null이면 그 지역 전체다 */
   const [selectedDong, setSelectedDong] = useState<string | null>(null);
-  // ComplexList의 PAGE_SIZE와 같은 값이다 — 각 덩어리에서 이만큼씩 보여준다.
-  const [visibleCount, setVisibleCount] = useState(10);
   // 상세(상환 시뮬레이션)를 연 평형. null이면 목록 화면이다.
   const [selectedUnit, setSelectedUnit] = useState<ComplexUnit | null>(null);
   /**
@@ -284,9 +282,11 @@ export function App() {
   /**
    * 지역을 확정하면 그 지역의 실거래가를 조회한다.
    *
-   * 앞 지역에서 고른 행정동과 "더 보기"로 늘려 둔 행 수를 함께 되돌린다 —
-   * 남겨 두면 새 지역에는 없는 동으로 걸러 빈 목록이 되거나, 새 지역의
-   * 첫 화면이 앞 지역의 스크롤 깊이를 물려받는다.
+   * 앞 지역에서 고른 행정동을 되돌린다 — 남겨 두면 새 지역에는 없는
+   * 동으로 걸러 빈 목록이 된다. `ComplexList`에 건 `key`(region+dong,
+   * 아래 렌더 참고)가 이 값의 변화를 보고 목록을 다시 마운트하므로,
+   * 각 덩어리가 펼쳐 둔 페이지도 함께 1쪽으로 되돌아간다 — 새 지역의
+   * 첫 화면이 앞 지역의 페이지 깊이를 물려받지 않는다.
    *
    * **열려 있던 단지 상세도 함께 닫는다**(C1). 앞 지역 단지의 상세는 새
    * 지역 화면에서 잔상이 아니라 **틀린 숫자**다 — 사이드바가 목록 대신
@@ -298,7 +298,6 @@ export function App() {
    */
   function handleRegionSelect(regionCode: string) {
     setSelectedDong(null);
-    setVisibleCount(10);
     // 앞 지역에서 고른 단지는 새 지역 목록에도 지도에도 없다.
     setFocusedComplexKey(null);
     clearComplexSelection();
@@ -608,13 +607,11 @@ export function App() {
   }, [regionComplexes.status, currentRegionCode, hasMappedUnits, complexCoordinates.query]);
 
   /**
-   * 지도에서 마커를 눌렀다. 목록 쪽 선택을 같은 단지로 맞추고, 그 행이
-   * "더 보기" 너머에 있으면 **보이는 데까지 목록을 펼친다.**
-   *
-   * 펼치지 않으면 이 배선은 절반만 동작한다: 지도는 30개까지 그리는데
-   * (`MARKER_LIMIT`) 목록은 덩어리마다 `visibleCount`(기본 10)개씩만
-   * 그리므로, 11번째 단지의 마커를 누르면 선택은 바뀌는데 화면에는
-   * 아무 변화가 없다 — 사용자에겐 마커가 죽은 것으로 보인다.
+   * 지도에서 마커를 눌렀다. 목록 쪽 선택을 같은 단지로 맞춘다 — 그 행이
+   * 지금 보이는 페이지 밖에 있어도 걱정할 것 없다. `ComplexList`가
+   * `focusedComplexKey` prop을 보고 그 단지가 속한 덩어리의 페이지를
+   * 스스로 넘긴다(`ComplexList.tsx`의 첫 `useEffect`) — 여기서는 그 값만
+   * 알려 주면 된다.
    *
    * 상세(`selectedUnit`)는 열지 않는다. 마커는 단지 하나를 가리키고
    * 상세는 **평형** 하나에 대한 것이라, 어느 평형인지는 마커가 정할 수
@@ -659,20 +656,6 @@ export function App() {
       handleCloseDetail();
     }
     setFocusedComplexKey(complexKey);
-    if (complexList === null) return;
-    // 덩어리마다 같은 visibleCount로 잘리므로(ComplexList), 그 단지가
-    // 들어 있는 덩어리에서의 자리(1부터 센 순번)만큼은 펼쳐야 한다.
-    const needed = Math.max(
-      ...[complexList.withinSafe, complexList.unverified, complexList.beyondSafe].map(
-        (chunk) => {
-          const index = chunk.findIndex((e) => e.unit.complexKey === complexKey);
-          return index === -1 ? 0 : index + 1;
-        },
-      ),
-    );
-    // 줄이지는 않는다 — 이미 더 펼쳐 둔 목록을 접으면 사용자가 방금
-    // 누른 "더 보기"를 화면이 되돌리는 셈이 된다.
-    setVisibleCount((n) => Math.max(n, needed));
   }
 
   /**
@@ -1697,12 +1680,12 @@ export function App() {
                                     // 없을 수 있다 — 목록에 없는 행을 가리키는
                                     // 표시가 남지 않게 함께 되돌린다.
                                     setFocusedComplexKey(null);
-                                    // 앞서 걸러지지 않은 목록에서 "더 보기"로
-                                    // 늘려 둔 행 수를 되돌린다 — 안 그러면 동을
-                                    // 좁힌 새 목록이 이전 목록의 스크롤
-                                    // 깊이를 그대로 물려받는다
-                                    // (handleRegionSelect와 같은 이유).
-                                    setVisibleCount(10);
+                                    // `ComplexList`에 건 `key`(아래 렌더)가 동
+                                    // 값을 포함하므로, 목록이 다시 마운트돼 각
+                                    // 덩어리의 페이지도 함께 1쪽으로 돌아간다
+                                    // (handleRegionSelect와 같은 이유) —
+                                    // 안 그러면 동을 좁힌 새 목록이 이전
+                                    // 목록의 페이지 깊이를 그대로 물려받는다.
                                   }}
                                 >
                                   <option value="">전체</option>
@@ -1723,6 +1706,16 @@ export function App() {
                           ) : (
                             complexList !== null && (
                               <ComplexList
+                                /*
+                                  지역·행정동이 바뀌면 컴포넌트를 통째로
+                                  다시 마운트한다 — 각 덩어리가 내부에 들고
+                                  있는 페이지 번호(useState)가 자동으로 1쪽
+                                  으로 초기화된다. 프로필(현금·소득 등)만
+                                  바뀔 때는 이 key가 그대로라 페이지가
+                                  유지된다: 상단바에서 숫자만 살짝 고친
+                                  사람이 보던 페이지를 잃지 않는다.
+                                */
+                                key={`${currentRegionCode ?? ""}|${selectedDong ?? ""}`}
                                 result={complexList}
                                 /*
                                   이 조회가 실제로 반영한 계약월이다.
@@ -1738,8 +1731,6 @@ export function App() {
                                 noRepaymentCapacity={
                                   affordability.result.loanLimit.breakdown.DSR === 0
                                 }
-                                visibleCount={visibleCount}
-                                onShowMore={() => setVisibleCount((n) => n + 10)}
                                 onSelect={handleSelectUnit}
                                 /*
                                   지도에서 고른 단지. 마커 강조와 같은

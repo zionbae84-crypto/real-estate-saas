@@ -1,8 +1,8 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
-import { burdenGrade } from "../lib/burden-grade";
+import { burdenGrade, burdenIsComplete } from "../lib/burden-grade";
 import { burdenTierOf } from "../lib/complex-list";
 import type { ComplexListEntry, ComplexListResult } from "../lib/complex-list";
 import { landLeaseRules } from "../state/landLeaseRules";
@@ -10,16 +10,20 @@ import { LandLeaseNote } from "./LandLeaseNote";
 import { NoLoanLine } from "./NoLoanLine";
 
 /**
- * 각 덩어리에서 한 번에 보여주는 최대 행 수.
+ * 각 덩어리가 한 쪽(페이지)에서 보여주는 행 수.
  *
- * 덩어리를 합쳐 세지 않고 **각각** 자른다. 합쳐 세면 안전 덩어리가
- * 길 때 뒤 덩어리가 화면 밖으로 밀려나고, 그러면 "선이 어디에
+ * 덩어리를 합쳐 세지 않고 **각각** 따로 페이지를 넘긴다. 합쳐 세면 안전
+ * 덩어리가 길 때 뒤 덩어리가 화면 밖으로 밀려나고, 그러면 "선이 어디에
  * 있는가"라는 이 화면의 요점이 보이지 않는다 — 실제로 안전 82개·부담
  * 7개인 프로필에서 두 번째 헤더가 아예 안 나왔다. 덩어리가 셋이 된
  * 뒤에는 이 규칙이 더 중요해졌다: 가운데 덩어리("우리 숫자로는 …")가
  * 밀려나면 등급을 붙든 이유 자체가 화면에서 사라진다.
+ *
+ * 사용자 지시로 한 쪽에 5개씩, 쪽을 넘겨서 보게 했다(예전엔 10개씩
+ * 누적으로 펼치는 "더 보기"였다) — 그래서 각 덩어리는 자기만의 페이지
+ * 번호를 갖는다(아래 `ComplexList`의 세 `useState`).
  */
-const PAGE_SIZE = 10;
+const PAGE_SIZE = 5;
 
 export interface ComplexListProps {
   result: ComplexListResult;
@@ -39,9 +43,14 @@ export interface ComplexListProps {
   hasRegionFilter: boolean;
   /** 상환 능력(DSR) 자체가 0인가 */
   noRepaymentCapacity: boolean;
-  /** 더 보기로 늘린 행 수. 기본은 PAGE_SIZE */
-  visibleCount?: number;
-  onShowMore?: () => void;
+  /**
+   * 한 쪽에서 보여주는 행 수. 기본은 {@link PAGE_SIZE}(5).
+   *
+   * 화면에서 쓰는 값을 바꿀 자리가 아니다 — `land-lease-grade.test.tsx`처럼
+   * 페이지에 잘리지 않고 목록 전체를 한 번에 검사해야 하는 자리를 위한
+   * 탈출구다(예전 `visibleCount` 오버라이드와 같은 자리).
+   */
+  pageSize?: number;
   /**
    * 있으면 각 행이 눌러서 상세(상환 시뮬레이션)를 열 수 있는 버튼이
    * 된다. 없으면(App.tsx 밖에서 이 컴포넌트만 렌더링하는 기존
@@ -51,12 +60,15 @@ export interface ComplexListProps {
   onSelect?: (unit: ComplexUnit) => void;
   /**
    * 지금 지도에서 고른 단지(`complexKey`). 그 단지의 행에 표시를 달고,
-   * 값이 바뀌면 그 행을 목록 스크롤 안으로 끌어온다.
+   * 값이 바뀌면 그 행이 속한 덩어리의 페이지를 그 행이 있는 쪽으로
+   * 넘긴 뒤 목록 스크롤 안으로 끌어온다(아래 첫 `useEffect`).
    *
    * **단지 키라 같은 단지의 평형 행이 여럿이면 전부 표시된다.** 마커는
    * 단지 하나에 하나이므로(ComplexMap의 `groupByComplex`) 그것이 정직한
    * 대응이다 — 평형 하나만 골라 표시하면 지도에서 누른 마커가 가리키는
-   * 것보다 좁게 말하게 된다.
+   * 것보다 좁게 말하게 된다. 같은 이유로, 같은 단지의 평형이 서로 다른
+   * 덩어리에 걸쳐 있으면(예: 84㎡는 안전, 59㎡는 대출 필요) **그 덩어리
+   * 모두**의 페이지를 넘긴다.
    *
    * 선택 상태는 여기서 만들지 않는다. `App.tsx`가 한 벌만 들고
    * (`focusedComplexKey`) 목록과 지도에 같은 값을 내려 준다 — 두 벌로
@@ -77,27 +89,125 @@ export interface ComplexListProps {
  * **변동률을 내지 않는다.** 사실 서술이지만 투자 판단 재료로 읽힌다
  * (같은 조항의 "수익률 예측 금지").
  *
- * 목록을 등급에서 세 덩어리로 가른다. 어디까지가 무리 없는지를 배지
- * 하나가 아니라 목록 구조가 말한다.
+ * 목록을 세 덩어리로 가른다. 어디까지가 무리 없는지를 배지 하나가
+ * 아니라 목록 구조가 말한다.
  *
- * 가운데 덩어리는 **우리가 다 재지 못한 행**이다(토지임대부이거나
- * 토지임대부인지 모르는 평형). "무리 없이 살 수 있어요"에 넣으면 우리가
- * 스스로 불완전하다고 인정한 숫자로 안심시키는 것이 되고, "부담이
- * 커요"에 넣으면 모르는 것을 아는 척하는 것이 된다 — 그래서 자기
- * 덩어리를 준다. 가르는 기준은 행 배지와 **같은 함수**다
- * (`lib/burden-grade.ts`의 `burdenGradeLevel`).
+ * **대출 필요 여부로만 가른다** — `result.withinSafe`·`result.beyondSafe`를
+ * 합친 뒤 `burdenTierOf`로 둘로 쪼갠다. 대출이 아예 없는 행은 전부
+ * "무리 없이 살 수 있어요"로, 대출이 끼는 행은 전부 "대출이 필요해요"로
+ * 간다(사용자 지시). `result.unverified`(토지임대부 확인 필요)만
+ * 대출 유무와 무관하게 따로 남는다 — 아래 참고.
+ *
+ * ⚠ **`beyondSafe`가 "항상 대출이 낀 행"은 아니다.** `calcSafetyScore`의
+ * 부담률은 이번 구매의 새 대출뿐 아니라 **기존 대출**
+ * (`existingDebtAnnualPayment`)도 함께 잰다 — 그래서 이번 구매엔 대출이
+ * 필요 없어도(neededLoan 0) 기존 빚만으로 등급이 caution/danger로
+ * 떨어질 수 있고, 그런 행도 엔진 수준에서는 `beyondSafe`에 담긴다.
+ *
+ * **처음엔 그런 행을 `beyondSafe`와 함께 "대출이 필요해요"에 남겼다.**
+ * 그런데 행 문구는 "대출 없이 살 수 있어요"인데 덩어리 제목은 "대출이
+ * 필요해요"라, 화면만 보면 모순으로 읽혔다(사용자 지시: "카테고리가
+ * 안 맞는 것 같다"). 그래서 **대출 유무만으로 완전히 가른다** — 대출이
+ * 없는 행은 엔진이 낸 등급이 무엇이었든 "무리 없이"로 옮기고, 아래
+ * `ComplexRow`도 그 행의 등급 배지를 "안전"으로 함께 맞춘다(그래야
+ * "대출 없이 살 수 있어요"와 "위험" 배지가 한 카드 안에서 서로 다른
+ * 말을 하지 않는다). **기존 빚이 많다는 사실 자체가 사라지는 것은
+ * 아니다** — 그 사실을 실제로 재는 화면(예: `ComplexDetail`의 한도
+ * 계산)은 이 목록의 표시와 별개로 `burden.safety.level`을 그대로
+ * 쓴다. 여기서 덮는 것은 **이 목록 카드의 등급 배지 하나**뿐이다.
+ *
+ * 새로 합쳐 나눈 두 배열은 부담률 오름차순으로 다시 정렬한다 — 예전
+ * (`withinSafe`·`beyondSafe`를 순서 그대로 이어 붙이는 방식)처럼
+ * 재정렬을 생략할 수 없다: 이제 두 배열 모두 `withinSafe`·`beyondSafe`
+ * 양쪽에서 원소를 섞어 오므로, 원래 각각의 오름차순은 합친 뒤에는
+ * 더 이상 전체 오름차순을 보장하지 않는다.
+ *
+ * "확인 필요" 덩어리는 **우리가 다 재지 못한 행**이다(토지임대부이거나
+ * 토지임대부인지 모르는 평형) — 이건 대출 유무와 무관하게 그대로
+ * 자기 덩어리를 유지한다. "무리 없이"에 넣으면 우리가 스스로
+ * 불완전하다고 인정한 숫자로 안심시키는 것이 되고, "대출이 필요해요"에
+ * 넣으면 모르는 것을 아는 척하는 것이 된다.
  */
 export function ComplexList({
   result,
   dataAsOf,
   hasRegionFilter,
   noRepaymentCapacity,
-  visibleCount = PAGE_SIZE,
-  onShowMore,
+  pageSize = PAGE_SIZE,
   onSelect,
   focusedComplexKey = null,
 }: ComplexListProps) {
   const sectionRef = useRef<HTMLElement>(null);
+
+  /*
+   * 대출 유무로 다시 가른 두 배열(위 컴포넌트 문서 참고). `result`가
+   * 바뀔 때만 다시 계산한다 — 매 렌더 새 배열을 만들면 아래 `useEffect`의
+   * 의존성 비교가 매번 "바뀜"으로 잡혀 페이지 넘김 effect가 불필요하게
+   * 다시 돈다.
+   */
+  const byBurdenRatio = (a: ComplexListEntry, b: ComplexListEntry) =>
+    a.burden.safety.burdenRatio - b.burden.safety.burdenRatio;
+
+  /*
+   * "무리 없이"로 옮기는 조건은 대출이 없는 것**만**이 아니다 —
+   * 토지임대부 데이터가 완전해야(`landLeasehold === "N"`) 한다. 둘 다
+   * 갖춘 행만 등급도 "안전"으로 함께 올린다(아래 `ComplexRow`). 완전하지
+   * 않은 행("Y"·`null`)은 대출이 없어도 여기서 뺀다 — 자료가 없는데
+   * "안전"이라고 말하면 이 저장소가 가장 경계하는 오답이 된다. 그런
+   * 행은 원래 있던 곳(`beyondSafe`면 "대출이 필요해", `unverified`면
+   * 그대로 "확인 필요")에 남는다.
+   */
+  const isConfidentNoLoan = (e: ComplexListEntry) =>
+    burdenTierOf(e) === "no-loan" && burdenIsComplete(e.unit.landLeasehold);
+
+  const noLoanSafe = useMemo(
+    () =>
+      [...result.withinSafe, ...result.beyondSafe]
+        .filter(isConfidentNoLoan)
+        .sort(byBurdenRatio),
+    [result],
+  );
+  const loanNeeded = useMemo(
+    () =>
+      [...result.withinSafe, ...result.beyondSafe]
+        .filter((e) => !isConfidentNoLoan(e))
+        .sort(byBurdenRatio),
+    [result],
+  );
+
+  // 덩어리마다 독립된 페이지 번호. 하나로 합치면 한 덩어리를 넘길 때
+  // 다른 덩어리도 함께 넘어간다 — 세 덩어리가 서로 다른 것을 말하는
+  // 이 목록에서는 그 자체가 오류다.
+  const [loanPage, setLoanPage] = useState(1);
+  const [noLoanPage, setNoLoanPage] = useState(1);
+  const [unverifiedPage, setUnverifiedPage] = useState(1);
+
+  /*
+   * 지도에서 마커를 누르면 그 단지가 속한 덩어리(들)의 페이지를 그
+   * 단지가 실제로 있는 쪽으로 넘긴다.
+   *
+   * 펼치지 않으면 이 배선은 절반만 동작한다: 지도는 지역 전체를
+   * 그리는데 목록은 덩어리마다 `pageSize`(기본 5)개씩만 보여주므로,
+   * 첫 페이지 밖의 단지 마커를 누르면 선택은 바뀌는데 화면에는 아무
+   * 변화가 없다 — 사용자에겐 마커가 죽은 것으로 보인다.
+   *
+   * **세 덩어리 모두 각자 넘긴다.** 같은 단지의 평형이 서로 다른
+   * 덩어리에 걸쳐 있을 수 있어(위 `focusedComplexKey` 문서 참고), 하나만
+   * 찾고 멈추면 다른 덩어리의 그 단지 행은 여전히 안 보인다.
+   */
+  useEffect(() => {
+    if (focusedComplexKey === null) return;
+    const jumpTo = (
+      entries: readonly ComplexListEntry[],
+      setPage: (page: number) => void,
+    ) => {
+      const index = entries.findIndex((e) => e.unit.complexKey === focusedComplexKey);
+      if (index !== -1) setPage(Math.floor(index / pageSize) + 1);
+    };
+    jumpTo(loanNeeded, setLoanPage);
+    jumpTo(noLoanSafe, setNoLoanPage);
+    jumpTo(result.unverified, setUnverifiedPage);
+  }, [focusedComplexKey, result, loanNeeded, noLoanSafe, pageSize]);
 
   /*
    * 지도에서 마커를 누르면 그 단지의 행이 사이드바 스크롤 밖에 있을 수
@@ -109,8 +219,8 @@ export function ComplexList({
    * `scrollIntoView`를 부르면 마지막 행이 이겨 목록이 그 단지의 **끝**으로
    * 내려간다.
    *
-   * `visibleCount`도 의존성에 넣는다 — 마커가 가리키는 행이 "더 보기"
-   * 너머에 있으면 App이 먼저 `visibleCount`를 늘리고, 그 행은 이 렌더
+   * 세 페이지 번호도 의존성에 넣는다 — 마커가 가리키는 행이 지금 보이는
+   * 페이지 밖에 있으면 위 effect가 먼저 페이지를 넘기고, 그 행은 이 렌더
    * **다음**에야 DOM에 생긴다.
    *
    * `scrollIntoView`는 jsdom에 없다(정의되지 않은 속성이다) — 옵셔널
@@ -120,7 +230,7 @@ export function ComplexList({
     if (focusedComplexKey === null) return;
     const row = sectionRef.current?.querySelector(".complex-row--focused");
     row?.scrollIntoView?.({ block: "nearest" });
-  }, [focusedComplexKey, visibleCount]);
+  }, [focusedComplexKey, loanPage, noLoanPage, unverifiedPage]);
 
   const total =
     result.withinSafe.length + result.unverified.length + result.beyondSafe.length;
@@ -139,80 +249,161 @@ export function ComplexList({
     );
   }
 
-  const safeShown = result.withinSafe.slice(0, visibleCount);
-  const unverifiedShown = result.unverified.slice(0, visibleCount);
-  const beyondShown = result.beyondSafe.slice(0, visibleCount);
-  const remaining =
-    total - safeShown.length - unverifiedShown.length - beyondShown.length;
+  // 실제로 뭔가 그려지는 덩어리 사이에만 구분선을 놓는다 — 세 덩어리 중
+  // 가운데 것이 비어 있을 때(예: 확인 필요 0건) 그 빈자리에 줄만 남는
+  // 사고를 막는다.
+  const hasLoanNeeded = loanNeeded.length > 0;
+  const hasNoLoanSafe = noLoanSafe.length > 0;
+  const hasUnverified = result.unverified.length > 0;
 
   return (
     <section className="complex-list" aria-label="살 수 있는 단지" ref={sectionRef}>
       <h2>살 수 있는 단지</h2>
 
-      {safeShown.length > 0 && (
-        <>
-          <h3 className="complex-group complex-group--safe">무리 없이 살 수 있어요</h3>
-          <ul className="complex-rows">
-            {safeShown.map((e) => (
-              <ComplexRow
-                key={unitKey(e.unit)}
-                entry={e}
-                onSelect={onSelect}
-                focused={e.unit.complexKey === focusedComplexKey}
-              />
-            ))}
-          </ul>
-        </>
+      <ComplexGroup
+        heading="살 수는 있지만 대출이 필요해"
+        modifier="beyond"
+        entries={loanNeeded}
+        page={loanPage}
+        onPageChange={setLoanPage}
+        pageSize={pageSize}
+        onSelect={onSelect}
+        focusedComplexKey={focusedComplexKey}
+      />
+
+      {hasLoanNeeded && hasNoLoanSafe && <hr className="complex-group-divider" />}
+
+      <ComplexGroup
+        heading="무리 없이 살 수 있어요"
+        modifier="safe"
+        entries={noLoanSafe}
+        page={noLoanPage}
+        onPageChange={setNoLoanPage}
+        pageSize={pageSize}
+        onSelect={onSelect}
+        focusedComplexKey={focusedComplexKey}
+      />
+
+      {(hasLoanNeeded || hasNoLoanSafe) && hasUnverified && (
+        <hr className="complex-group-divider" />
       )}
 
       {/*
-        우리 숫자가 그 행의 매달 부담을 다 담지 못하는 행들. 안전 덩어리
-        **바로 다음**에 둔다 — 이 행들은 우리 계산상 "무리 없는" 쪽에
-        있던 행이라, 사용자가 좋은 선택지를 찾는 그 자리에서 바로
-        읽혀야 한다. 헤더 문구는 룰셋에서 온다(판정을 바꾸는 근거다).
+        우리 숫자가 그 행의 매달 부담을 다 담지 못하는 행들. 헤더 문구는
+        룰셋에서 온다(판정을 바꾸는 근거다).
       */}
-      {unverifiedShown.length > 0 && (
-        <>
-          <h3 className="complex-group complex-group--unverified">
-            {landLeaseRules.grade.groupHeading}
-          </h3>
-          <ul className="complex-rows">
-            {unverifiedShown.map((e) => (
-              <ComplexRow
-                key={unitKey(e.unit)}
-                entry={e}
-                onSelect={onSelect}
-                focused={e.unit.complexKey === focusedComplexKey}
-              />
-            ))}
-          </ul>
-        </>
-      )}
-
-      {beyondShown.length > 0 && (
-        <>
-          <h3 className="complex-group complex-group--beyond">살 수는 있지만 부담이 커요</h3>
-          <ul className="complex-rows">
-            {beyondShown.map((e) => (
-              <ComplexRow
-                key={unitKey(e.unit)}
-                entry={e}
-                onSelect={onSelect}
-                focused={e.unit.complexKey === focusedComplexKey}
-              />
-            ))}
-          </ul>
-        </>
-      )}
-
-      {remaining > 0 && onShowMore !== undefined && (
-        <button type="button" className="complex-more" onClick={onShowMore}>
-          {remaining}개 더 보기
-        </button>
-      )}
+      <ComplexGroup
+        heading={landLeaseRules.grade.groupHeading}
+        modifier="unverified"
+        entries={result.unverified}
+        page={unverifiedPage}
+        onPageChange={setUnverifiedPage}
+        pageSize={pageSize}
+        onSelect={onSelect}
+        focusedComplexKey={focusedComplexKey}
+      />
 
       <Freshness dataAsOf={dataAsOf} />
     </section>
+  );
+}
+
+/**
+ * 한 덩어리(헤더 + 행 목록 + 필요하면 페이지 넘김)를 그린다.
+ *
+ * 세 덩어리(대출 필요·무리 없이·확인 필요)가 헤더 문구와 CSS 수정자만
+ * 다르고 나머지 동작(페이지 자르기·넘김 버튼)은 완전히 같아서 하나로
+ * 모았다 — 셋을 각각 손으로 쓰면 페이지 계산이 세 벌 생기고, 언젠가
+ * 한 곳만 고쳐져 덩어리마다 다른 쪽수 규칙을 갖게 된다.
+ */
+function ComplexGroup({
+  heading,
+  modifier,
+  entries,
+  page,
+  onPageChange,
+  pageSize,
+  onSelect,
+  focusedComplexKey,
+}: {
+  heading: string;
+  modifier: "beyond" | "safe" | "unverified";
+  entries: readonly ComplexListEntry[];
+  page: number;
+  onPageChange: (page: number) => void;
+  pageSize: number;
+  onSelect?: (unit: ComplexUnit) => void;
+  focusedComplexKey: string | null;
+}) {
+  if (entries.length === 0) return null;
+
+  const totalPages = Math.max(1, Math.ceil(entries.length / pageSize));
+  // 목록이 줄어들어(예: 예산을 낮춰서) 이전에 보던 페이지가 더 이상
+  // 없을 수 있다 — 화면 상태(`page`)는 그대로 두고 보여줄 때만 안으로
+  // 접어, 마지막 남은 페이지를 보여준다.
+  const clampedPage = Math.min(Math.max(page, 1), totalPages);
+  const shown = entries.slice(
+    (clampedPage - 1) * pageSize,
+    clampedPage * pageSize,
+  );
+
+  return (
+    <>
+      <h3 className={`complex-group complex-group--${modifier}`}>{heading}</h3>
+      <ul className="complex-rows">
+        {shown.map((e) => (
+          <ComplexRow
+            key={unitKey(e.unit)}
+            entry={e}
+            onSelect={onSelect}
+            focused={e.unit.complexKey === focusedComplexKey}
+          />
+        ))}
+      </ul>
+      {totalPages > 1 && (
+        <Pager page={clampedPage} totalPages={totalPages} onChange={onPageChange} />
+      )}
+    </>
+  );
+}
+
+/**
+ * 덩어리 하나의 쪽 넘김. 이전/다음 버튼과 "N / M쪽" 표시뿐이다 — 쪽
+ * 번호를 눌러 건너뛰는 것까지는 사용자 지시에 없었고, 한 덩어리가
+ * 수십 쪽이 되는 경우가 드물어(예산 안에 드는 단지 수 자체가 크지
+ * 않다) 번호 목록을 따로 낼 이득이 적다.
+ */
+function Pager({
+  page,
+  totalPages,
+  onChange,
+}: {
+  page: number;
+  totalPages: number;
+  onChange: (page: number) => void;
+}) {
+  return (
+    <div className="complex-pager">
+      <button
+        type="button"
+        className="complex-pager-nav"
+        onClick={() => onChange(page - 1)}
+        disabled={page <= 1}
+      >
+        이전
+      </button>
+      <span className="complex-pager-status">
+        {page} / {totalPages}쪽
+      </span>
+      <button
+        type="button"
+        className="complex-pager-nav"
+        onClick={() => onChange(page + 1)}
+        disabled={page >= totalPages}
+      >
+        다음
+      </button>
+    </div>
   );
 }
 
@@ -238,9 +429,24 @@ function ComplexRow({
   focused?: boolean;
 }) {
   const { unit, burden, needsBuiltYear } = entry;
-  // 덩어리를 가른 것과 **같은 함수**다(lib/complex-list.ts). 배지와
-  // 덩어리 헤더가 어긋나려면 이 함수가 같은 입력에 다른 답을 내야 한다.
-  const grade = burdenGrade(burden.safety.level, unit.landLeasehold, landLeaseRules);
+  /*
+   * 대출이 없고 토지임대부 데이터도 완전하면 등급을 "안전"으로 맞춘다
+   * (사용자 지시 — 위 컴포넌트 문서의 `isConfidentNoLoan`과 **같은
+   * 조건**이어야 한다. 조건이 갈리면 "무리 없이" 덩어리에 "안전"이
+   * 아닌 배지가 뜨는 행이 다시 생긴다 — 실제로 한 번 그랬다:
+   * 토지임대부 미확인 행을 대출 유무만 보고 옮겼더니 그 행이 "무리
+   * 없이" 헤더 아래에서 "확인 필요" 배지를 달았다).
+   *
+   * 데이터가 불완전한(`"Y"`·`null`) 행은 대출이 없어도 그대로 둔다 —
+   * 엔진이 낸 진짜 등급(`burden.safety.level`, 기존 대출까지 함께 잰
+   * 값)을 그대로 보여준다. 자료가 없는데 "안전"이라고 말하면 이
+   * 저장소가 가장 경계하는 오답이 된다.
+   */
+  const effectiveLevel =
+    burdenTierOf(entry) === "no-loan" && burdenIsComplete(unit.landLeasehold)
+      ? "safe"
+      : burden.safety.level;
+  const grade = burdenGrade(effectiveLevel, unit.landLeasehold, landLeaseRules);
 
   // 각 줄은 <p>가 아니라 <span>이다. onSelect가 있으면 이 마크업이
   // 그대로 <button> 안으로 들어가는데, button의 콘텐츠 모델은
@@ -257,13 +463,17 @@ function ComplexRow({
         <span className="complex-trades"> · {AGGREGATION_WINDOW_LABEL} 거래 {unit.tradeCount}건</span>
       </span>
       <span className="complex-burden" data-level={grade.level}>
-        범위 위쪽인 {formatWon(unit.maxPrice)}에 산다면{" "}
         {/*
           대출이 필요한지 아닌지는 `burdenTierOf`가 가른다 — **지도 마커의
           색·꼬리표를 가르는 것과 같은 함수다**(lib/complex-list.ts). 여기서
           `burden.neededLoan === 0`을 직접 다시 쓰면 두 화면이 각자의 조건을
           갖게 되고, 한쪽만 고쳐지는 날 지도와 목록이 같은 단지를 두고 다른
           말을 한다.
+
+          "범위 위쪽인 X에 산다면"이라는 기준 설명은 더 이상 붙이지 않는다
+          (사용자 지시: 카드 안에서 크게 중요하지 않다). 계산 기준 자체는
+          바뀌지 않았다 — 여전히 `unit.maxPrice`로 잰다(위 lib/complex-list.ts의
+          `buildComplexList` 문서 참고), 화면에서 그 문장을 뺐을 뿐이다.
         */}
         {burdenTierOf(entry) === "no-loan" ? (
           // 현금만으로 덮이는 가격이다. "월 0원 · 부담률 0%"만 보여주면

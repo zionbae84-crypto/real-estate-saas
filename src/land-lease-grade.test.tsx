@@ -85,7 +85,7 @@ function build(units: readonly ComplexUnit[], p: BuyerProfile) {
   return buildComplexList({ units, profile: p, rules, regionCodes: [] });
 }
 
-/** 목록 전체를 자르지 않고 그린다 — 잘려서 검사가 공허해지지 않게 */
+/** 목록 전체를 자르지 않고 그린다 — 페이지에 잘려서 검사가 공허해지지 않게 */
 function renderList(result: ComplexListResult) {
   return render(
     <ComplexList
@@ -93,7 +93,7 @@ function renderList(result: ComplexListResult) {
       dataAsOf="2026-08"
       hasRegionFilter={false}
       noRepaymentCapacity={false}
-      visibleCount={result.withinSafe.length + result.unverified.length + result.beyondSafe.length + 1}
+      pageSize={result.withinSafe.length + result.unverified.length + result.beyondSafe.length + 1}
     />,
   );
 }
@@ -239,6 +239,12 @@ describe("덩어리 헤더와 행 등급이 어긋나지 않는다", () => {
    * 덩어리 안에 "주의" 배지가 달린 행이 들어가, 덩어리 헤더가 그 행의
    * 배지보다 낙관적으로 말했다. 덩어리가 셋이 된 뒤에도 같은 불변식이
    * 지켜져야 한다.
+   *
+   * **"대출이 필요해요"는 등급표가 아니다.** 그 덩어리가 말하는 것은
+   * 부담 등급이 아니라 **대출 유무**다(`ComplexList.tsx`의 `loanNeeded`
+   * 문서 참고) — 등급이 "안전"이어도 대출이 끼면 여기 온다. 그래서 이
+   * 덩어리는 EXPECTED에 없고, 아래 루프에서 등급이 아니라 "정말 대출이
+   * 꼈는가"를 확인한다.
    */
   const EXPECTED: Record<string, string> = {
     "무리 없이 살 수 있어요": "안전",
@@ -272,12 +278,29 @@ describe("덩어리 헤더와 행 등급이 어긋나지 않는다", () => {
         const expected = EXPECTED[text];
         for (const row of rows) {
           if (expected === undefined) {
-            // "살 수는 있지만 부담이 커요" — 안전으로도, 확인 필요로도
-            // 읽히면 안 된다(이 덩어리는 우리가 다 잰 행들이다).
-            expect(levelTextOf(row)).not.toBe("안전");
+            // "살 수는 있지만 대출이 필요해" — 등급은 안전이어도 될 수
+            // 있다(대출 유무로 가른 덩어리라 등급표가 아니다). 확인
+            // 필요로 읽혀서는 안 된다 — 그건 여전히 제 덩어리를 지킨다.
+            //
+            // **"대출 없이 살 수 있어요" 행이 섞여 있을 수 있다** — 대출
+            // 없이도 위험할 수 있는 경우 중, 토지임대부 데이터까지
+            // 불완전한 행만 여기 남는다(`ComplexList.tsx`의
+            // `isConfidentNoLoan` 참고). 데이터가 완전한 행은 "무리
+            // 없이"로 옮기고 등급도 "안전"으로 맞추지만, 불완전한 행까지
+            // "안전"이라 부르면 근거 없는 안심이 된다 — 그래서 그 행은
+            // 여기 남아 `burden.safety.level`(기존 대출까지 함께 잰
+            // 진짜 등급)을 그대로 보여준다. 행 자신의 문구("대출 없이
+            // 살 수 있어요")는 여전히 옳다(이번 구매엔 대출이 없다는
+            // 사실은 그대로다) — 덩어리 제목이 "대출이 필요해"인 것과
+            // 그 행 하나가 상충하지 않는다.
             expect(levelTextOf(row)).not.toBe(landLeaseRules.grade.label);
           } else {
             expect(levelTextOf(row), text).toBe(expected);
+            if (text === "무리 없이 살 수 있어요") {
+              // 대출 유무로도 어긋나면 안 된다 — 이 덩어리는 이제 "안전
+              // 등급"이 아니라 "대출이 아예 없는 행"만 모은다.
+              expect(row.textContent).toMatch(/대출 없이 살 수 있어요/);
+            }
           }
         }
       }

@@ -20,7 +20,9 @@ import { MARKER_ANCHOR } from "../src/components/ComplexMap";
  *    `scripts/colorSurfaces.ts`의 토큰 해석기(파일을 순서대로 훑어 **먼저
  *    정의된 쪽**을 쓴다)는 그 갈림을 볼 수 없어 **화면과 다른 색을 재게
  *    된다.**
- * 2. **사이드바 폭 298px**(사용자 지시 ②: 20%쯤 줄일 것). 예산 상세
+ * 2. **사이드바 폭 320px**(사용자 지시 ②로 20%쯤 줄여 298px이었다가,
+ *    카드 안 가격 범위가 종종 두 줄로 접혀 다시 조금 넓혔다 —
+ *    `src/styles.css`의 `.complex-range` 문서 참고). 예산 상세
  *    패널은 그 열을 **정확히** 덮는 오버레이라 같은 값이어야 한다
  *    (`ResultShell.tsx`·`src/App.test.tsx`의 그 주석 참고 — 폭이 어긋나면
  *    패널이 지도 왼쪽을 덮는다).
@@ -241,15 +243,20 @@ describe("결과 화면 전용 색 토큰", () => {
 
 /*
  * ══════════════════════════════════════════════════════════════════
- * 2. 무대 — 사이드바 폭 298px, 행은 minmax(0, 1fr)
+ * 2. 무대 — 사이드바 폭 320px, 행은 minmax(0, 1fr)
  * ══════════════════════════════════════════════════════════════════
  */
 
-/** 사용자 지시 ②로 정해진 사이드바 열 폭. 패널도 이 값을 그대로 쓴다. */
-const SIDEBAR_WIDTH = "298px";
+/**
+ * 사이드바 열 폭. 사용자 지시 ②로 372 → 298px까지 줄었다가, 카드 안
+ * 가격 범위가 종종 두 줄로 접혀 298 → 320px로 다시 조금 넓혔다
+ * (`src/styles.css`의 `.complex-range` 문서 참고). 패널도 이 값을
+ * 그대로 쓴다.
+ */
+const SIDEBAR_WIDTH = "320px";
 
 describe("결과 화면 무대", () => {
-  it(`사이드바 열이 ${SIDEBAR_WIDTH}다(사용자 지시 ②)`, () => {
+  it(`사이드바 열이 ${SIDEBAR_WIDTH}다(사용자 지시)`, () => {
     expect(declared(".region-results-grid", "grid-template-columns")).toBe(
       `${SIDEBAR_WIDTH} minmax(0, 1fr)`,
     );
