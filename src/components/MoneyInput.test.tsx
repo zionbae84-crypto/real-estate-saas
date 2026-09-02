@@ -45,9 +45,54 @@ describe("MoneyInput", () => {
     expect(screen.queryByText("숫자로 읽을 수 없어요")).not.toBeInTheDocument();
   });
 
-  it("초기 value가 있으면 만원 단위로 채워 보여준다", () => {
+  it("초기 value가 있으면 만원 단위로, 셋째 자리마다 끊어 채워 보여준다", () => {
+    // 사용자 지시로 입력란 표시에 쉼표를 넣는다 — `449703200원`처럼
+    // 붙어 나오면 자릿수를 눈으로 셀 수 없다. `parseMoney`가 쉼표를
+    // 먼저 걷어내므로 이 표기는 그대로 다시 읽힌다(아래 검사).
     setup(350_000_000);
-    expect(screen.getByLabelText("보유 현금")).toHaveValue("35000");
+    expect(screen.getByLabelText("보유 현금")).toHaveValue("35,000");
+  });
+
+  it("쉼표가 든 표시값이 그대로 다시 읽힌다 — 왕복이 깨지지 않는다", () => {
+    const { onChange, input } = setup(350_000_000);
+    // 화면에 뜨는 표기 그대로(쉼표 포함) 다시 넣어도 같은 규칙으로
+    // 읽어야 한다. 값이 그대로면 change 이벤트가 아예 안 나므로 다른
+    // 금액으로 바꿔 넣는다.
+    fireEvent.change(input, { target: { value: "12,000" } });
+    expect(onChange).toHaveBeenLastCalledWith(120_000_000);
+  });
+
+  /**
+   * 사용자 지시: "매물가격입력란 아래 중복으로 출력되는 금액은 제거해줘."
+   *
+   * 되비추기 **자체**를 없앤 것이 아니다 — 만원 기본 해석을 성립시키는
+   * 장치라(위 "자릿수를 틀리면 되비추기로 드러난다") 그대로 둔다.
+   * 지우는 것은 같은 말을 두 번 하는 경우뿐이다.
+   */
+  describe("되비추기는 입력과 뜻이 다를 때만 낸다", () => {
+    it("'12억'이라고 치면 아래에 '12억원'을 또 적지 않는다", async () => {
+      const { input } = setup();
+      await userEvent.type(input, "12억");
+      expect(screen.queryByText("12억원")).not.toBeInTheDocument();
+    });
+
+    it("끝에 '원'을 붙여도 서식 차이일 뿐이라 되비추지 않는다", async () => {
+      const { input } = setup();
+      await userEvent.type(input, "12억원");
+      expect(screen.queryByText("12억원")).not.toBeInTheDocument();
+    });
+
+    it("단위 없는 숫자는 여전히 되비춘다 — 자릿수 오해를 잡는 자리다", async () => {
+      const { input } = setup();
+      await userEvent.type(input, "120000");
+      expect(screen.getByText("12억원")).toBeInTheDocument();
+    });
+
+    it("일부만 단위를 쓴 입력도 되비춘다", async () => {
+      const { input } = setup();
+      await userEvent.type(input, "12억3000");
+      expect(screen.getByText("12억 3,000만원")).toBeInTheDocument();
+    });
   });
 
   it("만원 기본 해석을 되비춰 자릿수 오해를 드러낸다", () => {

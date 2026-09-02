@@ -150,14 +150,35 @@ function acquisitionTaxRate(price: number, rules: Rules): number {
   return t.lowRate + (t.highRate - t.lowRate) * progress;
 }
 
-function calcBrokerageFee(price: number, rules: Rules): number {
+function brokerageFeeBracket(
+  price: number,
+  rules: Rules,
+): Rules["brokerageFee"][number] {
   const bracket = rules.brokerageFee.find(
     (b) => b.upTo === null || price < b.upTo,
   );
   if (!bracket) {
     throw new Error(`중개보수 구간을 찾을 수 없습니다: ${price}`);
   }
+  return bracket;
+}
 
+function calcBrokerageFee(price: number, rules: Rules): number {
+  const bracket = brokerageFeeBracket(price, rules);
   const fee = price * bracket.rate;
   return Math.floor(bracket.cap === null ? fee : Math.min(fee, bracket.cap));
+}
+
+/**
+ * 이 가격 구간에 적용되는 중개보수 **상한요율**(예: 0.004 = 0.4%).
+ *
+ * 화면(`CostBreakdown`)이 부대비용 표에서 "중개보수는 이 요율까지가
+ * 상한이고 실제로는 협의할 수 있다"는 사실을 함께 보여주려고 쓴다 —
+ * `calcBrokerageFee`가 돌려주는 것은 금액뿐이라 요율 자체는 알 수 없다.
+ * 상한이 걸리는 구간(`bracket.cap !== null`)에서도 이 함수는 여전히
+ * **요율**을 돌려준다 — 실제로 낸 금액이 상한에 막혀 `price * rate`보다
+ * 작을 수 있다는 사실은 화면이 "협의 가능"이라는 문구로 대신 알린다.
+ */
+export function brokerageFeeRateFor(price: number, rules: Rules): number {
+  return brokerageFeeBracket(price, rules).rate;
 }

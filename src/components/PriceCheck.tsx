@@ -3,6 +3,7 @@ import { AGGREGATION_WINDOW_LABEL } from "../data/complexes";
 import type { ComplexUnit } from "../data/complexes";
 import { formatWon } from "../format/won";
 import { householdCountNoteFor } from "../lib/finance";
+import { assessPrice } from "../lib/price";
 import type {
   PriceAssessment,
   PriceBudgetInput,
@@ -27,10 +28,42 @@ export interface PriceCheckProps {
    */
   budget: PriceBudgetInput | null;
   /**
-   * 진단 종합에 이 축의 최신 판정을 알린다. `PurchaseCheck.onAssessment`와
-   * 같은 배선·같은 이유다 — 새로 계산하지 않고 이미 낸 값을 올릴 뿐이다.
+   * 이 축의 최신 판정을 바깥에 알린다. 새로 계산하지 않고 이미 낸 값을
+   * 올릴 뿐이다(`PurchaseCheck.onAssessment`와 같은 배선).
+   *
+   * ⚠ **지금 이 값을 받는 화면은 없다.** 받던 곳(진단 종합)이 지워졌고,
+   * `ComplexDetail`도 더 이상 흘려보내지 않는다. 축을 다시 모으는 화면이
+   * 붙는 날을 위한 자리로만 남아 있다.
    */
   onAssessment?: (assessment: PriceAssessment) => void;
+  /**
+   * 이 영역이 자기 제목을 그릴 것인가. 기본은 그린다.
+   *
+   * `false`를 주는 자리는 하나뿐이다: 단지 상세가 이 영역을
+   * `<details>`로 접고 **같은 문구**(`rules.position.label`)를
+   * `summary`에 적는 자리(design.md §6). 제목이 둘이 되면 인쇄에서
+   * `<details>`가 강제로 펼쳐질 때 종이에 같은 제목이 연달아 두 번
+   * 찍힌다.
+   *
+   * 섹션의 접근 가능한 이름(`aria-label="호가 위치 확인"`)은 그대로
+   * 남으므로, 제목을 지워도 스크린리더에서 이 영역이 무엇인지 잃지
+   * 않는다. `BindingExplainer.showTitle`과 같은 갈래의 prop이다.
+   */
+  showTitle?: boolean;
+  /**
+   * 호가를 **바깥이 정할 때** 그 값. 넘기면 이 컴포넌트는 자기 입력란을
+   * 그리지 않고 이 값으로만 판정한다(`null`은 "아직 안 넣었다").
+   *
+   * 사용자 지시로 단지 상세의 가격 입력란을 하나로 합치면서 생긴
+   * prop이다 — 한 화면에 가격 입력란이 둘 있으면 어느 쪽이 기준인지
+   * 알 수 없고, 실제로 두 값이 갈리면 위쪽 부대비용과 아래쪽 호가 판정이
+   * 서로 다른 가격을 말하게 된다.
+   *
+   * **넘기지 않으면(`undefined`) 예전 그대로** 자기 입력란과 자기 상태를
+   * 쓴다. 두 모드가 있는 이유는 이 컴포넌트가 언젠가 다시 혼자 설 수 있기
+   * 때문이고, 지금 실제로 쓰는 자리(`ComplexDetail`)는 언제나 넘긴다.
+   */
+  askingPrice?: number | null;
 }
 
 /**
@@ -58,7 +91,19 @@ export interface PriceCheckProps {
  * 종이에서 잃는 정보가 없고, 층·향 고지와 신고 지연 고지는
  * `.price-disclosure`로 언제나 함께 남는다.
  */
-export function PriceCheck({ unit, budget, onAssessment }: PriceCheckProps) {
+export function PriceCheck({
+  unit,
+  budget,
+  onAssessment,
+  showTitle = true,
+  askingPrice: controlledPrice,
+}: PriceCheckProps) {
+  /**
+   * 바깥이 호가를 정하는가. prop이 **아예 없을 때만** 자기 입력란을
+   * 쓴다 — `null`은 "바깥이 정하는데 아직 안 넣었다"는 뜻이라 여기서
+   * 자기 상태로 되돌아가면 안 된다.
+   */
+  const controlled = controlledPrice !== undefined;
   // 평형이 바뀌면 이 컴포넌트는 통째로 다시 마운트된다(호출부의 key).
   // 그래도 근거 객체는 렌더마다 새로 만들지 않는다 — 훅의 useMemo가
   // 참조로 의존성을 보기 때문이다.
@@ -75,10 +120,23 @@ export function PriceCheck({ unit, budget, onAssessment }: PriceCheckProps) {
     [unit],
   );
 
-  const { rules, askingPrice, setAskingPrice, assessment } = usePriceCheck(
-    evidence,
-    budget,
-  );
+  const {
+    rules,
+    askingPrice: ownPrice,
+    setAskingPrice,
+    assessment: ownAssessment,
+  } = usePriceCheck(evidence, budget);
+
+  /*
+   * 제어 모드에서는 훅이 낸 판정을 버리고 바깥 값으로 다시 낸다.
+   * 훅을 조건부로 부를 수는 없으므로(리액트 훅 규칙) 언제나 부르되,
+   * 이 자리에서 어느 쪽을 쓸지 고른다. `assessPrice`는 순수 함수라
+   * 한 번 더 부르는 비용이 렌더 한 번의 산술뿐이다.
+   */
+  const assessment = controlled
+    ? assessPrice(rules, evidence, controlledPrice ?? null, budget)
+    : ownAssessment;
+  const askingPrice = controlled ? (controlledPrice ?? null) : ownPrice;
 
   // useEffect가 아니라 useLayoutEffect다 — 페인트 **전에** 부모 상태를
   // 갱신해, 진단 종합이 한 프레임 늦은 판정을 보여주지 않게 한다. 평형이
@@ -90,7 +148,9 @@ export function PriceCheck({ unit, budget, onAssessment }: PriceCheckProps) {
 
   return (
     <section className="price-check" aria-label="호가 위치 확인">
-      <h3 className="price-check-title">{rules.position.label}</h3>
+      {showTitle && (
+        <h3 className="price-check-title">{rules.position.label}</h3>
+      )}
 
       {/*
         무엇을 말하지 않는 화면인지 먼저 밝힌다. 이 문단은 인쇄에서도
@@ -117,16 +177,32 @@ export function PriceCheck({ unit, budget, onAssessment }: PriceCheckProps) {
       */}
       <LandLeaseNote landLeasehold={unit.landLeasehold} variant="price" />
 
-      <form className="price-check-form" onSubmit={(e) => e.preventDefault()}>
-        <MoneyInput
-          id="price-check-asking"
-          label={rules.askingPrice.label}
-          hint={rules.askingPrice.hint}
-          value={askingPrice}
-          onChange={setAskingPrice}
-        />
-        <p className="hint">{MONEY_HINT}</p>
-      </form>
+      {/*
+        제어 모드에서는 입력란을 그리지 않는다 — 호가를 위쪽 예상
+        매수금액 입력란 하나가 정한다(사용자 지시). 대신 **무엇을
+        기준으로 판정한 것인지**를 한 줄로 적는다: 이 영역은 접혀
+        있다가 펼쳐지므로, 위 입력란이 화면 밖에 있을 때 판정만 보이면
+        어느 금액에 대한 답인지 알 수 없다. 값이 아직 없으면 그 사실을
+        말한다.
+      */}
+      {controlled ? (
+        <p className="price-check-basis">
+          {askingPrice === null
+            ? "위 예상 매수금액을 넣으면 이 평형의 실거래 범위 어디쯤인지 짚어 드려요."
+            : `위에 넣은 예상 매수금액 ${formatWon(askingPrice)} 기준이에요.`}
+        </p>
+      ) : (
+        <form className="price-check-form" onSubmit={(e) => e.preventDefault()}>
+          <MoneyInput
+            id="price-check-asking"
+            label={rules.askingPrice.label}
+            hint={rules.askingPrice.hint}
+            value={askingPrice}
+            onChange={setAskingPrice}
+          />
+          <p className="hint">{MONEY_HINT}</p>
+        </form>
+      )}
 
       <PriceVerdict assessment={assessment} unit={unit} budget={budget} />
     </section>

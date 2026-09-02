@@ -1,0 +1,334 @@
+<!doctype html>
+<!--
+  결과 화면(상단바 + 사이드바) 프로토타입 — 앱 코드가 아니다.
+  http://localhost:4173/prototype-results.html
+
+  사용자가 시안 A(카드)를 골랐고, 이어서 요청한 것:
+    ① 카드 안 글자를 줄일 것
+    ② 사이드바 폭을 20%쯤 줄일 것 (372px → 298px)
+    ③ 사이드바 배경을 흰색으로
+    ④ 버튼·포인트 색을 Cyan Signal #3ba6f1로
+
+  DESIGN.md의 구조(24px 반경 카드 · 18px 알약 · compact 밀도 · Stat Block)는
+  그대로다.
+
+  ── 대비 실측 (직접 계산, 본문 4.5:1 기준) ──────────────────
+    흰 배경 위 글자
+      ink        #12294d   14.48
+      gray       #4f6a8c    5.57
+      signal-ink #1f6ea9    5.44
+
+    채움 위 굵은 흰 글자 — 둘 다 사용자 지시
+      #ffffff on #3ba6f1 (파랑)   2.65   ← 기준 미달
+      #ffffff on #e8663c (주황)   3.28   ← 기준 미달, 파랑보다는 낫다
+
+    굵기로는 메워지지 않는다 — 3:1 완화는 18.66px부터인데 이 자리들은
+    11~13px이다. 통과시키는 방법은 채움을 어둡게 하는 것이고
+    (#1f6ea9 → 흰 글자 5.44, #c8431b → 4.91), 그만큼 지정하신 색에서
+    멀어진다.
+
+    색이 **글자로** 나가야 하는 자리는 어둡게 한 변형을 쓴다:
+      금액 #1f6ea9  흰 배경 5.44   ← 화면에서 가장 중요한 숫자다
+    (주황이 글자로 나가야 할 일이 생기면 #b23713이 흰 배경에서 6.09다)
+
+    선택된 카드 바탕 #e8f4fe 위 gray = 4.98
+
+  ── 두 색이 뜻을 나눠 갖는다 ────────────────────────────────
+    파랑 = 대출 없이 살 수 있다 · 주황 = 대출이 필요하다
+    **색만으로 말하지 않는다** — 배지와 범례에 같은 뜻이 글자로도 적혀
+    있고, 지도 마커는 고른 뒤에도 채움색을 유지한다(선택은 바깥 테로
+    표시한다). 고른 순간 색이 바뀌면 그 마커가 어느 쪽이었는지 사라진다.
+
+  사이드바가 흰색이 되면서 흰 카드가 바탕에 묻히므로, 카드는 헤어라인
+  테두리 + 얕은 그림자로 경계를 세운다(DESIGN.md도 "그림자만으로는 카드
+  가장자리가 서지 않는다"고 못박는다).
+
+  화면 1(영상)은 아직 황동을 쓴다 — 이어 붙일 때 한쪽으로 맞춰야 한다.
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>결과 화면 프로토타입 — 카드</title>
+<script type="module">
+  import "pretendard/dist/web/static/pretendard.css";
+</script>
+<style>
+  :root {
+    /* 표면 — 사이드바까지 전부 흰색 */
+    --paper:  #ffffff;
+
+    /* 글자 */
+    --ink:   #12294d;   /* 본문·제목 — 흰 배경 14.48:1 */
+    --gray:  #4f6a8c;   /* 보조 — 흰 배경 5.57:1 */
+
+    /* 선 */
+    --rule: #dbe7f3;
+
+    /*
+      포인트 색 — Cyan Signal #3ba6f1.
+
+      채움 위 글자는 **사용자 지시로 굵은 흰색**이다.
+
+      ⚠ 그 조합의 실측값은 **2.65:1**로 본문 기준(4.5:1)에 못 미친다.
+      굵게 해도 3:1(큰 굵은 글자) 기준은 18.66px부터 적용되는데, 이
+      자리들은 11~13px이라 해당되지 않는다. 즉 굵기로는 메워지지 않는다.
+
+      참고로 같은 채움 위 어두운 글자는 통과한다:
+         #12294d on #3ba6f1 = 5.46:1
+         #0a1b2e on #3ba6f1 = 6.54:1
+      또 채움을 --signal-ink(#1f6ea9)로 내리면 흰 글자가 5.44:1로 통과한다.
+      둘 중 하나로 바꾸면 대비 문제는 사라진다 — 지시가 바뀌면 여기부터
+      고치면 된다.
+
+      글자 색으로 나가야 하는 자리(금액)는 여전히 --signal-ink를 쓴다.
+      화면에서 가장 중요한 숫자를 2.65:1로 둘 수는 없다.
+    */
+    --signal:      #3ba6f1;  /* 채움·테두리 — 그 위 글자는 굵은 흰색(지시) */
+    --signal-ink:  #1f6ea9;  /* 글자용 — 흰 배경 5.44:1 */
+    --signal-wash: #e8f4fe;  /* 선택된 카드 바탕 — 그 위 --gray 4.98:1 */
+
+    /*
+      대출이 필요한 경우 — 주황 채움 + 굵은 흰 글자(사용자 지시).
+      흰 글자 대비 3.28:1. 본문 4.5:1에는 못 미치지만 파랑 쪽(2.65:1)보다는
+      낫다. 통과시키려면 #c8431b(4.91:1)까지 내리면 되는데, 그만큼
+      첨부하신 색에서 멀어진다.
+
+      두 색이 뜻을 나눠 갖는다: 파랑 = 대출 없이 살 수 있다,
+      주황 = 대출이 필요하다. **색만으로 말하지 않는다** — 배지와 범례에
+      같은 뜻이 글자로도 적혀 있다.
+    */
+    --warn: #e8663c;
+
+    --font: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; font-family: var(--font); color: var(--ink);
+    background: var(--paper); overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+  }
+  button { font-family: inherit; }
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  .shell {
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);  /* ⚠ auto면 지도 높이가 0이 된다 */
+  }
+  .stage { display: grid; grid-template-columns: 298px minmax(0, 1fr); min-height: 0; }
+  .side { overflow-y: auto; min-height: 0; }
+  .mapwrap { position: relative; min-height: 0; }
+  /* ⚠ 네이버 SDK가 position을 인라인으로 덮어써서 inset:0이 무력화된다 */
+  #map { width: 100%; height: 100%; }
+
+  /* ── 상단바 ──────────────────────────────────────────────── */
+  .topbar {
+    height: 68px; background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    display: flex; align-items: center; gap: 30px; padding: 0 22px;
+  }
+  .brand {
+    font-size: 13px; font-weight: 600; letter-spacing: -.012em;
+    flex: none; color: var(--ink);
+  }
+  .stats { display: flex; gap: 30px; flex: 1; min-width: 0; }
+  .stat .k {
+    display: block; font-size: 11px; color: var(--gray);
+    letter-spacing: .06em; margin-bottom: 3px; white-space: nowrap;
+  }
+  .stat .v {
+    font-size: 18px; font-weight: 600; letter-spacing: -.028em;
+    white-space: nowrap;
+  }
+  .stat .v.money { color: var(--signal-ink); }
+  .ghost {
+    background: var(--signal); border: 0; border-radius: 18px;
+    padding: 8px 14px; font-size: 13px; font-weight: 700; color: #ffffff;
+    cursor: pointer; flex: none;
+  }
+  .ghost:hover { background: #59b4f4; }
+
+  /* ── 사이드바 ────────────────────────────────────────────── */
+  .side { background: var(--paper); border-right: 1px solid var(--rule); padding: 14px 12px 22px; }
+  .sideHead { padding: 4px 8px 12px; }
+  .sideHead h2 { margin: 0 0 4px; font-size: 15px; font-weight: 600; letter-spacing: -.025em; }
+  .sideHead p { margin: 0; font-size: 11.5px; color: var(--gray); line-height: 1.6; }
+
+  /* 카드 — DESIGN.md의 24px 반경 + 헤어라인 + 얕은 그림자 */
+  .row {
+    display: block; width: 100%; text-align: left; cursor: pointer;
+    background: var(--paper);
+    border: 1px solid var(--rule);
+    border-radius: 24px;
+    box-shadow: 0 1px 2px rgba(18,41,77,.05), 0 1px 3px rgba(18,41,77,.06);
+    padding: 13px 16px 14px;
+    margin-bottom: 8px;
+    transition: border-color .14s, box-shadow .14s;
+  }
+  .row:hover { background: #fbfdff; border-color: var(--signal); }
+  .row[aria-current="true"] {
+    border-color: var(--signal);
+    box-shadow: 0 0 0 1px var(--signal);
+    background: var(--signal-wash);
+  }
+
+  /* 카드 안 활자 — 요청대로 줄였다 */
+  .nm { font-size: 13px; font-weight: 600; letter-spacing: -.012em; }
+  .nm em { font-style: normal; font-weight: 500; color: var(--gray); }
+  .pr {
+    font-size: 17px; font-weight: 600; letter-spacing: -.03em;
+    margin-top: 6px;
+  }
+  .mt { font-size: 11px; color: var(--gray); margin-top: 3px; letter-spacing: .005em; }
+  .tg {
+    display: inline-block; margin-top: 9px; border-radius: 18px;
+    padding: 2px 9px; font-size: 11px; font-weight: 700;
+    background: var(--warn); color: #ffffff;
+  }
+  .tg.cash { background: var(--signal); }
+
+  /* ── 지도 위 ─────────────────────────────────────────────── */
+  .legend {
+    position: absolute; left: 16px; bottom: 16px; z-index: 2;
+    background: rgba(255,255,255,.95); border: 1px solid var(--rule);
+    border-radius: 12px; padding: 8px 12px;
+    font-size: 11px; color: var(--gray); line-height: 1.95;
+    pointer-events: none;                 /* 아래 마커 클릭을 먹지 않게 */
+  }
+  .legend i {
+    display: inline-block; width: 8px; height: 8px; border-radius: 2px;
+    margin-right: 7px; vertical-align: 1px;
+  }
+  .legend .a { background: var(--signal); }
+  .legend .b { background: var(--warn); }
+
+  .pin {
+    font-family: var(--font); font-size: 11px; font-weight: 700;
+    letter-spacing: -.02em; white-space: nowrap;
+    padding: 3px 9px; border-radius: 18px;
+    border: 1px solid var(--warn); background: var(--warn); color: #ffffff;
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 1px 4px rgba(18,41,77,.22); cursor: pointer;
+  }
+  .pin.cash { background: var(--signal); border-color: var(--signal); }
+  /*
+    선택 표시는 **채움색을 바꾸지 않는다**. 채움이 곧 분류(파랑=대출 없이,
+    주황=대출 필요)라, 고른 순간 색이 바뀌면 그 뜻이 사라진다.
+    대신 바깥에 테를 두른다.
+  */
+  .pin.on {
+    box-shadow: 0 0 0 2px #fff, 0 0 0 4px var(--ink), 0 1px 4px rgba(18,41,77,.22);
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+  <header class="topbar">
+    <div class="brand">내 예산으로 살 수 있는 집</div>
+    <div class="stats">
+      <div class="stat"><span class="k">가진 현금</span><span class="v tnum">3억 5,000만원</span></div>
+      <div class="stat"><span class="k">연 소득</span><span class="v tnum">7,000만원</span></div>
+      <div class="stat"><span class="k">살 수 있는 가격</span><span class="v money tnum">5억 8,800만원</span></div>
+      <div class="stat"><span class="k">지역</span><span class="v">서울 노원구</span></div>
+    </div>
+    <button class="ghost">조건 다시 넣기</button>
+  </header>
+
+  <div class="stage">
+    <aside class="side">
+      <div class="sideHead">
+        <h2>살 수 있는 단지</h2>
+        <p>최근 6개월 실거래 범위예요. 하나의 적정가를 매기지 않고 범위로만 말해요.</p>
+      </div>
+      <div id="list"></div>
+    </aside>
+
+    <div class="mapwrap">
+      <div id="map"></div>
+      <div class="legend">
+        <div><i class="a"></i>대출 없이 살 수 있어요</div>
+        <div><i class="b"></i>대출이 필요해요</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const DATA = [
+  { name:"벽산",      area:43, dong:"상계동", lo:30000, hi:38000, n:15, cash:true,  lat:37.6603, lng:127.0596 },
+  { name:"사슴3",     area:33, dong:"월계동", lo:30000, hi:37650, n:15, cash:true,  lat:37.6301, lng:127.0554 },
+  { name:"주공2",     area:39, dong:"월계동", lo:28000, hi:35000, n:15, cash:true,  lat:37.6288, lng:127.0602 },
+  { name:"청백3",     area:40, dong:"월계동", lo:31500, hi:31500, n:1,  cash:true,  lat:37.6325, lng:127.0521 },
+  { name:"초안2",     area:40, dong:"월계동", lo:25000, hi:29500, n:5,  cash:true,  lat:37.6270, lng:127.0578 },
+  { name:"상계주공7", area:59, dong:"상계동", lo:52000, hi:61000, n:22, cash:false, lat:37.6650, lng:127.0640 },
+  { name:"중계무지개", area:59, dong:"중계동", lo:58000, hi:67000, n:18, cash:false, lat:37.6452, lng:127.0762 },
+  { name:"하계장미",   area:84, dong:"하계동", lo:72000, hi:83000, n:9,  cash:false, lat:37.6386, lng:127.0698 },
+];
+
+const won = m => {
+  const eok = Math.floor(m / 10000), man = m % 10000;
+  if (eok && man) return `${eok}억 ${man.toLocaleString()}만원`;
+  if (eok) return `${eok}억원`;
+  return `${man.toLocaleString()}만원`;
+};
+const range = d => d.lo === d.hi ? won(d.lo) : `${won(d.lo)} – ${won(d.hi)}`;
+
+let current = -1, map = null, pins = [];
+
+document.getElementById("list").innerHTML = DATA.map((d, i) => `
+  <button class="row" data-i="${i}">
+    <div class="nm">${d.name} <em>${d.area}㎡ · ${d.dong}</em></div>
+    <div class="pr tnum">${range(d)}</div>
+    <div class="mt">최근 6개월 거래 ${d.n}건</div>
+    <span class="tg ${d.cash ? "cash" : ""}">${d.cash ? "대출 없이" : "대출 필요"}</span>
+  </button>`).join("");
+
+document.querySelectorAll("#list .row").forEach(r =>
+  r.addEventListener("click", () => select(+r.dataset.i, true)));
+
+function select(i, pan) {
+  current = i;
+  document.querySelectorAll("#list .row").forEach((r, k) =>
+    r.setAttribute("aria-current", String(k === i)));
+  pins.forEach((p, k) => {
+    const el = p.getElement && p.getElement();
+    el?.querySelector(".pin")?.classList.toggle("on", k === i);
+  });
+  if (pan && map) map.panTo(new naver.maps.LatLng(DATA[i].lat, DATA[i].lng));
+}
+
+const s = document.createElement("script");
+s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=%VITE_NAVER_MAP_CLIENT_ID%";
+s.onload = () => {
+  map = new naver.maps.Map("map", {
+    center: new naver.maps.LatLng(37.642, 127.062),
+    zoom: 13, scaleControl: false, mapDataControl: false,
+  });
+  pins = DATA.map((d, i) => {
+    const m = new naver.maps.Marker({
+      position: new naver.maps.LatLng(d.lat, d.lng), map,
+      icon: {
+        content: `<div class="pin ${d.cash ? "cash" : ""}">${won(d.hi)}</div>`,
+        anchor: new naver.maps.Point(34, 11),
+      },
+    });
+    naver.maps.Event.addListener(m, "click", () => {
+      select(i, false);
+      document.querySelector(`#list .row[data-i="${i}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return m;
+  });
+};
+s.onerror = () => {
+  document.getElementById("map").innerHTML =
+    '<div style="height:100%;display:grid;place-items:center;color:#4f6a8c;font-size:13px">' +
+    '지도를 불러오지 못했어요 — 등록된 주소(포트 4173)에서 열어 주세요.</div>';
+};
+document.head.appendChild(s);
+</script>
+</body>
+</html>

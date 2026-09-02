@@ -35,45 +35,40 @@ function result(overrides: Partial<AffordableResult> = {}): AffordableResult {
   };
 }
 
-/**
- * `safePrice`의 기본값을 `affordablePrice`와 같게 둔다(한 줄로 합쳐지는
- * 경로). safePrice와 관련 없는 테스트(실구매력 표시, 부대비용, 경고 등)가
- * `formatWon(affordablePrice)` 문자열이 SafeLine 안에 한 번 더 나타나
- * `getByText`가 "여러 개 발견"으로 실패하는 것을 피하기 위해서다. safePrice
- * 자체를 검증하는 테스트는 아래에서 명시적으로 다른 값을 넘긴다.
- */
 interface RenderResultOverrides {
   result?: AffordableResult;
-  safePrice?: number | null;
+  isRegulatedArea?: boolean;
+  isFirstTimeBuyer?: boolean;
 }
 
 function renderResult(overrides: RenderResultOverrides = {}) {
   const r = overrides.result ?? result();
-  // safePrice: null을 명시적으로 넘긴 테스트가 있으므로 `??`는 못 쓴다
-  // (`??`는 null도 "값 없음"으로 취급해 기본값으로 되돌려 버린다 — 여기서
-  // null은 유효한 실제 값이다). "제공 안 됨"만 undefined로 구분한다.
-  const safePrice =
-    overrides.safePrice === undefined ? r.affordablePrice : overrides.safePrice;
-  render(
+  return render(
     <BudgetResult
       result={r}
-      safePrice={safePrice}
       householdCountNote={rules.acquisitionTax.householdCountNote}
+      isRegulatedArea={overrides.isRegulatedArea ?? true}
+      isFirstTimeBuyer={overrides.isFirstTimeBuyer ?? false}
     />,
   );
 }
 
 describe("BudgetResult", () => {
-  it("실구매력을 크게 보여준다", () => {
-    renderResult();
-    expect(screen.getByText("6억 4,000만원")).toBeInTheDocument();
+  /**
+   * 사용자 지시로 헤드라인 카드("실구매 가능 가격")를 없앴다 — 상단바가
+   * 이미 같은 라벨·같은 값을 보여주는 자리라 중복이었다. 이 카드는 이제
+   * 대출 한도·부대비용·정책대출, 카드 셋으로 시작한다.
+   */
+  it("대출 한도 카드로 시작한다 — 헤드라인 카드는 더 이상 없다", () => {
+    const { container } = renderResult();
+    const section = container.querySelector(".budget-result");
+    expect(section?.firstElementChild?.className).toBe("binding-explainer");
   });
 
-  it("부대비용 합계를 보여준다", () => {
+  it("부대비용 합계를 만원 단위로 반올림해 보여준다", () => {
     renderResult();
-    // Task 4에서 costs.total에 brokerageVat·housingBondCost가 더해지며
-    // 13,060,000 → 14,247,840으로 바뀌었다("1,306만원" → "1,424만 7,840원").
-    expect(screen.getByText("1,424만 7,840원")).toBeInTheDocument();
+    // 사용자 지시로 만원 단위까지만 보여준다 — 14,247,840원은 "1,425만원".
+    expect(screen.getByText("1,425만원")).toBeInTheDocument();
   });
 
   /**
@@ -82,7 +77,10 @@ describe("BudgetResult", () => {
    * 나오는 이 자리에도 그 사실과 방향을 알리는 고지가 반드시 함께
    * 나가야 한다. `CostBreakdown.test.tsx`가 이미 문구 자체와 방향을
    * 잠그므로, 여기서는 이 화면이 실제로 그 컴포넌트를 통해 고지를
-   * 보여주는지만 확인한다.
+   * 보여주는지만 확인한다. (실제 앱에서 이 prop에 무엇이 들어가는지는
+   * `App.tsx`가 정한다 — 지금은 사용자 지시로 짧은 고정 문구를 쓴다.
+   * `BudgetResult` 자신은 받은 문구를 그대로 낼 뿐이라 이 테스트는
+   * 여전히 임의의 문구로 그 계약만 확인한다.)
    */
   it("부대비용 옆에 주택 수 고지가 함께 나온다", () => {
     renderResult();
@@ -91,37 +89,26 @@ describe("BudgetResult", () => {
     ).toBeInTheDocument();
   });
 
-  it("무엇이 막았는지 한 줄로 보여준다", () => {
+  /**
+   * 사용자 지시: "대출한도 부분 >> 부대비용 형식과 동일하게 표시." 두
+   * 카드가 같은 summary/토글 형식이고, summary만으로도 요점(제목+금액)이
+   * 보인다 — 펼치지 않아도 된다.
+   */
+  it("부대비용 합계와 대출 한도 금액이 각자 summary에 접히지 않고 보인다", () => {
     renderResult();
-    expect(
-      screen.getByText("담보 가치(LTV)에 걸렸어요"),
-    ).toBeInTheDocument();
-  });
 
-  it("걸린 제약의 상세 설명은 접힌 채로 들어 있다", () => {
-    renderResult();
-    // <details>는 열려 있지 않아도 텍스트가 DOM에 있다(jsdom은 CSS로
-    // 접힌 콘텐츠의 렌더링을 계산하지 않는다) — 여기서는 "접혀 있다"는
-    // 사실 자체(<details> 안에 있다)를 확인한다.
-    const advice = screen.getByText(/현금을 더 모으면/);
-    expect(advice.closest("details")).not.toBeNull();
-  });
+    const costTotal = screen.getByText("1,425만원");
+    expect(costTotal.closest("summary")).not.toBeNull();
+    expect(costTotal.closest("details")).toHaveClass("cost-breakdown");
 
-  it("리뷰 수정(인쇄 결함 2): summary의 '더 보기'만 별도 span으로 감싼다", () => {
-    // 인쇄에서 <details>가 강제로 펼쳐지면(styles.css의 ::details-content
-    // 규칙) "더 보기"는 이미 펼쳐진 내용 바로 위에서 하라고 시키는 죽은
-    // 지시문이 된다 — .fold-more-hint만 인쇄에서 지운다. 이 details 안에
-    // BindingExplainer의 "네 가지 한도 모두 보기" summary도 중첩돼
-    // 있으므로, 바깥 details의 자식 summary로 범위를 좁혀 조회한다.
-    renderResult();
-    const summary = document.querySelector(".result-step--fold > summary");
-    expect(summary).not.toBeNull();
-
-    const hint = summary?.querySelector(".fold-more-hint");
-    expect(hint).not.toBeNull();
-    expect(hint?.textContent).toBe(" 더 보기");
-    // 제목 자체(펼쳐진 내용의 헤딩 구실)는 hint 바깥에 남는다.
-    expect(summary?.textContent).toBe("부대비용·정책대출·상세 설명 더 보기");
+    // amount(420,000,000)와 breakdown.LTV가 엔진 불변식상 같은 값이라
+    // 표의 LTV 줄에도 "4억 2,000만원"이 나온다 — summary 안의 금액으로
+    // 범위를 좁힌다.
+    const loanTotal = screen.getByText("4억 2,000만원", {
+      selector: ".binding-total",
+    });
+    expect(loanTotal.closest("summary")).not.toBeNull();
+    expect(loanTotal.closest("details")).toHaveClass("binding-explainer");
   });
 
   it("실구매력이 0이면 숫자 대신 안내를 보여준다", () => {
@@ -171,61 +158,27 @@ describe("BudgetResult", () => {
     });
   });
 
-  it("경고가 있으면 결과 위에 보여준다", () => {
-    renderResult({ result: result({ warnings: ["양도세가 반영되지 않았어요."] }) });
+  /**
+   * 예전에는 여기 두 검사가 있었다 — "경고가 있으면 결과 위에
+   * 보여준다"와 "경고는 details 밖에 있다 — 접히지 않는다". 둘 다 지운
+   * 것이 아니라 **호출부로 옮겼다**: `src/App.test.tsx`의
+   * "엔진 경고의 자리"가 같은 두 사실을 새 자리에서 검사한다(사이드바
+   * 맨 위에 보인다 / 접히는 패널·`<details>` 밖이다).
+   *
+   * 이 컴포넌트가 통째로 접히는 예산 상세 패널 안으로 들어가면서
+   * (Task 5) 여기서 그리는 경고는 자동으로 함께 접혔다 — "접지 않는다"를
+   * 이 컴포넌트가 더는 지킬 수 없다. 그래서 경고를 들어냈고, 여기 남는
+   * 검사는 **다시 들어오지 않는지**를 잠그는 것이다. `warnings`를 주고도
+   * 아무것도 그리지 않아야 한다 — 그리면 화면과 종이에 같은 문장이 두 번
+   * 나온다(호출부가 이미 그린다).
+   */
+  it("경고를 그리지 않는다 — 접히는 패널 밖에서 호출부가 그린다", () => {
+    const { container } = renderResult({
+      result: result({ warnings: ["양도세가 반영되지 않았어요."] }),
+    });
     expect(
-      screen.getByText("양도세가 반영되지 않았어요."),
-    ).toBeInTheDocument();
-  });
-
-  it("경고는 details 밖에 있다 — 접히지 않는다", () => {
-    renderResult({ result: result({ warnings: ["양도세가 반영되지 않았어요."] }) });
-    const warning = screen.getByText("양도세가 반영되지 않았어요.");
-    expect(warning.closest("details")).toBeNull();
-  });
-
-  describe("안전선", () => {
-    it("최대 가격과 다르면 안전선을 나란히 보여준다", () => {
-      const r = result({ affordablePrice: 600_000_000 });
-      renderResult({ result: r, safePrice: 480_000_000 });
-      expect(screen.getByText(/4억 8,000만/)).toBeInTheDocument();
-    });
-
-    it("안전선이 null이면 문장으로 보여준다", () => {
-      renderResult({ safePrice: null });
-      expect(
-        screen.getByText(/지금 조건으론 무리 없는 가격대가 없어요/),
-      ).toBeInTheDocument();
-    });
-
-    it("안전선은 details 밖에 있다 — 접히지 않는다", () => {
-      const r = result({ affordablePrice: 600_000_000 });
-      renderResult({ result: r, safePrice: 480_000_000 });
-      const safeLineText = screen.getByText("무리 없는 선");
-      expect(safeLineText.closest("details")).toBeNull();
-    });
-
-    describe("리뷰 수정: 안전선이 없는 원인을 SafeLine에 그대로 전달한다 (Important 2)", () => {
-      it("실구매력은 있지만(0 아님) DSR이 0이면 소득·부채를 원인으로 짚는다", () => {
-        const r = result({
-          affordablePrice: 600_000_000,
-          loanLimit: {
-            amount: 420_000_000,
-            binding: "LTV",
-            breakdown: { LTV: 420_000_000, DSR: 0, CAP: 600_000_000, POLICY: 0 },
-          },
-        });
-        renderResult({ result: r, safePrice: null });
-        expect(
-          screen.getByText(/소득이 없거나 기존 부채가 이미 상환 한도를 채우고 있어/),
-        ).toBeInTheDocument();
-      });
-
-      it("DSR이 0이 아니면 소득 탓으로 단정하지 않는다", () => {
-        const r = result({ affordablePrice: 600_000_000 }); // 기본 DSR: 574_316_140
-        renderResult({ result: r, safePrice: null });
-        expect(screen.queryByText(/소득이 없거나 기존 부채가/)).not.toBeInTheDocument();
-      });
-    });
+      screen.queryByText("양도세가 반영되지 않았어요."),
+    ).not.toBeInTheDocument();
+    expect(container.querySelector(".warning-list")).toBeNull();
   });
 });

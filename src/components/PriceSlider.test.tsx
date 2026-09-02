@@ -1,13 +1,34 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { SafetyScore } from "../lib/finance";
 import { PriceSlider, type PriceSliderProps } from "./PriceSlider";
+
+const DEFAULT_SAFETY: SafetyScore = {
+  monthlyPayment: 1_500_000,
+  burdenRatio: 0.18,
+  stressedMonthlyPayment: 1_800_000,
+  stressedBurdenRatio: 0.22,
+  level: "safe",
+};
 
 function renderSlider(overrides: Partial<PriceSliderProps> = {}) {
   const props: PriceSliderProps = {
     price: overrides.price ?? 300_000_000,
     max: overrides.max ?? 640_000_000,
+    // 넘기지 않으면 컴포넌트가 `max`로 기본값을 잡는다 — 눈금 상한이 곧
+    // 한계였던 예전 그대로 움직인다. 아래 "초과 구간" describe만 둘을
+    // 갈라 넘긴다.
+    affordablePrice: overrides.affordablePrice,
+    cashShortfall: overrides.cashShortfall,
     safePrice: overrides.safePrice,
     onChange: overrides.onChange ?? vi.fn(),
+    safety: overrides.safety ?? DEFAULT_SAFETY,
+    loanAmount: overrides.loanAmount ?? 300_000_000,
+    ratePercentText: overrides.ratePercentText ?? "4.53",
+    onRateChange: overrides.onRateChange ?? vi.fn(),
+    effectiveRate: overrides.effectiveRate ?? 0.0453,
+    landLeasehold: overrides.landLeasehold,
+    explainGrade: overrides.explainGrade,
   };
   return render(<PriceSlider {...props} />);
 }
@@ -145,6 +166,116 @@ describe("PriceSlider", () => {
     });
   });
 
+  /**
+   * 사용자 지시로 눈금 상한이 실구매 가능 가격 **위**까지 열렸다
+   * (`useAffordability`의 `sliderMax`). 그 위 구간에서 화면이 해야 하는
+   * 말은 하나다 — **지금 현금으로는 못 산다, 얼마가 모자라다.**
+   *
+   * 이 구간이 열리기 전에는 "한계예요"가 눈금 끝의 유일한 문장이었다.
+   * 그 문장이 초과 구간까지 따라 올라가면, 살 수 없는 가격을 살 수 있는
+   * 것처럼 말하게 된다 — 이 앱이 가장 경계하는 방향(낙관 쪽으로 틀리는
+   * 것)이라 아래 두 테스트가 그 경계를 함께 잠근다.
+   */
+  describe("초과 구간 — 실구매 가능 가격 위로 올렸을 때", () => {
+    it("모자란 현금을 금액으로 말한다", () => {
+      renderSlider({
+        price: 700_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 45_000_000,
+      });
+      const warning = screen.getByText(/지금 현금으로는 이 가격을 살 수 없어요/);
+      expect(warning).toBeInTheDocument();
+      expect(warning.textContent).toContain("4,500만원");
+      // 살 수 있는 최대가 얼마인지도 같은 문장이 함께 말한다.
+      expect(warning.textContent).toContain("6억 4,000만원");
+    });
+
+    it("초과 구간에서는 '한계예요' 문장을 내지 않는다 — 살 수 없는 가격이다", () => {
+      renderSlider({
+        price: 700_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 45_000_000,
+      });
+      expect(
+        screen.queryByText(/빌릴 수 있는 한계예요/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("실구매 가능 가격에 정확히 있으면 한계 안내만 나온다", () => {
+      renderSlider({
+        price: 640_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 0,
+      });
+      expect(
+        screen.getByText(/빌릴 수 있는 한계예요/),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText(/지금 현금으로는 이 가격을 살 수 없어요/),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * 금액을 말하는 경고라 금액이 0이면 낼 말이 없다. 두 조건은 정상
+     * 상태에서 함께 참이지만, 하나만 보고 문장을 내면 "현금이 0원 더
+     * 필요해요"라는 답의 모양을 한 거짓말이 나간다.
+     */
+    it("초과 구간이어도 모자란 금액이 0이면 경고를 내지 않는다", () => {
+      renderSlider({
+        price: 700_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 0,
+      });
+      expect(
+        screen.queryByText(/지금 현금으로는 이 가격을 살 수 없어요/),
+      ).not.toBeInTheDocument();
+    });
+
+    /**
+     * 눈금이 한계 위로 이어지면서 "어디까지가 살 수 있는 구간인지"가
+     * 눈금만 봐서는 사라졌다 — 마커로 되돌린다.
+     */
+    it("살 수 있는 최대를 눈금에 마커로 표시한다", () => {
+      renderSlider({
+        price: 300_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+      });
+      expect(screen.getByText("살 수 있는 최대")).toBeInTheDocument();
+    });
+
+    it("안전선과 값이 같으면 마커를 겹쳐 붙이지 않는다", () => {
+      renderSlider({
+        price: 300_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        safePrice: 640_000_000,
+      });
+      expect(screen.getByText("무리 없는 선")).toBeInTheDocument();
+      expect(screen.queryByText("살 수 있는 최대")).not.toBeInTheDocument();
+    });
+
+    /**
+     * 색이 말하는 것은 "이 숫자가 실구매 가능 가격이다"이지 "슬라이더가
+     * 끝까지 갔다"가 아니다 — 눈금 상한이 그 위로 열리면서 둘이 갈렸다.
+     */
+    it("눈금 끝(상한)에서는 브랜드 색을 쓰지 않는다 — 그 값은 못 사는 가격이다", () => {
+      renderSlider({
+        price: 832_000_000,
+        max: 832_000_000,
+        affordablePrice: 640_000_000,
+        cashShortfall: 210_000_000,
+      });
+      expect(
+        screen.getByText("8억 3,200만원", { selector: ".slider-price" }),
+      ).not.toHaveClass("slider-price--max");
+    });
+  });
+
   describe("리뷰 수정(인쇄 결함 2): 한계 경고에서 조작 지시만 감싼다", () => {
     // "슬라이더를 내려 ~ 확인해 보세요"는 종이 위에서는 누를 수 없는
     // 조작 지시다. 이 span만 인쇄에서 지운다(styles.css의 .slider-action)
@@ -175,6 +306,142 @@ describe("PriceSlider", () => {
       expect(printedText).toContain("이건 빌릴 수 있는 한계예요.");
       expect(printedText).toContain("무리 없는 선은 따로 있어요.");
       expect(printedText).not.toContain("슬라이더를 내려");
+    });
+  });
+
+  /**
+   * 사용자 지시로 옛 `SafetyBadge` 카드를 이 슬라이더 카드에 합쳤다.
+   * 라벨은 이제 **항상** 나온다 — 예전에는 단지를 골랐을 때만 나와서,
+   * 메인 예산 패널에서는 이 표가 "실제로 사면 이렇게 된다"처럼 읽혔다
+   * (실제로는 최대로 빌렸을 때를 가정한 값이다).
+   */
+  describe("합쳐진 부담 표", () => {
+    it("항상 '최대로 빌린다면' 라벨을 낸다", () => {
+      renderSlider();
+      expect(
+        screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
+      ).toBeInTheDocument();
+    });
+
+    it("최대 대출 가능 금액을 표에 보여준다", () => {
+      renderSlider({ loanAmount: 475_330_000 });
+      expect(screen.getByText("4억 7,533만원")).toBeInTheDocument();
+    });
+
+    it("월 상환액·부담률·스트레스 시나리오를 표에 보여준다", () => {
+      renderSlider({
+        safety: {
+          monthlyPayment: 2_033_878,
+          burdenRatio: 0.244,
+          stressedMonthlyPayment: 2_536_169,
+          stressedBurdenRatio: 0.304,
+          level: "safe",
+        },
+      });
+      expect(
+        screen.getByText("203만 3,878원", { selector: "[data-field='payment']" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("24.4%", { selector: "[data-field='ratio']" }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("253만 6,169원", {
+          selector: "[data-field='stressedPayment']",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByText("30.4%", { selector: "[data-field='stressedRatio']" }),
+      ).toBeInTheDocument();
+    });
+
+    it("등급 글자를 색 구분 속성과 함께 낸다", () => {
+      renderSlider({ safety: { ...DEFAULT_SAFETY, level: "danger" } });
+      const grade = screen.getByText("위험", { selector: ".price-slider-grade" });
+      expect(grade).toHaveAttribute("data-level", "danger");
+    });
+
+    it("단지를 고르지 않았으면(landLeasehold 없음) 순수 등급을 낸다", () => {
+      renderSlider({ safety: { ...DEFAULT_SAFETY, level: "safe" } });
+      expect(
+        screen.getByText("안전", { selector: ".price-slider-grade" }),
+      ).toBeInTheDocument();
+    });
+
+    it("토지임대부를 모르면(landLeasehold=null) '확인 필요'로 내리고 근거를 함께 말한다", () => {
+      renderSlider({
+        safety: { ...DEFAULT_SAFETY, level: "safe" },
+        landLeasehold: null,
+      });
+      expect(
+        screen.queryByText("안전", { selector: ".price-slider-grade" }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByText("확인 필요")).toBeInTheDocument();
+      expect(
+        screen.getByText(/매달 나가는 돈을 다 재지 못해서/),
+      ).toBeInTheDocument();
+    });
+
+    it("explainGrade가 false면 등급 근거 문장을 내지 않는다", () => {
+      renderSlider({
+        safety: { ...DEFAULT_SAFETY, level: "safe" },
+        landLeasehold: null,
+        explainGrade: false,
+      });
+      // burdenGrade의 "unverified" 근거 문장(rules.grade.note)이 이
+      // 카드에는 없어야 한다 — ComplexDetail의 배지가 이미 말한다.
+      expect(screen.getByText("확인 필요")).toBeInTheDocument();
+      expect(
+        screen.queryByText(/매달 나가는 돈을 다 재지 못해서/),
+      ).not.toBeInTheDocument();
+    });
+
+    it("적용 금리 입력란은 ratePercentText를 그대로 값으로 쓴다", () => {
+      renderSlider({ ratePercentText: "3.9" });
+      expect(screen.getByLabelText("적용 금리 (연 %)")).toHaveValue(3.9);
+    });
+
+    it("금리 입력을 바꾸면 onRateChange에 입력 문자열을 그대로 넘긴다", () => {
+      const onRateChange = vi.fn();
+      renderSlider({ onRateChange });
+      fireEvent.change(screen.getByLabelText("적용 금리 (연 %)"), {
+        target: { value: "5.2" },
+      });
+      expect(onRateChange).toHaveBeenCalledWith("5.2");
+    });
+
+    it("실제로 계산에 쓰인 금리를 평문으로 다시 적는다 — 입력이 무효여도 감추지 않는다", () => {
+      renderSlider({ ratePercentText: "abc", effectiveRate: 0.0453 });
+      expect(screen.getByText(/지금은 연 4\.53%로 계산했어요/)).toBeInTheDocument();
+    });
+
+    it("월 상환액이 0원이면 전액 현금 구매임을 설명한다", () => {
+      renderSlider({
+        safety: {
+          monthlyPayment: 0,
+          burdenRatio: 0,
+          stressedMonthlyPayment: 0,
+          stressedBurdenRatio: 0,
+          level: "safe",
+        },
+      });
+      expect(
+        screen.getByText("대출 없이 전액 현금으로 사는 경우예요."),
+      ).toBeInTheDocument();
+    });
+
+    it("소득이 없어 부담률이 무한대면 그 사실까지 함께 설명한다", () => {
+      renderSlider({
+        safety: {
+          monthlyPayment: 0,
+          burdenRatio: Number.POSITIVE_INFINITY,
+          stressedMonthlyPayment: 0,
+          stressedBurdenRatio: Number.POSITIVE_INFINITY,
+          level: "danger",
+        },
+      });
+      expect(
+        screen.getByText(/이 등급은 상환 부담이 아니라 소득 정보가 없다는 사실을 반영해요/),
+      ).toBeInTheDocument();
     });
   });
 });

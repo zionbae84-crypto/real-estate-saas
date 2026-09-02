@@ -12,11 +12,24 @@ export interface LocationFactsProps {
   /** 단지 고유 ID. 좌표는 평형이 아니라 단지에 붙는다 */
   complexKey: string;
   /**
-   * 진단 종합에 이 축의 최신 상태를 알린다. `PriceCheck.onAssessment`와
-   * 같은 배선이다 — 판정이 아니라 상태(`state`)를 옮기는 축이라는 점만
-   * 다르고, 여기서도 새로 계산하지 않는다.
+   * 이 축의 최신 상태를 바깥에 알린다. 새로 계산하지 않고 이미 낸 값을
+   * 올릴 뿐이다 — 판정이 아니라 상태(`state`)를 옮기는 축이라는 점만
+   * `PriceCheck.onAssessment`와 다르다.
+   *
+   * ⚠ **지금 이 값을 받는 화면은 없다.** 받던 곳(진단 종합)이 지워졌고,
+   * `ComplexDetail`도 더 이상 흘려보내지 않는다. 축을 다시 모으는 화면이
+   * 붙는 날을 위한 자리로만 남아 있다.
    */
   onAssessment?: (assessment: LocationAssessment) => void;
+  /**
+   * 이 영역이 자기 제목을 그릴 것인가. 기본은 그린다.
+   *
+   * `false`를 주는 자리는 하나뿐이다: 단지 상세가 이 영역을
+   * `<details>`로 접고 **같은 문구**(`locationRules.label`)를
+   * `summary`에 적는 자리(design.md §6). `PriceCheck.showTitle`과 같은
+   * 이유이며, 섹션의 접근 가능한 이름은 그대로 남는다.
+   */
+  showTitle?: boolean;
 }
 
 /**
@@ -58,7 +71,11 @@ export interface LocationFactsProps {
  * 것이 없고, 여기서 가장 무거운 말인 두 고지는 종이에서 더 중요하다 —
  * 종이를 건네받은 사람은 화면의 다른 맥락을 보지 못했다.
  */
-export function LocationFacts({ complexKey, onAssessment }: LocationFactsProps) {
+export function LocationFacts({
+  complexKey,
+  onAssessment,
+  showTitle = true,
+}: LocationFactsProps) {
   const { rules, assessment } = useLocationFacts(complexKey);
 
   // useEffect가 아니라 useLayoutEffect다 — 페인트 **전에** 부모 상태를
@@ -68,7 +85,13 @@ export function LocationFacts({ complexKey, onAssessment }: LocationFactsProps) 
     onAssessment?.(assessment);
   }, [assessment, onAssessment]);
 
-  return <LocationFactsView rules={rules} assessment={assessment} />;
+  return (
+    <LocationFactsView
+      rules={rules}
+      assessment={assessment}
+      showTitle={showTitle}
+    />
+  );
 }
 
 /**
@@ -83,13 +106,18 @@ export function LocationFacts({ complexKey, onAssessment }: LocationFactsProps) 
 export function LocationFactsView({
   rules,
   assessment,
+  showTitle = true,
 }: {
   rules: LocationRules;
   assessment: LocationAssessment;
+  /** {@link LocationFactsProps.showTitle} 참고 */
+  showTitle?: boolean;
 }) {
   return (
     <section className="location-facts" aria-label="주변에 무엇이 있는지">
-      <h3 className="location-facts-title">{assessment.label}</h3>
+      {showTitle && (
+        <h3 className="location-facts-title">{assessment.label}</h3>
+      )}
 
       {/*
         상태는 **글자**로 말한다. `data-state`는 색을 입히는 고리일 뿐이고,

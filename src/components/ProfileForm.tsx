@@ -1,55 +1,38 @@
-import { useEffect, useState } from "react";
-import { Checkbox } from "seed-design/ui/checkbox";
-import type { AssumableField, ProfileFormState } from "../state/useProfileForm";
+import type { ReactNode } from "react";
+import { rules } from "../state/useAffordability";
+import type { ProfileFormState } from "../state/useProfileForm";
+import { AreaBandSelect } from "./AreaBandSelect";
 import { MoneyInput } from "./MoneyInput";
 
-const MONTHS_PER_YEAR = 12;
-
 /**
- * 연간 금액(원) → 월 금액(원). "매달 나가는 대출금"으로 물어 받은 값을
- * 엔진이 원하는 연간 값으로 바꾸는 변환의 반대 방향이다.
+ * 화면 1이 묻는 것 — **여섯이다.**
  *
- * 한 곳에만 둔다 — 두 군데서 곱하고 나누면 언젠가 한쪽만 고쳐 값을
- * 넣고 다시 열었을 때 12배가 된 숫자를 보게 된다. 반올림해 정수 원
- * 단위를 유지한다(이 프로젝트의 금액은 전부 원 단위 정수다).
- */
-function toMonthly(annualWon: number | null): number | null {
-  return annualWon === null ? null : Math.round(annualWon / MONTHS_PER_YEAR);
-}
-
-/** 월 금액(원) → 연간 금액(원). {@link toMonthly}의 역변환. */
-function toAnnual(monthlyWon: number | null): number | null {
-  return monthlyWon === null ? null : monthlyWon * MONTHS_PER_YEAR;
-}
-
-/**
- * SEED Checkbox의 `onCheckedChange`는 배포판에 따라 `boolean | "indeterminate"`를
- * 줄 수 있다(Radix 계열 `CheckedState` 관례). `checked === true`로 명시적으로
- * 좁힌다 — `"indeterminate"`는 truthy 문자열이라 `!!checked`나 `as boolean`으로
- * 뭉개면 참이 되고, 그러면 규제지역 LTV가 40%에서 70%로 뛰어 한도를 30%p
- * 과대 계상한다. 이 제품이 절대 하면 안 되는 방향이다.
+ * ① 얼마 있어요? ② 연 소득은요? ③ 어디에 살고 싶으세요?(지역) ④
+ * 무주택이세요? ⑤ 생애최초 구입이에요? ⑥ 어느 평형대요?
  *
- * (지금 이 프로젝트가 물고 있는 @seed-design/react-checkbox@2.0.1의
- * `onCheckedChange`는 소스 확인 결과 boolean으로만 좁혀 두어 실제로는
- * `"indeterminate"`가 흘러들어오지 않는다. 그래도 파라미터 타입은
- * `boolean | "indeterminate"`로 넓게 받아 두어, 라이브러리가 나중에
- * `CheckedState` 유니온으로 바뀌어도 이 방어선이 조용히 무너지지 않게
- * 한다.)
- */
-export function isExplicitlyChecked(
-  checked: boolean | "indeterminate",
-): boolean {
-  return checked === true;
-}
-
-/**
- * 리뷰 수정: 이 인터페이스는 예전에 `setExistingHomeField`도 받았다.
- * status(주택 보유 상황)·existingHome(갈아타기 매도 정보) 편집 UI가
- * ProfileForm에서 완전히 빠지면서 그 prop을 어디서도 호출하지 않는
- * 죽은 배선이 됐다. 옛 갈아타기 상태를 화면 없이 조용히 반영하지
- * 않기로 한 결정(useProfileForm.ts의 loadStoredState 주석 참고)에 따라
- * 이 편집 UI는 되살아나지 않으므로 prop 자체를 지웠다 — App.tsx의
- * 호출부도 함께 정리했다.
+ * ⚠ **③(지역)은 이 컴포넌트 소유가 아니다.** `App.tsx`가
+ * `regionSlot` prop으로 `<RegionSelect>`(+조회 로딩·실패 문구)를
+ * 끼워 넣는다 — 지역 조회는 여러 상태(로딩·성공·실패)를 갖고 그
+ * 상태에 따라 `App.tsx`가 화면 단계(`phase`)까지 옮기므로, 이 순수
+ * 폼 컴포넌트가 직접 소유하기엔 책임이 다르다. 그래도 자리는 사용자
+ * 지시로 여기(② 다음, ④ 앞)가 됐다 — 예산(현금·소득)을 모르는 채로
+ * 지역부터 확정하게 두지 않는다는 원래 취지는 지역 카드 자체의 게이트
+ * (`App.tsx`)가 그대로 지킨다.
+ *
+ * ④·⑤는 카드 모양이 같다 — 물음표로 끝나는 제목 + "맞아요/아니에요"류
+ * 라디오 둘. ⑤는 원래 체크박스 하나였는데 ④와 통일했다(사용자 지시).
+ *
+ * ⚠ **③·④는 사용자 지시로 되살아났다.** 한때는 "없앤 입력 넷"(생애최초 ·
+ * 기존 대출 · 주택 수 · 규제지역 체크박스)에 속해 값을
+ * `ASSUMED_REMOVED_INPUTS`(useProfileForm.ts)로 고정하고 화면에는 그
+ * 가정을 `AssumptionLine`이 문장으로만 알렸다. 대출·취득세 계산에 실제로
+ * 반영해야 한다는 지시로 둘만 다시 실제 입력란이 됐다 — 값은 이제
+ * `ProfileFormState.ownedHomeCount`·`isFirstTimeBuyer`에서 직접 온다.
+ * 남은 것은 기존 대출·규제지역 체크박스 둘뿐이다.
+ *
+ * 규제지역만 방향이 다르다: 체크박스는 없앴지만 값은 **지역 조회가 자동
+ * 판정**한다(`App.tsx`의 useEffect, `api/_data/regulated-regions.json`).
+ * 그래서 그 문구는 "가정했어요"와 "판정했어요"로 갈린다.
  */
 export interface ProfileFormProps {
   state: ProfileFormState;
@@ -58,300 +41,122 @@ export interface ProfileFormProps {
     value: ProfileFormState[K],
   ) => void;
   /**
-   * 지금 펼쳐서 편집 중인 가정 항목. 미지정이거나 null이고, 아직 아무
-   * 것도 확정하지 않은 사용자라면 첫 화면의 세 항목(사용가능 현금 예산 · 연 소득 ·
-   * 생애최초 여부)만 보인다.
-   *
-   * 나머지 가정(기존 부채 · 규제지역 · 전용면적)을 눌러서 고치는 흐름은
-   * `AssumptionLine`이 결과 영역에서 담당한다 — 이 prop은 그 컴포넌트가
-   * 고른 항목을 여기 전달받아 제자리(폼 안)에서 편집 UI를 펼치는
-   * 자리다.
-   *
-   * 리뷰 수정(Critical 1): 각 필드는 `openField === field`이거나 사용자가
-   * **이미 그 값을 확정**했을 때 렌더링한다(existingDebt는
-   * `existingDebtAnnualPayment !== null`로, regulatedArea·area는
-   * `state.touched`로 판단). `openField`는 `App`의 세션 한정
-   * `useState`라 저장되지 않는다 — 이 prop만으로 판단하면 사용자가 값을
-   * 정하는 순간 `AssumptionLine`에서 그 항목이 빠지면서(가정이 아니게
-   * 됐으니 맞다) 동시에 그 항목을 다시 열 유일한 버튼도 함께 사라진다.
-   * 그러면 값은 `localStorage`에 남아 엔진을 계속 움직이는데, 새로고침하거나
-   * 다른 항목을 열면 화면에서는 그 값을 다시 보거나 고칠 방법이 없어진다.
+   * 지역 선택(+조회 상태 문구)이 들어갈 자리. `App.tsx`가 넘긴다 —
+   * 위 파일 머리 주석 참고. `null`이면 그 자리에 아무것도 그리지
+   * 않는다(예: 순수 렌더 검증에서 이 슬롯을 비워 두고 싶을 때).
    */
-  openField?: AssumableField | null;
-  /**
-   * 지금 화면이 특정 평형의 상세를 보여주고 있어, 그 평형의 실제
-   * 전용면적으로 계산 중인가(App.tsx의 `effectiveProfile`).
-   *
-   * 참이면 전용면적 입력란을 **내보내지 않는다.** 상세가 열려 있는
-   * 동안에는 화면 계산이 그 평형의 면적을 쓰므로, 입력란에 값을 넣어도
-   * 화면이 꿈쩍하지 않는다 — 입력이 조용히 무시되는 상태다. 무시할
-   * 거라면 물어보지 않는 편이 정직하다. `AssumptionLine`이 같은
-   * 이유로 전용면적 가정 문구를 빼는 것과 짝을 이룬다. 상세를 닫으면
-   * 이 플래그가 꺼지고 입력란도 원래 조건대로 돌아온다.
-   */
-  areaOverridden?: boolean;
+  regionSlot?: ReactNode;
 }
 
-export function ProfileForm({
-  state,
-  setField,
-  openField = null,
-  areaOverridden = false,
-}: ProfileFormProps) {
+export function ProfileForm({ state, setField, regionSlot }: ProfileFormProps) {
   return (
     <form className="profile-form" onSubmit={(e) => e.preventDefault()}>
       <MoneyInput
         id="cash"
-        label="사용가능 현금 예산"
+        label="얼마 있어요?"
         value={state.cash}
         onChange={(won) => setField("cash", won)}
-        hint="대출을 빼고 지금 바로 쓸 수 있는 현금이에요. 대출 원리금(한도·월
-          상환액)을 계산하는 데 써요. 단위를 안 쓰면 만원으로 읽어요.
-          '3억5000'처럼 써도 돼요."
+        hint="대출을 빼고 지금 바로 쓸 수 있는 현금이에요. 단위를 안 쓰면
+          만원으로 읽어요. '3억5000'처럼 써도 돼요."
       />
 
       <MoneyInput
         id="income"
-        label="연 소득 (세전)"
+        label="연 소득은요? (세전)"
         value={state.annualIncome}
         onChange={(won) => setField("annualIncome", won)}
         hint="DSR(총부채원리금상환비율)로 대출 한도를 정하는 데 써요 — 소득이
           낮으면 현금이 있어도 원리금을 감당할 수 있는 만큼만 빌릴 수 있어요."
       />
 
-      <OwnedHomeField
-        value={state.ownedHomeCount}
-        onChange={(count) => setField("ownedHomeCount", count)}
-      />
+      {regionSlot}
 
-      <div className="field">
-        <Checkbox
-          inputProps={{ id: "first-time" }}
-          label="생애최초 주택 구입"
-          checked={state.isFirstTimeBuyer}
-          onCheckedChange={(checked) =>
-            setField("isFirstTimeBuyer", isExplicitlyChecked(checked))
-          }
-        />
-      </div>
+      {/*
+        보유 주택 수. 정확한 채수가 아니라 "무주택이냐 아니냐"만 묻는다 —
+        정책대출 자격(디딤돌 0채·보금자리론 0~1채)이 실제로 가르는 지점이
+        그 하나뿐이다(policy-loans.ts). 라디오라 값을 답하기 전에는 어느
+        쪽도 선택돼 있지 않다 — `toProfile`이 null을 돌려주고 계산을
+        막는다(useProfileForm.ts의 ownedHomeCount 주석 참고).
 
-      {(openField === "existingDebt" ||
-        state.existingDebtAnnualPayment !== null) && (
-        <MoneyInput
-          id="debt-monthly"
-          label="매달 나가는 대출금"
-          value={toMonthly(state.existingDebtAnnualPayment)}
-          onChange={(monthlyWon) =>
-            setField("existingDebtAnnualPayment", toAnnual(monthlyWon))
-          }
-          hint="대출이 없으면 0을 입력하세요. 비워 두면 이 항목을 다음에 또 물어봐요."
-        />
-      )}
-
-      {(openField === "regulatedArea" ||
-        state.touched.includes("regulatedArea")) && (
-        <div className="field">
-          <Checkbox
-            inputProps={{ id: "regulated-area" }}
-            label="규제지역(투기과열지구·조정대상지역)"
-            checked={state.isRegulatedArea}
-            onCheckedChange={(checked) =>
-              setField("isRegulatedArea", isExplicitlyChecked(checked))
-            }
-          />
-          <p className="hint">
-            무주택자 LTV가 규제지역은 40%, 비규제(수도권)는 70%로 갈려요.
-            잘 모르면 켜 둔 채로 계산하세요 — 한도를 과대평가하지 않아요.
-          </p>
+        선택(라디오 줄)을 설명보다 먼저 그린다 — 사용자 지시로 카드마다
+        "고르는 줄이 위, 설명이 아래"로 통일했다. 그래도 스크린 리더에는
+        legend가 항상 먼저 읽히므로 "무엇에 대한 선택인지" 맥락 자체가
+        사라지지는 않는다.
+      */}
+      <fieldset className="field household-select">
+        <legend>무주택이세요?</legend>
+        <div className="household-options">
+          <label className="household-option">
+            <input
+              type="radio"
+              name="owned-home-count"
+              checked={state.ownedHomeCount === 0}
+              onChange={() => setField("ownedHomeCount", 0)}
+            />
+            무주택이에요
+          </label>
+          <label className="household-option">
+            <input
+              type="radio"
+              name="owned-home-count"
+              checked={
+                state.ownedHomeCount !== null && state.ownedHomeCount > 0
+              }
+              onChange={() => setField("ownedHomeCount", 1)}
+            />
+            집이 있어요
+          </label>
         </div>
-      )}
+        <p className="hint">
+          이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요.
+        </p>
+      </fieldset>
 
-      {!areaOverridden &&
-        (openField === "area" || state.touched.includes("area")) && (
-          <AreaInput
-            value={state.exclusiveAreaSqm}
-            onChange={(value) => setField("exclusiveAreaSqm", value)}
-          />
-        )}
+      {/*
+        생애최초 주택 구입 여부. 기본값(false)이 안전한 방향이라(우대를
+        빼고 계산 — 실제 생애최초 구매자에게는 숫자가 이보다 올라간다)
+        위 주택 수와 달리 답하지 않아도 계산을 막지 않는다 — 그래서 두
+        라디오 중 하나가 항상 이미 선택돼 있다(무주택 질문과 달리 "아직
+        아무것도 선택 안 됨" 상태가 없다).
+
+        예전에는 체크박스 하나였다. 위 무주택 질문과 같은 라디오-둘 모양
+        (제목 물음표 + "맞아요/아니에요")으로 통일했다 — 사용자 지시.
+      */}
+      <fieldset className="field first-time-buyer-select">
+        <legend>생애최초 구입이에요?</legend>
+        <div className="household-options">
+          <label className="household-option">
+            <input
+              type="radio"
+              name="first-time-buyer"
+              checked={state.isFirstTimeBuyer}
+              onChange={() => setField("isFirstTimeBuyer", true)}
+            />
+            맞아요
+          </label>
+          <label className="household-option">
+            <input
+              type="radio"
+              name="first-time-buyer"
+              checked={!state.isFirstTimeBuyer}
+              onChange={() => setField("isFirstTimeBuyer", false)}
+            />
+            아니에요
+          </label>
+        </div>
+        <p className="hint">
+          생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요.
+        </p>
+      </fieldset>
+
+      <AreaBandSelect
+        value={state.areaBands}
+        onChange={(bands) => setField("areaBands", bands)}
+        // 85㎡ 경계는 농특세가 실제로 갈리는 지점이라 룰셋에서 온다 —
+        // 숫자를 화면에 박아 두면 룰셋이 바뀐 날 구간 이름의 뜻과
+        // 취득세 계산이 조용히 어긋난다.
+        ruralTaxAreaThresholdSqm={rules.acquisitionTax.ruralTaxAreaThresholdSqm}
+      />
     </form>
-  );
-}
-
-interface AreaInputProps {
-  value: number;
-  onChange: (value: number) => void;
-}
-
-/**
- * 전용면적 입력란. 이전에는 change 핸들러가 파싱 실패("", "0" 등)일 때
- * 그냥 아무 것도 하지 않았다 — value prop이 그대로라 리렌더가 안 일어나고,
- * 그 결과 통제 입력(controlled input)인데도 브라우저가 사용자가 방금
- * 지운 화면 그대로("" 등)를 계속 보여줬다. 실제 계산에 쓰이는 값(농특세
- * 판정 등)과 화면이 어긋나는 상태다.
- *
- * 원본 텍스트를 로컬 상태로 따로 들고, 파싱 가능할 때만 상위 상태를
- * 갱신하며, blur 시점에 여전히 유효하지 않으면 마지막으로 유효했던
- * 값으로 되돌린다 — 입력 중에는 자유롭게 지우고 다시 쓸 수 있으면서도,
- * 입력을 마쳤을 때는 화면과 계산값이 항상 일치한다.
- */
-function AreaInput({ value, onChange }: AreaInputProps) {
-  const [text, setText] = useState(() => String(value));
-
-  useEffect(() => {
-    setText((current) => (Number(current) === value ? current : String(value)));
-  }, [value]);
-
-  function handleChange(next: string) {
-    setText(next);
-    const parsed = Number(next);
-    if (next.trim() !== "" && Number.isFinite(parsed) && parsed > 0) {
-      onChange(parsed);
-    }
-  }
-
-  function handleBlur() {
-    const parsed = Number(text);
-    if (text.trim() === "" || !Number.isFinite(parsed) || parsed <= 0) {
-      setText(String(value));
-    }
-  }
-
-  return (
-    <div className="field">
-      <label htmlFor="area">전용면적 (㎡)</label>
-      <input
-        id="area"
-        type="number"
-        min={1}
-        step={1}
-        value={text}
-        onChange={(e) => handleChange(e.target.value)}
-        onBlur={handleBlur}
-      />
-    </div>
-  );
-}
-
-interface OwnedHomeFieldProps {
-  /** 보유 주택 수(채). `null`이면 아직 답하지 않았다 */
-  value: number | null;
-  onChange: (count: number | null) => void;
-}
-
-/**
- * 주택 수를 묻는다 — 먼저 무주택/유주택을 고르고, 유주택이면 몇 채인지
- * 적는다.
- *
- * **미리 골라 두지 않는다.** 무주택을 기본 선택으로 두면 아무것도
- * 고르지 않은 사람이 무주택으로 계산되는데, 그건 디딤돌·보금자리론
- * 자격을 모두 열어 한도를 키우는 낙관 방향이다. 이 폼의 다른 기본값
- * (규제지역 켬 · 농특세가 붙는 면적)이 전부 과대평가를 피하는 쪽으로
- * 놓인 것과 같은 판단이고, 주택 수는 그 "안전한 쪽"이 사실을 지어내는
- * 것이 되므로(당신은 집이 있다) 아예 답을 받는다.
- *
- * 유주택을 고르면 1채로 시작한다. 유주택이라고 답한 사람이 가질 수
- * 있는 가장 작은 수이고, 여기서 늘리는 방향은 자격이 좁아지는 쪽이라
- * 시작값이 한도를 부풀리지 않는다.
- *
- * **라디오 두 개 + 숫자 하나**로 나눈 이유: "0채"를 숫자 입력으로만
- * 받으면 빈 칸과 0채가 화면에서 구분되지 않는다. 무주택은 이 계산에서
- * 자격이 가장 넓어지는 답이라, 고른 적 없는 사람이 그 답을 얻는 경로를
- * 만들면 안 된다.
- *
- * 색으로 뜻을 전달하지 않는다 — 어느 쪽을 골랐는지는 라디오와 글자가
- * 말하고, 아래 힌트가 무엇이 달라지는지 문장으로 적는다.
- */
-function OwnedHomeField({ value, onChange }: OwnedHomeFieldProps) {
-  const hasHome = value !== null && value > 0;
-
-  return (
-    <fieldset className="field owned-home-field">
-      <legend>지금 집이 몇 채 있나요?</legend>
-      <p className="hint">
-        이번에 사려는 집은 빼고 세어 주세요. 주택 수에 따라 받을 수 있는
-        정책대출이 달라져요 — 디딤돌은 무주택만, 보금자리론은 1주택까지
-        받을 수 있어요.
-      </p>
-      <div className="owned-home-options">
-        <label className="owned-home-option">
-          <input
-            type="radio"
-            name="owned-home"
-            value="none"
-            checked={value === 0}
-            onChange={() => onChange(0)}
-          />
-          <span>무주택</span>
-        </label>
-        <label className="owned-home-option">
-          <input
-            type="radio"
-            name="owned-home"
-            value="some"
-            checked={hasHome}
-            // 유주택으로 넘어올 때는 1채로 시작한다. 이미 유주택이면
-            // 사용자가 적어 둔 수를 그대로 둔다.
-            onChange={() => onChange(hasHome ? value : 1)}
-          />
-          <span>유주택</span>
-        </label>
-      </div>
-
-      {hasHome && (
-        <HomeCountInput value={value} onChange={(next) => onChange(next)} />
-      )}
-    </fieldset>
-  );
-}
-
-interface HomeCountInputProps {
-  value: number;
-  onChange: (value: number) => void;
-}
-
-/**
- * 보유 주택 수 입력란. `AreaInput`과 같은 방식이다 — 원본 텍스트를
- * 로컬 상태로 들고, 읽을 수 있는 값일 때만 상위 상태를 갱신하며,
- * 포커스를 잃는 순간 여전히 읽을 수 없으면 마지막으로 유효했던 값으로
- * 되돌린다. 입력 중에는 지웠다 다시 쓸 수 있으면서, 입력을 마쳤을 때는
- * 화면과 계산값이 항상 일치한다.
- *
- * 1채 미만·소수는 받지 않는다 — 여기까지 온 사용자는 이미 유주택을
- * 골랐고, 0채는 위 라디오가 담당한다.
- */
-function HomeCountInput({ value, onChange }: HomeCountInputProps) {
-  const [text, setText] = useState(() => String(value));
-
-  useEffect(() => {
-    setText((current) => (Number(current) === value ? current : String(value)));
-  }, [value]);
-
-  function parse(raw: string): number | null {
-    const parsed = Number(raw);
-    if (raw.trim() === "" || !Number.isInteger(parsed) || parsed < 1) {
-      return null;
-    }
-    return parsed;
-  }
-
-  return (
-    <div className="field owned-home-count">
-      <label htmlFor="owned-home-count">갖고 있는 주택 수 (채)</label>
-      <input
-        id="owned-home-count"
-        type="number"
-        min={1}
-        step={1}
-        value={text}
-        onChange={(e) => {
-          setText(e.target.value);
-          const parsed = parse(e.target.value);
-          if (parsed !== null) onChange(parsed);
-        }}
-        onBlur={() => {
-          if (parse(text) === null) setText(String(value));
-        }}
-      />
-    </div>
   );
 }

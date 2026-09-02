@@ -146,13 +146,18 @@ describe("공개 진입점의 비유한 입력 방어", () => {
     // NaN 주입 지점은 구간별 캡 스키마에 맞춰 bracket.amount로 옮겼다 —
     // calcAbsoluteCap이 이 NaN을 그대로 반환하고, Math.floor(NaN)이
     // breakdown.CAP에 실려 assertNoNaN에 잡히는 경로는 그대로다.
+    //
+    // isRegulatedArea: true로 명시한다 — calcMaxLoan은 이제 비규제지역이면
+    // calcAbsoluteCap을 아예 호출하지 않으므로(loan-limit.ts 참고), 이
+    // 파일의 기본값(false)을 그대로 쓰면 여기서 심은 NaN이 breakdown에
+    // 도달하지 못해 이 테스트가 검증하려는 방어선 자체를 건너뛴다.
     const brokenRules = {
       ...rules,
       absoluteCap: { brackets: [{ upTo: null, amount: NaN }] },
     };
-    expect(() => calcMaxLoan(profile(), brokenRules, 600_000_000)).toThrow(
-      /NaN/,
-    );
+    expect(() =>
+      calcMaxLoan(profile({ isRegulatedArea: true }), brokenRules, 600_000_000),
+    ).toThrow(/NaN/);
   });
 });
 

@@ -5,6 +5,8 @@ import {
   calcMaxLoan,
   calcPolicyLimit,
   calcPolicyLoanAvailability,
+  ltvRateFor,
+  NO_ABSOLUTE_CAP,
 } from "./loan-limit";
 import { matchPolicyLoans } from "./policy-loans";
 import { parseRules } from "./rules";
@@ -77,14 +79,43 @@ describe("calcMaxLoan", () => {
     expect(result.binding).toBe("DSR");
   });
 
-  it("고가주택·고소득이면 6억 절대캡에 걸린다", () => {
+  // isRegulatedArea: true를 명시한다 — 절대캡은 규제지역에만 걸리므로
+  // (loan-limit.ts의 calcMaxLoan 참고), 이 파일의 기본값(false)을 그대로
+  // 쓰면 캡 자체가 적용되지 않아 이 테스트가 표적으로 삼는 제약이
+  // 애초에 발동하지 않는다.
+  //
+  // 가격은 2,000,000,000(20억)을 쓴다 — 이 파일이 쓰는 2026-03 룰셋의
+  // absoluteCap은 구간 없는 단일 6억이라(2026-08과 달리 15억/25억 구간이
+  // 없다), 가격 1,500,000,000에서는 규제지역 LTV(40%×15억=6억)가 캡과
+  // 정확히 같은 값이 되어 `<` 비교에서 먼저 온 LTV가 binding으로 남는다
+  // (동률이면 먼저 검사한 쪽이 이긴다 — calcMaxLoan 참고). 20억에서는
+  // LTV(40%×20억=8억)가 캡(6억)보다 뚜렷이 커서 캡이 확실히 이긴다.
+  it("규제지역·고가주택·고소득이면 6억 절대캡에 걸린다", () => {
     const result = calcMaxLoan(
-      profile({ annualIncome: 300_000_000 }),
+      profile({ annualIncome: 300_000_000, isRegulatedArea: true }),
       rules,
-      1_500_000_000,
+      2_000_000_000,
     );
     expect(result.binding).toBe("CAP");
     expect(result.amount).toBe(600_000_000);
+  });
+
+  // 대조군: 같은 조건에서 비규제지역이면 캡 자체가 없다 — LTV(70%)가
+  // 대신 binding이 된다.
+  it("비규제지역·고가주택·고소득이면 절대캡이 아니라 LTV에 걸린다", () => {
+    const result = calcMaxLoan(
+      profile({ annualIncome: 300_000_000, isRegulatedArea: false }),
+      rules,
+      1_500_000_000,
+    );
+    expect(result.binding).not.toBe("CAP");
+    expect(result.breakdown.CAP).toBe(NO_ABSOLUTE_CAP);
+    expect(result.binding).toBe("LTV");
+    // 이론값은 0.7 × 1,500,000,000 = 1,050,000,000이지만, 0.7이 이진
+    // 부동소수점으로 정확히 표현되지 않아 실제 곱셈 결과가 그 값보다
+    // 살짝 작게(...9999999) 나온다 — Math.floor가 한 원 아래를 내는 건
+    // 이 곱셈의 실제 부동소수점 결과이지 버그가 아니다.
+    expect(result.amount).toBe(1_049_999_999);
   });
 
   // 의미론 변경(2026-08-17): 정책대출은 반드시 따라야 하는 상한이 아니라
@@ -112,17 +143,26 @@ describe("calcMaxLoan", () => {
     expect(result.breakdown.DSR).toBe(229_726_456);
   });
 
-  // 승인된 비대칭: absoluteCap은 수도권 주담대에 대한 규제이지 정책대출
+  // 승인된 비대칭: absoluteCap은 규제지역 주담대에 대한 규제이지 정책대출
   // 상품 고시 한도에 걸리는 상한이 아니다. 실제 룰셋의 상품 한도는 모두
   // 6억보다 한참 아래이므로 이 비대칭이 관측되지 않지만, 코드가 의도적으로
   // CAP을 정책 경로에서 뺀다는 사실 자체를 고정해 둔다.
+  //
+  // isRegulatedArea: true와 가격 2,000,000,000(20억)을 쓴다 — 이 파일의
+  // 2026-03 룰셋은 구간 없는 단일 캡(6억)이라 가격을 올려도 캡 값 자체는
+  // 그대로다. 15억에서는 규제지역 LTV(40%×15억=6억)와 캡(6억)이 우연히
+  // 같아져 `<` 비교에서 먼저 오는 LTV가 binding으로 남는다(동률이면
+  // 먼저 검사한 쪽이 이긴다). 20억에서는 LTV(40%×20억=8억)가 캡(6억)보다
+  // 뚜렷이 커서, 은행 경로만 캡(6억)에 눌리고 정책 경로는 LTV(8억) 안에서
+  // 상품 한도 그대로(7억)를 낸다 — 두 경로가 실제로 갈리는 지점이다.
   it("정책대출 경로에는 지역 절대캡이 걸리지 않는다", () => {
     const result = calcMaxLoan(
-      profile({ annualIncome: 300_000_000 }),
+      profile({ annualIncome: 300_000_000, isRegulatedArea: true }),
       withPolicyLimit(700_000_000),
-      1_500_000_000,
+      2_000_000_000,
     );
     expect(result.breakdown.CAP).toBe(600_000_000);
+    expect(result.breakdown.LTV).toBe(800_000_000);
     expect(result.binding).toBe("POLICY");
     expect(result.amount).toBe(700_000_000);
   });
@@ -233,15 +273,34 @@ describe("calcMaxLoan", () => {
 
   // 변경 전에는 POLICY가 Infinity일 수 있어 예외 처리가 필요했다.
   // 이제 "선택지 없음"을 0으로 표현하므로 네 값 모두 유한한 정수다.
-  it("breakdown의 모든 값은 유한한 정수다", () => {
+  // 절대캡 도입(isRegulatedArea 게이팅) 이후로는 "네 값 모두 유한하다"가
+  // 규제지역에서만 성립한다 — 비규제지역이면 breakdown.CAP이 의도적으로
+  // NO_ABSOLUTE_CAP(Infinity)이다(loan-limit.ts 참고). 그래서 이 단언은
+  // 규제지역 프로필로 좁히고, 비규제지역의 CAP 예외는 바로 아래 테스트가
+  // 따로 고정한다.
+  it("규제지역에서는 breakdown의 모든 값이 유한한 정수다", () => {
     const result = calcMaxLoan(
-      profile({ annualIncome: 40_000_000 }),
+      profile({ annualIncome: 40_000_000, isRegulatedArea: true }),
       rules,
       1_000_000_000,
     );
     for (const value of Object.values(result.breakdown)) {
       expect(Number.isInteger(value)).toBe(true);
     }
+  });
+
+  it("비규제지역에서는 breakdown.CAP만 유한하지 않고(Infinity) 나머지 셋은 정수다", () => {
+    const result = calcMaxLoan(
+      profile({ annualIncome: 40_000_000, isRegulatedArea: false }),
+      rules,
+      1_000_000_000,
+    );
+    expect(result.breakdown.CAP).toBe(NO_ABSOLUTE_CAP);
+    for (const key of ["LTV", "DSR", "POLICY"] as const) {
+      expect(Number.isInteger(result.breakdown[key])).toBe(true);
+    }
+    // amount 자체는 CAP이 binding이 될 수 없으므로 항상 유한하다.
+    expect(Number.isInteger(result.amount)).toBe(true);
   });
 
   it("amount는 breakdown[binding]과 정확히 같다", () => {
@@ -523,6 +582,43 @@ describe("규제지역 LTV", () => {
       300_000_000,
     );
     expect(first.breakdown.LTV).toBe(base.breakdown.LTV);
+  });
+});
+
+/**
+ * `ltvRateFor`는 `calcLtvLimit`이 breakdown.LTV를 낼 때 쓰는 것과
+ * 같은 표(rules.ltv)에서 같은 규칙으로 고른다 — 화면(BindingExplainer)이
+ * "규제지역 기준 LTV 40%를 적용했어요" 같은 설명을 낼 때 쓰는 함수라,
+ * 위 "규제지역 LTV" describe의 네 조합과 정확히 같은 값을 내야 한다.
+ */
+describe("ltvRateFor", () => {
+  it("규제지역 무주택(생애최초 아님)은 0.4다", () => {
+    expect(
+      ltvRateFor({ isRegulatedArea: true, isFirstTimeBuyer: false }, rules),
+    ).toBe(0.4);
+  });
+
+  it("규제지역 생애최초는 0.7이다", () => {
+    expect(
+      ltvRateFor({ isRegulatedArea: true, isFirstTimeBuyer: true }, rules),
+    ).toBe(0.7);
+  });
+
+  it("비규제지역은 생애최초 여부와 무관하게 0.7이다", () => {
+    expect(
+      ltvRateFor({ isRegulatedArea: false, isFirstTimeBuyer: false }, rules),
+    ).toBe(0.7);
+    expect(
+      ltvRateFor({ isRegulatedArea: false, isFirstTimeBuyer: true }, rules),
+    ).toBe(0.7);
+  });
+
+  it("calcMaxLoan의 breakdown.LTV와 같은 요율을 고른다 — 두 계산이 다른 표를 보지 않는다", () => {
+    const p = profile({ isRegulatedArea: true, annualIncome: 1_000_000_000 });
+    const price = 300_000_000;
+    const result = calcMaxLoan(p, rules, price);
+    const rate = ltvRateFor(p, rules);
+    expect(Math.floor(price * rate)).toBe(result.breakdown.LTV);
   });
 });
 

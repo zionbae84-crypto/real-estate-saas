@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import rawFinanceRules from "../../rules/2026-08.json";
 import {
@@ -6,7 +7,11 @@ import {
   PRINT_HIDDEN_SELECTORS,
 } from "../print/hiddenInPrint";
 import { COMPLEX_UNITS, type ComplexUnit } from "../data/complexes";
-import type { BurdenAtPrice, CostBreakdown as CostBreakdownData } from "../lib/finance";
+import type {
+  BurdenAtPrice,
+  CostBreakdown as CostBreakdownData,
+  LoanLimit,
+} from "../lib/finance";
 import { parseRules, type BuyerProfile } from "../lib/finance";
 import type { ComplexListEntry, ComplexListResult } from "../lib/complex-list";
 import type { PriceBudgetInput } from "../lib/price";
@@ -63,6 +68,8 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     minFloor: 3,
     maxFloor: 18,
     unknownFloorCount: 0,
+    address: null,
+    trades: [],
     lowConfidence: false,
     ...overrides,
   };
@@ -130,14 +137,31 @@ function renderList(entries: ComplexListEntry[], onSelect?: () => void) {
   );
 }
 
+/**
+ * "매달 나가는 돈" 계산기의 입력 상한. 이 파일이 보는 것은 토지임대부
+ * 표시라 한도 값 자체는 상관이 없다 — 계산기가 그려질 만큼만 크게 둔다
+ * (0이면 입력란 대신 "받을 수 있는 대출이 없어요"가 뜬다).
+ */
+const maxLoan: LoanLimit = {
+  amount: 400_000_000,
+  binding: "LTV",
+  breakdown: {
+    LTV: 400_000_000,
+    DSR: 400_000_000,
+    CAP: 400_000_000,
+    POLICY: 0,
+  },
+};
+
 function renderDetail(u: ComplexUnit) {
   return render(
     <ComplexDetail
       unit={u}
-      burden={burden()}
-      costs={costs()}
-        householdCountNote={주택수고지}
+      units={[u]}
+      onSelectUnit={vi.fn()}
+      householdCountNote={주택수고지}
       priceBudget={priceBudget}
+      profile={priceBudget.profile}
       onClose={vi.fn()}
     />,
   );
@@ -304,19 +328,45 @@ describe("토지임대부 표시", () => {
       expect(button?.querySelectorAll("p")).toHaveLength(0);
     });
 
-    it("상세에서는 월 상환액 배지 바로 다음이다", () => {
+    /**
+     * ⚠ **"등급 배지 바로 다음"이라는 절은 사라졌다.** 사용자 지시로 이
+     * 화면을 다시 짜면서 별도 등급 배지(`SafetyBadge`)가 없어지고, 등급은
+     * 대출 계산기 표의 한 줄로 들어갔다.
+     *
+     * **지켜야 하는 것은 그대로다**: 이 표시가 **금액보다 앞**에 있어야
+     * 한다. 그래야 그 금액에 토지 사용료가 빠져 있다는 사실이 금액을
+     * 읽기 전에 도착한다. 지금은 예상 매수금액 입력란보다도 앞이라,
+     * 사용자가 값을 넣기 전에 이미 읽는다 — 더 이른 자리다.
+     */
+    it("상세에서는 가격 입력란보다도, 금액 블록보다도 앞이다", async () => {
       const { container } = renderDetail(unit({ landLeasehold: "Y" }));
-      const badge = container.querySelector(".safety-badge");
-      const note = container.querySelector('.land-lease-note[data-variant="monthly"]');
-      expect(badge?.textContent).toContain("월 상환액");
-      expect(badge).not.toBeNull();
+      // 금액 블록은 이미 이 평형 기준값으로 채워져 있다(ComplexDetail의
+      // 프리필) — 그대로도 아래 검사가 성립하지만, 명시적으로 값을
+      // 다시 넣어 이 시나리오("사용자가 방금 값을 넣었다")를 재현한다.
+      // `commitOn="blur"`라 벗어나야 확정된다.
+      const priceInput = screen.getByLabelText("예상 매수금액");
+      await userEvent.clear(priceInput);
+      await userEvent.type(priceInput, "120000");
+      await userEvent.tab();
+
+      const note = container.querySelector(
+        '.land-lease-note[data-variant="monthly"]',
+      );
+      const form = container.querySelector(".complex-detail-price-form");
+      const monthly = container.querySelector(".detail-block--monthly");
       expect(note).not.toBeNull();
-      if (badge === null || note === null) return;
-      // 문서 순서상 배지가 먼저다.
+      expect(form).not.toBeNull();
+      expect(monthly).not.toBeNull();
+      if (note === null || form === null || monthly === null) return;
+
+      // 값을 넣는 자리보다 앞이다.
       expect(
-        badge.compareDocumentPosition(note) & Node.DOCUMENT_POSITION_FOLLOWING,
+        note.compareDocumentPosition(form) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
-      expect(badge.nextElementSibling).toBe(note);
+      // 그리고 금액 블록보다도 앞이다.
+      expect(
+        note.compareDocumentPosition(monthly) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
     });
 
     it("호가 화면에서는 호가를 적기 전에 먼저 나온다", () => {

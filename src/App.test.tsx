@@ -1,11 +1,17 @@
-import { render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
+import { ZERO_BUDGET_HEADLINE } from "./components/BudgetResult";
 import type { ComplexUnit } from "./data/complexes";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import * as loadNaverMaps from "./lib/loadNaverMaps";
 import * as regionQuery from "./lib/regionQuery";
+import { BODY_SCROLL_LOCK_CLASS } from "./print/bodyScrollLock";
+import {
+  MUST_SURVIVE_PRINT_CLASSES,
+  PRINT_HIDDEN_SELECTORS,
+} from "./print/hiddenInPrint";
 import { rules } from "./state/useAffordability";
 import type * as UseAffordabilityModule from "./state/useAffordability";
 
@@ -43,11 +49,10 @@ const DETAIL_TEST_UNIT: ComplexUnit = {
   regionCode: "11680",
   legalDongName: "테스트동",
   builtYear: 2015,
-  // 85㎡ 초과로 둔다 — 가정 전용면적 기본값(85㎡, 농특세 미부과)과
-  // 다른 세율 구간이어야 상세를 열었을 때 실구매 가능 가격이 실제로
-  // 달라진다(아래 "상세가 열린 동안에는..." 테스트 참고). 85㎡
-  // 이하였다면 둘 다 농특세 미부과 구간이라 같은 값이 나와 그 테스트가
-  // 아무것도 증명하지 못한다.
+  // 85㎡ 초과다(중대형). 기본 선택은 전체이므로 헤드라인도 85㎡ 초과를
+  // 가정하고, 그래서 이 평형의 상세를 열어도 **부대비용이 달라지지
+  // 않는다** — 그 차이를 보는 테스트는 아래 NARROW_DETAIL_UNIT(전용
+  // 59㎡)을 쓴다.
   areaBucket: 90,
   maxExclusiveAreaSqm: 90,
   landLeasehold: "N",
@@ -57,20 +62,23 @@ const DETAIL_TEST_UNIT: ComplexUnit = {
   minFloor: 3,
   maxFloor: 18,
   unknownFloorCount: 0,
+  address: null,
+  trades: [],
   lowConfidence: false,
 };
 
 /**
- * 지역을 고르고 그 결과로 {@link DETAIL_TEST_UNIT} 하나를 받는다.
+ * 지역을 고르고 그 결과로 단지 목록을 받는다(기본값은
+ * {@link DETAIL_TEST_UNIT} 하나).
  *
  * `isRegulatedArea`는 `null`("모르는 지역")로 둔다. 불리언을 주면 App이
  * 그 값을 폼에 반영하면서 규제지역이 **가정에서 확정으로** 바뀌는데,
  * 아래 테스트들은 전용면적 가정·상세 화면·인쇄 요약을 보는 것이라 그
  * 축과 무관하다 — 예전 흐름에서도 규제지역은 가정인 채였다.
  */
-async function selectTestRegion() {
+async function selectTestRegion(units: ComplexUnit[] = [DETAIL_TEST_UNIT]) {
   vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
-    units: [DETAIL_TEST_UNIT],
+    units,
     isRegulatedArea: null,
     dataAsOf: null,
   });
@@ -120,17 +128,31 @@ describe("App - 지역 선택 위자드", () => {
     window.localStorage.clear();
   });
 
-  it("예산을 확정하기 전에는 지역 선택 단계가 보이지 않는다", () => {
+  /*
+   * 지역 선택 카드는 이제 화면 1의 3번째 자리(연 소득 다음)에 사용자
+   * 지시로 항상 그려진다 — 예산을 확정하기 전에 숨기는 대신, 조회
+   * 버튼만 잠근다(`RegionSelect.tsx`의 disabled prop). 예산 없이 조회가
+   * 성공하면 화면이 빈 결과 셸로 넘어가는 사고(이 저장소가 여섯 번
+   * 반복한 실패의 형태, 커밋 `c90babf`)를 이 잠금이 막는다.
+   */
+  it("예산을 확정하기 전에도 지역 선택 카드는 보이지만, 구를 골라도 조회 버튼은 비활성화돼 있다", async () => {
     render(<App />);
-    expect(screen.queryByRole("region", { name: "지역 선택" })).not.toBeInTheDocument();
+    expect(screen.getByLabelText("광역단체")).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    expect(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    ).toBeDisabled();
   });
 
-  it("현금·소득을 입력하면 지역 선택 단계가 나타난다", async () => {
+  it("현금·소득·주택 수·평형대를 모두 정하면 조회 버튼이 활성화된다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
-    expect(screen.getByRole("region", { name: "지역 선택" })).toBeInTheDocument();
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
+    expect(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    ).not.toBeDisabled();
   });
 
   /*
@@ -143,9 +165,9 @@ describe("App - 지역 선택 위자드", () => {
    */
   it("지역 선택 단계는 전국 2단 선택이고, 조회 전에는 단지 목록이 없다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     expect(screen.getByLabelText("광역단체")).toBeInTheDocument();
     expect(
@@ -185,9 +207,9 @@ describe("App - 지역 조회의 네 상태", () => {
   });
 
   async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
   }
 
   async function chooseRegion() {
@@ -306,6 +328,143 @@ describe("App - 지역 조회의 네 상태", () => {
 });
 
 /**
+ * ⚠ **평형대 필터가 만든 새 빈 상태를 잠근다.**
+ *
+ * 0건의 원인이 하나 늘었다. "이 지역엔 거래가 없어요"·"그 평형대엔
+ * 매물이 없어요"·"이 동엔 조건에 맞는 단지가 없어요"·"예산으로는 못
+ * 사요"는 **서로 다른 말**이고, 사용자가 넓혀야 할 축이 각각 지역·
+ * 평형대·동·예산으로 다르다. 섞으면 틀린 해법을 준다 — 이 저장소가 여섯
+ * 번 반복한 실패의 정확한 형태다.
+ */
+describe("App - 평형대로 좁히기", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** 전용 90㎡ — 중대형이다(85㎡ 초과) */
+  const LARGE_UNIT = DETAIL_TEST_UNIT;
+  /** 전용 45㎡ — 소형이다 */
+  const SMALL_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|테스트동|2015|소형단지",
+    complexName: "소형단지",
+    areaBucket: 45,
+    maxExclusiveAreaSqm: 45,
+  };
+
+  async function fillMoney() {
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
+  }
+
+  async function chooseRegion() {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  const uncheckBandsExcept = async (keep: string) => {
+    for (const chip of screen.getAllByRole("checkbox")) {
+      const name = chip.getAttribute("value");
+      if (name !== keep && (chip as HTMLInputElement).checked) {
+        await userEvent.click(chip);
+      }
+    }
+  };
+
+  it("고른 평형대의 매물만 목록에 남는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [SMALL_UNIT, LARGE_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillMoney();
+    await uncheckBandsExcept("소형");
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    expect(screen.getByText("소형단지")).toBeInTheDocument();
+    expect(screen.queryByText("테스트단지")).not.toBeInTheDocument();
+  });
+
+  /**
+   * 거래는 있었고 예산도 넉넉하다 — 원인은 오직 평형대다. 그 사실을
+   * 말하고, 지역·예산·동 탓으로 돌리지 않는다.
+   */
+  it("고른 평형대에 매물이 없으면 평형대 탓이라고 말한다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [LARGE_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillMoney();
+    await uncheckBandsExcept("소형");
+    await chooseRegion();
+    await screen.findByText(/고른 평형대에 해당하는 매물이/);
+
+    expect(screen.getByText(/평형대를 넓혀 보세요/)).toBeInTheDocument();
+    // 다른 세 원인은 말하지 않는다.
+    expect(screen.queryByText(/실거래가 자체가 없어요/)).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(/살 수 있는 단지가 이 데이터에는 없어요/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/이 동엔 조건에 맞는 단지가 없어요/)).toBeNull();
+  });
+
+  /**
+   * 거래가 아예 없는 지역에서는 평형대를 탓하지 않는다 — 평형대를
+   * 넓혀도 결과가 달라지지 않으므로 그 조언은 거짓이다.
+   */
+  it("지역에 거래가 아예 없으면 지역 탓이라고 말한다(대조군)", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillMoney();
+    await uncheckBandsExcept("소형");
+    await chooseRegion();
+    await screen.findByText(/실거래가 자체가 없어요/);
+
+    expect(screen.queryByText(/고른 평형대에 해당하는 매물이/)).toBeNull();
+  });
+
+  /**
+   * 평형대로 걸러 남은 것이 없으면 **동 좁히기 자체가 나오지 않아야**
+   * 한다 — 고를 수 있는 동이 남아 있으면, 그 동을 고른 사용자가 0건의
+   * 원인을 동으로 읽는다.
+   */
+  it("평형대로 0건이면 동 좁히기를 내지 않는다", async () => {
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units: [LARGE_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+
+    render(<App />);
+    await fillMoney();
+    await uncheckBandsExcept("소형");
+    await chooseRegion();
+    await screen.findByText(/고른 평형대에 해당하는 매물이/);
+
+    expect(screen.queryByLabelText("행정동으로 좁히기")).toBeNull();
+  });
+});
+
+/**
  * 행정동으로 좁히는 `<select>`("행정동으로 좁히기")를 잠근다.
  *
  * 이 좁히기는 지역 조회 결과 **안**에서 한 번 더 거르는 필터라, 위
@@ -349,9 +508,9 @@ describe("App - 행정동으로 좁히기", () => {
   };
 
   async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
   }
 
   async function chooseRegion() {
@@ -566,9 +725,9 @@ describe("App - 행정동으로 좁히기", () => {
 
     render(<App />);
     // 소득 0 → DSR 한도가 0이 된다(상환 능력 자체가 없다).
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "10000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "0");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "10000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "0");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
     await chooseRegion();
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
@@ -607,11 +766,21 @@ describe("App - 행정동으로 좁히기", () => {
 
     // 같은 지역을 다시 조회한다(예: 다시 시도하거나 재확정하는 상황과
     // 같은 배선 — handleRegionSelect가 selectedDong을 되돌린다).
+    //
+    // 화면이 갈리면서(Task 3) `RegionSelect`는 이제 "입력" 화면
+    // 전용이다 — 지역 조회가 한 번 성공하면 화면은 "결과"로 넘어가고
+    // "입력" 화면은 시각적으로 숨는다(`EntryScreen`). 그래서 다시
+    // 지역을 고르려면 먼저 "조건 다시 넣기"로 "입력" 화면으로 돌아가야
+    // 한다 — 이 재조회 자체가 검사하는 사실(동 좁히기가 전체로
+    // 되돌아간다)은 그대로이고, 거기 도달하는 경로만 한 단계 늘었다.
     spy.mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
       dataAsOf: null,
     });
+    await userEvent.click(
+      screen.getByRole("button", { name: "조건 다시 넣기" }),
+    );
     await chooseRegion();
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
@@ -621,6 +790,202 @@ describe("App - 행정동으로 좁히기", () => {
     expect(
       (screen.getByLabelText("행정동으로 좁히기") as HTMLSelectElement).value,
     ).toBe("");
+  });
+});
+
+/**
+ * 상세를 연 채 **다른 지역**을 다시 조회하는 경로.
+ *
+ * 기준 커밋에서는 이 상태에 도달할 수 없었다 — `RegionSelect`가
+ * `detail === null` 가지 안에 있어서 상세가 열려 있는 동안에는 지역을
+ * 다시 고를 방법 자체가 없었다. Task 3이 `RegionSelect`를
+ * `EntryScreen`으로 옮기고 "조건 다시 넣기"를 만들면서 그 경로가 열렸고,
+ * `handleRegionSelect`는 다시 검토되지 않았다.
+ *
+ * 남은 상세는 보기 흉한 잔상이 아니라 **숫자를 틀리게 한다**:
+ * `effectiveProfile`이 남은 평형의 `maxExclusiveAreaSqm`를 화면 전체
+ * (상단바 실구매 가능 가격·안전선·인쇄 요약)에 계속 대입하고 있어,
+ * 사용자가 보고 있지 않은 지역의 단지를 전제로 취득 부대비용이 계산된다.
+ * 앞 지역에서 59㎡를 골랐다면 그 오차는 실구매 가능 가격을 **올리는**
+ * 쪽 — 이 저장소가 가장 피하는 낙관 편향 방향이다.
+ */
+describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /** 강남구(11680)에서 돌아오는 단지. 90㎡ — 농특세 부과 구간. */
+  const GANGNAM_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|강남동|2015|강남단지",
+    complexName: "강남단지",
+    legalDongName: "강남동",
+  };
+
+  /**
+   * 서초구(11650)에서 돌아오는 단지. **전용면적이 다르다**(59㎡) —
+   * 같으면 상세가 남았는지 여부가 화면 숫자에 드러나지 않아 아래
+   * 인쇄 요약 단언이 공허해진다.
+   */
+  const SEOCHO_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11650|서초동|2015|서초단지",
+    complexName: "서초단지",
+    regionCode: "11650",
+    legalDongName: "서초동",
+    areaBucket: 59,
+    maxExclusiveAreaSqm: 59,
+  };
+
+  async function fillProfile() {
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
+  }
+
+  async function queryRegion(sigungu: string) {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), sigungu);
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  it("앞 지역 단지의 상세가 남지 않고, 새 지역의 목록이 보인다", async () => {
+    const spy = vi
+      .spyOn(regionQuery, "fetchRegionComplexes")
+      .mockResolvedValue({
+        units: [GANGNAM_UNIT],
+        isRegulatedArea: null,
+        dataAsOf: null,
+      });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [],
+      partialFailureCount: 0,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await queryRegion("강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+
+    // 강남 단지의 상세를 연다.
+    await userEvent.click(screen.getByRole("button", { name: /강남단지/ }));
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+
+    // "조건 다시 넣기" → 서초구로 다시 조회한다.
+    spy.mockResolvedValue({
+      units: [SEOCHO_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
+    await queryRegion("서초구");
+    // 조회가 끝난 신호로 **상단바의 지역 이름**을 기다린다 — 목록이
+    // 아니라. 이 버그가 살아 있으면 사이드바가 상세를 그린 채라 목록이
+    // 아예 없고, 목록을 기다리면 실패가 "타임아웃"으로만 보여 무엇이
+    // 잘못됐는지 가려진다(실제로 처음 이 테스트를 쓸 때 그랬다).
+    await screen.findByText("서울특별시 서초구");
+
+    // 상세는 닫혀 있어야 한다 — 앞 지역 단지를 가리키는 화면이다.
+    expect(
+      screen.queryByRole("region", { name: "단지 상세" }),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/강남단지/)).not.toBeInTheDocument();
+    // 그리고 사용자가 실제로 달라고 한 것 — 서초구 목록 — 이 보인다.
+    expect(screen.getByText("서초단지")).toBeInTheDocument();
+  });
+
+  it("화면 전체의 전용면적 전제가 앞 지역 단지에 묶여 있지 않다", async () => {
+    const spy = vi
+      .spyOn(regionQuery, "fetchRegionComplexes")
+      .mockResolvedValue({
+        units: [GANGNAM_UNIT],
+        isRegulatedArea: null,
+        dataAsOf: null,
+      });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [],
+      partialFailureCount: 0,
+    });
+
+    const { container } = render(<App />);
+    await fillProfile();
+    await queryRegion("강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    await userEvent.click(screen.getByRole("button", { name: /강남단지/ }));
+
+    // 상세를 연 동안에는 인쇄 요약이 그 평형의 면적을 "선택한 매물의
+    // 실제 면적"이라고 적는다 — 이것이 정상이다(전제).
+    expect(
+      container.querySelector(".print-summary")?.textContent,
+    ).toMatch(/90㎡\s*\(선택한 매물의 실제 면적\)/);
+
+    spy.mockResolvedValue({
+      units: [SEOCHO_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+    await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
+    await queryRegion("서초구");
+    await screen.findByText("서울특별시 서초구");
+
+    // 서초구를 보고 있는데 종이에 강남 단지의 90㎡가 "선택한 매물의 실제
+    // 면적"으로 남아 있으면 안 된다.
+    const summary = container.querySelector(".print-summary")?.textContent;
+    expect(summary).not.toMatch(/선택한 매물의 실제 면적/);
+    expect(summary).not.toMatch(/90㎡/);
+  });
+
+  /**
+   * 예전에는 이 자리가 "가정 칩으로 화면 1에 돌아가는" 경로였다. 화면 1이
+   * 네 질문으로 줄면서 고칠 입력란이 사라졌고, 칩도 함께 사라졌다(가정
+   * 문구는 이제 전부 순수 정보다). 남은 경로는 **예산 상세 패널을 연 채
+   * "조건 다시 넣기"로 돌아가는 것**이고, 그 경로도 같은 상태에 닿는지
+   * 여기서 잠근다 — 패널이 열려 있어도 상세 리셋이 빠지지 않아야 한다.
+   */
+  it("예산 패널을 연 채 화면 1에 돌아가 다시 조회해도 마찬가지다", async () => {
+    const spy = vi
+      .spyOn(regionQuery, "fetchRegionComplexes")
+      .mockResolvedValue({
+        units: [GANGNAM_UNIT],
+        isRegulatedArea: null,
+        dataAsOf: null,
+      });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [],
+      partialFailureCount: 0,
+    });
+
+    render(<App />);
+    await fillProfile();
+    await queryRegion("강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    await userEvent.click(screen.getByRole("button", { name: /강남단지/ }));
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+
+    // 상단바의 "실구매 가능 가격"을 눌러 예산 상세 패널을 연다.
+    await userEvent.click(
+      screen.getByRole("button", { name: /실구매 가능 가격/ }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
+
+    spy.mockResolvedValue({
+      units: [SEOCHO_UNIT],
+      isRegulatedArea: null,
+      dataAsOf: null,
+    });
+    await queryRegion("서초구");
+    await screen.findByText("서울특별시 서초구");
+
+    expect(
+      screen.queryByRole("region", { name: "단지 상세" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByText("서초단지")).toBeInTheDocument();
   });
 });
 
@@ -645,14 +1010,31 @@ describe("App - 단지 상세(화면 4)", () => {
    * 화면·전용면적 가정·인쇄 요약)은 그대로이고, 거기 도달하는 경로에
    * 한 단계가 늘었을 뿐이다.
    */
-  async function fillProfile() {
+  async function fillProfile(units?: ComplexUnit[]) {
     // "150000"·"15000"은 단위 없이 쓴 만원 표기다(MoneyInput 기본
     // 해석) — 각각 15억, 1억 5천만원.
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
-    await selectTestRegion();
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
+    await selectTestRegion(units);
   }
+
+  /**
+   * 전용 59㎡ — **임계값 이하**다.
+   *
+   * 헤드라인은 기본 선택(전체)에서 85㎡ 초과를 가정하므로, 이 평형의
+   * 상세를 열면 계산이 농특세 미부과 구간으로 넘어가 숫자가 실제로
+   * 달라진다. 90㎡짜리 기본 픽스처로는 그 차이가 나지 않는다 — 둘 다
+   * 85㎡ 초과 구간이라 같은 값이 나오고, 그러면 그 테스트가 아무것도
+   * 증명하지 못한다.
+   */
+  const NARROW_DETAIL_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|테스트동|2015|좁은단지",
+    complexName: "좁은단지",
+    areaBucket: 59,
+    maxExclusiveAreaSqm: 59,
+  };
 
   it("단지 목록의 행을 누르면 그 평형의 상세가 열린다", async () => {
     render(<App />);
@@ -666,39 +1048,9 @@ describe("App - 단지 상세(화면 4)", () => {
     ).toBeInTheDocument();
     // 목록·지역 선택은 상세가 열리면 화면에서 빠진다 — 별개 화면이다.
     expect(
-      screen.queryByRole("region", { name: "지역 선택" }),
+      screen.queryByRole("group", { name: "어느 지역에 살고 싶으세요?" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("살 수 있는 단지")).not.toBeInTheDocument();
-  });
-
-  /**
-   * 권리분석 축은 이 앱에서 **영구히** 값이 없다.
-   *
-   * 등기부 문진이 제거됐고 별도 도구로 다시 만들 예정이라, `App.tsx`는
-   * `DiagnosisSummary`에 `rights={null}`만 넘긴다("아직 값이 없을 수도
-   * 있다"가 아니라 "영구히 없다" — `src/lib/summary/types.ts` 참고).
-   * 그 불변식을 붙잡아 두는 것이 아무것도 없어서, 언젠가 이 자리에
-   * 다른 값이 흘러 들어가도 아무도 모른다. 여기서 그 자리를 못박는다:
-   * **다른 축이 실제로 채워진 상태에서도** 권리 축만은 "확인 안 함"이다.
-   */
-  it("권리분석 축은 언제나 '확인 안 함'이다 — App은 rights={null}만 넘긴다", async () => {
-    render(<App />);
-    await fillProfile();
-    // 평형을 골라 호가·입지 축이 실제로 채워진 상태로 만든다 — 그래야
-    // "아무 축도 안 채워져서 통과한" 것이 아님이 드러난다.
-    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-
-    const rightsLine = document.querySelector(
-      '.diagnosis-summary-axis[data-axis="rights"]',
-    );
-    expect(rightsLine).not.toBeNull();
-    expect(rightsLine?.getAttribute("data-status")).toBe("notLooked");
-
-    const otherStatuses = [...document.querySelectorAll(".diagnosis-summary-axis")]
-      .filter((el) => el.getAttribute("data-axis") !== "rights")
-      .map((el) => el.getAttribute("data-status"));
-    expect(otherStatuses).toHaveLength(3);
-    expect(otherStatuses.some((status) => status !== "notLooked")).toBe(true);
   });
 
   it("목록으로 버튼을 누르면 다시 목록이 보인다", async () => {
@@ -714,36 +1066,21 @@ describe("App - 단지 상세(화면 4)", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("평형을 고르면 그 평형의 전용면적이 화면 계산에 반영돼 가정 문구에서 빠진다", async () => {
-    render(<App />);
-    await fillProfile();
-
-    // 아직 고르기 전에는 전용면적이 가정 중이라는 문구가 있다.
-    expect(screen.getByText(/전용면적 85㎡로 가정하고 계산했어요/)).toBeInTheDocument();
-
-    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-
-    // 이 평형(전용 90㎡)을 반영했으므로 가정 문구 자체가 더 이상
-    // 화면에 없다 — 상세가 열려 있는 동안 areaOverridden이 참이 되어
-    // AssumptionLine이 전용면적 항목을 빼기 때문이다.
-    expect(screen.queryByText(/전용면적 85㎡로 가정하고 계산했어요/)).not.toBeInTheDocument();
-    expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
-  });
-
   it("상세가 열린 동안에는 실구매 가능 가격이 그 평형 기준으로 바뀌고, 목록으로 돌아가면 원래 값으로 되돌아간다", async () => {
     const { container } = render(<App />);
-    await fillProfile();
+    await fillProfile([NARROW_DETAIL_UNIT]);
 
-    const priceBefore = container.querySelector(".affordable-price")?.textContent;
+    const priceBefore = container.querySelector(".result-topbar-item-value--money")?.textContent;
 
-    await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-    const priceWhileOpen = container.querySelector(".affordable-price")?.textContent;
-    // 상세가 열려 있는 동안에는 이 평형(전용 90㎡)의 실제 면적 기준으로
-    // 다시 계산되므로 원래 가정(85㎡) 기준 가격과 달라야 한다.
+    await userEvent.click(screen.getByRole("button", { name: /좁은단지/ }));
+    const priceWhileOpen = container.querySelector(".result-topbar-item-value--money")?.textContent;
+    // 상세가 열려 있는 동안에는 이 평형(전용 59㎡)의 실제 면적 기준으로
+    // 다시 계산된다 — 헤드라인은 고른 평형대(전체)에 85㎡ 초과가 있어
+    // 농특세가 붙는 기준이었으므로 값이 달라야 한다.
     expect(priceWhileOpen).not.toBe(priceBefore);
 
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-    const priceAfter = container.querySelector(".affordable-price")?.textContent;
+    const priceAfter = container.querySelector(".result-topbar-item-value--money")?.textContent;
 
     // 결함이었던 지점: 프로필에 영구히 저장하면 목록으로 돌아와도
     // priceAfter가 priceWhileOpen에 머물러 있어(원래 값으로 돌아오지
@@ -752,73 +1089,58 @@ describe("App - 단지 상세(화면 4)", () => {
     expect(priceAfter).toBe(priceBefore);
   });
 
-  it("상세를 열었다 목록으로 돌아오면 전용면적 가정 문구가 다시 나타나고, localStorage에는 상세에서 본 면적이 쓰이지 않는다", async () => {
+  it("상세를 열었다 목록으로 돌아오면 localStorage에는 상세에서 본 면적이 쓰이지 않는다", async () => {
     render(<App />);
     await fillProfile();
 
     await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-    expect(screen.queryByText(/전용면적.*로 가정하고 계산했어요/)).not.toBeInTheDocument();
-
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
 
-    // 목록으로 돌아오면 다시 가정이므로 문구도 다시 나타나야 한다 —
-    // 원래 가정 면적(85㎡) 그대로다.
-    expect(screen.getByText(/전용면적 85㎡로 가정하고 계산했어요/)).toBeInTheDocument();
-
     // 프로필(및 localStorage)에는 상세에서 본 90㎡가 전혀 쓰이지
-    // 않았어야 한다 — touched에도 "area"가 없고, 저장된 exclusiveAreaSqm도
-    // 원래 가정값(85)이다.
+    // 않았어야 한다 — touched에도 "area"가 없고, 전용면적은 아예 폼
+    // 상태가 아니라 저장 대상 자체가 아니다.
     const stored = JSON.parse(window.localStorage.getItem("budget-profile-v1") ?? "{}");
     expect(stored.touched ?? []).not.toContain("area");
-    expect(stored.exclusiveAreaSqm).not.toBe(90);
+    expect(stored.exclusiveAreaSqm).toBeUndefined();
   });
 
   describe("리뷰 수정: 상세 화면의 배지 라벨·전용면적 입력·포커스", () => {
-    it("상세가 열리면 배지가 둘이 되고, 각각 무엇에 답하는지 라벨이 보인다", async () => {
-      const { container } = render(<App />);
-      await fillProfile();
-
-      // 목록 화면에서는 배지가 하나뿐이라 라벨을 붙이지 않는다.
-      expect(container.querySelectorAll(".safety-badge")).toHaveLength(1);
-      expect(container.querySelector(".safety-badge-label")).toBeNull();
-
-      await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-
-      const badges = container.querySelectorAll(".safety-badge");
-      expect(badges).toHaveLength(2);
-
-      const labels = [...container.querySelectorAll(".safety-badge-label")].map(
-        (el) => el.textContent ?? "",
-      );
-      // 둘 다 라벨이 있고, 서로 다른 질문에 답한다고 글자로 말한다.
-      expect(labels).toHaveLength(2);
-      expect(labels[0]).toMatch(/최대로 빌렸을 때/);
-      expect(labels[1]).toMatch(/이 집을 샀을 때/);
-
-      // 목록으로 돌아오면 배지가 다시 하나가 되고 라벨도 사라진다.
-      await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-      expect(container.querySelectorAll(".safety-badge")).toHaveLength(1);
-      expect(container.querySelector(".safety-badge-label")).toBeNull();
-    });
-
-    it("상세가 열려 있는 동안에는 전용면적 입력란을 내보내지 않는다", async () => {
-      // 상세가 열려 있으면 화면 계산이 그 평형의 면적을 쓰므로,
-      // 입력란에 값을 넣어도 화면이 꿈쩍하지 않는다 — 입력이 조용히
-      // 무시되는 상태다. 무시할 거라면 물어보지 않는다.
+    /**
+     * 이 화면에서 등급이 나오는 자리가 두 번 옮겨졌다. 예산 상세의
+     * "최대로 빌린다면" 표는 `PriceSlider`(`.price-slider-burden`)로
+     * 합쳐졌고, 단지 상세의 배지는 대출 계산기 표의 한 줄
+     * (`[data-field="grade"]`)로 들어갔다 — 둘 다 사용자 지시다.
+     *
+     * **지켜야 하는 것은 그대로다**: 두 자리가 서로 다른 질문에 답하고,
+     * 어느 쪽도 상대의 답을 덮어쓰지 않는다. 예산 상세 쪽 라벨은 단지
+     * 상세를 열어도 그대로 남는다.
+     */
+    it("단지 상세를 열어도 예산 상세의 라벨은 그대로다 — 서로 다른 질문에 각자 답한다", async () => {
       render(<App />);
       await fillProfile();
 
-      await userEvent.click(
-        screen.getByRole("button", { name: /전용면적 85㎡로 가정하고 계산했어요/ }),
-      );
-      expect(screen.getByLabelText("전용면적 (㎡)")).toBeInTheDocument();
+      expect(
+        screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
+      ).toBeInTheDocument();
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
-      expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
 
-      // 상세를 닫으면 다시 물어볼 수 있어야 한다.
+      // 단지 상세가 열려도 예산 상세 쪽 라벨은 그대로다.
+      expect(
+        screen.getByText("이 가격으로 샀을 때 최대로 빌린다면"),
+      ).toBeInTheDocument();
+      // 그리고 단지 상세는 자기 질문(이 단지, 이 평형)을 연다.
+      expect(screen.getByLabelText("예상 매수금액")).toBeInTheDocument();
+
       await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
-      expect(screen.getByLabelText("전용면적 (㎡)")).toBeInTheDocument();
+      expect(screen.queryByLabelText("예상 매수금액")).not.toBeInTheDocument();
+    });
+
+    /** 전용면적 입력란은 화면 1이 네 질문으로 줄면서 사라졌다. */
+    it("전용면적 입력란은 어떤 상태에서도 없다", async () => {
+      render(<App />);
+      await fillProfile();
+      expect(screen.queryByLabelText("전용면적 (㎡)")).not.toBeInTheDocument();
     });
 
     it("상세를 열면 포커스가 상세로 옮겨간다", async () => {
@@ -833,24 +1155,341 @@ describe("App - 단지 상세(화면 4)", () => {
     });
   });
 
-  describe("리뷰 수정: 인쇄(화면 5)", () => {
-    it("현금·소득을 입력하기 전에는 인쇄 버튼이 없다", () => {
-      render(<App />);
+  /**
+   * 리뷰 수정(Critical 2). `AssumptionLine`의 칩은 진짜 `<button>`이고,
+   * 문구가 직접 누르라고 지시한다("눌러서 알려주세요"). 그런데 그 클릭이
+   * 여는 `ProfileForm`은 이제 `EntryScreen` 안에 있고, `EntryScreen`은
+   * `phase === "결과"` 내내 `display: none`이다 — 그리고 이 칩들이 보이는
+   * 단계가 바로 그 "결과"뿐이었다. 눌러도 아무 일도 일어나지 않는 버튼이
+   * 지시문을 달고 있던 셈이다.
+   */
+  /**
+   * 리뷰 수정(Important 4). `phase === "입력"`일 때 결과 트리는 언마운트되지
+   * 않고 불투명한 오버레이 **밑에** 그대로 깔려 있다 — `inert`로 포커스와
+   * 접근성 트리 노출을 함께 끊는다. `display: none`이 아니어야 하는 이유는
+   * 인쇄다(그 단계에서 인쇄해도 종이에는 나와야 한다).
+   */
+  /**
+   * 리뷰 수정(Important 5). "무엇이 모자란지" 안내는 그 존재 이유인 모든
+   * 상태에서 100% 보이지 않는 자리에 있었다 — 실거주 경로에서 그 조건은
+   * 사실상 `phase === "입력"`을 뜻하고, 그 동안 결과 트리는 불투명한
+   * 오버레이 **밑에** 깔려 있기 때문이다.
+   *
+   * ⚠ **모자랄 수 있는 축이 둘이고, 둘은 서로 다른 말이다.** 돈(현금·연
+   * 소득)이 없으면 예산 자체를 계산할 수 없고, 평형대를 하나도 고르지
+   * 않았으면 계산은 되지만 보여줄 매물을 고를 수 없다 — 해야 할 일이
+   * 다르므로 문구도 달라야 한다. 한 문구로 뭉치면 평형대만 비운 사용자가
+   * 현금을 다시 들여다보게 된다. 이 저장소가 여섯 번 반복한 실패의
+   * 형태다.
+   */
+  describe("리뷰 수정: 무엇이 모자란지 화면 1에서 말한다", () => {
+    it("돈을 안 넣었으면 그 안내가 입력 화면 안에 있다", async () => {
+      const { container } = render(<App />);
+
+      // 전제: 구를 골라도 조회 버튼이 잠겨 있다(무엇이 모자란지 화면이
+      // 말해야 하는 상태) — 버튼 자체는 이제 항상 화면에 있다(사용자
+      // 지시로 지역 카드가 3번째 자리에 항상 그려지므로).
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
       expect(
-        screen.queryByRole("button", { name: "인쇄하기" }),
-      ).not.toBeInTheDocument();
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).toBeDisabled();
+
+      const prompt = screen.getByText(/현금·연 소득·주택 수를 알려주면/);
+      const entry = container.querySelector(".entry-screen");
+      // 화면 1 안에 있다 — 오버레이에 가려지는 결과 트리 쪽이 아니다.
+      expect(entry?.contains(prompt)).toBe(true);
+      expect(container.querySelector(".results-screen")?.contains(prompt)).toBe(
+        false,
+      );
+      // 그 화면 1은 지금 보이는 중이다.
+      expect(entry).not.toHaveClass("entry-screen--hidden");
     });
 
-    it("계산이 나오면 인쇄 버튼이 나타나고, 누르면 브라우저 인쇄 대화상자를 연다", async () => {
-      const printSpy = vi.spyOn(window, "print").mockImplementation(() => {});
+    it("돈·주택 수를 넣으면 안내가 사라지고 조회 버튼이 풀린다(대조군)", async () => {
       render(<App />);
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+      await userEvent.click(
+        screen.getByRole("radio", { name: "무주택이에요" }),
+      );
+
+      expect(
+        screen.queryByText(/현금·연 소득·주택 수를 알려주면/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).not.toBeDisabled();
+    });
+
+    /**
+     * 돈만 넣고 주택 수를 아직 안 답했으면, 원인은 평형대가 아니라
+     * 주택 수다 — 같은 안내(현금·연 소득·주택 수)가 그대로 남아야 한다.
+     */
+    it("돈만 넣고 주택 수를 안 답했으면 여전히 같은 안내다", async () => {
+      render(<App />);
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+
+      expect(
+        screen.getByText(/현금·연 소득·주택 수를 알려주면/),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).toBeDisabled();
+    });
+
+    /**
+     * 평형대를 전부 끄면 조회 버튼이 다시 잠긴다. **빈 선택을 조용히
+     * "전체"로 바꿔 읽지 않는다** — 그렇게 읽으면 화면이 사용자가 고른 적
+     * 없는 조건으로 결과를 그리면서 그 사실을 말하지 않게 된다. 조회
+     * 버튼도 같은 원칙을 따른다 — 평형대 없이 조회하면 결과 화면이 매물을
+     * 하나도 못 보여준다.
+     *
+     * 이 축을 보려면 먼저 돈·주택 수를 모두 채워야 한다 — 안 그러면
+     * 평형대를 아무리 껐다 켜도 "무엇이 모자란지" 조건이 여전히
+     * 돈/주택 수 쪽에 걸려 있어 평형대 안내 자체가 뜨지 않는다.
+     */
+    it("평형대를 전부 끄면 돈 안내가 아니라 평형대 안내가 나오고, 조회 버튼도 잠긴다", async () => {
+      render(<App />);
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+      await userEvent.click(
+        screen.getByRole("radio", { name: "무주택이에요" }),
+      );
+
+      for (const chip of screen.getAllByRole("checkbox", { name: /㎡/ })) {
+        await userEvent.click(chip);
+      }
+
+      expect(screen.getByText(/찾는 평형대를 하나 이상/)).toBeInTheDocument();
+      // 원인을 섞지 않는다 — 돈·주택 수는 이미 넣었다.
+      expect(
+        screen.queryByText(/현금·연 소득·주택 수를 알려주면/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).toBeDisabled();
+    });
+
+    it("칩을 하나 다시 켜면 곧바로 빠져나온다 — 갇히는 화면이 아니다", async () => {
+      render(<App />);
+      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+      await userEvent.click(
+        screen.getByRole("radio", { name: "무주택이에요" }),
+      );
+      const bandChips = screen.getAllByRole("checkbox", { name: /㎡/ });
+      for (const chip of bandChips) {
+        await userEvent.click(chip);
+      }
+
+      await userEvent.click(bandChips[0]!);
+
+      expect(screen.queryByText(/찾는 평형대를 하나 이상/)).toBeNull();
+      expect(
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      ).not.toBeDisabled();
+    });
+  });
+
+  describe("리뷰 수정: 오버레이 뒤의 결과 트리는 조작할 수 없다", () => {
+    it("입력 단계에서는 결과 화면 전체가 inert다", async () => {
+      const { container } = render(<App />);
+      const results = container.querySelector(".results-screen");
+      expect(results).not.toBeNull();
+      expect(results).toHaveAttribute("inert");
+
+      // 결과 단계로 넘어가면 풀린다.
       await fillProfile();
+      expect(container.querySelector(".results-screen")).not.toHaveAttribute(
+        "inert",
+      );
+    });
 
-      const button = screen.getByRole("button", { name: "인쇄하기" });
-      await userEvent.click(button);
+    it("결과에서 화면 1로 돌아가면 다시 inert가 된다", async () => {
+      const { container } = render(<App />);
+      await fillProfile();
+      await userEvent.click(
+        screen.getByRole("button", { name: "조건 다시 넣기" }),
+      );
+      expect(container.querySelector(".results-screen")).toHaveAttribute(
+        "inert",
+      );
+    });
 
-      expect(printSpy).toHaveBeenCalledTimes(1);
-      printSpy.mockRestore();
+    it("상단바 버튼도 그 안에 있다 — 오버레이 뒤에서 키보드로 눌리지 않는다", async () => {
+      const { container } = render(<App />);
+      await fillProfile();
+      await userEvent.click(
+        screen.getByRole("button", { name: "조건 다시 넣기" }),
+      );
+      const results = container.querySelector(".results-screen");
+      expect(
+        results?.contains(
+          screen.getByRole("button", { name: /실구매 가능 가격/ }),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  describe("리뷰 수정: 인쇄(화면 5)", () => {
+    /**
+     * 리뷰 수정(Critical 1). 화면 1(`.entry-screen`)은 불투명한 전체화면
+     * 고정 레이어라 인쇄에서 통째로 지운다 — 그러면 그 **안에** 있던
+     * 보호 대상 클래스도 조상과 함께 조용히 사라진다. 실제로
+     * `.purchase-type-print`("구매 유형 — …")가 그 형태로 사라졌고,
+     * `printCss.test.ts`는 선택자 **문자열**만 비교하므로 조상 관계를
+     * 보지 못해 잡아내지 못했다. 그래서 렌더된 DOM에서 직접 확인한다.
+     */
+    it("인쇄에서 지우는 요소 안에 보호 대상 클래스가 들어 있지 않다", async () => {
+      /*
+       * Task 4에서 화면 상태가 늘었다 — 전체화면 셸(상단바·사이드바·
+       * 지도)과 그 안의 목록·상세다. 지도까지 실제로 그려야
+       * `.complex-map-frame`(이번에 새로 숨기게 된 조상)과 그 안의
+       * 범례가 DOM에 생긴다 — 안 그리면 이 교차곱은 그 조상을 아예
+       * 방문하지 않고 통과한다.
+       */
+      vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+        units: [
+          { complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 },
+        ],
+        partialFailureCount: 0,
+      });
+      vi.spyOn(loadNaverMaps, "loadNaverMaps").mockResolvedValue(
+        {
+          maps: {
+            Map: class {
+              // 지도에도 리스너가 붙는다(zoom_changed) — 이 필드가 없으면
+              // Event.addListener가 undefined에 쓰려다 던진다.
+              listeners: Record<string, () => void> = {};
+              // 마커 상세도가 줌으로 갈리므로 ComplexMap이 getZoom()을 읽는다.
+              getZoom() {
+                return 14;
+              }
+              fitBounds() {}
+              panTo() {}
+              destroy() {}
+            },
+            LatLng: class {},
+            LatLngBounds: class {},
+            Point: class {},
+            Marker: class {
+              setMap() {}
+            },
+            InfoWindow: class {
+              getMap() {
+                return undefined;
+              }
+              open() {}
+              close() {}
+              setMap() {}
+            },
+            Event: { addListener: () => ({}), removeListener: () => {} },
+          },
+        } as unknown as typeof naver,
+      );
+
+      const { container } = render(<App />);
+
+      function check(state: string) {
+        for (const selector of PRINT_HIDDEN_SELECTORS) {
+          for (const hidden of container.querySelectorAll(selector)) {
+            for (const cls of MUST_SURVIVE_PRINT_CLASSES) {
+              expect(
+                hidden.querySelector(`.${cls}`),
+                `${state}에서 ${selector} 안에 .${cls}가 있습니다 — ` +
+                  "조상이 인쇄에서 지워지면 이 보호 대상도 함께 사라집니다.",
+              ).toBeNull();
+              /*
+               * 재검토 수정(Important 3): 조상뿐 아니라 **자기 자신**도
+               * 본다. 숨김 대상 요소가 보호 대상 클래스를 함께 달고 있으면
+               * 그 요소는 자기 자신째로 종이에서 사라진다 —
+               * `hidden.querySelector`는 후손만 보므로 그 형태를 놓친다.
+               */
+              expect(
+                hidden.classList.contains(cls),
+                `${state}에서 ${selector}가 보호 대상 클래스 .${cls}를 ` +
+                  "함께 달고 있습니다 — 그 요소 자신이 인쇄에서 사라집니다.",
+              ).toBe(false);
+            }
+          }
+        }
+      }
+
+      check("빈 입력 화면(실거주)");
+
+      // 이 블록의 fillProfile은 지역 조회까지 마친다 — 도착점이
+      // 전체화면 셸(목록 + 지도)이다.
+      await fillProfile();
+      await screen.findByRole("region", { name: "단지 지도" });
+
+      // 전제: 이 상태가 실제로 셸과 지도 액자를 그렸다. 없으면 아래
+      // check()가 새 조상을 하나도 순회하지 않고 공허하게 통과한다.
+      for (const selector of [
+        ".result-shell",
+        ".region-results-sidebar",
+        ".complex-map-frame",
+        ".back-to-entry-button",
+      ]) {
+        expect(
+          container.querySelector(selector),
+          `${selector}가 결과 화면에 없습니다 — 이 검사의 전제가 깨졌습니다.`,
+        ).not.toBeNull();
+      }
+      check("지역 조회 결과가 뜬 전체화면 셸");
+
+      /*
+       * Task 5: 예산 상세 패널이 **열린** 상태도 지난다. 이 패널 안에는
+       * 보호 대상 클래스가 여럿 들어 있고(no-budget·binding-explainer·
+       * cost-breakdown·policy-loan-list·slider-price·slider-warning —
+       * 예전에 함께 있던 `assumption-line`·`assumption-notice`는 "계산
+       * 전제" 덩어리가, `safe-line`은 헤드라인의 안전선 비교 줄이 사용자
+       * 지시로 각각 삭제되며 함께 없어졌다), 그 위에 새 조상
+       * (`.budget-panel`)과 새 숨김 대상(`.budget-detail-close`)이 함께
+       * 생겼다 — 이 검사가 정확히 겨누는 배치다.
+       */
+      await userEvent.click(
+        screen.getByRole("button", { name: /실구매 가능 가격/ }),
+      );
+      for (const selector of [".budget-panel", ".budget-detail-close"]) {
+        expect(
+          container.querySelector(selector),
+          `${selector}가 열린 패널에 없습니다 — 이 검사의 전제가 깨졌습니다.`,
+        ).not.toBeNull();
+      }
+      check("예산 상세 패널이 열린 전체화면 셸");
+
+      // 닫아도 내용은 DOM에 그대로 남는다(인쇄 계약) — 그 상태도 지난다.
+      await userEvent.click(
+        screen.getByRole("button", { name: /실구매 가능 가격/ }),
+      );
+      check("예산 상세 패널이 닫힌 전체화면 셸");
+
+      // 사이드바가 목록에서 단지 상세로 바뀐 상태. 상세 안에는 보호 대상
+      // 클래스가 몰려 있다(호가·입지·등급 근거).
+      await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
+      expect(
+        container.querySelector(".complex-detail-back"),
+        "단지 상세가 열리지 않았습니다 — 이 검사의 전제가 깨졌습니다.",
+      ).not.toBeNull();
+      check("단지 상세가 열린 전체화면 셸");
+
+      /*
+       * 예전에는 여기서 투자 경로(월세수익형)도 지났다 — 거기엔
+       * `PurchaseCheck`(`.purchase-form`, 인쇄에서 숨김)와 그 바로
+       * 옆의 보호 대상(`purchase-loan-note`·`purchase-verdict`·
+       * `purchase-print-summary`)이라는, 이 검사가 정확히 겨누는
+       * 조상-후손 배치가 있었기 때문이다. 구매 유형 선택이 제거되면서
+       * 이 화면에서 그 경로에 도달할 방법이 없어졌다(컴포넌트 자체는
+       * 남아 있다 — App.tsx의 결과 트리 주석 참고).
+       *
+       * 그 배치의 교차곱 검사는 그래서 여기서 빠졌다. 다시 붙이는
+       * 날에는 이 자리에 그 상태를 되살려야 한다.
+       */
     });
 
     it("입력한 전제(현금·소득·주택 수·룰셋 기준)가 인쇄 전용 요약에 나온다", async () => {
@@ -870,41 +1509,33 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(summary?.textContent).toMatch(/무주택/);
     });
 
-    it("리뷰 수정(인쇄 '함께 볼 것'): 부제의 개인정보 보호 문구만 별도 span으로 감싼다", () => {
-      // "입력한 재무정보는 이 브라우저를 벗어나지 않아요"는 "이
-      // 브라우저"라는 지시 대상이 종이 위에는 없어 인쇄에서 뜻이 서지
-      // 않는다 — .subtitle-privacy-note만 인쇄에서 지운다
-      // (styles.css). 룰셋 기준은 종이에서도 뜻이 있어 남긴다.
-      //
-      // 지역 조회가 붙으면서 이 span에 한 문장이 늘었다. "고른 지역
-      // 코드만 서버로 전송돼요"는 같은 약속(무엇이 이 브라우저를
-      // 벗어나는가)의 단서라 같은 자리에 있어야 하고, "이 브라우저"와
-      // 마찬가지로 종이 위에서는 뜻이 서지 않아 함께 지워져야 한다.
-      //
-      // "· 수도권"은 지웠다 — 지역이 전국으로 넓어져 더 이상 사실이
-      // 아니다.
+    /**
+     * 사용자 지시로 부제의 개인정보 보호 문구("입력한 재무정보는 이
+     * 브라우저를 벗어나지 않아요…")를 통째로 지웠다 — .subtitle-privacy-note
+     * span 자체가 이제 없다(App.tsx). 인쇄 숨김 목록(hiddenInPrint.ts)·
+     * @media print 규칙에서도 이 선택자를 함께 뺐다.
+     */
+    it("부제에는 룰셋 기준만 남고, 개인정보 보호 문구는 없다", () => {
       const { container } = render(<App />);
       const subtitle = container.querySelector(".subtitle");
-      const note = subtitle?.querySelector(".subtitle-privacy-note");
 
-      expect(note).not.toBeNull();
-      expect(note?.textContent).toBe(
-        " · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는 고른 지역 코드만 서버로 전송돼요.",
-      );
+      expect(subtitle?.querySelector(".subtitle-privacy-note")).toBeNull();
+      expect(subtitle?.textContent).not.toMatch(/이 브라우저를 벗어나지 않아요/);
 
       const expectedLabel = formatRuleVersionLabel(rules);
-      expect(subtitle?.textContent).toBe(
-        `${expectedLabel} · 입력한 재무정보는 이 브라우저를 벗어나지 않아요. 지역 실거래가 조회에는 고른 지역 코드만 서버로 전송돼요.`,
-      );
+      expect(subtitle?.textContent).toBe(expectedLabel);
       expect(subtitle?.textContent).not.toContain("수도권");
     });
 
-    it("목록 화면에서는 전용면적이 가정값이라고 밝히고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
+    it("목록 화면에서는 고른 평형대가 정한 전제를 적고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
       const { container } = render(<App />);
       await fillProfile();
 
+      // 종이에도 대표값 하나를 지어내 적지 않는다 — 헤드라인이 쓴 것은
+      // "85㎡ 초과가 섞였는가"라는 전제다.
       const summaryBefore = container.querySelector(".print-summary");
-      expect(summaryBefore?.textContent).toMatch(/85㎡\s*\(가정값\)/);
+      expect(summaryBefore?.textContent).toMatch(/85㎡ 초과 기준/);
+      expect(summaryBefore?.textContent).toMatch(/가정/);
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
@@ -924,9 +1555,9 @@ describe("App - 지도", () => {
   });
 
   async function fillProfile() {
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "150000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "15000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
   }
 
   async function chooseRegion() {
@@ -1157,6 +1788,10 @@ describe("App - 지도", () => {
           constructor(el: HTMLElement) {
             mapContainer = el;
           }
+          listeners: Record<string, () => void> = {};
+          getZoom() {
+            return 14;
+          }
           fitBounds() {}
           destroy() {}
         },
@@ -1241,6 +1876,7 @@ describe("App - 지도", () => {
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => expect(markerEls.length).toBeGreaterThan(0));
 
+    // 라벨은 단지명 + 가격 범위다(면적은 더 이상 적지 않는다).
     const labels = markerEls.map((el) => el.textContent ?? "").join("|");
     expect(labels).toContain("테스트단지"); // 목록에 뜨는 단지
     expect(labels).not.toContain("비싼단지"); // 예산을 넘어 목록에 없는 단지
@@ -1285,5 +1921,1134 @@ describe("App - 지도", () => {
     ).not.toBeInTheDocument();
     // 지역에 데이터가 없다는 말과도 다르다 — 데이터는 있고, 예산이 안 맞았을 뿐이다.
     expect(screen.queryByText(/실거래가 자체가/)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * 재검토 수정(Critical 2): 화면 1의 문서 스크롤 잠금은 **인쇄에서 풀 수
+ * 있는 형태**여야 한다.
+ *
+ * 인라인 스타일(`document.body.style.overflow = "hidden"`)로 걸면
+ * `@media print`가 `!important` 없이는 손댈 수 없고, `<html>`의
+ * `overflow` 기본값(`visible`) 때문에 `<body>`의 `hidden`이 뷰포트로
+ * 전파돼 인쇄물이 첫 장에서 잘린다. 그 인쇄 CSS 쪽 계약은
+ * `scripts/printCss.test.ts`가 잠그고, 여기서는 **컴포넌트가 실제로
+ * 클래스를 쓰는지**를 잠근다 — 두 쪽 중 하나만 지켜지면 잠금은 다시
+ * 인쇄를 깨뜨린다.
+ */
+describe("재검토 수정: 화면 1의 문서 스크롤 잠금", () => {
+  beforeEach(() => {
+    window.localStorage.clear();
+    document.body.style.overflow = "";
+  });
+
+  afterEach(() => {
+    document.body.style.overflow = "";
+  });
+
+  it("화면 1이 떠 있는 동안 body에 잠금 클래스가 붙는다", () => {
+    const { container } = render(<App />);
+    expect(container.querySelector(".entry-screen")).not.toHaveClass(
+      "entry-screen--hidden",
+    );
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+  });
+
+  it("잠금은 인라인 스타일을 건드리지 않는다 — 다른 곳이 쓴 값도 그대로다", () => {
+    // 예전 구현은 잠글 때 값을 기억했다가 풀 때 그대로 되돌려, 그 사이
+    // 다른 곳이 쓴 값을 조용히 지웠다.
+    document.body.style.overflow = "auto";
+    render(<App />);
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+    expect(document.body.style.overflow).toBe("auto");
+  });
+
+  /*
+   * 예전에는 여기에 두 가지가 더 있었다 — "투자 유형을 고르면 화면 1이
+   * 걷히고 잠금이 떨어진다"와 "저장된 투자 유형으로 새로 열면 처음부터
+   * 잠기지 않는다". 구매 유형 선택이 제거되면서 화면 1이 걷히는 경로가
+   * 지역 조회 성공 하나로 줄었고, 그 경로의 잠금·해제는 아래 전체화면
+   * 셸 블록의 "셸이 서 있는 동안 문서 스크롤이 잠기고, 셸이 사라지면
+   * 풀린다"가 그대로 잠근다.
+   */
+});
+
+/**
+ * 화면 2 — 전체화면 셸(design.md §4, Task 4).
+ *
+ * 여기서 확인하는 것은 **어디에 무엇이 그려지는가**다. 계산은
+ * 건드리지 않았으므로 숫자 검증은 기존 테스트들이 그대로 맡는다.
+ */
+describe("전체화면 결과 셸", () => {
+  /**
+   * 마커를 실제 DOM에 그리고 클릭 리스너를 붙잡아 두는 최소 SDK 가짜.
+   * `panTo`가 있어야 한다 — 고른 단지로 지도를 옮길 때 부른다.
+   */
+  function fakeNaver() {
+    const markers: Array<{ listeners: Record<string, () => void> }> = [];
+    const panToCalls: unknown[] = [];
+    let mapContainer: HTMLElement | null = null;
+    const naverGlobal = {
+      maps: {
+        Map: class {
+          constructor(el: HTMLElement) {
+            mapContainer = el;
+          }
+          listeners: Record<string, () => void> = {};
+          getZoom() {
+            return 14;
+          }
+          fitBounds() {}
+          panTo(coord: unknown) {
+            panToCalls.push(coord);
+          }
+          destroy() {}
+        },
+        LatLng: class {
+          constructor(
+            public lat: number,
+            public lng: number,
+          ) {}
+        },
+        LatLngBounds: class {
+          constructor(
+            public sw: unknown,
+            public ne: unknown,
+          ) {}
+        },
+        Point: class {
+          constructor(
+            public x: number,
+            public y: number,
+          ) {}
+        },
+        Marker: class {
+          listeners: Record<string, () => void> = {};
+          constructor(opts: { icon?: { content?: string } }) {
+            markers.push(this);
+            if (opts.icon?.content !== undefined && mapContainer !== null) {
+              const el = document.createElement("div");
+              el.innerHTML = opts.icon.content;
+              mapContainer.appendChild(el);
+            }
+          }
+          setMap() {}
+        },
+        InfoWindow: class {
+          constructor(public opts: unknown) {}
+          getMap() {
+            return undefined;
+          }
+          open() {}
+          close() {}
+          setMap() {}
+        },
+        Event: {
+          addListener(
+            marker: { listeners: Record<string, () => void> },
+            event: string,
+            fn: () => void,
+          ) {
+            marker.listeners[event] = fn;
+            return { marker, event };
+          },
+          removeListener() {},
+        },
+      },
+    };
+    return { naverGlobal, markers, panToCalls };
+  }
+
+  /** 현금 15억으로 대출 없이 살 수 있는 단지 */
+  const CASH_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|테스트동|2015|현금단지",
+    complexName: "현금단지",
+    areaBucket: 59,
+    maxExclusiveAreaSqm: 59,
+    minPrice: 200_000_000,
+    maxPrice: 210_000_000,
+  };
+
+  /** 살 수는 있지만 대출이 필요한 단지 */
+  const LOAN_UNIT: ComplexUnit = {
+    ...DETAIL_TEST_UNIT,
+    complexKey: "11680|테스트동|2015|대출단지",
+    complexName: "대출단지",
+    areaBucket: 84,
+    maxExclusiveAreaSqm: 84,
+    minPrice: 1_800_000_000,
+    maxPrice: 1_800_000_000,
+  };
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.classList.remove(BODY_SCROLL_LOCK_CLASS);
+  });
+
+  /** 단위는 만원이다(150000 = 15억). */
+  async function fillProfile(cash = "150000", income = "15000") {
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), cash);
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), income);
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
+  }
+
+  async function chooseRegion() {
+    await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
+    await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+  }
+
+  /** 두 단지가 뜨는 결과 화면까지 간다. 지도까지 실제로 그린다. */
+  async function renderResults(
+    units: ComplexUnit[] = [CASH_UNIT, LOAN_UNIT],
+    profile: { cash?: string; income?: string } = {},
+  ) {
+    const fake = fakeNaver();
+    vi.spyOn(loadNaverMaps, "loadNaverMaps").mockResolvedValue(
+      fake.naverGlobal as unknown as typeof naver,
+    );
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
+      units,
+      isRegulatedArea: null,
+      dataAsOf: "2026-01",
+    });
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: units.map((u, i) => ({
+        complexKey: u.complexKey,
+        lat: 37.1 + i * 0.01,
+        lon: 127.1 + i * 0.01,
+      })),
+      partialFailureCount: 0,
+    });
+
+    const rendered = render(<App />);
+    await fillProfile(profile.cash, profile.income);
+    await chooseRegion();
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    return { ...rendered, ...fake };
+  }
+
+  it("상단바 + 사이드바 + 지도 세 자리가 서고, 목록과 지도가 각자의 자리에 들어간다", async () => {
+    const { container } = await renderResults();
+
+    const shell = container.querySelector(".result-shell");
+    expect(shell).not.toBeNull();
+    const sidebar = container.querySelector(".region-results-sidebar");
+    const mapColumn = container.querySelector(".region-results-map");
+    expect(container.querySelector(".result-topbar")).not.toBeNull();
+    expect(sidebar).not.toBeNull();
+    expect(mapColumn).not.toBeNull();
+
+    // 목록은 사이드바 안, 지도는 지도 칸 안.
+    expect(
+      sidebar?.contains(screen.getByRole("region", { name: "살 수 있는 단지" })),
+    ).toBe(true);
+    await screen.findByRole("region", { name: "단지 지도" });
+    expect(
+      mapColumn?.contains(screen.getByRole("region", { name: "단지 지도" })),
+    ).toBe(true);
+  });
+
+  /**
+   * 셸은 `position: fixed; inset: 0`이라 그 **밖에** 남은 것은 화면에서
+   * 덮인다 — `phase === "입력"`일 때 결과 트리가 오버레이 뒤에 깔려
+   * 있던 것과 같은 실패다(Task 3 리뷰 Important 4·5). jsdom은 레이아웃을
+   * 계산하지 않으므로 "보이는가"를 물을 수 없다 — 대신 **셸 안에
+   * 들어 있는가**를 구조로 확인한다.
+   */
+  it("면책 문구가 셸 **안**에 있다 — 고정 레이어 뒤에 깔리지 않는다", async () => {
+    const { container } = await renderResults();
+    const shell = container.querySelector(".result-shell");
+
+    const disclaimer = container.querySelector(".disclaimer");
+    expect(disclaimer).not.toBeNull();
+    expect(shell?.contains(disclaimer!)).toBe(true);
+    // 화면에 한 벌만 있다 — 두 자리에 각각 적으면 갈라진다.
+    expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+
+    // 상세를 열어도 같은 자리에 그대로 한 벌이다.
+    await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+    expect(shell?.contains(container.querySelector(".disclaimer")!)).toBe(true);
+    expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+  });
+
+  /**
+   * **면책은 그대로 남는다**(`disclaimer`는 MUST_SURVIVE_PRINT_CLASSES라
+   * 이 상태의 종이에서도 사라지면 안 된다).
+   */
+  it("프로필이 아직 안 끝났으면 셸을 세우지 않지만, 면책은 그대로 남는다", () => {
+    const { container } = render(<App />);
+    expect(container.querySelector(".result-shell")).toBeNull();
+    expect(container.querySelector(".disclaimer")).not.toBeNull();
+  });
+
+  it("상단바가 전제와 결과를 요약하고, 조건 다시 넣기가 그 안에 선다", async () => {
+    const { container } = await renderResults();
+    const topbar = container.querySelector(".result-topbar");
+
+    expect(topbar?.textContent).toContain("사용가능 현금 예산");
+    expect(topbar?.textContent).toContain("연 소득(세전)");
+    expect(topbar?.textContent).toContain("실구매 가능 가격");
+    /*
+     * 현금·소득은 **고칠 수 있는 입력란**이라(사용자 지시로 상단바에서
+     * 직접 바꾼다) 값이 textContent가 아니라 `input.value`에 있다.
+     * `commitOn="blur"`의 계약대로 확정 표기(`formatWon`)로 적혀 있다 —
+     * 사용자에게 보이는 글자는 예전과 같다.
+     */
+    expect(screen.getByLabelText("사용가능 현금 예산")).toHaveValue("15억원");
+    expect(screen.getByLabelText("연 소득(세전)")).toHaveValue("1억 5,000만원");
+    // 금액이 있는 프로필에서는 그 자리가 황동 강조다 — 아래 0원 테스트의 대조군.
+    expect(
+      topbar?.querySelector(".result-topbar-item-value--money"),
+    ).not.toBeNull();
+    // 지역은 코드가 아니라 이름으로 적는다.
+    expect(topbar?.textContent).toContain("서울특별시 강남구");
+    expect(topbar?.textContent).not.toContain("11680");
+
+    expect(
+      topbar?.contains(screen.getByRole("button", { name: "조건 다시 넣기" })),
+    ).toBe(true);
+  });
+
+  /*
+   * 사용자 지시: "지도페이지 들어온 후 조건변경은 상단 사이드 바에서
+   * 직접하고싶어, 사용가능 현금예산, 연소득, 지역을 직접 변경할 수 있도록
+   * 해줘." — 아래 셋이 그 세 자리다.
+   */
+  describe("상단바에서 조건을 그 자리에서 바꾼다", () => {
+    it("현금을 고쳐 벗어나면 실구매 가능 가격이 다시 계산된다", async () => {
+      const { container } = await renderResults();
+      const topbar = () => container.querySelector(".result-topbar")!;
+      const before = topbar().textContent ?? "";
+
+      const cash = screen.getByLabelText("사용가능 현금 예산");
+      await userEvent.clear(cash);
+      await userEvent.type(cash, "50000"); // 5억
+      /*
+       * `commitOn="blur"`라 **벗어나야** 확정된다 — 타이핑 중간값마다
+       * 아래 계산 전부가 다시 도는 것을 막는 계약이다.
+       */
+      expect(topbar().textContent).toBe(before);
+
+      await userEvent.tab();
+      // 확정되면 입력란 자신이 사람이 읽는 표기로 바뀐다.
+      expect(cash).toHaveValue("5억원");
+      expect(topbar().textContent).not.toBe(before);
+    });
+
+    it("소득을 고쳐 벗어나면 그 값이 확정 표기로 남는다", async () => {
+      await renderResults();
+      const income = screen.getByLabelText("연 소득(세전)");
+      await userEvent.clear(income);
+      await userEvent.type(income, "9000");
+      await userEvent.tab();
+      expect(income).toHaveValue("9,000만원");
+    });
+
+    /**
+     * 지역은 고르는 순간 조회가 나간다 — 결과를 이미 보고 있는 중이라
+     * 버튼을 한 번 더 누르게 하면 "직접 변경"이 아니다
+     * (`RegionQuickSelect` 주석 참고).
+     *
+     * **입력 화면의 지역 select와 라벨이 달라야 한다** — 두 화면이 함께
+     * 마운트돼 있어서, 같은 라벨이면 이 질의가 어느 화면인지 못 고른다.
+     */
+    it("상단바에서 자치구를 고르면 그 지역으로 곧바로 다시 조회한다", async () => {
+      await renderResults();
+      const spy = vi.spyOn(regionQuery, "fetchRegionComplexes");
+      spy.mockClear();
+
+      await userEvent.selectOptions(screen.getByLabelText("시·군·구 바꾸기"), "11650");
+
+      await vi.waitFor(() => expect(spy).toHaveBeenCalledWith("11650", null));
+      // 입력 화면의 라벨은 그대로 하나뿐이다(문서에 두 벌이 생기지 않았다).
+      expect(screen.getByLabelText("자치구")).toBeInTheDocument();
+    });
+
+    it("조회 중에는 지역 select가 잠기고, 진행을 말한다", async () => {
+      await renderResults();
+      // 응답을 붙잡아 두어 loading 상태를 관찰한다.
+      let release: (() => void) | undefined;
+      vi.spyOn(regionQuery, "fetchRegionComplexes").mockImplementation(
+        () => new Promise((resolve) => {
+          release = () =>
+            resolve({ units: [], isRegulatedArea: null, dataAsOf: "2026-01" });
+        }),
+      );
+
+      await userEvent.selectOptions(screen.getByLabelText("시·군·구 바꾸기"), "11650");
+
+      await screen.findByText("새 지역을 불러오는 중이에요…");
+      expect(screen.getByLabelText("시·군·구 바꾸기")).toBeDisabled();
+      expect(screen.getByLabelText("시·도 바꾸기")).toBeDisabled();
+      release?.();
+    });
+
+    /**
+     * 실패 안내가 **이 화면에도** 있어야 한다. 입력 화면에도 같은 성격의
+     * 안내가 있지만 그쪽은 `phase === "결과"` 동안 감춰져 있어, 상단바에서
+     * 지역을 바꿨다가 실패하면 아무 일도 안 일어난 것처럼 보였다.
+     */
+    it("조회가 실패하면 상단바가 그 사실을 말하고 다시 시도할 수 있다", async () => {
+      await renderResults();
+      vi.spyOn(regionQuery, "fetchRegionComplexes").mockRejectedValue(
+        new Error("네트워크 오류"),
+      );
+
+      await userEvent.selectOptions(screen.getByLabelText("시·군·구 바꾸기"), "11650");
+
+      await screen.findByText(/새 지역 조회에 실패했어요/);
+      // 입력 화면의 "다시 시도"와 **다른 이름**이라야 둘을 가려낼 수 있다.
+      expect(
+        screen.getByRole("button", { name: "실거래가 다시 불러오기" }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  it("셸이 서 있는 동안 문서 스크롤이 잠기고, 셸이 사라지면 풀린다", async () => {
+    await renderResults();
+    /*
+     * 여기서 실제로 잡은 버그: 셸은 프로필을 채운 순간(아직
+     * `phase === "입력"`) 마운트되며 잠금을 걸고, 지역 조회가 성공해
+     * `phase`가 "결과"로 넘어가면 `EntryScreen`의 effect 정리가 그
+     * 잠금을 떼어 버렸다 — 전체화면 셸이 떠 있는데 뒤로 페이지
+     * 스크롤바가 남았다. 지금은 `lockBodyScroll()`이 잠글 이유를 센다.
+     */
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+
+    // 화면 1로 돌아가면 두 레이어가 동시에 잠근다 — 그래도 잠금은 하나다.
+    await userEvent.click(
+      screen.getByRole("button", { name: "조건 다시 넣기" }),
+    );
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+    // 다시 결과로 돌아와도 유지된다(유형 라디오를 거치지 않는 경로).
+    await userEvent.click(
+      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    );
+    expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
+
+    // 셸이 언마운트되면 잠금도 함께 풀린다.
+    cleanup();
+    expect(document.body).not.toHaveClass(BODY_SCROLL_LOCK_CLASS);
+  });
+
+  /**
+   * 사용자 지시로 마커에서 면적·거래 건수·부담 수준 색 구분이 빠지고
+   * **단지명과 가격 범위만** 남았다. 두 창이 어긋나지 않는지를 여기서
+   * 확인한다 — 예전에는 마커 **색**이 목록 행의 부담 문구와 맞는지를
+   * 봤고, 지금은 마커 **이름**이 목록 행의 이름과 맞는지를 본다.
+   *
+   * **목록 쪽 부담 배지는 그대로다.** `burdenTierOf`(단수)는 살아 있고
+   * `ComplexList`가 계속 쓴다 — 이번 변경은 지도만의 일이다. 그 사실을
+   * 아래에서 함께 못박는다(목록에서도 사라지면 이 검사가 깨진다).
+   */
+  it("마커 라벨이 단지명·가격 범위를 내고, 목록 행과 같은 단지를 가리킨다", async () => {
+    const { container } = await renderResults();
+    await screen.findByRole("region", { name: "단지 지도" });
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll(".complex-map-marker")).toHaveLength(2),
+    );
+
+    const markerOf = (complexKey: string) => {
+      const marker = [
+        ...container.querySelectorAll<HTMLElement>(".complex-map-marker"),
+      ].find((el) => el.dataset.complexKey === complexKey);
+      expect(marker, `${complexKey} 마커가 없습니다`).toBeDefined();
+      return marker!;
+    };
+
+    const cash = markerOf(CASH_UNIT.complexKey);
+    const loan = markerOf(LOAN_UNIT.complexKey);
+
+    // 마커가 자기 단지를 이름으로 가리킨다.
+    expect(cash.textContent).toContain("현금단지");
+    expect(loan.textContent).toContain("대출단지");
+
+    // 면적·거래건수는 여전히 뺀 채다.
+    for (const marker of [cash, loan]) {
+      expect(marker.textContent).not.toContain("㎡");
+      expect(marker.textContent).not.toContain("거래");
+    }
+    // 부담 수준 글자는 마커가 아니라 지도 범례가 낸다 — 색만으로 말하지 않는다.
+    const legend = screen.getByRole("list", { name: "마커 색 안내" });
+    expect(legend.textContent).toContain("대출 없이");
+    expect(legend.textContent).toContain("대출 필요");
+    // 색 구분도 살아 있다 — 감싸는 핀(.complex-map-pin)의 티어 클래스가 서로 다르다.
+    expect(cash.parentElement?.className).not.toBe(loan.parentElement?.className);
+    expect(cash.parentElement?.className).toContain("complex-map-pin--no-loan");
+    expect(loan.parentElement?.className).toContain("complex-map-pin--loan");
+
+    // **목록 행의 부담 배지는 그대로다** — `burdenTierOf`는 지도가 아니라
+    // 목록의 함수다. 지도에서 뺀 것을 목록에서까지 빼지 않았다.
+    const rowText = (name: string) =>
+      screen.getByRole("button", { name: new RegExp(name) }).textContent ?? "";
+    expect(rowText("현금단지")).toContain("대출 없이 살 수 있어요");
+    expect(rowText("대출단지")).toContain("부담률");
+    expect(rowText("대출단지")).not.toContain("대출 없이 살 수 있어요");
+  });
+
+  it("목록 행을 누르면 그 단지의 마커가 강조된다", async () => {
+    const { container } = await renderResults();
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll(".complex-map-marker")).toHaveLength(2),
+    );
+    expect(container.querySelectorAll(".complex-map-marker--focused")).toHaveLength(
+      0,
+    );
+
+    await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+
+    await vi.waitFor(() => {
+      const focused = container.querySelectorAll<HTMLElement>(
+        ".complex-map-marker--focused",
+      );
+      expect(focused).toHaveLength(1);
+      expect(focused[0]!.dataset.complexKey).toBe(CASH_UNIT.complexKey);
+    });
+  });
+
+  it("마커를 누르면 그 단지의 목록 행이 선택되고, 상세는 열리지 않는다", async () => {
+    const { container, markers } = await renderResults();
+    await vi.waitFor(() => expect(markers.length).toBe(2));
+
+    // 마커 순서는 목록 순서를 따른다(부담이 낮은 것부터).
+    markers[1]!.listeners.click!();
+
+    await vi.waitFor(() =>
+      expect(container.querySelectorAll(".complex-row--focused")).toHaveLength(1),
+    );
+    const row = container.querySelector(".complex-row--focused");
+    expect(row?.textContent).toContain("대출단지");
+    expect(row).toHaveAttribute("aria-current", "true");
+    // 마커는 단지를 가리키지 상세(평형)를 고르지 않는다 — 목록은 그대로다.
+    expect(
+      screen.getByRole("region", { name: "살 수 있는 단지" }),
+    ).toBeInTheDocument();
+  });
+
+  /**
+   * 리뷰 수정 Important 1 — **상단바가 맨숫자 0을 내지 않는다.**
+   *
+   * `useAffordability`는 프로필이 완성되면 `null`을 내지 않으므로, 현금이
+   * 고정 부대비용에도 못 미치는 사람도 이 셸에 도달한다. 그때 상단바는
+   * 화면에서 가장 큰 글씨이자 종이의 첫 줄인데, 예전에는 거기에 황동으로
+   * "실구매 가능 가격 / 0원"만 찍혔다.
+   */
+  it("실구매 가능 가격이 0원이면 상단바가 숫자 대신 원인을 말한다", async () => {
+    // 현금 100만원 — 매매가 0원에서도 드는 고정 부대비용(법무비·이사비)에도
+    // 못 미쳐 실구매 가능 가격이 0이 된다.
+    const { container } = await renderResults([CASH_UNIT, LOAN_UNIT], {
+      cash: "100",
+    });
+
+    // 전제: 실제로 0원 상태다(사이드바가 그 사실을 말하고 있다).
+    expect(container.querySelector(".no-budget")).not.toBeNull();
+
+    const topbar = container.querySelector(".result-topbar");
+    expect(topbar?.textContent).toContain("실구매 가능 가격");
+    expect(topbar?.textContent).not.toContain("0원");
+    // 사이드바가 쓰는 것과 같은 문장이다(같은 상수).
+    expect(topbar?.textContent).toContain(ZERO_BUDGET_HEADLINE);
+    // 금액 강조(황동)를 입히지 않는다 — 없는 숫자를 있는 것처럼 광고하지 않는다.
+    expect(
+      topbar?.querySelector(".result-topbar-item-value--money"),
+    ).toBeNull();
+  });
+
+  /**
+   * 리뷰 수정 Important 2 — **상세 열림 × 마커 클릭.**
+   *
+   * 상세가 열려 있는 동안 `effectiveProfile`이 화면 전체의 계산을 그
+   * 평형의 면적으로 바꿔치기한다. 그 상태에서 다른 단지의 마커를 눌렀는데
+   * 상세가 그대로면, 사이드바는 A를 그리고 지도는 B를 강조하는 —
+   * 이 저장소가 여섯 번 낸 바로 그 어긋남이 된다.
+   */
+  it("상세가 열린 채 다른 단지의 마커를 누르면 상세가 닫히고 그 단지로 옮겨 간다", async () => {
+    const { container, markers } = await renderResults();
+    await vi.waitFor(() => expect(markers.length).toBe(2));
+
+    // A(현금단지)의 상세를 연다.
+    await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+
+    // B(대출단지)의 마커를 누른다. 마커 순서는 목록 순서를 따른다.
+    markers[1]!.listeners.click!();
+
+    await vi.waitFor(() => {
+      // 상세가 닫히고 목록으로 돌아온다 — 두 창이 다시 같은 것을 본다.
+      expect(
+        screen.queryByRole("region", { name: "단지 상세" }),
+      ).not.toBeInTheDocument();
+      const focused = container.querySelector(".complex-row--focused");
+      expect(focused?.textContent).toContain("대출단지");
+    });
+    // 지도 쪽 강조도 B 하나다.
+    const focusedMarkers = container.querySelectorAll<HTMLElement>(
+      ".complex-map-marker--focused",
+    );
+    expect(focusedMarkers).toHaveLength(1);
+    expect(focusedMarkers[0]!.dataset.complexKey).toBe(LOAN_UNIT.complexKey);
+  });
+
+  it("상세가 열린 채 **그 단지의** 마커를 누르면 상세는 그대로다", async () => {
+    const { markers } = await renderResults();
+    await vi.waitFor(() => expect(markers.length).toBe(2));
+
+    await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+
+    // 같은 단지(현금단지)의 마커 — 두 창은 이미 같은 것을 가리키고 있다.
+    markers[0]!.listeners.click!();
+
+    expect(screen.getByRole("region", { name: "단지 상세" })).toBeInTheDocument();
+  });
+
+  /**
+   * 지도는 30개까지 그리는데 목록은 덩어리마다 10개씩만 그린다. 그 너머의
+   * 마커를 누르면 선택은 바뀌는데 화면엔 아무 변화가 없다 — 사용자에겐
+   * 마커가 죽은 것으로 보인다.
+   */
+  it("'더 보기' 너머의 마커를 눌러도 그 행이 목록에 나타난다", async () => {
+    // 같은 부담 덩어리(대출 없이)에 12개를 넣어 10개 상한을 넘긴다.
+    const many = Array.from({ length: 12 }, (_, i) => ({
+      ...CASH_UNIT,
+      complexKey: `11680|테스트동|2015|현금단지${i}`,
+      complexName: `현금단지${i}`,
+      // 부담률 오름차순 정렬이 예측 가능하도록 가격을 조금씩 올린다.
+      minPrice: 200_000_000 + i * 1_000_000,
+      maxPrice: 210_000_000 + i * 1_000_000,
+    }));
+    const { container, markers } = await renderResults(many);
+
+    await vi.waitFor(() => expect(markers.length).toBe(12));
+    // 전제: 12번째 단지는 아직 목록에 없다.
+    expect(
+      screen.queryByRole("button", { name: /현금단지11/ }),
+    ).not.toBeInTheDocument();
+
+    markers[11]!.listeners.click!();
+
+    await vi.waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: /현금단지11/ }),
+      ).toBeInTheDocument();
+    });
+    const focused = container.querySelector(".complex-row--focused");
+    expect(focused?.textContent).toContain("현금단지11");
+  });
+
+  /**
+   * Task 5 — 예산 상세 패널(design.md §5).
+   *
+   * 상단바의 "실구매 가능 가격"을 누르면 예산 블록(가정 문구·BudgetResult·
+   * 슬라이더·안전선)이 사이드바 위에 오버레이로 펼쳐진다.
+   */
+  describe("예산 상세 패널", () => {
+    /** 트리거(상단바의 "실구매 가능 가격" 항목) */
+    function trigger() {
+      return screen.getByRole("button", { name: /실구매 가능 가격/ });
+    }
+
+    function panel(container: HTMLElement) {
+      return container.querySelector(".budget-panel");
+    }
+
+    /**
+     * 패널이 열려 있는 동안 그 **뒤에 완전히 가려지는** 사이드바가
+     * 키보드 초점을 받지 않는지(리뷰 findings M2).
+     *
+     * `.budget-panel`은 372px 사이드바 열을 정확히 덮는 절대 배치
+     * 오버레이인데(styles.css), DOM 순서는 패널 → 사이드바다. `inert`가
+     * 없으면 패널을 지나 Tab을 계속 누를 때 보이지 않는 행정동
+     * `<select>`와 `.complex-row` 버튼에 초점이 간다 — 그 상태에서
+     * Enter를 누르면 평형이 선택되고 패널이 발밑에서 닫힌다
+     * (WCAG 2.4.3 초점 순서 / 2.4.7 초점 표시).
+     *
+     * **"지도 조작을 막지 않는다"와 충돌하지 않는다.** 브리프가 지키려는
+     * 것은 지도의 조작성이고, 지도는 사이드바 열 밖(`.region-results-map`)
+     * 이라 `inert`가 닿지 않는다 — 마커는 그대로 눌린다. 아래 마지막
+     * 테스트가 그 사실을 함께 못박는다.
+     *
+     * ⚠ **jsdom은 `inert`를 강제하지 않는다**(이 저장소가 이미 아는
+     * 함정 — progress.md의 Task 3 항목). 그래서 이 테스트는 "Tab이 실제로
+     * 건너뛰는가"를 확인할 수 없고, **속성이 붙는가**만 확인한다.
+     *
+     * 실제 차단은 브라우저에서 따로 확인했다(dev 4173, 실데이터):
+     * 패널이 열린 상태에서 가려진 `.complex-row-button`에 `.focus()`를
+     * 불러도 `document.activeElement`가 그 행으로 가지 않고
+     * `section.budget-panel`에 머물렀고, 패널을 닫으면 같은 행이 다시
+     * 초점을 받았다.
+     */
+    it("패널이 열려 있는 동안 사이드바가 inert다", async () => {
+      const { container } = await renderResults();
+      const sidebar = container.querySelector(".region-results-sidebar")!;
+
+      // 닫혀 있는 동안에는 당연히 조작할 수 있어야 한다.
+      expect(sidebar).not.toHaveAttribute("inert");
+
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+      expect(sidebar).toHaveAttribute("inert");
+
+      await userEvent.click(trigger());
+      expect(sidebar).not.toHaveAttribute("inert");
+    });
+
+    it("패널이 열려도 지도 열은 inert가 아니다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+
+      expect(container.querySelector(".region-results-map")).not.toHaveAttribute(
+        "inert",
+      );
+      // 지도가 사이드바의 자손이 아니라는 것도 함께 못박는다 — 자손이면
+      // 사이드바에 건 inert가 지도까지 끌고 들어간다.
+      expect(
+        container
+          .querySelector(".region-results-sidebar")!
+          .contains(container.querySelector(".region-results-map")),
+      ).toBe(false);
+    });
+
+    it("패널이 열린 채 마커를 누르면 패널이 닫히고 그 단지가 강조된다", async () => {
+      const { container, markers } = await renderResults();
+      await vi.waitFor(() => expect(markers.length).toBe(2));
+
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      markers[1]!.listeners.click!();
+
+      await vi.waitFor(() => {
+        expect(panel(container)).toHaveClass("budget-panel--closed");
+        expect(
+          container.querySelector(".region-results-sidebar"),
+        ).not.toHaveAttribute("inert");
+      });
+      const focused = container.querySelector(".complex-row--focused");
+      expect(focused?.textContent).toContain("대출단지");
+    });
+
+    it("상단바의 '실구매 가능 가격'이 버튼이고, 누르면 예산 상세가 펼쳐진다", async () => {
+      const { container } = await renderResults();
+
+      const button = trigger();
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+
+      await userEvent.click(button);
+
+      expect(trigger()).toHaveAttribute("aria-expanded", "true");
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      // 브리프가 지정한 내용물이 그 안에 들어 있다 — 컴포넌트도 prop도
+      // 그대로이고 자리만 옮겼다.
+      const open = panel(container)!;
+      expect(open.querySelector(".budget-result")).not.toBeNull();
+      expect(open.querySelector(".price-slider")).not.toBeNull();
+      expect(open.querySelector(".binding-explainer")).not.toBeNull();
+    });
+
+    it("다시 누르면 닫힌다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+      await userEvent.click(trigger());
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+    });
+
+    it("Esc로 닫힌다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      await userEvent.keyboard("{Escape}");
+
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+      // 포커스는 열었던 자리로 돌아온다 — 안 그러면 키보드 사용자는
+      // 사라진 요소 자리에 남아 문서 맨 앞으로 튕긴다.
+      expect(trigger()).toHaveFocus();
+    });
+
+    it("닫기 버튼으로도 닫힌다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+
+      await userEvent.click(screen.getByRole("button", { name: "닫기" }));
+
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+    });
+
+    /**
+     * dispatch A — **0원일 때도 열린다.**
+     *
+     * 그때가 사용자가 "왜 0원인가"를 가장 알고 싶은 순간이고, 그 답
+     * (`ZeroBudgetMessage`·`BindingExplainer`)이 바로 이 패널 안에 있다.
+     * 0원일 때만 죽은 버튼으로 두면 Task 3이 리뷰에서 잡힌 실패(누르라고
+     * 적어 놓고 아무 일도 안 하던 가정 칩)를 그대로 재현한다.
+     */
+    it("실구매 가능 가격이 0원이어도 버튼이고, 열면 그 원인이 들어 있다", async () => {
+      const { container } = await renderResults([CASH_UNIT, LOAN_UNIT], {
+        cash: "100",
+      });
+
+      // 전제: 실제로 0원 상태다.
+      expect(container.querySelector(".no-budget")).not.toBeNull();
+
+      const button = trigger();
+      expect(button.textContent).toContain(ZERO_BUDGET_HEADLINE);
+
+      await userEvent.click(button);
+
+      const open = panel(container)!;
+      expect(open).not.toHaveClass("budget-panel--closed");
+      // 0원 분기에서 `BudgetResult`가 그리는 것은 `ZeroBudgetMessage`다 —
+      // 원인 갈래(현금 부족 / 상환능력 0)까지 여기서 갈린다.
+      // (`binding-explainer`는 `affordablePrice > 0` 분기에만 있다.
+      // `BudgetResult`의 구조는 이 태스크에서 손대지 않는다.)
+      expect(open.querySelector(".no-budget")).not.toBeNull();
+      /*
+       * **경고는 이제 이 패널 안이 아니다**(followup-warnings-out).
+       * 접히는 자리에 두면 상단바의 헤드라인 숫자만 보이고 그 숫자를
+       * 한정하는 문장은 눌러야 보인다 — 이 검사는 지운 것이 아니라
+       * 아래 "엔진 경고의 자리"로 **옮겼다**. 여기서는 옮겨 간 뒤에도
+       * 이 프로필에 경고가 실제로 있다는 것과, 그 한 벌이 패널 밖에
+       * 있다는 것만 확인한다.
+       */
+      expect(open.querySelector(".warning-list")).toBeNull();
+      const warning = container.querySelector(".warning-list");
+      expect(warning).not.toBeNull();
+      expect(open.contains(warning!)).toBe(false);
+    });
+
+    /**
+     * dispatch 1 — `phase === "입력"`(화면 1이 덮고 있을 때) 결과 트리는
+     * 통째로 `inert`다. 그때 패널의 `Esc` 핸들러가 살아 있으면 안 된다 —
+     * 화면 1에서 Esc를 눌렀는데 보이지도 않는 뒤쪽 패널이 닫히는 것은
+     * 유령 동작이다. `inert`는 document 레벨 키 리스너를 막지 못하므로
+     * 상태 쪽에서 막아야 한다.
+     *
+     * dispatch 2 — 그리고 돌아오면 어떤 상태인가: 열어 둔 그대로다.
+     * "조건 다시 넣기"는 화면 전환일 뿐 리셋이 아니라는 기존 계약과
+     * 같은 방향이다.
+     */
+    it("화면 1로 돌아가면 패널이 닫히고, 결과로 돌아오면 다시 열려 있다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "조건 다시 넣기" }),
+      );
+
+      // 화면 1이 덮은 동안에는 닫힌 것으로 그린다.
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+      expect(trigger()).toHaveAttribute("aria-expanded", "false");
+
+      // 그리고 Esc는 아무 일도 하지 않는다 — 핸들러가 아예 붙어 있지 않다.
+      await userEvent.keyboard("{Escape}");
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+
+      await userEvent.click(
+        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      );
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+    });
+
+    /**
+     * dispatch 4 — 패널은 지도를 덮지 않으므로 마커는 계속 눌린다. 그런데
+     * 마커가 바꾸는 것(목록의 선택 행)은 패널 **뒤**에 있다 — 닫지 않으면
+     * 누른 사람에게는 아무 일도 일어나지 않은 것으로 보인다.
+     */
+    it("패널이 열린 채 지도 마커를 누르면 패널이 물러나고 그 행이 드러난다", async () => {
+      const { container, markers } = await renderResults();
+      await vi.waitFor(() => expect(markers.length).toBe(2));
+
+      await userEvent.click(trigger());
+      expect(panel(container)).not.toHaveClass("budget-panel--closed");
+
+      markers[1]!.listeners.click!();
+
+      await vi.waitFor(() => {
+        expect(panel(container)).toHaveClass("budget-panel--closed");
+        const focused = container.querySelector(".complex-row--focused");
+        expect(focused?.textContent).toContain("대출단지");
+      });
+    });
+
+    /**
+     * dispatch 3 — 패널이 무엇을 덮는가. jsdom은 레이아웃을 계산하지
+     * 않으므로 "덮는다"를 픽셀로 물을 수 없다 — 대신 **어느 칸에 붙어
+     * 있는가**를 구조로 확인한다. 지도 칸(`.region-results-map`) 밖에
+     * 있어야 지도 조작을 막지 않는다(실제 픽셀은 보고서 §6의 브라우저
+     * 실측).
+     */
+    it("패널은 결과 그리드 안, 지도 칸 밖에 붙는다", async () => {
+      const { container } = await renderResults();
+      const el = panel(container)!;
+
+      expect(container.querySelector(".region-results-grid")!.contains(el)).toBe(
+        true,
+      );
+      expect(container.querySelector(".region-results-map")!.contains(el)).toBe(
+        false,
+      );
+      expect(
+        container.querySelector(".region-results-sidebar")!.contains(el),
+      ).toBe(false);
+    });
+
+    /**
+     * dispatch C — **이 태스크에서 가장 위험한 자리.**
+     *
+     * 패널 안에 든 것들은 `MUST_SURVIVE_PRINT_CLASSES`가 지키는 값·문구다.
+     * 닫혀 있을 때 **언마운트하거나** 인쇄에도 닿는 `display: none`으로
+     * 두면, 패널을 닫은 채 Cmd+P를 누른 사람의 종이에서 그것들이 통째로
+     * 사라진다. Cmd+P는 어느 단계에서든 눌린다.
+     *
+     * 여기서는 리액트 쪽 절반(언마운트하지 않는다)을 잡는다 — CSS 쪽
+     * 절반(그 숨김이 `@media print`에 닿지 않는다)은
+     * `scripts/printCss.test.ts`가 구조로 잠근다.
+     *
+     * **모집합은 `MUST_SURVIVE_PRINT_CLASSES` 그대로다**(리뷰 findings m3).
+     * 예전에는 "패널 안에 있는 열 개"를 손으로 적어 뒀는데, 그 목록이
+     * 화면과 어긋나도 아무것도 깨지지 않았다 — 패널이 새 값을 품게 되면
+     * 그 값은 검사 대상에서 조용히 빠진다. 보호 대상 목록 전체를 훑으면
+     * 그럴 자리가 없다(패널 밖의 보호 대상도 함께 지켜지므로 검사가 더
+     * 넓어질 뿐 약해지지 않는다).
+     *
+     * **파생되는 것은 기준선이지 모집합이 아니다.** 어느 클래스가 실제로
+     * 화면에 있는지는 프로필에 따라 다르므로, 열었을 때 있던 것을 기준선
+     * 으로 잡고 닫은 뒤와 대조한다.
+     */
+    function protectedPresent(container: HTMLElement): string[] {
+      return MUST_SURVIVE_PRINT_CLASSES.filter(
+        (cls) => container.querySelector(`.${cls}`) !== null,
+      );
+    }
+
+    it("패널을 닫아도 보호 대상 클래스가 DOM에서 하나도 사라지지 않는다(양수 예산)", async () => {
+      const { container } = await renderResults();
+
+      await userEvent.click(trigger());
+      const whileOpen = protectedPresent(container);
+      // 전제: 실제로 여러 개가 있었다. 없으면 아래 대조가 공허하다.
+      expect(whileOpen.length).toBeGreaterThanOrEqual(6);
+      // 그중 패널 **안**에 있는 것들이 실제로 잡혔는지도 확인한다 —
+      // 모집합을 넓히면서 정작 이 테스트가 지켜야 할 자리가 빠지면
+      // 대조는 통과해도 아무것도 지키지 못한다.
+      const panelElement = panel(container)!;
+      const insidePanel = whileOpen.filter(
+        (cls) => panelElement.querySelector(`.${cls}`) !== null,
+      );
+      expect(insidePanel.length).toBeGreaterThanOrEqual(6);
+
+      await userEvent.click(trigger());
+      expect(panel(container)).toHaveClass("budget-panel--closed");
+      expect(protectedPresent(container)).toEqual(whileOpen);
+    });
+
+    it("0원 프로필에서도, 단지 상세를 연 채로도 마찬가지다", async () => {
+      const zero = await renderResults([CASH_UNIT, LOAN_UNIT], { cash: "100" });
+      await userEvent.click(trigger());
+      const zeroOpen = protectedPresent(zero.container);
+      expect(zeroOpen).toContain("no-budget");
+      await userEvent.click(trigger());
+      expect(protectedPresent(zero.container)).toEqual(zeroOpen);
+      zero.unmount();
+
+      const { container } = await renderResults();
+      await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+      expect(
+        screen.getByRole("region", { name: "단지 상세" }),
+      ).toBeInTheDocument();
+
+      await userEvent.click(trigger());
+      const whileOpen = protectedPresent(container);
+      await userEvent.click(trigger());
+      expect(protectedPresent(container)).toEqual(whileOpen);
+      // 상세도 여전히 그 자리에 있다 — 패널은 덮을 뿐 걷어 가지 않는다.
+      expect(
+        screen.getByRole("region", { name: "단지 상세" }),
+      ).toBeInTheDocument();
+    });
+  });
+
+  /**
+   * 후속 수정 — **엔진 경고는 접히는 패널 밖에 산다**
+   * (`.superpowers/sdd/followup-warnings-out.md`, 전체 리뷰 I3).
+   *
+   * Task 5가 `BudgetResult`를 예산 상세 패널 안으로 옮기면서, 그 안에
+   * 있던 `WarningList`도 함께 접혔다. 결과 화면에는 굵은 "실구매 가능
+   * 가격"만 뜨고 그 숫자를 **한정하는** 문장은 "자세히"를 눌러야
+   * 보였다 — `BudgetResult.tsx`가 스스로 적어 둔 원칙("접으면 안 되는
+   * 종류의 정보다")이 조용히 무력화된 상태다.
+   *
+   * `BudgetResult`에 "경고를 숨기는 prop"을 더하지 않는다 — 출처가
+   * 둘이 된다. 컴포넌트에서 들어내고 호출부(`App.tsx`)가 그린다.
+   *
+   * **이 앱에서 화면으로 도달할 수 있는 경고는 0원 프로필의
+   * "고정 부대비용…" 하나다.** 나머지 경고(양도세·기존 주택 매도 대금)는
+   * `status === "갈아타기"`에서만 나는데 `ProfileForm`에 그 입력 화면이
+   * 없다(ProfileForm.tsx의 주석 — 죽은 배선이라 화면을 지웠다). 그래서
+   * 이 검사는 0원 프로필을 쓴다. 하필 그 상태가 경고가 가장 필요한
+   * 자리이기도 하다.
+   */
+  describe("엔진 경고의 자리", () => {
+    function trigger() {
+      return screen.getByRole("button", { name: /실구매 가능 가격/ });
+    }
+
+    function budgetPanel(container: HTMLElement) {
+      return container.querySelector(".budget-panel")!;
+    }
+
+    /** 경고가 실제로 나는 유일한 화면 경로 — 0원 프로필 */
+    function renderWithWarning() {
+      return renderResults([CASH_UNIT, LOAN_UNIT], { cash: "100" });
+    }
+
+    it("패널이 닫힌 채로도 경고가 사이드바 맨 위에 보인다", async () => {
+      const { container } = await renderWithWarning();
+
+      // 전제: 패널의 기본 상태는 닫힘이다. 결과 화면을 처음 만나는
+      // 사람이 보는 화면이 이 상태다.
+      expect(budgetPanel(container)).toHaveClass("budget-panel--closed");
+
+      const warning = container.querySelector(".warning-list");
+      expect(warning).not.toBeNull();
+      expect(warning!.textContent).toContain(
+        "고정 부대비용(법무비·이사비)만으로도 사용가능 현금 예산을 넘어요.",
+      );
+
+      // 접히는 자리 어디에도 들어 있지 않다 — 패널도, <details>도.
+      expect(budgetPanel(container).contains(warning!)).toBe(false);
+      expect(warning!.closest("details")).toBeNull();
+
+      // 사이드바 **맨 위**다: 상단바(트리거) 아래, 목록/상세보다 위.
+      const sidebar = container.querySelector(".region-results-sidebar")!;
+      expect(sidebar.contains(warning!)).toBe(true);
+      expect(sidebar.firstElementChild).toBe(warning);
+
+      // 출처가 하나다. `BudgetResult`에도 남겨 두면 같은 문장이 화면과
+      // 종이에 두 번 뜬다 — 인쇄에서는 패널이 닫혀 있어도 그대로 나온다.
+      expect(container.querySelectorAll(".warning-list")).toHaveLength(1);
+
+      /*
+       * 그리고 그 한 벌이 **종이에서 사라지지도** 않는다.
+       * `warning-list`는 `MUST_SURVIVE_PRINT_CLASSES`인데, 옮긴 자리가
+       * 인쇄에서 지워지는 조상 밑이면 개수만 맞고 종이에서는 0번이 된다.
+       * 위 개수 단언과 이 순회가 함께 "종이에 정확히 한 번"을 만든다.
+       */
+      expect(MUST_SURVIVE_PRINT_CLASSES).toContain("warning-list");
+      for (const selector of PRINT_HIDDEN_SELECTORS) {
+        for (const hidden of container.querySelectorAll(selector)) {
+          expect(
+            hidden.contains(warning!),
+            `경고가 인쇄에서 지워지는 ${selector} 안에 있습니다.`,
+          ).toBe(false);
+        }
+      }
+    });
+
+    it("패널을 열어도 경고는 한 벌뿐이고, 닫으면 다시 드러난다", async () => {
+      const { container } = await renderWithWarning();
+
+      await userEvent.click(trigger());
+      expect(budgetPanel(container)).not.toHaveClass("budget-panel--closed");
+      /*
+       * 패널이 열려 있는 동안 사이드바는 그 뒤에 가려지고 `inert`다
+       * (리뷰 findings M2) — 경고도 함께 가려진다. **그래도 사이드바에
+       * 둔다**: 패널이 담는 것이 바로 그 숫자의 근거
+       * (`ZeroBudgetMessage`·`BindingExplainer`·`CostBreakdown`)라,
+       * 패널이 열린 순간은 사용자가 한정 조건을 **읽고 있는** 상태다.
+       * 고쳐야 할 것은 기본 상태(닫힘)에서 숫자만 보이던 것이었고, 그
+       * 상태는 위 테스트가 잠근다. 패널을 경고 **아래**에서 시작하게
+       * 하려면 경고 높이를 런타임에 재야 하는데(패널은
+       * `.region-results-grid` 기준 `top: 0` 절대 배치다), 그 기계장치가
+       * 얻는 것보다 크다.
+       *
+       * 여기서 잠그는 것은 **개수**다 — 옮기면서 패널 안에 한 벌을 남겨
+       * 두면 종이에 같은 경고가 두 번 나온다.
+       */
+      expect(container.querySelectorAll(".warning-list")).toHaveLength(1);
+      expect(budgetPanel(container).querySelector(".warning-list")).toBeNull();
+
+      await userEvent.click(trigger());
+      expect(budgetPanel(container)).toHaveClass("budget-panel--closed");
+      expect(container.querySelectorAll(".warning-list")).toHaveLength(1);
+    });
+
+    /**
+     * 경고가 0건이면 사이드바 맨 위에 **아무것도** 생기지 않는다 —
+     * 빈 상자도, 빈 여백도. `WarningList`가 빈 배열에서 `null`을
+     * 돌려주는 것에 기대는 자리라, 그 계약이 깨지면 여기서 잡힌다.
+     */
+    it("경고가 0건이면 사이드바 맨 위에 빈 자리를 만들지 않는다", async () => {
+      const { container } = await renderResults();
+
+      expect(container.querySelector(".warning-list")).toBeNull();
+      const sidebar = container.querySelector(".region-results-sidebar")!;
+      // 맨 위는 옮기기 전과 같은 요소다(목록 쪽 첫 요소).
+      expect(sidebar.firstElementChild).not.toBeNull();
+      expect(sidebar.firstElementChild!.className).not.toContain("warning");
+    });
+
+    /**
+     * 옮긴 뒤에도 경고가 나오는 **경로 집합이 그대로**여야 한다 — 늘어도
+     * 줄어도 안 된다. 그 자리는 여전히
+     * `affordability !== null && residentialProfile !== null` 게이트
+     * 안이므로, 프로필이 아직 안 끝났으면 경고도 없다.
+     *
+     * (예전에는 이 자리에서 투자 경로로 넘어가 경고가 사라지는지도
+     * 확인했다. 구매 유형 선택이 제거되면서 그 경로에 도달할 방법이
+     * 없어졌다.)
+     */
+    it("프로필이 안 끝났으면 경고도 없다 — 옮기기 전과 같은 게이트다", () => {
+      const { container } = render(<App />);
+      expect(container.querySelector(".result-shell")).toBeNull();
+      expect(container.querySelector(".warning-list")).toBeNull();
+    });
+  });
+
+  /**
+   * 사이드바가 목록 ↔ 상세로 전환되는 동안 면책이 어디에 서는가.
+   *
+   * 진단 종합이 제거되기 전에는 이 describe가 그 자리(상세 안)까지 함께
+   * 잠갔다. 남은 것은 면책이고, 그쪽이 원래 더 무거운 계약이다 —
+   * `disclaimer`는 MUST_SURVIVE_PRINT_CLASSES라 어느 화면에서 인쇄해도
+   * 정확히 한 벌이 종이에 남아야 한다.
+   */
+  describe("사이드바 전환과 면책의 자리", () => {
+    it("목록 화면에서도 면책은 사이드바 끝에 있다", async () => {
+      const { container } = await renderResults();
+      const sidebar = container.querySelector(".region-results-sidebar")!;
+
+      expect(sidebar.querySelector(".disclaimer")).not.toBeNull();
+      expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+    });
+
+    it("상세를 열고 목록으로 돌아가도 면책은 한 벌 그대로다", async () => {
+      const { container } = await renderResults();
+      await userEvent.click(screen.getByRole("button", { name: /현금단지/ }));
+      expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+
+      await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
+
+      expect(container.querySelector(".disclaimer")).not.toBeNull();
+      expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+    });
+
+    it("프로필이 안 끝난 폴백에도 면책은 그대로다", () => {
+      const { container } = render(<App />);
+      expect(container.querySelector(".result-shell")).toBeNull();
+      expect(container.querySelectorAll(".disclaimer")).toHaveLength(1);
+    });
   });
 });

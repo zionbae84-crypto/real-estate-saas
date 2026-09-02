@@ -1,23 +1,41 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { rules } from "../state/useAffordability";
-import { DEFAULT_FORM_STATE, type ProfileFormState } from "../state/useProfileForm";
+import {
+  ASSUMED_REMOVED_INPUTS,
+  DEFAULT_FORM_STATE,
+  type ProfileFormState,
+} from "../state/useProfileForm";
 import {
   buildPrintSummaryItems,
   formatPrintDate,
   PrintSummary,
+  type AreaBasis,
 } from "./PrintSummary";
+
+const THRESHOLD = rules.acquisitionTax.ruralTaxAreaThresholdSqm;
 
 const FIXED_STATE: ProfileFormState = {
   ...DEFAULT_FORM_STATE,
   cash: 300_000_000,
   annualIncome: 80_000_000,
-  isFirstTimeBuyer: true,
-  existingDebtAnnualPayment: 3_600_000,
+  // 화면 1의 실제 질문이라(사용자 지시) 이제 명시적으로 답해 둔다 —
+  // DEFAULT_FORM_STATE의 null(미답변)을 그대로 두면 "입력 안 함"이라는
+  // 별도 분기로 떨어져, 아래 대부분의 테스트가 표적으로 삼는 정상 경로를
+  // 가리지 못한다.
+  ownedHomeCount: 0,
+  isFirstTimeBuyer: false,
   isRegulatedArea: false,
-  exclusiveAreaSqm: 59,
-  touched: ["existingDebt", "regulatedArea", "area"],
+  touched: ["regulatedArea"],
 };
+
+const items = (
+  state: ProfileFormState = FIXED_STATE,
+  basis: AreaBasis = { source: "assumed" },
+) => buildPrintSummaryItems(state, basis, THRESHOLD);
+
+const valueOf = (label: string, ...args: Parameters<typeof items>) =>
+  items(...args).find((i) => i.label === label)?.value;
 
 describe("formatPrintDate", () => {
   it("Date를 '몇년 몇월 며칠' 문구로 바꾼다", () => {
@@ -30,12 +48,11 @@ describe("formatPrintDate", () => {
 });
 
 describe("buildPrintSummaryItems", () => {
-  it("일곱 전제(현금·소득·주택 수·생애최초·기존대출·규제지역·전용면적)를 모두 낸다", () => {
-    const items = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
-    const labels = items.map((i) => i.label);
-    expect(labels).toEqual([
-      "사용가능 현금 예산",
+  it("여덟 전제를 모두 낸다 — 물어본 셋과 가정한 넷, 그리고 전용면적", () => {
+    expect(items().map((i) => i.label)).toEqual([
+      "얼마 있어요(현금)",
       "연 소득(세전)",
+      "찾는 평형대",
       "주택 수",
       "생애최초 주택 구입",
       "기존 대출(연간 상환액)",
@@ -44,169 +61,193 @@ describe("buildPrintSummaryItems", () => {
     ]);
   });
 
-  /**
-   * 주택 수는 정책대출 자격을 가르는 전제다. 화면에서는 그 답이
-   * `.profile-form` 안에만 있고 그 폼은 인쇄에서 통째로 지워지므로,
-   * 종이를 건네받은 사람이 전제를 확인할 곳은 여기뿐이다.
-   */
-  describe("주택 수", () => {
-    function ownedHomeValue(state: typeof FIXED_STATE): string | undefined {
-      return buildPrintSummaryItems(state, 59, "touched").find(
-        (i) => i.label === "주택 수",
-      )?.value;
-    }
+  it("금액은 formatWon과 같은 표기로 나온다", () => {
+    expect(valueOf("얼마 있어요(현금)")).toContain("3억");
+  });
 
-    it("0채는 '무주택'이라고 적는다 — 숫자가 아니라 뜻으로 적는다", () => {
-      expect(ownedHomeValue({ ...FIXED_STATE, ownedHomeCount: 0 })).toBe(
+  /**
+   * ⚠ **아직 없앤 입력(기존 대출)은 종이에서도 가정임이 드러나야 한다.**
+   * 종이를 건네받은 사람은 화면을 보지 못했고, "(가정)"이 빠지면 그
+   * 사람은 이 숫자를 자기 사정이 반영된 값으로 읽는다.
+   */
+  describe("남은 가정값(기존 대출)", () => {
+    it("기존 대출이 '(가정)'을 달고 나온다", () => {
+      expect(valueOf("기존 대출(연간 상환액)")).toBe("없음 (가정)");
+    });
+
+    /**
+     * 값은 화면의 가정 문구(`AssumptionLine`)와 **같은 원본**에서 온다 —
+     * 종이와 화면이 두 말을 할 수 없어야 한다.
+     */
+    it("값은 폼 상태가 아니라 ASSUMED_REMOVED_INPUTS에서 온다", () => {
+      // 폼 상태에는 이 키가 아예 없다. 있었다면 여기서 흘러들었을 것이다.
+      expect(Object.keys(DEFAULT_FORM_STATE)).not.toContain(
+        "existingDebtAnnualPayment",
+      );
+      expect(ASSUMED_REMOVED_INPUTS.existingDebtAnnualPayment).toBe(0);
+    });
+  });
+
+  /**
+   * ⚠ **주택 수·생애최초는 더 이상 가정이 아니다.** 사용자 지시로
+   * 화면 1의 실제 질문이 됐으므로, "(가정)"을 달지 않고 폼 상태의 답을
+   * 그대로 적는다 — 값은 `ASSUMED_REMOVED_INPUTS`가 아니라
+   * `ProfileFormState`에서 온다.
+   */
+  describe("주택 수·생애최초 — 이제 사용자가 답한 값이다", () => {
+    it("무주택으로 답하면 '무주택'이라고만 적는다 — '(가정)'을 달지 않는다", () => {
+      expect(valueOf("주택 수", { ...FIXED_STATE, ownedHomeCount: 0 })).toBe(
         "무주택",
       );
     });
 
-    it("1채 이상은 몇 채인지 함께 적는다", () => {
-      expect(ownedHomeValue({ ...FIXED_STATE, ownedHomeCount: 1 })).toBe(
+    it("유주택으로 답하면 채수를 적는다", () => {
+      expect(valueOf("주택 수", { ...FIXED_STATE, ownedHomeCount: 1 })).toBe(
         "유주택 1채",
       );
-      expect(ownedHomeValue({ ...FIXED_STATE, ownedHomeCount: 3 })).toBe(
-        "유주택 3채",
-      );
     });
 
-    it("답하지 않았으면 값을 지어내지 않는다", () => {
-      // 실제로는 이 상태에서 계산이 시작되지 않아 인쇄물이 나올 수 없다.
-      // 그래도 무주택으로 대신 채우지 않는다 — 종이에 적힌 전제가
-      // 사용자가 답한 적 없는 값이면 그 종이 전체가 거짓말이 된다.
-      expect(ownedHomeValue({ ...FIXED_STATE, ownedHomeCount: null })).toBe(
-        "입력 안 함",
-      );
+    it("주택 수를 아직 안 답했으면(null) '입력 안 함'이다", () => {
+      expect(
+        valueOf("주택 수", { ...FIXED_STATE, ownedHomeCount: null }),
+      ).toBe("입력 안 함");
+    });
+
+    it("생애최초로 답하면 '예'라고만 적는다", () => {
+      expect(
+        valueOf("생애최초 주택 구입", {
+          ...FIXED_STATE,
+          isFirstTimeBuyer: true,
+        }),
+      ).toBe("예");
+    });
+
+    it("생애최초가 아니라고 답하면 '아니오'라고만 적는다", () => {
+      expect(
+        valueOf("생애최초 주택 구입", {
+          ...FIXED_STATE,
+          isFirstTimeBuyer: false,
+        }),
+      ).toBe("아니오");
     });
   });
 
-  it("금액은 formatWon과 같은 표기로 나온다", () => {
-    const items = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
-    const cash = items.find((i) => i.label === "사용가능 현금 예산");
-    expect(cash?.value).toContain("3억");
+  describe("찾는 평형대 — 이 종이의 목록이 전부인지 일부인지 말한다", () => {
+    it("전부 고르면 '전체'다", () => {
+      expect(valueOf("찾는 평형대")).toBe("전체");
+    });
+
+    it("일부만 고르면 구간과 범위를 함께 적는다", () => {
+      expect(
+        valueOf("찾는 평형대", { ...FIXED_STATE, areaBands: ["중소형"] }),
+      ).toBe("중소형(60~85㎡)");
+    });
   });
 
-  it("생애최초 여부는 예/아니오로 나온다", () => {
-    const trueItems = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
-    expect(
-      trueItems.find((i) => i.label === "생애최초 주택 구입")?.value,
-    ).toBe("예");
+  describe("규제지역 — 판정과 가정을 가른다", () => {
+    it("지역 조회가 판정했으면 '(지역 판정)'이다", () => {
+      expect(valueOf("규제지역 여부")).toBe("비규제지역 (지역 판정)");
+    });
 
-    const falseItems = buildPrintSummaryItems(
-      { ...FIXED_STATE, isFirstTimeBuyer: false },
-      59,
-      "touched",
-    );
-    expect(
-      falseItems.find((i) => i.label === "생애최초 주택 구입")?.value,
-    ).toBe("아니오");
+    it("판정이 없으면 '(가정)'이다", () => {
+      expect(
+        valueOf("규제지역 여부", { ...FIXED_STATE, touched: [] }),
+      ).toMatch(/\(가정\)$/);
+    });
   });
 
-  it("기존 대출이 없으면(null) 가정임을 밝힌다", () => {
-    const items = buildPrintSummaryItems(
-      { ...FIXED_STATE, existingDebtAnnualPayment: null },
-      59,
-      "touched",
-    );
-    expect(items.find((i) => i.label === "기존 대출(연간 상환액)")?.value).toMatch(
-      /가정/,
-    );
-  });
-
-  it("기존 대출을 사용자가 입력했으면 금액과 함께 직접 입력이라고 밝힌다", () => {
-    const items = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
-    const debt = items.find((i) => i.label === "기존 대출(연간 상환액)")?.value;
-    expect(debt).toMatch(/직접 입력/);
-    expect(debt).toContain("360");
-  });
-
-  it("규제지역을 사용자가 정했으면 '(가정)' 표시가 없다", () => {
-    const items = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
-    expect(items.find((i) => i.label === "규제지역 여부")?.value).not.toMatch(
-      /가정/,
-    );
-  });
-
-  it("규제지역이 가정 중이면 '(가정)' 표시가 있다", () => {
-    const items = buildPrintSummaryItems(
-      { ...FIXED_STATE, touched: [] },
-      59,
-      "assumed",
-    );
-    expect(items.find((i) => i.label === "규제지역 여부")?.value).toMatch(
-      /가정/,
-    );
-  });
-
-  describe("전용면적 표시는 areaSource에 따라 갈린다", () => {
-    it("assumed면 가정값이라고 밝힌다", () => {
-      const items = buildPrintSummaryItems(FIXED_STATE, 85, "assumed");
-      const area = items.find((i) => i.label === "전용면적")?.value;
-      expect(area).toContain("85");
+  describe("전용면적은 고른 평형대가 정한다 — 숫자를 지어내지 않는다", () => {
+    /**
+     * ⚠ **종이에 대표값 하나를 적지 않는다.** 헤드라인이 쓴 것은 면적
+     * 값이 아니라 "85㎡ 초과가 섞였는가"라는 전제 하나이고, 종이도 그
+     * 전제를 적어야 화면과 두 말을 하지 않는다.
+     */
+    it("85㎡ 초과가 섞였으면 '초과 기준 (가정)'이라고 적는다", () => {
+      const area = valueOf("전용면적", {
+        ...FIXED_STATE,
+        areaBands: ["중대형"],
+      });
+      expect(area).toMatch(new RegExp(`${THRESHOLD}㎡ 초과`));
       expect(area).toMatch(/가정/);
     });
 
-    it("touched면 직접 입력이라고 밝힌다", () => {
-      const items = buildPrintSummaryItems(FIXED_STATE, 59, "touched");
-      const area = items.find((i) => i.label === "전용면적")?.value;
-      expect(area).toMatch(/직접 입력/);
+    /**
+     * 고른 구간이 전부 85㎡ 이하이면 그건 가정이 아니라 **사실**이다 —
+     * 종이에 "(가정)"을 달면 읽는 사람이 확인된 것을 못 미더워하게 된다.
+     */
+    it("85㎡ 초과가 안 섞였으면 '이하'라고 적고 가정이라 하지 않는다", () => {
+      const area = valueOf("전용면적", {
+        ...FIXED_STATE,
+        areaBands: ["소형", "중소형"],
+      });
+      expect(area).toMatch(new RegExp(`${THRESHOLD}㎡ 이하`));
+      expect(area).not.toMatch(/가정/);
     });
 
-    it("selectedUnit이면 매물 기준이라고 밝히고, 가정·직접입력이라 하지 않는다", () => {
-      const items = buildPrintSummaryItems(FIXED_STATE, 72, "selectedUnit");
-      const area = items.find((i) => i.label === "전용면적")?.value;
+    /**
+     * ⚠ **하나도 안 골랐으면 기준이 없다.** 같은 종이에 "찾는 평형대 =
+     * 고르지 않음"이 찍히는데 그 아래에서 "85㎡ 이하 (고른 평형대가 전부
+     * 이 범위)"를 단언하면, 종이가 스스로 모순된다 — 고른 것이 없는데
+     * "전부 이 범위"라고 말한다.
+     *
+     * 도달 경로: 현금·소득 입력 → 평형대 고름 → 지역 조회 → "조건 다시
+     * 넣기" → 평형대 전부 해제 → Cmd+P. 화면은 이 상태를 맞게 다룬다
+     * ("하나 이상 골라 주세요"). 종이에서만 어긋났다.
+     */
+    it("평형대를 하나도 안 골랐으면 면적 기준을 단언하지 않는다", () => {
+      const area = valueOf("전용면적", { ...FIXED_STATE, areaBands: [] });
+      expect(area).not.toMatch(/이하/);
+      expect(area).not.toMatch(/초과/);
+      expect(area).toBe("기준 없음 (찾는 평형대를 고르지 않았어요)");
+    });
+
+    it("매물을 골랐으면 그 평형의 실제 면적을 적고, 가정이라 하지 않는다", () => {
+      const area = valueOf("전용면적", FIXED_STATE, {
+        source: "selectedUnit",
+        sqm: 72,
+      });
       expect(area).toContain("72");
       expect(area).toMatch(/매물/);
       expect(area).not.toMatch(/가정/);
-      expect(area).not.toMatch(/직접 입력/);
     });
   });
 });
 
 describe("PrintSummary", () => {
-  it("룰셋 기준(연·월)과 인쇄일을 함께 보여준다", () => {
+  const renderIt = () =>
     render(
       <PrintSummary
         state={FIXED_STATE}
-        effectiveAreaSqm={59}
-        areaSource="touched"
+        areaBasis={{ source: "assumed" }}
         rules={rules}
         now={() => new Date(2026, 7, 23)}
       />,
     );
+
+  it("룰셋 기준(연·월)과 인쇄일을 함께 보여준다", () => {
+    renderIt();
     expect(screen.getByText(/2026년 8월 규제 기준/)).toBeInTheDocument();
     expect(screen.getByText(/2026년 8월 23일/)).toBeInTheDocument();
   });
 
-  it("여섯 전제를 모두 화면(DOM)에 낸다", () => {
-    render(
-      <PrintSummary
-        state={FIXED_STATE}
-        effectiveAreaSqm={59}
-        areaSource="touched"
-        rules={rules}
-        now={() => new Date(2026, 7, 23)}
-      />,
-    );
-    expect(screen.getByText("사용가능 현금 예산")).toBeInTheDocument();
-    expect(screen.getByText("연 소득(세전)")).toBeInTheDocument();
-    expect(screen.getByText("생애최초 주택 구입")).toBeInTheDocument();
-    expect(screen.getByText("기존 대출(연간 상환액)")).toBeInTheDocument();
-    expect(screen.getByText("규제지역 여부")).toBeInTheDocument();
-    expect(screen.getByText("전용면적")).toBeInTheDocument();
+  it("여덟 전제를 모두 DOM에 낸다", () => {
+    renderIt();
+    for (const label of [
+      "얼마 있어요(현금)",
+      "연 소득(세전)",
+      "찾는 평형대",
+      "주택 수",
+      "생애최초 주택 구입",
+      "기존 대출(연간 상환액)",
+      "규제지역 여부",
+      "전용면적",
+    ]) {
+      expect(screen.getByText(label)).toBeInTheDocument();
+    }
   });
 
   it("루트 요소가 print-summary 클래스를 갖는다(인쇄 CSS와 연결점)", () => {
-    const { container } = render(
-      <PrintSummary
-        state={FIXED_STATE}
-        effectiveAreaSqm={59}
-        areaSource="touched"
-        rules={rules}
-        now={() => new Date(2026, 7, 23)}
-      />,
-    );
+    const { container } = renderIt();
     expect(container.querySelector(".print-summary")).not.toBeNull();
   });
 });

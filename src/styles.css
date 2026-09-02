@@ -4,22 +4,43 @@
    * src/seed-brand.css와 같다 — 명도 단계와 모드별 값이 이미 검증돼 있고,
    * 우리가 색을 두 벌 관리하지 않아도 된다.
    *
-   * 이름은 이 저장소에서 쓰던 것을 유지한다. 소비처가 여럿이라
-   * 이름까지 바꾸면 이번 변경의 범위가 불필요하게 넓어진다.
+   * 이름은 스펙(docs/superpowers/specs/2026-08-26-영상히어로-전체화면지도
+   * -design.md §1 "상태색")이 쓰는 이름(--safe/--warn/--risk)으로
+   * 맞췄다 — 예전 이름은 --safe/--caution/--danger였다(task-1에서
+   * --caution→--warn, --danger→--risk로 바꿨다. 소비처가 이 파일
+   * 안에만 있어 범위가 크지 않았다).
    *
-   * -contrast 단계를 쓴다. base(-fg-positive 등)는 흰 배경에서 본문
-   * 크기 글자 기준 4.5:1을 못 넘는 조합이 있었다(safe 3.96:1, caution
-   * 4.12:1, danger 3.76:1 — 실측, task-2-report.md 참고). -contrast는
-   * 같은 계열의 더 진한 단계이고 24px 굵은 배지 텍스트에서도 여전히
-   * 등급 셋이 서로 다른 색으로 보여 구분이 흐려지지 않는다.
+   * -contrast 단계를 쓴다. 스펙 §1의 "상태색" 원색(--safe #4c9d7a,
+   * --warn #c98a3c, --risk #c4574f)은 흰 배경 대비 각각 3.28:1 /
+   * 2.92:1 / 4.35:1(계산값)이라 셋 다 본문 크기 기준(4.5:1)에 못
+   * 미치고 --warn은 큰 굵은 글자 기준(3:1)에도 못 미친다 — 그런데 이
+   * 변수들은 이 파일 곳곳에서 본문 크기 텍스트에 쓰인다. 그래서 -contrast
+   * 단계(스펙이 "밝은 면 위 태그"로 제시한 진한 값, --risk는 표에
+   * 태그 짝이 없어 같은 방식으로 새로 골랐다 — 근거는
+   * src/seed-brand.css 주석과 task-1-report.md 참고)를 그대로
+   * 가리킨다. 흰 배경 대비 safe 7.88:1 / warn 8.29:1 / risk
+   * 8.39:1(계산값)로 본문 기준을 넉넉히 넘는다.
    */
   --safe: var(--seed-color-fg-positive-contrast);
-  --caution: var(--seed-color-fg-warning-contrast);
-  --danger: var(--seed-color-fg-critical-contrast);
+  --warn: var(--seed-color-fg-warning-contrast);
+  --risk: var(--seed-color-fg-critical-contrast);
   --border: var(--seed-color-stroke-neutral-weak);
   color-scheme: light;
 }
 
+/*
+ * **활자는 Pretendard 한 벌이다.** 여기가 그 유일한 선언이고, 제목
+ * (h1·h2)도 이것을 상속한다.
+ *
+ * 예전에는 바로 위에 `--font-serif`(나눔명조) 토큰이 있었고 `h1, h2`가
+ * 그것을 썼다(design.md §2 "제목: 명조체. 부동산·건축 쪽 문법"). 화면 1은
+ * 재스킨하면서 스코프 override로 이미 빠져나왔고, 남은 세 자리
+ * (전역 `h1, h2` · `.result-topbar-brand` · `.budget-panel-title`)를 두고
+ * 사용자가 상단바 스크린샷과 함께 **"pretendard로 모두 통일해줘"**라고
+ * 지시했다. 셋을 다 옮기고 나니 토큰을 쓰는 자리가 없어져, 토큰 정의와
+ * `@fontsource/nanum-myeongjo` 의존성(번들 약 440KB)까지 함께 걷어냈다.
+ * 그 통일을 `scripts/entry-screen-layout.test.ts`가 잠근다.
+ */
 body {
   margin: 0;
   font-family: "Pretendard", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
@@ -32,8 +53,12 @@ body {
  * 예산 계산 단계는 세로 1단이라 42rem이 읽기 좋은 줄 길이를 준다. 지역
  * 결과 화면은 사이드바(320px)+지도를 나란히 두는 그리드라 그보다 넓은
  * 자리가 필요하다 — `.app` 자체를 넓히고, 세로 1단이어야 하는 나머지
- * 직계 자식들에게는 아래 규칙으로 42rem을 개별적으로 되돌린다
+ * 자식들에게는 아래 규칙으로 42rem을 개별적으로 되돌린다
  * (`.region-results-grid`만 예외).
+ *
+ * `.app`의 직계 자식은 지금 `.entry-screen`과 `.results-screen` 둘뿐이고,
+ * 세로 1단으로 흐르는 내용은 전부 그 `.results-screen` 아래에 있다 —
+ * 그래서 아래 규칙이 두 줄이다.
  */
 .app {
   max-width: 72rem;
@@ -41,7 +66,41 @@ body {
   padding: 1.5rem 1rem 4rem;
 }
 
-.app > :not(.region-results-grid) {
+/*
+ * `.results-screen`은 화면 2 전체를 감싸는 **레이아웃 없는** 래퍼다 —
+ * `phase === "입력"` 동안 이 트리 전체를 `inert`로 만들기 위한 자리
+ * 하나가 필요했을 뿐이라(App.tsx의 해당 주석), `display: contents`로
+ * 자기 상자를 없애 아래 폭 규칙과 세로 흐름을 그대로 둔다. 대신 폭
+ * 규칙의 `>`가 한 단계 깊어지므로 같은 규칙을 이 래퍼 아래에도 건다.
+ */
+.results-screen {
+  display: contents;
+}
+
+/*
+ * `.entry-screen`을 이 폭 제한에서 뺀다(리뷰 밖에서 찾은 결함, 브라우저로
+ * 실측). 그 레이어는 `position: fixed; inset: 0`이면서 `.app`의 직계
+ * 자식이라 여기 `max-width: 42rem`을 그대로 받고 있었다 —
+ * `getComputedStyle(document.querySelector('.entry-screen')).maxWidth`가
+ * 실제로 `672px`였다. `left`/`right`가 함께 걸린 고정 요소는 과도제약이
+ * 되면 폭을 `max-width`에 맞추므로, "전체 화면 영상"(design.md §3)이 어떤
+ * 화면에서도 672px를 넘지 못하고 나머지 폭으로는 오버레이 뒤의 결과
+ * 화면이 비쳤다.
+ *
+ * 첫 줄에서 `.region-results-grid` 항은 뺐다(재검토 수정 Minor). 그
+ * 그리드는 `.results-screen`의 자식이지 `.app`의 직계 자식이 아니라
+ * (`.results-screen`의 `display: contents`는 상자만 없앨 뿐 선택자가 보는
+ * DOM 구조는 그대로다) 그 항은 아무것도 걸러내지 못하는 죽은 조건이었다.
+ * 예외가 필요한 자리는 아래 둘째 줄 하나뿐이다.
+ *
+ * 둘째 줄의 예외는 이제 `.result-shell`이다(Task 4). 그 셸은
+ * `position: fixed; inset: 0`이라 이 42rem 제한을 받으면 `left`/`right`가
+ * 함께 걸린 과도제약이 되어 폭이 672px로 눌린다 — `.entry-screen`이
+ * 정확히 그 이유로 첫 줄의 예외가 된 것과 같은 형태다. 전체화면 결과가
+ * 화면의 3분의 1만 덮고 나머지로 뒤가 비친다.
+ */
+.app > :not(.entry-screen),
+.results-screen > :not(.result-shell) {
   max-width: 42rem;
   margin-inline: auto;
 }
@@ -80,48 +139,97 @@ body {
 }
 
 /*
- * 주택 수 질문. 라디오 두 개(무주택·유주택)와, 유주택일 때만 나타나는
- * 숫자 입력 하나로 이뤄진다.
+ * 평형대 질문(화면 1의 네 번째 질문). 네이티브 체크박스 넷을 라벨로
+ * 감싼 칩이다 — SEED 체크박스를 재구현하지 않으면서 키보드 조작·포커스
+ * 순서·스크린 리더 노출을 브라우저에 맡긴다(AreaBandSelect.tsx 참고).
  *
- * 색으로 뜻을 전달하는 것이 하나도 없다 — 무엇을 골랐는지는 라디오
- * 자체와 글자가 말하고, 주택 수에 따라 무엇이 달라지는지는 힌트 문장이
- * 말한다. 흑백으로 인쇄되거나 색이 보이지 않아도 뜻이 그대로 남는다.
+ * 색으로 뜻을 전달하는 것이 하나도 없다 — 무엇을 골랐는지는 체크박스
+ * 자체와 글자가 말한다. 흑백으로 인쇄되거나 색이 보이지 않아도 뜻이
+ * 그대로 남는다.
  *
  * 인쇄에서는 .profile-form 전체가 지워지므로 이 질문도 함께 사라진다 —
- * 대신 고른 답이 PrintSummary에 평문 한 줄로 남는다.
+ * 대신 고른 답이 PrintSummary에 "찾는 평형대" 한 줄로 남는다.
  */
-.owned-home-field {
+.area-band-select {
   border: 1px solid var(--border);
   border-radius: 0.375rem;
   padding: 0.5rem 1rem 0.75rem;
   margin: 0;
 }
 
-.owned-home-field legend {
+.area-band-select legend {
   font-weight: 600;
   padding: 0 0.25rem;
 }
 
-.owned-home-options {
-  display: flex;
-  gap: 1.25rem;
+/*
+ * 3열 고정 — 구간이 셋이므로 **한 줄에 셋**이다.
+ *
+ * 예전에는 네 구간을 2×2로 뒀다(`auto-fit`이 폭에 따라 3+1로 갈리는
+ * 것을 막으려고 고정한 값이었다). 구간이 셋이 된 지금 2열을 그대로 두면
+ * 2+1이 되어 같은 병이 다시 난다 — 세 구간이 한 축의 눈금인데 둘과
+ * 하나로 갈려 보이면 그 축이 읽히지 않는다. 한 줄에 셋이면 좁은 쪽에서
+ * 넓은 쪽으로 가는 눈금이 그대로 보인다.
+ *
+ * 열 수는 구간 수를 따라간다. `AREA_BANDS`가 다시 움직이면 이 값도
+ * 함께 움직여야 하고, `AreaBandSelect.test.tsx`의 "칩 열 수는 구간
+ * 수와 같다"가 그 둘이 어긋나면 깨진다.
+ */
+.area-band-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
   margin-top: 0.5rem;
 }
 
 /*
- * .field label이 block·bold라 라디오 라벨까지 그 모양이 된다. 이
- * 자리에서는 라디오와 글자가 한 줄로 붙어야 하므로 되돌린다.
+ * 좁은 화면에서는 한 열로 세운다.
+ *
+ * 실측(브라우저 `getBoundingClientRect`, 뷰포트 375px에서 3열을 강제해
+ * 재 봤다): 칩 폭 103.7px, 그중 글자 자리 60.7px, 범위 라벨이 필요한
+ * 폭 54px — 잘리지는 않지만 "60㎡ 이하"가 **두 줄로 접혀** 칩 높이가
+ * 64.4px에서 85.2px로 뛴다. 한 열이면 칩 폭 327px에 라벨이 한 줄로
+ * 들어간다. 세로로 셋이어도 좁은 쪽에서 넓은 쪽으로 가는 눈금은 그대로
+ * 남는다 — 2+1로 갈리는 것과 달리 축이 깨지지 않는다.
  */
-.owned-home-field .owned-home-option {
+@media (max-width: 480px) {
+  .area-band-options {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+/*
+ * .field label이 block·bold라 칩 라벨까지 그 모양이 된다. 이 자리에서는
+ * 체크박스와 글자가 한 줄로 붙어야 하므로 되돌린다.
+ */
+.area-band-select .area-band-option {
   display: flex;
   align-items: center;
-  gap: 0.375rem;
+  gap: 0.5rem;
   font-weight: 400;
   cursor: pointer;
 }
 
-.owned-home-count {
-  margin-top: 0.75rem;
+/*
+ * DESIGN.md의 Stat Block 규율 — 라벨 작게 위, 값 크게 아래, 왼쪽 정렬.
+ * 여기서 라벨은 범위(`~60㎡`)이고 값은 구간 이름(`소형`)이다. DOM
+ * 순서는 이름 → 범위(접근성 이름이 "소형 ~60㎡"로 읽힌다)이고, 눈에
+ * 보이는 순서만 여기서 뒤집는다.
+ */
+.area-band-text {
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-start;
+}
+
+.area-band-name {
+  font-weight: 600;
+}
+
+.area-band-range {
+  /* .hint·.field-note와 같은 13px. caption류 크기를 하나로 유지한다 */
+  font-size: 0.8125rem;
+  color: var(--seed-color-fg-neutral-muted);
 }
 
 .hint {
@@ -135,116 +243,79 @@ body {
   margin: 0.25rem 0 0;
 }
 
-.affordable-price {
-  font-size: 2rem;
-  font-weight: 700;
-  margin: 0.25rem 0;
-  /*
-   * fg-brand(#3ba6f1)는 이 화면 배경(#fafaf9) 대비 2.54:1(흰 배경
-   * 기준 2.65:1)로 큰 글자 기준(3:1)에도 못 미친다 — 그래서 한 단계
-   * 진한 -contrast를 쓴다. 숫자는 계산값이며
-   * `scripts/seed-semantic-tokens.test.ts`가 같은 계산을 검사한다.
-   * (예전 주석은 브랜드색이 #5e98fe이던 시절의 2.84:1을 그대로
-   * 들고 있었다 — 결론은 같지만 근거가 실제 값이 아니었다.)
-   */
-  color: var(--seed-color-fg-brand-contrast);
-}
-
-.result-step--binding {
-  color: var(--seed-color-fg-neutral);
-  margin: 0 0 1rem;
-}
-
-.result-step--fold {
-  margin: 1rem 0;
-}
-
-.result-step--fold > summary {
-  cursor: pointer;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
 /*
- * SafeLine: 안전선을 최대 가격 옆에 "동등한 무게"로 둔다는 것이 이
- * 제품의 핵심 주장이다. 그래서 두 항목을 나란히(flex) 놓고, 같은
- * font-size·font-weight로 맞춘다 — 한쪽이 시각적으로 더 작거나 옅으면
- * "여기까지가 무리 없는 선"이라는 말이 힘을 잃는다.
- */
-.safe-line--split {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1.5rem;
-  margin: 0 0 1rem;
-}
-
-.safe-line-item {
-  display: flex;
-  flex-direction: column;
-  gap: 0.125rem;
-}
-
-.safe-line-label {
-  font-size: 0.8125rem;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
-.safe-line-amount {
-  font-size: 1.375rem;
-  font-weight: 700;
-}
-
-/*
- * 안전선(무리 없는 선)은 positive 계열로 배경·글자를 함께 입힌다 —
- * "이 가격까지는 무리 없다"는 판단을 색으로도 반복한다. 다만 이번
- * 작업은 색만 바꾸는 것이라 padding 등 여백은 그대로 둔다.
- */
-.safe-line-item--safe {
-  background: var(--seed-color-bg-positive-weak);
-}
-
-.safe-line-item--safe .safe-line-amount {
-  color: var(--safe);
-}
-
-/*
- * 리뷰 수정(Important 1): 이 값(affordablePrice)은 `.affordable-price`와
- * `PriceSlider`의 `.slider-price--max`가 이미 브랜드색으로 표시하는
- * 것과 같은 숫자다. 슬라이더가 처음엔 최댓값에 있으므로 색을 안 입히면
- * 한 화면에 같은 금액이 세 번(1단·SafeLine·슬라이더) 나타나는데 그중
- * 하나만 색이 다르게 된다. 더 나쁜 건 형제인 `.safe-line-item--safe`는
- * 색을 받는데 이쪽만 기본 검정으로 남으면, "안전선이 의미 있는 숫자고
- * 최대 가격은 장식"처럼 읽힌다는 점이다 — SafeLine이 두 숫자에 동등한
- * 무게를 준다는 컴포넌트 의도와 정반대다. 새 hex를 만들지 않고
- * `.affordable-price`·`.slider-price--max`와 같은 -contrast 토큰을
- * 그대로 재사용한다.
+ * ══════════════════════════════════════════════════════════════════
+ * 예산 상세 패널의 **카드**(사용자 지시)
+ * ══════════════════════════════════════════════════════════════════
  *
- * 대비는 계산값으로 #3398e1 기준 흰 배경(#ffffff) 3.13:1, 이 화면
- * 배경(#fafaf9) 2.99:1이다. 22px 굵게(1.375rem/700)는 WCAG의 큰 글자
- * (18.66px 이상 굵게)에 들어가 기준이 3:1인데, **이 배경에서는 그
- * 3:1을 아슬아슬하게 넘지 못한다.** 예전 주석의 "3.95:1"은 브랜드색이
- * 바뀌기 전(당근 계열) 값이 그대로 남은 것이라 근거로 쓸 수 없다.
- * 이 토큰을 쓰는 세 자리(`.affordable-price`·이 규칙·
- * `.slider-price--max`)는 모두 같은 상황이며, 색 체계를 다시 고를 때
- * 함께 처리해야 한다 — 여기서 한 자리만 바꾸면 같은 금액이 한 화면에
- * 세 번 나오면서 그중 하나만 색이 달라진다(위 문단이 막으려던 바로
- * 그 상태다). 본문 크기 글자에는 절대 쓰지 않는다(4.5:1에 한참
- * 못 미친다) — `scripts/seed-semantic-tokens.test.ts`가 그 경계를
- * 검사한다.
+ * 예전에는 대출 한도·부대비용·정책대출이 `<details>` 한 겹
+ * ("부대비용·정책대출·상세 설명 더 보기") 안에 함께 접혀 있었다. 사용자
+ * 지시로 그 겉껍질을 걷어내고 셋을 각자 카드로 세웠다 — 요점(부대비용
+ * 합계·대출 한도 금액)이 펼치지 않아도 보인다.
+ *
+ * ⚠ **`overflow`·`max-height`·`display: none`을 쓰지 않는다.** 이 카드들은
+ * 인쇄에도 그대로 나가는 자리이고(안에 `MUST_SURVIVE_PRINT_CLASSES`가
+ * 여럿 있다), 그 셋 중 하나라도 걸면 종이에서 내용이 잘리거나 사라진다 —
+ * `scripts/printCss.test.ts`가 `budget-panel`을 겨눈 선택자에 대해 잠그는
+ * 것과 같은 규율을 이름이 다른 이 카드에도 손으로 지킨다. 여기서 하는
+ * 것은 배경·테두리·여백뿐이다.
  */
-.safe-line-item--max .safe-line-amount {
-  color: var(--seed-color-fg-brand-contrast);
+.budget-result > .binding-explainer,
+.budget-result > .cost-breakdown,
+.budget-result > .policy-loan-list,
+.budget-panel > .price-slider {
+  margin: 0 0 0.75rem;
+  padding: 0.875rem 1rem;
+  background: var(--result-paper, #fff);
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 0.625rem;
 }
 
-.safe-line--none {
-  color: var(--danger);
-  margin: 0 0 1rem;
+/*
+ * 카드 안에서 마지막 요소의 아래 여백을 지운다 — 안 지우면 카드마다
+ * 바닥에 빈 줄이 하나씩 생겨 카드 높이가 내용과 무관하게 들쭉날쭉해진다.
+ */
+.budget-result > .binding-explainer > :last-child,
+.budget-result > .policy-loan-list > :last-child {
+  margin-bottom: 0;
 }
 
-.safe-line--merged {
-  background: var(--seed-color-bg-positive-weak);
-  color: var(--safe);
-  font-weight: 600;
-  margin: 0 0 1rem;
+/*
+ * 정책대출 카드의 제목. 다른 카드의 제목(부대비용·대출 한도의 summary)과
+ * 같은 크기로 맞춘다 — 카드 셋이 나란히 서는데 제목만 한 단 크면 그
+ * 카드가 더 중요한 것처럼 읽힌다.
+ */
+.budget-result > .policy-loan-list > h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.9375rem;
+}
+
+/*
+ * 부대비용·대출 한도 카드의 제목 줄("부대비용 850만 5,278원",
+ * "대출 한도 1억 2,836만원"). 카드 바깥 껍질(`<details className=
+ * "result-step--fold">`)이 사라지면서 이 summary가 카드의 제목이 됐다 —
+ * 두 카드가 같은 크기·굵기로 맞추고, 누를 수 있다는 것은 커서가 말한다.
+ *
+ * 단지 상세(`ComplexDetail.tsx`)는 `CostBreakdown`을 아예 쓰지 않고
+ * 자기만의 "상세보기" 아이콘 팝업(`.detail-binding`)을 그리므로 이
+ * 규칙에 닿지 않는다 — 선택자를 `.budget-result >`로 좁혀 둔 이유다.
+ *
+ * ⚠ 색은 **폴백 없는 `var()` 하나**로 적는다. `scripts/seed-semantic-tokens.test.ts`
+ * 의 대비 전수 검사는 `var(--a, --b)` 형태를 hex로 풀지 못해 "못 푸는 값"으로
+ * 걸린다 — 검사에서 빠지는 색을 만들지 않는다. 이 자리는 결과 셸 안이라
+ * `--result-ink`가 언제나 정의돼 있다(`.budget-panel-title`이 같은 방식이다).
+ */
+.budget-result > .cost-breakdown > summary,
+.budget-result > .binding-explainer > summary {
+  cursor: pointer;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  color: var(--result-ink);
+}
+
+.binding-total {
+  font-weight: 700;
+  margin-left: 0.375rem;
 }
 
 /*
@@ -253,21 +324,45 @@ body {
  */
 .warning-list {
   background: var(--seed-color-bg-critical-weak);
-  border-left: 4px solid var(--danger);
+  border-left: 4px solid var(--risk);
   padding: 0.75rem 1rem;
   list-style: none;
+  /*
+   * 아래 여백은 이 상자 **자신이** 든다. 예전에는 `BudgetResult` 안
+   * 첫 자식이라 바로 뒤에 오는 형제 요소의 `margin: 1rem 0`이 대신
+   * 벌려 줬는데, 이제 이 상자는 사이드바 맨
+   * 위(패널 밖)에 서고 그 뒤에 오는 것은 `.housing-type-select`
+   * (위쪽 여백이 없다)나 단지 상세다 — 남의 여백에 기대면 옮기자마자
+   * 붉은 경고 상자가 "매물 유형" 라벨에 그대로 들러붙는다.
+   */
+  margin: 0 0 1rem;
 }
 
 .safety-badge[data-level="safe"] .safety-level { color: var(--safe); }
-.safety-badge[data-level="caution"] .safety-level { color: var(--caution); }
-.safety-badge[data-level="danger"] .safety-level { color: var(--danger); }
+.safety-badge[data-level="caution"] .safety-level { color: var(--warn); }
+.safety-badge[data-level="danger"] .safety-level { color: var(--risk); }
 /*
  * 우리 숫자가 이 집의 매달 부담을 다 담지 못할 때의 등급. **--safe를
  * 쓰지 않는다** — 이 등급이 존재하는 이유가 "안전"이라고 말하지 않기
  * 위해서인데 색이 그 말을 되돌려 주면 소용이 없다(색이 글자보다 먼저
  * 읽힌다). LandLeaseNote와 같은 계열로 둔다.
  */
-.safety-badge[data-level="unverified"] .safety-level { color: var(--caution); }
+.safety-badge[data-level="unverified"] .safety-level { color: var(--warn); }
+
+/*
+ * `ComplexDetail`의 "매달 나가는 돈" 머리(`.detail-monthly-header`)는
+ * `SafetyBadge`를 쓰지 않고 `.safety-level`을 직접 그린다(사용자 지시로
+ * 오른쪽 상단에 두기 위해 배치를 다시 짰다 — 위 `.detail-monthly-header`
+ * 규칙 참고). 그 자리에는 `data-level`을 얹을 `.safety-badge` 조상이
+ * 없으므로, **원소 자신**에 `data-level`을 받아 같은 색을 낸다. 위
+ * `.safety-badge[data-level] .safety-level` 규칙과 겹치는 자리가 아니다
+ * — `SafetyBadge.tsx`는 언제나 `data-level`을 조상(`section`)에만
+ * 얹지 `.safety-level` 자신에는 얹지 않는다.
+ */
+.safety-level[data-level="safe"] { color: var(--safe); }
+.safety-level[data-level="caution"] { color: var(--warn); }
+.safety-level[data-level="danger"] { color: var(--risk); }
+.safety-level[data-level="unverified"] { color: var(--warn); }
 
 /*
  * 등급이 왜 거기서 멈췄는지. 등급 글자 바로 아래에 붙고, 뜻은 이
@@ -298,17 +393,42 @@ body {
   margin: 0;
 }
 
-.slider-price {
-  font-size: 1.5rem;
-  font-weight: 700;
-  margin: 0.25rem 0;
+/*
+ * 단지 상세 "매달 나가는 돈" 블록의 머리(사용자 지시: "안전을 오른쪽
+ * 상단 빈공간으로 이동하고 줄을 올려줘"). 예전에는 `SafetyBadge`를
+ * 그대로 써서 라벨 두 줄(제목·"이 가격에 샀을 때예요") 아래에 등급
+ * 낱말이 세 번째 줄로 붙었다 — 카드 오른쪽이 통째로 비어 있는 채였다.
+ *
+ * 이제 왼쪽에 제목 두 줄, 오른쪽에 등급 하나를 **같은 줄**에 둔다.
+ * `ComplexDetail.tsx`가 `SafetyBadge` 대신 `burdenGrade`로 직접 그린
+ * `.safety-level`(같은 클래스, 같은 색 규칙)을 이 컨테이너의 형제로
+ * 넣는다.
+ */
+.detail-monthly-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
 }
 
 /*
- * 리뷰 수정(색 일관성): 슬라이더가 최대값에 있을 때 이 숫자는
- * `.affordable-price`가 보여준 것과 같은 "실구매 가능 가격" 데이터다.
- * 같은 의미이므로 같은 브랜드 색을 반복한다(hex 새로 만들지 않고
- * 같은 -contrast 토큰을 그대로 재사용). 슬라이더를 내려 값이 최대치가
+ * 사용자 지시: "글씨 크기는 사이드바의 다른 글씨들과 균형을 맞춰줘".
+ * 예전에는 1.5rem(상단바의 실구매 가능 가격보다도 컸다)이었다 — 이
+ * 카드가 슬라이더+부담 표로 합쳐지며 다른 카드들의 제목 크기
+ * (`.cost-breakdown summary`·`.binding-explainer summary`, 0.9375rem)와
+ * 맞춘다.
+ */
+.slider-price {
+  font-size: 0.9375rem;
+  font-weight: 700;
+  margin: 0 0 0.25rem;
+}
+
+/*
+ * 리뷰 수정(색 일관성): 슬라이더가 최대값에 있을 때 이 숫자는 상단바가
+ * 이미 보여준 것과 같은 "실구매 가능 가격" 데이터다. 같은 의미이므로
+ * 같은 브랜드 색을 반복한다(hex 새로 만들지 않고 같은 -contrast 토큰을
+ * 그대로 재사용). 슬라이더를 내려 값이 최대치가
  * 아니게 되면 임의로 탐색 중인 값일 뿐 더는 그 데이터가 아니므로
  * 기본색으로 되돌린다. 이 조건(price === max)은 바로 아래
  * `.slider-warning` 문구와 같은 조건이라 색만으로 의미를 전달하지
@@ -319,8 +439,141 @@ body {
 }
 
 .slider-warning {
-  color: var(--caution);
+  color: var(--warn);
   font-size: 0.875rem;
+}
+
+/*
+ * 슬라이더를 실구매 가능 가격 **위로** 올렸을 때의 경고(사용자 지시로
+ * 눈금 상한이 그 위까지 열렸다 — `useAffordability`의 `sliderMax`).
+ *
+ * ⚠ **한계 경고(`.slider-warning`)보다 무겁게 칠한다.** 이 두 문장은
+ * 같은 자리에서 갈리는데, 뜻의 무게가 다르다: 한계 경고는 "여기가
+ * 최대"라는 안내이고 이쪽은 **"지금 현금으로는 못 산다"는 사실**이다.
+ * 같은 노랑으로 두면 슬라이더를 끝까지 민 사람이 두 상태를 같은
+ * 강도로 읽는다.
+ *
+ * `--risk` 계열을 쓰는 이유는 `WarningList`와 같다 — 그냥 지나치면 안
+ * 되는 항목이다. 색만으로 말하지는 않는다: 문장 자체가 "살 수 없어요"와
+ * 모자란 금액을 이미 글자로 적는다.
+ */
+.slider-warning--over {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  background: var(--seed-color-bg-critical-weak);
+  border-left: 3px solid var(--risk);
+  border-radius: 0.25rem;
+  color: var(--risk);
+}
+
+/* 모자란 금액. 문장 안에서 이 숫자가 사람이 실제로 찾는 값이다. */
+.slider-shortfall {
+  font-weight: 700;
+}
+
+/*
+ * 사용자 지시로 이 슬라이더 카드와 옛 `SafetyBadge` 카드를 하나로
+ * 합쳤다. 슬라이더 위쪽 요소와 구분하는 여백만 준다 — 카드 테두리·배경은
+ * 이미 `.price-slider` 자신이(공용 카드 규칙) 지고 있어 여기서 다시
+ * 그리지 않는다.
+ */
+.price-slider-burden {
+  margin: 0.75rem 0 0;
+}
+
+/*
+ * "이 가격으로 샀을 때 최대로 빌린다면" — 아래 표가 **무엇을 가정한
+ * 계산인지** 항상 밝힌다(사용자 지시). 예전에는 단지를 고를 때만
+ * 붙었는데, 메인 예산 패널에서는 라벨이 없어 이 표가 "실제로 사면
+ * 이렇게 된다"처럼 읽혔다.
+ */
+.price-slider-burden-label {
+  margin: 0 0 0.375rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
+ * 표 관행은 `.cost-breakdown-table`·`.binding-limit-table`과 같다(라벨
+ * 왼쪽, 금액 오른쪽, tabular-nums, 줄마다 옅은 구분선) — 사용자 지시:
+ * "위에 다른내용 처럼 표 형식으로... 다른 내용의 형식과 균형을
+ * 맞춰줘".
+ */
+.price-slider-burden-table {
+  margin: 0;
+}
+
+.price-slider-burden-table > div {
+  --burden-amount-col: 7rem;
+  --burden-col-gap: 0.75rem;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(var(--burden-amount-col), max-content);
+  align-items: baseline;
+  column-gap: var(--burden-col-gap);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.price-slider-burden-table > div:last-child {
+  border-bottom: none;
+}
+
+.price-slider-burden-table dt {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.price-slider-burden-table dt label {
+  font-weight: inherit;
+}
+
+.price-slider-burden-table dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+/* 항목 아래 붙는 고지. `.cost-breakdown-table dt .hint`와 같은 요령으로 줄 전체 폭을 쓴다. */
+.price-slider-burden-table dt .hint {
+  display: block;
+  width: calc(100% + var(--burden-amount-col) + var(--burden-col-gap));
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+.price-slider-grade[data-level="safe"] { color: var(--safe); }
+.price-slider-grade[data-level="caution"] { color: var(--warn); }
+.price-slider-grade[data-level="danger"] { color: var(--risk); }
+/* SafetyBadge의 같은 등급과 같은 이유로 --safe를 쓰지 않는다 — "안전"이라고 말하지 않기 위해 존재하는 등급이다. */
+.price-slider-grade[data-level="unverified"] { color: var(--warn); }
+
+/*
+ * 적용 금리 입력. `dd`가 오른쪽 정렬인 표 관행 안에서 입력란+단위를
+ * 나란히 붙인다. 종이에서는 이 입력란 자체를 지운다
+ * (`src/print/hiddenInPrint.ts`의 `.price-slider-rate-input`) — 실제로
+ * 쓰인 금리는 바로 위 `.hint`가 평문으로 다시 적는다.
+ */
+.price-slider-rate-input {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.price-slider-rate-input input {
+  width: 4rem;
+  padding: 0.25rem 0.375rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 0.25rem;
 }
 
 .prompt {
@@ -328,52 +581,98 @@ body {
   margin: 1.5rem 0;
 }
 
-.binding-explainer {
-  margin: 1rem 0;
-  padding: 1rem;
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
+/*
+ * 예전에는 여기 `.binding-explainer`가 자기 상자(margin·padding·border·
+ * radius)를 직접 그렸다. 이 컴포넌트가 예산 상세 패널의 **대출 한도
+ * 카드**가 되면서 그 상자는 위 공용 카드 규칙
+ * (`.budget-result > .binding-explainer`)이 진다 — 같은 상자를 두 자리에
+ * 적어 두면 한쪽만 바뀌는 날 카드 하나만 다른 테두리를 갖는다.
+ */
+
+/*
+ * 대출 한도 네 가지 표(사용자 지시: "표로 정리해서 4가지 한도중 결정된
+ * 것 표시"). `.cost-breakdown-table`과 같은 표 관행(라벨 왼쪽, 금액 오른쪽,
+ * tabular-nums)을 따른다.
+ */
+.binding-limit-table {
+  margin: 0.75rem 0 0;
+}
+
+.binding-limit-table > div {
+  /* `.cost-breakdown-table > div`와 같은 이름의 변수를 같은 목적으로 쓴다 — 힌트 줄이 이 칸 너비를 다시 계산할 때 쓴다(아래 `.binding-limit-table dt .hint`). */
+  --binding-amount-col: 7rem;
+  --binding-col-gap: 0.75rem;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(var(--binding-amount-col), max-content);
+  align-items: baseline;
+  column-gap: var(--binding-col-gap);
+  padding: 0.375rem 0.375rem;
+  border-radius: 0.25rem;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.binding-limit-table > div:last-child {
+  border-bottom: none;
+}
+
+.binding-limit-table dt {
+  font-size: 0.875rem;
 }
 
 /*
- * 리뷰 수정(Minor 5): 라벨 없이 숫자만 두면 접힌 4단 안에서 바로 위
- * CostBreakdown의 부대비용 금액과 나란히 놓여 구분이 안 된다.
+ * LTV 기준에 대한 간단 언급(사용자 지시) — `.cost-breakdown-table dt .hint`와
+ * 같은 자리·같은 역할이다. LTV 행에만 붙는다: 대부분의 실거주 구매자를
+ * 실제로 묶는 제약이라 이 표에서 유일하게 "왜 이 숫자인지"를 짧게라도
+ * 밝힐 필요가 있다.
+ *
+ * **줄 전체 폭을 쓴다**(사용자 지시: "설명을 숫자 아래부분까지 이어서
+ * 적어줘") — `dt` 칸(`minmax(0,1fr)`)에 가두면 오른쪽 금액 칸만큼
+ * 폭을 못 쓰고 좁게 줄바꿈한다. `.cost-breakdown-table dt .hint`와 같은
+ * 요령으로, 금액 칸 폭과 칸 사이 간격만큼을 되찾는다.
  */
-.binding-amount-label {
+.binding-limit-table dt .hint {
   display: block;
-  font-size: 0.8125rem;
+  width: calc(100% + var(--binding-amount-col) + var(--binding-col-gap));
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  font-weight: 400;
   color: var(--seed-color-fg-neutral-muted);
 }
 
 /*
- * 여유(runner-up)와 동률 재걸림(runner-up-tied)은 서로 반대 의미다 —
- * 하나는 "이 조언을 따르면 한도가 늘어난다", 다른 하나는 "따라도 같은
- * 금액에서 다시 걸려 늘어나지 않는다". 지금까지 둘 다 룰이 없어 같은
- * 민무늬 텍스트로 렌더링돼 의미 차이가 화면에 보이지 않았다.
+ * ⚠ **`font-size`를 명시한다**(사용자 지시: "팝업의 금액부분의 크기를
+ * 줄여서 다른 크기와 균형을 맞춰줘 — 볼드체로"). 예전에는 크기를
+ * 정하지 않아 조상(팝업이 뜬 자리에 따라 달라지는 앰비언트 크기)을
+ * 그대로 물려받았고, 특히 한도 결정 내역 팝업 안에서는 라벨(`dt`,
+ * 0.875rem)보다 눈에 띄게 커 보였다(브라우저로 실측). 라벨과 같은
+ * 크기로 맞추되 **굵기는 그대로 둔다** — 사용자 지시대로 금액은
+ * 여전히 볼드체다.
  */
-.runner-up,
-.runner-up-tied {
-  margin: 0.75rem 0 0;
-  padding: 0.5rem 0.75rem;
-  border-radius: 0.25rem;
-  font-size: 0.9375rem;
+.binding-limit-table dd {
+  margin: 0;
+  font-size: 0.875rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
-.runner-up {
-  background: var(--seed-color-bg-positive-weak);
-  border-left: 3px solid var(--safe);
+/* 결정된(binding) 한도 — 네 줄 중 어느 것이 실제로 상한을 정했는지 표에서 바로 짚는다. */
+.binding-limit-table > div[data-active="true"] {
+  background: var(--seed-color-bg-neutral-weak);
 }
 
-.runner-up-tied {
-  background: var(--seed-color-bg-warning-weak);
-  border-left: 3px solid var(--caution);
+.binding-limit-table > div[data-active="true"] dt,
+.binding-limit-table > div[data-active="true"] dd {
+  font-weight: 700;
 }
 
 .no-budget {
   margin: 1rem 0;
   padding: 1rem;
   background: var(--seed-color-bg-critical-weak);
-  border-left: 4px solid var(--danger);
+  border-left: 4px solid var(--risk);
   border-radius: 0.25rem;
 }
 
@@ -381,7 +680,7 @@ body {
   margin: 1rem 0;
   padding: 1rem;
   background: var(--seed-color-bg-critical-weak);
-  border: 1px solid var(--danger);
+  border: 1px solid var(--risk);
   border-radius: 0.375rem;
 }
 
@@ -428,73 +727,6 @@ body {
 }
 
 /*
- * AssumptionLine: 숨긴 가정을 결과 옆에 문장으로 드러내고, 각 항목을
- * 눌러서 고칠 수 있게 한다. 목록이지만 시각적으로는 안내 카드처럼
- * 보이게 한다 — 사용자에게 중요한 것은 "항목 목록"이 아니라 "이 조건은
- * 내가 정하지 않았다"는 사실이다.
- */
-.assumption-line {
-  display: grid;
-  gap: 0.5rem;
-  margin: 1rem 0;
-  padding: 0;
-  list-style: none;
-}
-
-.assumption-item {
-  display: block;
-  width: 100%;
-  text-align: left;
-  padding: 0.625rem 0.875rem;
-  background: var(--seed-color-bg-neutral-weak);
-  border: 1px dashed var(--border);
-  border-radius: 0.375rem;
-  font: inherit;
-  color: inherit;
-  cursor: pointer;
-}
-
-.assumption-item:hover {
-  /*
-   * bg-neutral-weak(#f5f4f3)와 같은 토큰으로 두면 호버 구분이 사라진다
-   * (task-5-brief.md 참고). 팔레트에 없던 "pressed" 단계를 seed-brand.css에
-   * 새로 추가해 이 자리에서만 쓴다.
-   */
-  background: var(--seed-color-bg-neutral-weak-pressed);
-}
-
-/*
- * 가정 문구 셋 중 기존 부채만 고치면 숫자가 "내려갈" 수 있다 — 나머지
- * 둘(규제지역·전용면적)은 고치면 오히려 올라갈 수 있는 중립 가정이다.
- * 그 방향 차이를 warning 계열로만 드러낸다. 셋 다 노랗게 칠하면 이
- * 구분이 사라지므로, data-field로 기존 부채 항목만 짚어 색을 입힌다.
- */
-.assumption-item[data-field="existingDebt"] {
-  background: var(--seed-color-bg-warning-weak);
-  border-color: var(--caution);
-}
-
-.assumption-item[data-field="existingDebt"]:hover {
-  background: var(--seed-color-bg-warning-weak-pressed);
-}
-
-/*
- * assumption-notice: 눌러도 아무 일도 없는 순수 정보 문구(옛 갈아타기
- * 정보가 조용히 버려졌다는 알림 등)다. .assumption-item과 같은 카드
- * 자리를 차지하지만, 대시 테두리(=눌러서 고칠 수 있다는 신호)를 빼서
- * 버튼이 아니라는 사실을 시각적으로도 정직하게 드러낸다. 룰이 없으면
- * 맨 텍스트로 렌더링돼 같은 목록 안의 버튼 항목들과 위계가 어긋난다.
- */
-.assumption-notice {
-  margin: 0;
-  padding: 0.625rem 0.875rem;
-  background: var(--seed-color-bg-neutral-weak);
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
-/*
  * 모션은 상태가 바뀔 때만 쓴다. 가만히 있는 것은 움직이지 않는다.
  *
  * 값은 SEED 토큰을 쓴다 — 직접 정하면 이 저장소만의 감각이 되고,
@@ -509,18 +741,10 @@ body {
  * - .safety-level: SafetyBadge의 data-level 속성이 바뀔 때(같은 <p>가
  *   유지된 채 색만 safe/caution/danger로 갈린다) — 이 태스크가 고치려는
  *   "등급이 바뀔 때 색이 튀는" 지점 그 자체다.
- * - .safe-line: SafeLine이 안전선 없음(--none)에서 안전선=최대가
- *   병합(--merged)으로 바뀔 때 둘 다 <p>라 같은 노드를 재사용한다(색이
- *   danger에서 safe로, 배경이 없음에서 positive-weak로 바뀐다). --split은
- *   <div>라 이 두 상태와는 다른 노드로 갈리지만, 셀렉터 자체는 안전하다.
- * - .assumption-item: hover 시 배경이 바뀐다(존재 가정 항목은 warning
- *   계열 hover 배경도 별도로 있다).
  * - .slider-price: 슬라이더가 최댓값에 닿으면 같은 <p>에 --max 클래스가
  *   붙어 브랜드색으로 바뀐다(값을 다시 내리면 원래 색으로 돌아간다).
  */
 .safety-level,
-.safe-line,
-.assumption-item,
 .slider-price {
   transition:
     color var(--seed-duration-color-transition) var(--seed-timing-function-easing),
@@ -576,6 +800,40 @@ body {
 }
 
 /*
+ * 매물 유형·행정동 좁히기 그룹과 그 아래 단지 목록을 가르는 연한
+ * 구분선. 아래 두 select 자체를 작게 줄인 것과 짝을 이룬다 — "이건
+ * 조회 조건, 저 아래부터는 결과"라는 위계가 지금은 글자 크기만으로
+ * 약하게 전달되고 있어 선을 더한다. `--result-rule`은 이 사이드바
+ * (`.region-results-sidebar`)가 이미 자기 오른쪽 경계선과
+ * `.field select` 테두리에 쓰는 바로 그 연한 톤이라 새 토큰을 만들지
+ * 않고 재사용한다. `var(--border)` 폴백은 같은 구역의 다른
+ * 규칙들(예: 1215·1292·1473행)과 같은 패턴이다.
+ */
+.complex-filters {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+/*
+ * 매물 유형·행정동 좁히기는 "조회 조건"이지 이 목록의 핵심 값이
+ * 아니다 — 아래 단지 목록(이름·가격)보다 눈에 덜 띄어야 위계가 선다.
+ * 라벨은 `.hint`·`.area-band-range`와 같은 캡션 크기(13px)로,
+ * select 상자는 패딩·글자 크기를 한 단 줄인다. `.field select`(전역
+ * 1rem/0.5rem)보다 이 규칙이 아래에 있어 특정도가 같아도 이긴다.
+ */
+.housing-type-select label,
+.dong-narrow label {
+  font-size: 0.8125rem;
+}
+
+.housing-type-select select,
+.dong-narrow select {
+  padding: 0.3125rem 0.5rem;
+  font-size: 0.875rem;
+}
+
+/*
  * 오피스텔 실거래가 데이터를 아직 연동하지 않아 늘 "아파트"로 고정된
  * placeholder select다(App.tsx 참고) — 비활성 상태임이 겉모양으로도
  * 분명해야 사용자가 고장 난 컨트롤로 오인하지 않는다.
@@ -587,18 +845,37 @@ body {
 }
 
 /*
- * 조회 실패·결과 0건 안내. 셋 다 목록 자리를 대신 채우는 문구다.
- * `.dong-empty`는 지역 전체가 아니라 좁힌 행정동 하나에 결과가
- * 없다는 안내다(`.region-empty`와 원인이 다르다 — App.tsx 참고).
+ * 조회 실패·결과 0건 안내. 넷 다 목록 자리를 대신 채우는 문구다.
+ * **원인이 각각 다르므로 문구도 각각 다르다**(App.tsx 참고):
+ * `.region-empty`는 이 지역에 거래 자체가 없다는 것,
+ * `.area-band-empty`는 고른 평형대에 매물이 없다는 것,
+ * `.dong-empty`는 좁힌 행정동 하나에 결과가 없다는 것이다. 넓혀야 할
+ * 축이 각각 지역·평형대·동으로 다르므로 섞으면 틀린 해법을 준다.
  */
 .region-query-error,
 .region-empty,
+.area-band-empty,
 .dong-empty {
   margin-top: 1rem;
 }
 
 .complex-list {
-  margin-top: 2rem;
+  margin-top: 0;
+}
+
+/*
+ * 사이드바 머리(prototype-results.html의 `.sideHead h2`). 카드 안 활자를
+ * 줄인 것과 같은 이유로 제목도 15px이다 — 298px 열에서 그보다 크면
+ * 두 줄로 접힌다. 좌우 8px은 카드의 24px 반경 안쪽 글자와 세로선을
+ * 맞추기 위한 값이다.
+ */
+.complex-list > h2 {
+  margin: 4px 0 12px;
+  padding: 0 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  color: var(--result-ink);
 }
 
 /*
@@ -606,8 +883,11 @@ body {
  * 자체가 "무리 없이" / "부담이 커요"를 이미 말하고, 색은 그것을 반복한다.
  */
 .complex-group {
-  margin: 1rem 0 0.5rem;
-  font-size: 0.9375rem;
+  margin: 14px 0 6px;
+  padding: 0 8px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
 }
 
 .complex-group--safe {
@@ -615,7 +895,7 @@ body {
 }
 
 .complex-group--beyond {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 /*
@@ -624,7 +904,7 @@ body {
  * 넣지 않기 위해서인데, 색이 그 말을 되돌려 주면 헤더 문구가 무력해진다.
  */
 .complex-group--unverified {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 .complex-rows {
@@ -634,19 +914,58 @@ body {
 }
 
 /*
- * 320px 사이드바 폭에서 각 행에 카드 표면을 준다(Seline 톤) — 예전
- * `border-top` 구분선 대신 카드 하나하나가 자기 테두리를 가진다.
+ * 카드(prototype-results.html의 `.row`) — DESIGN.md의 24px 반경 +
+ * 헤어라인 + 얕은 그림자.
+ *
+ * ⚠ **테두리와 그림자를 함께 가진다.** 사이드바가 흰색이 되면서
+ * (사용자 지시 ③) 흰 카드가 바탕에 묻히는데, DESIGN.md는 "그림자만으로는
+ * 카드 가장자리가 서지 않는다"고 못박는다. 프로토타입 머리주석이 같은
+ * 이유를 적어 두었고, `scripts/result-screen-layout.test.ts`가 둘이 함께
+ * 있는지 검사한다.
+ *
+ * ⚠ **높이 상한도 `overflow`도 걸지 않는다.** 이 카드는 목업보다 정보가
+ * 많다 — 준공년·월 상환액·부담률·등급 글자·**등급이 멈춘 이유**
+ * (`.complex-grade-note`)·**토지임대부 표시**(`.land-lease-note`)가 붙고,
+ * 뒤 둘은 `MUST_SURVIVE_PRINT_CLASSES`다. 상자에 가두면 화면에서 잘리고,
+ * 그러면 "확인 필요"만 읽고 무엇이 부족한지 모른 채 지나간다.
  */
 .complex-row {
-  background: var(--seed-color-bg-layer-floating);
-  border: 1px solid var(--border);
-  border-radius: 0.5rem;
-  padding: 0.75rem;
-  margin-bottom: 0.5rem;
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 24px;
+  box-shadow:
+    0 1px 2px rgb(18 41 77 / 5%),
+    0 1px 3px rgb(18 41 77 / 6%);
+  padding: 13px 16px 14px;
+  margin-bottom: 8px;
+  transition:
+    border-color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    box-shadow var(--seed-duration-d3) var(--seed-timing-function-easing);
 }
 
 .complex-rows > .complex-row:last-child {
   margin-bottom: 0;
+}
+
+.complex-row:hover {
+  background: #fbfdff;
+  border-color: var(--result-signal);
+}
+
+/*
+ * 지도에서 고른 단지의 행. 채움색이 아니라 **테두리 + 옅은 바탕**으로
+ * 표시한다 — 그 위에 앉는 가장 옅은 글자(`--result-gray`)가 이 바탕에서
+ * 4.98:1이다(seed-semantic-tokens.test.ts가 계산으로 못박는다).
+ *
+ * `:hover` 짝을 함께 적는다. 위 `.complex-row:hover`가 (0,2,0)으로 이
+ * 규칙(0,1,0)보다 특정도가 높아, 고른 카드에 마우스를 얹으면 표시가
+ * 사라져 버린다.
+ */
+.complex-row--focused,
+.complex-row--focused:hover {
+  border-color: var(--result-signal);
+  box-shadow: 0 0 0 1px var(--result-signal);
+  background: var(--result-signal-wash);
 }
 
 /*
@@ -658,47 +977,84 @@ body {
 .complex-row .complex-name,
 .complex-row .complex-range,
 .complex-row .complex-burden {
+  /*
+   * `margin`은 여기서 주지 않는다 — 이 선택자는 (0,2,0)이라 아래 각
+   * 줄의 자기 규칙(0,1,0)을 이겨, 여기서 여백을 정하면 프로토타입의
+   * 줄 간격(6px·3px·9px)이 조용히 0이 된다.
+   */
   display: block;
-  margin: 0.15rem 0;
 }
 
 /*
- * 320px 사이드바 폭에서 기본 본문 크기(1rem)는 두 줄에 걸치기
- * 쉽다 — 이름·가격 줄을 한 단계 줄인다. 부가 정보(준공년·거래건수)는
- * `white-space`를 따로 건드리지 않는다 — span은 원래 `white-space:
- * normal`이라 좁은 폭에서 이미 자연스럽게 줄바꿈된다.
+ * 카드 안 활자(사용자 지시 ①: "카드 안 글자를 줄일 것"). 298px 열에서
+ * 기본 본문 크기(1rem)는 두 줄에 걸치기 쉽다.
+ *
+ * 이름 줄은 프로토타입의 `.nm`과 같은 구조다 — 단지 이름(`<strong>`)만
+ * 진하고, 그 뒤 면적·법정동은 한 단계 물러난 보조색이다. 부가 정보의
+ * `white-space`는 따로 건드리지 않는다 — span은 원래 `normal`이라 좁은
+ * 폭에서 이미 자연스럽게 줄바꿈된다.
  */
 .complex-name {
-  font-size: 0.9375rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  letter-spacing: -0.012em;
+  color: var(--result-gray);
 }
 
-.complex-range {
-  font-size: 0.9375rem;
+.complex-name strong {
   font-weight: 600;
+  color: var(--result-ink);
 }
 
-.complex-trades,
+/* 카드에서 가장 큰 숫자 — 프로토타입의 `.pr` */
+.complex-range {
+  margin-top: 6px;
+  font-size: 1.0625rem;
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  color: var(--result-ink);
+}
+
+/*
+ * 거래 건수는 가격 **아랫줄**로 내린다(프로토타입의 `.mt`). 마크업에서는
+ * 가격 범위 안에 들어 있지만(`ComplexList.tsx` — 같은 문장이라 그 자리가
+ * 맞다), 화면에서는 17px 가격 옆에 붙어 있으면 줄이 길어져 298px 열에서
+ * 접힌다.
+ */
+.complex-trades {
+  display: block;
+  margin-top: 3px;
+  font-size: 0.6875rem;
+  font-weight: 400;
+  letter-spacing: 0.005em;
+  color: var(--result-gray);
+}
+
 .complex-built {
   font-weight: 400;
-  color: var(--seed-color-fg-neutral-muted);
+  color: var(--result-gray);
 }
 
 .complex-burden {
-  font-size: 0.85rem;
+  margin-top: 9px;
+  font-size: 0.71875rem;
+  line-height: 1.65;
+  color: var(--result-gray);
 }
 
 .complex-burden[data-level="safe"] .complex-level { color: var(--safe); }
-.complex-burden[data-level="caution"] .complex-level { color: var(--caution); }
-.complex-burden[data-level="danger"] .complex-level { color: var(--danger); }
+.complex-burden[data-level="caution"] .complex-level { color: var(--warn); }
+.complex-burden[data-level="danger"] .complex-level { color: var(--risk); }
 /*
  * 우리 숫자가 이 행의 매달 부담을 다 담지 못할 때의 등급. 위 배지
  * (`.safety-badge[data-level="unverified"]`)와 같은 이유로 `--safe`를
  * 쓰지 않는다 — 색이 먼저 읽혀 글자를 되돌려 주면 안 된다.
  */
-.complex-burden[data-level="unverified"] .complex-level { color: var(--caution); }
+.complex-burden[data-level="unverified"] .complex-level { color: var(--warn); }
 
 .complex-level {
-  font-weight: 600;
+  font-weight: 700;
 }
 
 /*
@@ -706,19 +1062,31 @@ body {
  * 문장이 지고 색은 거들지 않는다(중립색).
  */
 .complex-grade-note {
-  color: var(--seed-color-fg-neutral);
+  color: var(--result-gray);
 }
 
+/*
+ * "N개 더 보기". 색은 `--result-signal`이 아니라 글자용 어두운 변형이다
+ * (흰 면 5.44:1) — 채움 위가 아니라 흰 면 위의 **글자**다.
+ */
 .complex-more {
-  margin-top: 1rem;
+  margin: 12px 8px 0;
+  padding: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--result-signal-ink);
+  background: none;
+  border: none;
+  cursor: pointer;
 }
 
 .complex-empty,
-.complex-list-note,
 .complex-freshness,
 .complex-map-caveat {
-  color: var(--seed-color-fg-neutral-muted);
-  font-size: 0.9rem;
+  color: var(--result-gray);
+  font-size: 0.75rem;
+  line-height: 1.65;
 }
 
 .complex-map-caveat {
@@ -731,13 +1099,9 @@ body {
  * 실패하지 않았다.
  */
 .complex-map-empty {
-  color: var(--seed-color-fg-neutral-muted);
+  color: var(--result-gray);
   font-size: 0.9rem;
   margin: 0;
-}
-
-.complex-list-note {
-  margin: 0 0 0.5rem;
 }
 
 /*
@@ -758,7 +1122,7 @@ body {
 }
 
 .complex-no-loan[data-complete="false"] {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 .complex-no-loan-caveat {
@@ -788,7 +1152,7 @@ body {
   display: block;
   margin: 0.4rem 0;
   padding: 0.5rem 0.6rem;
-  border-left: 3px solid var(--caution);
+  border-left: 3px solid var(--warn);
   background: var(--seed-color-bg-warning-weak);
   font-size: 0.875rem;
   font-weight: 400;
@@ -797,7 +1161,7 @@ body {
 
 .land-lease-badge {
   font-weight: 700;
-  color: var(--caution);
+  color: var(--warn);
 }
 
 /*
@@ -823,21 +1187,25 @@ body {
  * 목록으로 돌아가는 버튼. 상세 화면에서 **되돌아가는 유일한 길**이다.
  *
  * `font: inherit`이라 본문 크기(16px/400)로 그려지고, 그러면 WCAG의
- * 본문 기준 4.5:1이 그대로 적용된다. 예전에 쓰던
- * `--seed-color-fg-brand-contrast`(#3398e1)는 이 화면 배경(#fafaf9)
- * 대비 **2.99:1**이라 그 기준에 크게 못 미쳤다 — 게다가 그 토큰은
- * `src/seed-brand.css`가 스스로 "굵은 큰 글자나 비텍스트 요소에만"
- * 쓰라고 적어 둔 값이라, 이 자리는 그 파일이 쓴 규칙을 어기고 있었다.
+ * 본문 기준 4.5:1이 그대로 적용된다. 이 규칙이 만들어질 당시 쓰던
+ * `--seed-color-fg-brand-contrast`(cyan #3398e1)는 그때 화면 배경
+ * (#fafaf9) 대비 2.99:1이라 그 기준에 크게 못 미쳤다 — 게다가 그
+ * 토큰은 당시 `src/seed-brand.css`가 스스로 "굵은 큰 글자나 비텍스트
+ * 요소에만" 쓰라고 적어 둔 값이라, 이 자리는 그 파일이 쓴 규칙을
+ * 어기고 있었다.
  *
- * 그래서 본문 색(`--seed-color-fg-neutral`, #0c0a09 — #fafaf9 대비
- * **18.92:1**, 계산값은 `scripts/seed-semantic-tokens.test.ts`가
+ * 그래서 본문 색(`--seed-color-fg-neutral`, 2026-08-26 팔레트 교체
+ * 후 --on-sheet #15202b — 이 화면 배경(bg-layer-default, #f3f6f8)
+ * 대비 **15.20:1**, 계산값은 `scripts/seed-semantic-tokens.test.ts`가
  * 검사한다)으로 바꾸고, "누를 수 있다"는 신호는 색이 아니라 밑줄로
  * 준다. 색만으로 링크를 표시하면 색각 이상에서 평범한 문장과
  * 구분되지 않는데, 하필 이 버튼이 유일한 되돌아가는 길이다.
  *
- * 브랜드 계열에서 4.5:1을 넘는 **글자용** 토큰은 이 프로젝트에 없다.
- * 새로 만들 수도 없다 — `scripts/seed-brand-tokens.test.ts`가 SEED에
- * 없는 brand 토큰을 덮는 것을 금지한다(죽은 재정의 방지).
+ * (참고: 2026-08-26 팔레트 교체로 fg-brand-contrast는 이제 --brass-ink
+ * #8a5f14를 가리키고 본문 기준(4.5:1)도 넘긴다 — 그렇다고 이 규칙을
+ * 다시 브랜드색으로 되돌리지는 않았다. 이 버튼의 색은 "누를 수 있다"는
+ * 뜻이 아니라 순수 본문이라는 뜻이라, 브랜드색 대신 중립색을 쓴다는
+ * 판단 자체는 값과 무관하게 유효하다.)
  */
 .complex-detail-back {
   border: none;
@@ -850,206 +1218,1868 @@ body {
   cursor: pointer;
 }
 
+/*
+ * 사용자 지시로 제목이 **단지 이름 하나**가 됐다(면적·법정동은 아래
+ * 사실 줄과 평형 선택기로 내려갔다). 그래서 예전보다 조금 크게 둔다 —
+ * 이 화면에서 "무엇을 보고 있는가"를 지는 유일한 줄이다.
+ */
 .complex-detail-title {
   margin: 0 0 0.25rem;
+  font-size: 1.25rem;
+  line-height: 1.3;
 }
 
-.complex-detail-built,
-.complex-detail-area-note {
+/*
+ * 주소 · 준공년(경과년수). 사용자 지시의 순서 그대로이고, 세대수는
+ * 지금 데이터에 없어 항목 자체를 만들지 않는다(ComplexDetail.tsx 주석).
+ *
+ * 가운뎃점 구분자는 CSS가 넣는다 — 주소가 `null`이면 그 `<span>` 자체가
+ * 없으므로, 마크업에 구분자를 박아 두면 준공년 앞에 고아 점이 남는다.
+ */
+.complex-detail-facts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 0.5rem;
+  margin: 0 0 0.75rem;
   color: var(--seed-color-fg-neutral-muted);
-  font-size: 0.9rem;
-  margin: 0.15rem 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
 }
 
-.complex-detail-range {
+.complex-detail-facts > span + span::before {
+  content: "· ";
+}
+
+/*
+ * 평형(타입) 선택기. 지금 고른 것은 `aria-pressed`가 지고, 그 상태를
+ * 색만이 아니라 **테두리 굵기와 글자 굵기**로도 가른다 — 이 저장소는
+ * 색만으로 의미를 전달하지 않는다.
+ */
+.complex-detail-types {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem;
+  margin: 0 0 0.875rem;
+}
+
+/*
+ * ⚠ 색은 **폴백 없는 `var()` 하나**로 적는다. `scripts/seed-semantic-tokens.test.ts`
+ * 의 대비 전수 검사는 `var(--a, --b)` 형태를 hex로 풀지 못해 "못 푸는 값"으로
+ * 걸린다 — 검사에서 빠지는 색을 만들지 않는다. 이 자리는 결과 셸 안이라
+ * `--result-ink`·`--result-paper`가 언제나 정의돼 있다
+ * (`.budget-result > summary`가 같은 방식이다). 테두리는 이 검사의
+ * 대상이 아니라 폴백을 그대로 둔다.
+ */
+.complex-detail-type {
+  padding: 0.3125rem 0.75rem;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--result-ink);
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.complex-detail-type[aria-pressed="true"] {
+  font-weight: 700;
+  border-width: 2px;
+  border-color: var(--seed-color-fg-neutral);
+}
+
+/*
+ * 실거래 내역 표(사용자 지시: "타입을 선택하면 거래가, 거래일을
+ * 볼수있도록"). `.cost-breakdown-table`과 같은 표 관행을 쓴다 — 금액은
+ * 오른쪽 정렬·tabular-nums, 줄마다 옅은 구분선.
+ *
+ * 진짜 `<table>`인 이유: 이건 세 열이 각각 뜻을 지는 **표 데이터**라
+ * (거래일·거래가·층) 스크린리더가 열 제목과 셀을 이어 읽어야 한다.
+ * 다른 자리의 `<dl>`은 라벨-값 쌍이라 결이 다르다.
+ */
+.complex-detail-trades {
+  margin: 0 0 1rem;
+}
+
+.complex-detail-trade-table {
+  width: 100%;
+  margin-top: 0.375rem;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+}
+
+.complex-detail-trade-table th {
+  text-align: left;
   font-weight: 600;
-  margin: 0.75rem 0 0.5rem;
+  color: var(--seed-color-fg-neutral-muted);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
 }
 
-.complex-detail-loan {
-  margin: 0.5rem 0 1.5rem;
+.complex-detail-trade-table td {
+  padding: 0.375rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+  font-variant-numeric: tabular-nums;
+}
+
+.complex-detail-trade-table tr:last-child td {
+  border-bottom: none;
+}
+
+.complex-detail-trade-table th:nth-child(2),
+.complex-detail-trade-price {
+  text-align: right;
+}
+
+.complex-detail-trade-table th:nth-child(3),
+.complex-detail-trade-floor {
+  text-align: right;
+  width: 4rem;
+}
+
+.complex-detail-trades-empty,
+.complex-detail-await-price,
+.price-check-basis {
+  color: var(--seed-color-fg-neutral-muted);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  margin: 0 0 0.875rem;
+}
+
+.complex-detail-price-form {
+  margin: 0 0 1rem;
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 단지 상세의 두 블록 (ComplexDetail.tsx, design.md §6)
+ *
+ * `DESIGN.md`의 **Stat Block** 규율 그대로다 — 라벨 작게 위, 값 크게
+ * 아래, **왼쪽 정렬.** 예전에는 `<dl>`의 `<dt>`/`<dd>`가 세로로 흩어지고
+ * 값만 어정쩡하게 들여쓰기돼 있었다(사용자가 스크린샷으로 지적한 자리).
+ *
+ * **색은 빌리지 않는다.** 금액에 쓰는 황동은 이 파일이 이미 세 자리에서
+ * 쓰던 `--seed-color-fg-brand-contrast`(--brass-ink #8a5f14) 그대로이며,
+ * 새 hex를 만들지 않았다. 이 블록이 앉는 면은 이제 **흰 카드 면**
+ * (`--result-paper` #ffffff)이고 그 위에서 **5.63:1**이다 —
+ * `scripts/seed-semantic-tokens.test.ts`가 그 계산과 "이 토큰을 쓰는
+ * 자리 목록"을 함께 잠근다.
+ *
+ * ⚠ `overflow`·`max-height`·`position`을 걸지 않는다. 이 화면에는 접히는
+ * `<details>`가 넷 있고(부대비용 내역 · 금리 시나리오 · 호가의 위치 ·
+ * 주변에 무엇이 있는지), 그 안에 `MUST_SURVIVE_PRINT_CLASSES`가
+ * 열 개 넘게 들어 있다 — 상자에 가두는 규칙 하나면 종이에서 그것들이
+ * 통째로 잘린다(`.budget-panel`이 이미 한 번 막은 사고). 그래서 애초에
+ * 걸지 않고, `scripts/printCss.test.ts`가 `.detail-fold`에 대해,
+ * `scripts/result-screen-layout.test.ts`가 이 블록에 대해 그 사실을
+ * 검사한다.
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+/*
+ * **카드다**(사용자 지시: "카드를 선택했을때의 내용도 카드형식의 표로
+ * 만들어줘"). 예전에는 배경도 테두리도 없는 흐르는 텍스트였다.
+ *
+ * 값은 **위 `.complex-row`(사이드바 목록 카드)에서 그대로 가져왔다** —
+ * 새로 디자인하지 않는다. 상세는 그 카드를 눌러서 여는 화면이고 같은
+ * 열 안에 그려지므로, 두 카드 문법이 갈리면 그 자체가 결함이다.
+ * 흰 바탕 위의 흰 카드라 **테두리와 그림자를 함께** 가진다(DESIGN.md:
+ * "그림자만으로는 카드 가장자리가 서지 않는다").
+ * `scripts/result-screen-layout.test.ts`가 두 카드의 값이 같은지
+ * 검사하므로, 한쪽을 움직이면 나머지도 함께 움직여야 한다.
+ */
+/*
+ * 아래 패딩을 16px에서 12px로 줄였다(사용자 지시: "부대비용의 카드의
+ * 아래 공간을 줄이고"). 나머지 대부분은 바로 위 내역 아이콘이
+ * `2.1rem`에서 `1.5rem`으로 줄며 함께 사라졌다(`.detail-binding-toggle`
+ * 규칙 참고) — 아이콘이 값의 줄높이에 거의 맞아떨어져 행 자체가
+ * 예전만큼 늘어나지 않는다.
+ */
+.detail-block {
+  margin: 1rem 0;
+  padding: 14px 16px 12px;
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 24px;
+  box-shadow:
+    0 1px 2px rgb(18 41 77 / 5%),
+    0 1px 3px rgb(18 41 77 / 6%);
+}
+
+/*
+ * 내역을 펼치는 **아이콘 버튼**(부대비용·최대 대출 두 카드의
+ * "상세보기" 트리거, `.detail-binding-toggle`).
+ *
+ * 사용자 지시: "안에 내용은 … 옆에 상세보기 아이콘 으로 누르면
+ * 볼수있게 해줘." 예전에는 "내역 보기"라는 텍스트 링크였다.
+ *
+ * ⚠ **클릭 가능 영역은 `<summary>` 그대로다.** 버튼처럼 보이게만
+ * 만들고 `<button>`으로 바꾸지 않는다 — 네이티브 `<details>`의 토글이
+ * 이미 그 일을 하고, 인쇄에서 내용을 펼치는 규칙이 그 태그에 걸린다.
+ *
+ * `width: fit-content`가 아니라 고정 크기 알약인 이유: `.detail-value-row`
+ * (`flex`)가 값과 이 트리거를 한 줄 양 끝에 세우는데, 트리거의 높이가
+ * 값의 한 줄 높이와 다르면 그 줄이 큰 쪽 높이로 늘어나 값 옆에 빈
+ * 공간이 남는다.
+ *
+ * `.detail-binding` 자신은 `position: static`이라 흐름에 자리를 차지하지
+ * 않고(팝업만 `position: fixed`로 뜬다) 남는 것은 이 트리거(summary)
+ * 하나뿐이라, `.detail-value-row`의 `justify-content: space-between`이
+ * 이미 오른쪽 끝에 세운다 — `margin-left: auto`는 `.loan-calc-toggle`
+ * 처럼 flex가 아닌 자리에서도 같은 규칙을 그대로 쓸 수 있게 남겨 둔
+ * 보험이다.
+ */
+/*
+ * ⚠ **`2.1rem`(33.6px)에서 `1.5rem`(24px)으로 줄였다**(사용자 지시:
+ * "부대비용의 카드의 아래 공간을 줄이고 토글도 맞춰서 수정해줘"). 값
+ * (`.detail-stat-value`, 18px/700, 실측 줄높이 약 23.4px)과 나란히 서는
+ * 자리라, 아이콘 버튼이 그보다 크면 줄 자체가 아이콘 높이로 늘어나
+ * 값 옆에 빈 공간이 남았다. 24px는 그 줄높이에 거의 맞으면서 WCAG의
+ * 최소 탭 영역(24px CSS px)도 지킨다.
+ */
+.loan-calc-toggle,
+.detail-binding-toggle {
+  /* 기본 삼각형 마커를 지운다 — 보이는 것은 아이콘 하나여야 한다 */
+  list-style: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin: 0.15rem 0 0 auto;
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 999px;
+  color: var(--result-signal-ink);
+  background: var(--result-paper);
+  cursor: pointer;
+  transition:
+    border-color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    background var(--seed-duration-d3) var(--seed-timing-function-easing);
+}
+
+/*
+ * Safari/구 Chromium은 마커를 이 의사 요소로 그린다.
+ *
+ * ⚠ 이 `display: none`은 **의사 요소 하나**를 지우는 것이지 내용을
+ * 숨기는 것이 아니다 — `scripts/printCss.test.ts`의 "계산기 접기를
+ * 가두지 않는다" 가드가 `::`가 붙은 선택자를 세지 않는 이유가 정확히
+ * 이 규칙이다(그 가드 주석 참고).
+ */
+.loan-calc-toggle::-webkit-details-marker,
+.detail-binding-toggle::-webkit-details-marker {
+  display: none;
+}
+
+.loan-calc-toggle:hover,
+.detail-binding-toggle:hover {
+  border-color: var(--result-signal);
+  background: var(--result-signal-wash);
+}
+
+/*
+ * ⚠ **회전을 걷어냈다**(사용자 지시로 아이콘이 화살표에서 정보
+ * (`CalcBasisIcon`)로 바뀌면서). 화살표였을 때는 방향 회전이 열림·
+ * 닫힘을 색이나 글자 없이도 보이는 유일한 신호였는데, 정보 기호는
+ * 대칭이라 180도 돌려도 다른 모양이 되지 않는다 — 회전을 그대로 두면
+ * 아무 뜻 없는 애니메이션만 남는다.
+ *
+ * `.loan-calc-toggle`은 지금 화면에 이 트리거로 쓰이는 자리가 없다
+ * (매달 나가는 돈 계산기는 더 이상 접히지 않는다) — 회전 규칙을 그
+ * 이름에만 남겨 둔다. 언젠가 다시 화살표 트리거로 쓰인다면 이 규칙이
+ * 바로 다시 맞는다.
+ */
+.loan-calc-toggle svg {
+  transition: transform var(--seed-duration-d3) var(--seed-timing-function-easing);
+}
+
+.loan-calc[open] > .loan-calc-toggle svg {
+  transform: rotate(180deg);
+}
+
+/*
+ * 부대비용 내역을 **두 칸 표**로 세운다(사용자 지시: "카드형식의 표").
+ *
+ * `<dl>`을 `<table>`로 바꾸지 않았다 — 이 정보(이름 하나에 값 하나)에는
+ * `<dl>`이 이미 맞는 시맨틱이고, 태그를 갈아엎으면 인쇄 계약과 기존
+ * 검사가 함께 흔들린다. 표처럼 보이게 하는 것은 여기서 한다: 라벨
+ * 왼쪽, 금액 오른쪽(`tabular-nums`로 자릿수를 세로로 맞춘다).
+ *
+ * ⚠ **`.cost-breakdown` 안이 아니라 독립된 클래스다**(`BindingLimitTable`
+ * 의 `.binding-limit-table`과 같은 모양) — `CostBreakdownTable`이
+ * `CostBreakdown`(예산 상세의 카드, `<details className="cost-breakdown">`)
+ * 과 단지 상세의 뜨는 팝업(`.detail-binding-popup`) **양쪽**에서 쓰이는데,
+ * 뒤쪽은 조상에 `.cost-breakdown`이 없다. 두 자리가 같은 표를 다르게
+ * 그릴 이유가 없으므로 규칙은 하나다. `--result-*` 스코프 밖일 수 있어
+ * 선 색에 전역 `--border` 폴백을 함께 적는다.
+ */
+.cost-breakdown-table {
+  margin: 0.5rem 0 0;
+}
+
+.cost-breakdown-table > div {
+  /*
+   * 금액 칸에 **최소 폭**을 준다. 그래야 항목마다 자릿수가 달라도
+   * 숫자의 오른쪽 끝이 한 줄로 선다(그게 "표"의 실제 효용이다).
+   * `max-content`를 상한으로 둬서 억 단위가 들어오는 날에는 칸이
+   * 늘어나고, 그때도 왼쪽 칸이 `minmax(0, 1fr)`이라 라벨 쪽이
+   * 줄바꿈을 진다.
+   */
+  --cost-amount-col: 7.5rem;
+  --cost-col-gap: 0.75rem;
+
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(var(--cost-amount-col), max-content);
+  align-items: baseline;
+  column-gap: var(--cost-col-gap);
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.cost-breakdown-table > div:last-child {
+  border-bottom: none;
+}
+
+.cost-breakdown-table dt {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+/*
+ * ⚠ **`font-size`를 명시한다**(사용자 지시: "취득시 부대비용 카드의
+ * 상세보기도 … 글자크기 축소 등 동일하게" — 대출 한도 팝업의
+ * `.binding-limit-table dd`를 줄인 것과 같은 자리). 예전에는 이 값이
+ * 없어 주변보다 큰 본문 크기를 그대로 물려받아 같은 표 안에서 `dt`
+ * (0.875rem)와 `dd`의 크기가 어긋났다 — `dt`와 같은 크기로 맞추고
+ * 굵기(`font-weight: 600`)는 그대로 둔다.
+ */
+.cost-breakdown-table dd {
+  margin: 0;
+  font-size: 0.875rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  /*
+   * 금액은 줄바꿈하지 않는다 — "1,424만 / 7,840원"으로 끊기면 두 값을
+   * 적은 것처럼 읽힌다. 대신 왼쪽 칸이 `minmax(0, 1fr)`이라 긴 라벨
+   * 쪽이 줄바꿈을 진다.
+   */
+  white-space: nowrap;
+}
+
+/*
+ * 항목 아래 붙는 고지(취득세의 주택 수 고지·국민주택채권 추정치 안내).
+ *
+ * **줄 전체 폭을 쓴다.** 이 고지들은 문장이고 이 표가 서는 자리(사이드바
+ * 카드·19rem 팝업)는 둘 다 폭이 좁다 — 라벨 칸(금액 칸을 뺀 나머지)에
+ * 가두면 한 줄에 두세 글자만 들어가 세로로 길게 흘러 읽히지 않는다
+ * (브라우저로 실측해서 고친 자리다). `<p>`가 `<dt>` 안에 있어야 하는
+ * 것은 `<dl>`의 콘텐츠 모델 때문이라(dt/dd 말고는 못 넣는다) 칸 밖으로
+ * 꺼낼 수 없다 — 대신 폭으로 금액 칸과 칸 사이 간격만큼을 되찾는다.
+ *
+ * 금액 칸이 `max-content`로 늘어난 경우에는 이 폭이 조금 모자라게
+ * 되지만, 그건 문장이 오른쪽 끝까지 못 닿는 것뿐이라 안전한 쪽이다.
+ */
+.cost-breakdown-table dt .hint {
+  width: calc(100% + var(--cost-amount-col) + var(--cost-col-gap));
+  margin: 0.15rem 0 0;
+}
+
+.detail-stat-label {
+  /* 12px. DESIGN.md의 Stat Block 라벨 크기 */
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--seed-color-fg-neutral-muted);
+  margin: 0;
+}
+
+/*
+ * 단지 상세 두 블록의 값.
+ *
+ * ⚠ **28px에서 18px로 줄였다**(사용자 지시: "취득시 부대비용 글씨는
+ * 색은 유지하고, 크기는 다른 글자의 크기와 맞게 줄여줘"). 사이드바
+ * 폭에서 28px는 다른 어떤 글자보다도 커서, 이 화면에서 가장 중요한
+ * 값이 아닌데도 가장 크게 읽혔다. 18px는 상단바의 값
+ * (`.result-topbar-item-value`)과 같은 크기다 — 이 앱이 "값"에 쓰는
+ * 크기 계열에 맞춘 것이다.
+ *
+ * **색은 그대로 둔다**(사용자 지시). `--seed-color-fg-brand-contrast`는
+ * 카드 면 대비 5.63:1이라 본문 크기 기준(4.5:1)도 넘으므로, 크기를
+ * 줄여도 대비 요건이 깨지지 않는다 —
+ * `scripts/seed-semantic-tokens.test.ts`가 그 수치를 실측하고, 이 토큰을
+ * 쓰는 자리 목록도 거기서 잠근다(목록은 바뀌지 않았다).
+ */
+.detail-stat-value {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.15rem 0 0;
+  color: var(--seed-color-fg-brand-contrast);
+}
+
+/*
+ * 값 자리에 숫자가 아니라 **문장**이 들어가는 경우("대출 없이 살 수
+ * 있어요"). 28px짜리 문장은 사이드바 폭(372px)에서 서너 줄이 되므로
+ * 한 단계 줄인다.
+ *
+ * **색을 다시 정하지 않는다.** 이 문장의 색은 `NoLoanLine`이 이미
+ * 자기 규칙(`.complex-no-loan[data-complete]`)으로 정하고 있고, 그
+ * 규칙이 특정도로 이긴다 — 단서가 붙은 경우와 아닌 경우를 색으로도
+ * 가르는 그 구분을 여기서 덮으면 안 된다.
+ */
+.detail-stat-value--sentence {
+  font-size: 1.25rem;
+}
+
+/* 단서는 값이 아니라 문장이다 — 값 크기를 따라가지 않는다 */
+.detail-stat-value--sentence .complex-no-loan-caveat {
+  display: block;
+  font-size: 0.875rem;
+  line-height: 1.5;
+}
+
+/* 값 바로 아래의 가정·고지 한 줄(금리·기간, 농특세) */
+.detail-stat-note {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--seed-color-fg-neutral-muted);
+  margin: 0.35rem 0 0;
+}
+
+/*
+ * "이 가격에 매수할 경우 최대 대출은 / 4억 7,532만원 이에요."
+ *
+ * 사용자 지시로 **금액이 줄을 바꿔 크게 선다.** 이 블록에서 가장 중요한
+ * 숫자라서다 — 바로 아래 계산기에 얼마를 넣을지 정하는 기준이고,
+ * 문장 안에 섞여 있으면 그 역할이 보이지 않는다.
+ *
+ * 문장 자체는 `.detail-stat-note`와 같은 캡션 톤이다(이건 안내 문장이지
+ * 값이 아니다). 크기와 무게는 **금액에만** 준다.
+ */
+.detail-max-loan {
+  margin: 0.35rem 0 0;
+  /* 아래 결정 내역 팝업이 이 상자를 기준으로 뜬다 */
+  position: relative;
+}
+
+/*
+ * "이 가격에 매수할 경우 최대 대출은" — 안내 문장이지 값이 아니라
+ * `.detail-stat-note`와 같은 캡션 톤이다. 끝의 "이에요."는 사용자
+ * 지시로 뺐다: 금액이 줄을 바꿔 따로 서면서 문장을 닫는 말이 금액
+ * 아래 홀로 떨어져 읽혔다.
+ */
+.detail-max-loan-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--seed-color-fg-neutral-muted);
+}
+
+/*
+ * 값 한 줄 + 그 오른쪽 끝의 "상세보기" 트리거. **최대 대출 카드와
+ * 부대비용 카드가 함께 쓴다**(사용자 지시: "취득시 부대비용 카드의
+ * 상세보기도 … 동일하게 만들어줘") — 두 자리 모두 "값이 있고, 그
+ * 값을 이룬 내역을 오른쪽 아이콘을 눌러 뜨는 팝업으로 본다"는 같은
+ * 구조라 클래스 하나로 같이 움직인다. 예전 이름(`.detail-max-loan-line`)
+ * 은 최대 대출 자리 하나에만 맞았는데, 두 번째 자리가 생기며 그 이름이
+ * 더 이상 맞지 않아 일반화했다.
+ *
+ * 아이콘을 **줄 오른쪽 끝까지** 민다(사용자 지시: "아이콘을 최대한
+ * 오른쪽으로 이동해서 아이콘과 팝업이 자연스럽게 연결되게"). 예전에는
+ * 금액 바로 옆에 작은 간격만 두고 붙어 있었다 — `justify-content:
+ * space-between`으로 이 줄(카드 안쪽 폭 전체)의 양 끝에 금액과 아이콘을
+ * 각각 세운다. 팝업이 이제 이 아이콘의 화면 좌표에서 오른쪽으로
+ * 뜨므로(`.detail-binding-popup` 문서), 아이콘이 카드 오른쪽 끝(=지도
+ * 칸과 맞닿는 경계)에 가까울수록 팝업이 지도 위로 자연스럽게 이어진다.
+ */
+.detail-value-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.375rem;
+}
+
+/*
+ * 금액. `display: block`이 줄바꿈을 만든다 — 문장에 `<br>`을 박지
+ * 않는 이유는, 줄바꿈이 **이 금액이 한 덩어리**라는 사실에서 나와야
+ * 하기 때문이다(폭이 좁아져도 라벨과 금액이 엉키지 않는다).
+ *
+ * 크기는 `.detail-stat-value`(18px)와 같은 계열로 둔다 — 이 화면에서
+ * "값"에 쓰는 크기다. 색은 브랜드색을 쓰지 않는다: 그 색은 부대비용·
+ * 매달 나가는 돈 같은 **결과 값**의 것이고, 이 숫자는 한도(제약)라
+ * 결이 다르다. 같은 색을 주면 세 숫자가 같은 종류로 읽힌다.
+ */
+/*
+ * ⚠ **부대비용(`.detail-stat-value`)과 같은 황금색이다**(사용자 지시:
+ * "최대대출금액 도 부대비용과 같은 황금색으로 수정해줘"). 같은 토큰
+ * (`--seed-color-fg-brand-contrast`)을 쓴다 — `scripts/seed-semantic-tokens.test.ts`가
+ * 이 토큰을 "큰 굵은 글자" 두 자리로 못박아 뒀는데, 이 값도 같은 크기·
+ * 굵기(1.125rem/700)라 그 자물쇠에 이 선택자를 추가했다.
+ */
+.detail-max-loan-amount {
+  font-size: 1.125rem;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.1rem 0;
+  color: var(--seed-color-fg-brand-contrast);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 한도 결정 내역 팝업(사용자 지시: "대출금 옆에 결정내역 아이콘으로
+ * 해서 … 산출내역을 팝업 형식으로 볼 수 있도록").
+ *
+ * ⚠ **`<dialog>`가 아니라 `<details>`를 띄운 상자로 그린다.** 모달로
+ * 만들면 이 내역이 인쇄에서 통째로 사라진다 — `<details>`는
+ * `@media print`의 `::details-content` 규칙이 강제로 펼쳐 준다
+ * (ComplexDetail.tsx의 해당 주석 참고). 화면에서만 떠 있는 상자로
+ * 보이고, 종이에서는 그 자리에 그대로 흐른다.
+ *
+ * `.detail-binding` 자체는 흐름에 자리를 차지하지 않아야 한다(아이콘
+ * 옆에 빈 공간이 생기면 금액 줄이 벌어진다) — 내용만 절대 배치한다.
+ */
+.detail-binding {
+  position: static;
+}
+
+/*
+ * ⚠ **`position: fixed`다 — `absolute`가 아니다**(사용자 지시: "지금
+ * 팝업이 사이드바 위치에 생겨서 내용을 가리는데 오른쪽 맵부분에
+ * 생기도록 해줘"). 이 팝업의 조상인 `.region-results-sidebar`는
+ * `overflow-y: auto`인데, CSS 오버플로 계산 규칙상 한 축만 `auto`를
+ * 걸어도 다른 축이 `visible`에서 `auto`로 함께 바뀐다 — 그래서
+ * `absolute`로 띄웠을 때 사이드바 오른쪽 경계에서 그대로 잘렸다
+ * (브라우저로 실측). `fixed`는 `transform`·`filter`가 없는 조상의
+ * overflow에 갇히지 않고 뷰포트 기준으로 뜬다 — 이 앱의 조상 트리
+ * 어디에도 그런 속성이 없어(styles.css 전수 확인) 사이드바를 벗어나
+ * 지도 위에 자연스럽게 걸친다.
+ *
+ * **리액트 포털을 쓰지 않았다.** DOM 자리는 그대로 `<details>` 안이고
+ * `position`만 바꿨다 — 인쇄 규칙(`::details-content`가 `<details>`
+ * 안의 내용만 강제로 펼친다)도, 기존 테스트의 `container.querySelector`
+ * 조회도 그대로 유효하다.
+ *
+ * `top`/`left`는 인라인 스타일로 온다(`ComplexDetail.tsx`의
+ * `bindingPopupPos` — 아이콘을 열 때 그 화면 좌표를 잰다). 여기서는
+ * `position`과 나머지 생김새만 정한다.
+ */
+.detail-binding-popup {
+  position: fixed;
+  z-index: 20;
+  width: 19rem;
+  max-width: calc(100vw - 2rem);
+  padding: 0.75rem 0.875rem;
+  background: var(--result-paper, #fff);
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 0.625rem;
+  /*
+   * 떠 있는 상자라는 것을 그림자로 말한다. 색만으로 뜻을 전달하는
+   * 자리가 아니다 — 여닫는 상태는 아이콘이, 무엇인지는 제목이 말한다.
+   */
+  box-shadow: 0 6px 20px rgb(21 32 43 / 12%);
+}
+
+/*
+ * 아이콘과 팝업을 **선으로 잇는다**(사용자 지시: "아이콘과 팝업이
+ * 자연스럽게 연결되게"). 팝업이 더 이상 카드에 붙어 있지 않고 살짝
+ * 띄워진 채 지도 위에 떠 있어서, 그림자만으로는 "이게 그 아이콘에서
+ * 나왔다"는 관계가 옅게 읽힌다. 왼쪽 가장자리 중간에 작은 삼각형
+ * 꼬리를 달아 아이콘 쪽을 가리키게 한다 — 말풍선의 표준 관용구다.
+ */
+.detail-binding-popup::before {
+  content: "";
+  position: absolute;
+  top: 0.9rem;
+  left: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--result-paper, #fff);
+  border-left: 1px solid var(--result-rule, var(--border));
+  border-bottom: 1px solid var(--result-rule, var(--border));
+  transform: rotate(45deg);
+}
+
+.detail-binding-title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--result-ink);
+}
+
+/* "← 결정" 표시가 라벨과 떨어져 혼자 줄바꿈되지 않게 한다 */
+.detail-binding-popup .binding-limit-table dt {
+  text-wrap: pretty;
+}
+
+/*
+ * ⚠ 인쇄에서는 이 상자를 **뷰포트에 띄우지 않는다** — `fixed`인 채로
+ * 인쇄되면 페이지마다 같은 자리에 겹쳐 찍히거나 페이지 밖으로 나간다.
+ * 그 해제 규칙은 이 파일 **맨 아래 `@media print` 블록 안**에 있다.
+ * 여기에 별도 `@media print`를 열지 않는 이유: `scripts/printCss.test.ts`가
+ * 인쇄 블록을 하나로 보고 파싱한다(두 번째 블록을 열면 그 검사가
+ * 통째로 깨진다).
+ */
+
+/* 상환부담률. **한 줄이다** — 별도 지표 블록으로 키우지 않는다 */
+.detail-burden-ratio {
+  font-weight: 600;
+  margin: 0.35rem 0 0;
+}
+
+/*
+ * 접히는 자리(호가의 위치 · 주변에 무엇이 있는지 · 금리 상승 시나리오).
+ * 위 블록 주석의 경고가 그대로 걸린다 — 숨기거나 가두는 선언을 여기
+ * 넣지 마라.
+ */
+.detail-fold {
+  margin: 1.25rem 0 0;
+  border-top: 1px solid var(--border);
+  padding-top: 0.75rem;
+}
+
+.detail-fold > summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+/* 금리 시나리오는 ② 블록 **안**의 곁가지라 구분선을 그리지 않는다 */
+.detail-fold--stress {
+  margin-top: 0.5rem;
+  border-top: none;
+  padding-top: 0;
+  font-size: 0.875rem;
+}
+
+/*
+ * 접힌 두 영역은 자기 위에 구분선을 다시 그리지 않는다 — `.detail-fold`가
+ * 이미 그렸다(화면에서는 선이 겹치고, 인쇄에서는 펼쳐진 내용 위에 선이
+ * 두 번 나온다).
+ */
+.detail-fold .price-check,
+.detail-fold .location-facts {
+  margin-top: 0.75rem;
+  border-top: none;
+  padding-top: 0;
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 매달 나가는 돈 계산기 (LoanCalculator)
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 사용자 지시: "매달나가는비용도 상세보기해서 표로 만들고, 대출금액 및
+ * 금리는 한도액 내에 직접 입력할수 있도록 해서 … 이것도 상세보기
+ * 아이콘을 만들어서 카드형식으로 결과를 볼수있도록 해줘."
+ *
+ * ⚠ **`overflow`·`max-height`·`position`을 걸지 않는다.** 이 접기 안에는
+ * `MUST_SURVIVE_PRINT_CLASSES`(`loan-calc`)가 지키는 결과 카드가 들어
+ * 있고, 인쇄에서는 `<details>`가 강제로 펼쳐져 그 카드가 종이에 나간다 —
+ * 상자에 가두는 규칙 하나면 화면에서 잘리고 종이에서 사라진다
+ * (`.budget-panel`·`.detail-fold`가 이미 두 번 막은 사고).
+ * `scripts/printCss.test.ts`가 그 사실을 검사한다.
+ *
+ * 여닫는 트리거(`.loan-calc-toggle`)의 모양은 위 `.detail-binding-toggle`
+ * 과 **같은 규칙**에서 온다 — 같은 열의 카드들이 같은 버튼을 쓴다.
+ */
+.loan-calc-body {
+  margin: 0.75rem 0 0;
+}
+
+/*
+ * 입력란 묶음. **인쇄에서 통째로 지운다**(`src/print/hiddenInPrint.ts`의
+ * `.loan-input-form`) — 종이 위에서는 채울 수도 고를 수도 없다. 아래
+ * 결과 카드는 그대로 남으므로, 무엇을 넣었는지는 `.loan-calc-basis`가
+ * 종이에서 다시 적는다.
+ */
+.loan-input-form {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.loan-input-field {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.loan-input-field input {
+  /*
+   * 네이티브 입력이라 폼 컨트롤 기본 글꼴을 물려받지 못한다 —
+   * 명시하지 않으면 이 칸만 시스템 글꼴로 뜬다.
+   */
+  font: inherit;
+  font-weight: 400;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 8px;
+  background: var(--result-paper);
+}
+
+/*
+ * 매물가격(`ComplexDetail`)·대출금액(`LoanCalculator`)의 라벨·입력 상자를
+ * 바로 위 금리 입력과 같은 크기로 맞춘다(사용자 지시: "사이드바의
+ * 글자크기, 입력하는 글상자박스의 크기가 통일이 안되어있는데, 금리의
+ * 글자 크기와 상자박스를 통일되게 적용해줘").
+ *
+ * 그 둘은 `MoneyInput`(SEED `TextField`)으로 그려지는데, SEED의 기본
+ * 크기(outline/responsive — node_modules/@seed-design/css/recipes/
+ * text-input.css·field-label.css)는 라벨 16px, 상자 높이 40~52px·좌우
+ * 패딩 14~16px다. 금리는 네이티브 `<input>`이라 우리 CSS(`.loan-input-field`)
+ * 하나로 14px·8px 반경 상자로 정해져 있어, 같은 사이드바 안에서 크기가
+ * 들쭉날쭉해 보였다.
+ *
+ * **SEED `TextField`를 재구현하지 않는다**(design.md Global Constraints)
+ * — 그 컴포넌트가 실제로 그리는 라벨(`.seed-field-label__root`)과 상자
+ * (`.seed-text-input__root`)·값(`input`)만 이 크기로 덮는다. `.entry-screen`의
+ * 같은 방식과 다른 점: 거기는 화면 1 전체가 밑줄 스타일이라 상자 자체를
+ * 지우지만, 여기서는 **금리와 같은 테두리 상자**를 유지한다.
+ *
+ * ⚠ **렌더되는 변형 클래스 이름(`--variant_outline-size_responsive` 등)에
+ * 기대지 않고 기본 클래스에 건다** — SEED가 변형 이름을 바꿔도 이쪽이
+ * 그대로 이긴다(`.entry-screen` 규칙과 같은 이유, 그 규칙의 주석 참고).
+ *
+ * ⚠ **좌우 패딩은 이 화면에 이미 있는 두 폼 래퍼**
+ * (`.loan-input-form`·`.complex-detail-price-form`)**를 선택자에 넣어야
+ * 한다.** SEED가 좌우 패딩을 주는 규칙 자체가 `:first-child`/`:last-child`가
+ * 낀 클래스 두 개짜리라 특정도가 (0,2,0)이고, `.money-input input`
+ * 하나만으로는 (0,1,1)이라 진다 — 폼 래퍼 클래스까지 넣어야 (0,2,1)로
+ * 안전하게 이긴다.
+ */
+.loan-input-form .seed-field-label__root,
+.complex-detail-price-form .seed-field-label__root {
+  font-size: 0.875rem;
+}
+
+/*
+ * ⚠ **높이를 `min-height`로 못박는다.** 처음에는 `min-height: 0`으로
+ * 풀고 `padding-block`으로 높이를 만들었는데, 그러면 벤더가 값 요소에
+ * 건 `line-height`(`--seed-line-height-t5`)가 그대로 남아 상자가 56px로
+ * 섰다 — 바로 아래 금리 상자(40px)와 나란히 놓고 브라우저로 실측해서
+ * 잡은 값이다. 글자 크기만 줄이고 줄높이를 두면 이런 식으로 어긋난다.
+ *
+ * 40px는 금리 입력(`.loan-input-field input`: 14px 글자 + 상하 8px 패딩
+ * + 1px 테두리)의 실측 높이다. 벤더 루트가 이미 `align-items: center`라
+ * 패딩 없이도 글자가 세로 가운데에 선다.
+ */
+.loan-input-form .seed-text-input__root,
+.complex-detail-price-form .seed-text-input__root {
+  min-height: 40px;
+  padding-block: 0;
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1px var(--result-rule, var(--border));
+  background: var(--result-paper, #fff);
+}
+
+.loan-input-form .money-input input,
+.complex-detail-price-form .money-input input {
+  font-size: 0.875rem;
+  /* 벤더가 값 요소에 t5 줄높이를 건다 — 함께 덮지 않으면 위 높이가 밀린다. */
+  line-height: 1.45;
+  padding-left: 0.625rem;
+  padding-right: 0.625rem;
+}
+
+/* 라디오 두 개. `<fieldset>` 기본 테두리·여백은 걷어낸다 */
+.loan-input-method {
+  border: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1rem;
+  align-items: center;
+}
+
+.loan-input-method legend {
+  padding: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.loan-input-method-option {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+
+/*
+ * 결과 카드(사용자 지시: "카드형식으로 결과를 볼수있도록"). 상세 블록
+ * 카드(`.detail-block`) 안에 앉는 한 겹 안쪽 카드라, 같은 카드 언어를
+ * 쓰되 그림자는 얹지 않는다 — 카드 위의 카드에 그림자를 두 번 얹으면
+ * 화면이 층으로 읽힌다.
+ */
+.loan-calc-result {
+  margin-top: 0.75rem;
+  padding: 12px 14px;
+  border: 1px solid var(--result-rule, var(--border));
+  border-radius: 16px;
+  background: var(--result-paper);
+}
+
+/* 부대비용 내역과 같은 두 칸 표 — 라벨 왼쪽, 금액 오른쪽 */
+.loan-calc-figures {
+  margin: 0;
+}
+
+.loan-calc-figures > div {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(7.5rem, max-content);
+  align-items: baseline;
+  column-gap: 0.75rem;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--result-rule, var(--border));
+}
+
+.loan-calc-figures > div:last-child {
+  border-bottom: none;
+}
+
+.loan-calc-figures dt {
+  font-size: 0.875rem;
+  line-height: 1.45;
+}
+
+.loan-calc-figures dd {
+  margin: 0;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+  /* 금액은 줄바꿈하지 않는다 — 끊기면 두 값을 적은 것처럼 읽힌다 */
+  white-space: nowrap;
+}
+
+/*
+ * 소득 대비 원리금 판정(사용자 지시: "안전/주의/경고 등을 알려줘").
+ * 색 대응은 `SafetyBadge`·`PriceSlider`와 **같은 토큰**을 쓴다 — 한 앱이
+ * 같은 등급을 세 화면에서 세 색으로 말하면 안 된다. 뜻은 색이 아니라
+ * 글자("안전"/"주의"/"위험")가 진다.
+ */
+.loan-calc-grade {
+  font-weight: 700;
+}
+
+.loan-calc-grade[data-level="safe"] { color: var(--safe); }
+.loan-calc-grade[data-level="caution"] { color: var(--warn); }
+.loan-calc-grade[data-level="danger"] { color: var(--risk); }
+
+/*
+ * 무엇을 전제로 계산했는가 / 이 숫자가 가정이라는 사실. 둘 다 종이에
+ * 남아야 하는 줄이라 `.detail-stat-note`와 **같은 어조·같은 크기**로
+ * 적는다(그 줄이 금리·기간 가정을 지는 것과 같은 성격이다).
+ */
+.loan-calc-basis,
+.loan-calc-note {
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  color: var(--seed-color-fg-neutral-muted);
+  margin: 0.5rem 0 0;
+}
+
+/*
+ * 계산하지 않은 이유. **빈칸을 남기지 않는다** — 빈 자리는 언제나
+ * "문제 없음"으로 읽힌다. `.price-no-estimate`와 같은 모양(왼쪽 선)을
+ * 써서 "이건 값이 아니라 안내"라는 것이 한눈에 보이게 한다.
+ */
+.loan-calc-guidance,
+.loan-calc-unavailable {
+  border-left: 4px solid var(--border);
+  padding: 0.25rem 0.75rem;
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.5;
 }
 
 /*
  * 단지 지도(ComplexMap)가 들어가는 자리.
  *
- * **높이를 반드시 명시해야 한다.** 네이버지도 SDK는 넘겨받은 컨테이너의
- * 실제 크기 안에 지도를 그리는데, 이 <div>는 안이 비어 있어 높이를 주지
+ * **크기를 반드시 명시해야 한다.** 네이버지도 SDK는 넘겨받은 컨테이너의
+ * 실제 크기 안에 지도를 그리는데, 이 <div>는 안이 비어 있어 크기를 주지
  * 않으면 0px가 된다 — 스크립트도 마커도 정상인데 화면엔 아무것도 안
  * 보이고, 지도가 없는 것과 실패한 것이 구분되지 않는다.
  *
- * 테두리·모서리는 이 화면의 다른 상자들(`.complex-detail`류, 인쇄 버튼)과
- * 같은 값을 쓴다.
+ * 예전에는 `height: 600px` 고정이었다. 지금은 전체화면 무대의 한 칸을
+ * 통째로 채운다(design.md §4).
  */
 .complex-map {
-  height: 600px;
   /*
-   * 위쪽 여백을 두지 않는다. 지도가 목록 **아래**에 있던 시절의
-   * 값이었는데, 지금은 사이드바와 나란한 그리드 컬럼이라 이 여백이
-   * 남으면 지도만 옆 사이드바보다 24px 내려앉는다.
+   * ⚠ **`position: absolute; inset: 0`을 쓰지 않는다 — 네이버 SDK가 이
+   * 요소의 `position`을 인라인으로 `relative`로 덮어써서 그 순간
+   * `inset`이 무력화된다.** (프로토타입에서 실제로 겪은 버그다.
+   * design.md §4의 두 경고 중 둘째.) `width`/`height` 100%는 인라인
+   * `position`과 무관하게 살아남는다.
    */
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  overflow: hidden;
+  width: 100%;
+  height: 100%;
 }
 
 /*
- * 지역 결과 화면(목록+지도)을 담는 그리드. 목록 블록·지도 블록은 이
- * 두 컬럼 중 한쪽에 그대로 옮겨졌을 뿐, 각자의 기존 조건부 렌더링은
- * 바뀌지 않았다 — 이 그리드는 순수 레이아웃 컨테이너다.
+ * 지도 액자(ComplexMap.tsx). 지도 칸의 높이·테두리를 지는 상자다 —
+ * 지도 컨테이너 자신에게 그 일을 맡길 수 없는 이유는 바로 위 경고와
+ * 같다(SDK가 그 요소의 position을 인라인으로 정한다).
+ *
+ * 예전에는 마커 색 범례를 지도 위 좌측 하단에 얹기 위한 기준 상자이기도
+ * 했다. 마커가 한 색이 되며 범례는 사라졌지만(위 마커 섹션 주석), 이
+ * 액자는 남는다 — `position: relative`도 그대로 둔다. 지도 위에 무언가를
+ * 다시 얹게 되는 날 기준이 되고, 지금 지우면 `overflow: hidden`이
+ * 걸린 이 상자의 성격만 반쪽이 된다.
+ */
+.complex-map-frame {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--result-rule);
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 화면 2 — 전체화면 결과 셸 (ResultShell.tsx, design.md §4)
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+/*
+ * 뷰포트를 통째로 덮는 고정 레이어. 위는 상단바(내용 높이), 아래는
+ * 남는 높이 전부를 쓰는 무대다.
+ *
+ * `z-index`를 화면 1(`.entry-screen`, z-index 40)보다 **낮게** 둔다 —
+ * `phase === "입력"`인 동안 이 셸은 언마운트되지 않고 그 뒤에 깔려
+ * 있어야 한다(그 트리는 통째로 `inert`다, App.tsx 참고).
+ */
+.result-shell {
+  /*
+   * ── 결과 화면 전용 색 토큰(prototype-results.html의 `:root`) ──────
+   *
+   * **이름을 `--result-*`로 새로 짓는다.** 프로토타입은 이 값들을
+   * `--paper`·`--ink`·`--gray`·`--rule`이라 부르지만, 그 이름들은
+   * `src/seed-brand.css`에서 **어두운 면(화면 1)의 값**으로 이미 쓰이고
+   * 있다. 같은 이름을 여기서 다른 값으로 다시 선언하면 한 이름이 화면에
+   * 따라 다른 색을 뜻하게 되고, `scripts/colorSurfaces.ts`의 토큰
+   * 해석기는 **먼저 정의된 쪽**만 보므로 대비 검사가 화면과 다른 색을
+   * 재게 된다(조용히 통과하는 검사가 이 저장소가 가장 여러 번 겪은
+   * 실패다). `scripts/result-screen-layout.test.ts`가 그 겹침을 잠근다.
+   *
+   * 대비 실측은 `scripts/seed-semantic-tokens.test.ts`의 "화면 2 재스킨
+   * 대비율 실측"이 전부 다시 계산해 못박는다. 요약하면:
+   *   흰 면 위 글자 — ink 14.48 / gray 5.57 / signal-ink 5.44
+   *   채움 위 굵은 흰 글자 — 파랑 2.65, 주황 3.28 (**둘 다 기준 미달,
+   *   사용자 지시**. 굵기로는 메워지지 않는다 — 3:1 완화는 18.66px부터인데
+   *   이 자리들은 11~13px이다. 통과시키려면 채움을 어둡게 하는 것이고
+   *   그만큼 지정하신 색에서 멀어진다.)
+   *
+   * 그래서 **색이 글자로 나가야 하는 자리는 어두운 변형을 쓴다**:
+   * 금액(`--result-signal-ink`)이 그것이다. 화면에서 가장 중요한 숫자를
+   * 2.65:1로 둘 수는 없다.
+   *
+   * **두 색이 뜻을 나눠 갖는다**: 파랑 = 대출 없이 살 수 있다,
+   * 주황 = 대출이 필요하다. 색만으로 말하지 않는다 — 같은 뜻이 마커
+   * 라벨과 범례에 글자로도 적혀 있다(`ComplexMap.tsx`).
+   */
+  --result-paper: #ffffff;
+  --result-alt: #f3f8fe;
+  --result-ink: #12294d;
+  --result-gray: #4f6a8c;
+  --result-rule: #dbe7f3;
+  --result-signal: #3ba6f1;
+  --result-signal-ink: #1f6ea9;
+  --result-signal-wash: #e8f4fe;
+  --result-warn: #e8663c;
+  /*
+   * `--result-warn`은 흰 글자를 얹는 **채움** 전용이다(2.65:1 — 사용자
+   * 지시로 채택, LoanCalculator.tsx 참고). 규제 배지처럼 옅은 바탕 위
+   * **글자**로 주황을 써야 하는 자리는 이 어두운 변형을 쓴다 —
+   * `#fdf0ea` 위 5.46:1.
+   */
+  --result-warn-ink: #b23713;
+
+  position: fixed;
+  inset: 0;
+  z-index: 1;
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+  background: var(--result-paper);
+  color: var(--result-ink);
+}
+
+.result-topbar {
+  display: flex;
+  align-items: center;
+  /*
+   * **줄바꿈을 허용한다.** 안 하면 좁은 화면에서 flex가 요약 칸을
+   * 0px까지 눌러 버린다 — 실측(420px): `.result-topbar-summary`의 폭이
+   * 0이 되어 현금·연소득·실구매 가능 가격이 화면에서 사라지고, 인쇄
+   * 버튼은 글자가 세로로 쪼개져 122px짜리 기둥이 됐다. 넘치면 아래로
+   * 흐르게 두는 쪽이 정직하다(무대는 `minmax(0, 1fr)`이라 그만큼
+   * 줄어들 뿐 잘리지 않는다).
+   */
+  flex-wrap: wrap;
+  gap: 0.5rem 30px;
+  /*
+   * 프로토타입은 `height: 68px`에 `padding: 0 22px`다. 여기서는
+   * `min-height`로 둔다 — 위 `flex-wrap: wrap`이 좁은 화면에서 실제로
+   * 걸리는데, 고정 높이면 그때 접힌 줄이 상단바 밖으로 잘린다(요약 칸이
+   * 0px까지 눌리던 실측 결함을 wrap으로 고쳤던 그 자리다). 세로 여백도
+   * 0이 아니라 조금 둔다: 줄이 접혔을 때 글자가 테두리에 붙는다.
+   */
+  min-height: 68px;
+  padding: 0.5rem 22px;
+  background: var(--result-paper);
+  border-bottom: 1px solid var(--result-rule);
+  /*
+   * 요약 항목이 좁은 화면에서 넘칠 수 있다. 상단바가 세로로 자라
+   * 무대를 밀어내지 않게 가로로만 흐르게 한다 — **이 `overflow`는
+   * 인쇄에서 반드시 풀어야 한다**(아래 @media print, design.md §6).
+   */
+  overflow-x: auto;
+}
+
+.result-topbar-brand {
+  margin: 0;
+  flex-shrink: 0;
+  /*
+   * 글자체를 다시 선언하지 않는다 — body의 Pretendard를 그대로 쓴다.
+   * 사용자가 이 자리("내 예산으로 살 수 있는 집")가 명조로 뜨는
+   * 스크린샷을 두고 "pretendard로 모두 통일해줘"라고 지시했다.
+   * 크기·굵기·자간은 그대로 프로토타입의 `.brand`에서 온 값이다.
+   */
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  white-space: nowrap;
+}
+
+.result-topbar-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.5rem 30px;
+  min-width: 0;
+}
+
+.result-topbar-item {
+  display: grid;
+  gap: 3px;
+  white-space: nowrap;
+}
+
+.result-topbar-item-label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--result-gray);
+}
+
+.result-topbar-item-value-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.result-topbar-item-value {
+  font-size: 1.125rem;
+  font-weight: 600;
+  letter-spacing: -0.028em;
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * 상단바에서 **그 자리에서 고치는** 칸(현금·소득·지역). 사용자 지시:
+ * "지도페이지 들어온 후 조건변경은 상단 사이드 바에서 직접하고싶어."
+ *
+ * 읽기 전용 칸(`.result-topbar-item`)은 `white-space: nowrap`으로 한 줄에
+ * 붙어 있지만, 입력란과 select는 자기 폭이 필요하다 — 그 상속을 여기서
+ * 푼다. 폭을 고정하지 않고 상한만 두어, 좁은 화면에서는 상단바의
+ * `flex-wrap`이 이 칸을 아랫줄로 접는다.
+ */
+.result-topbar-item--field {
+  white-space: normal;
+  max-width: 15rem;
+}
+
+/*
+ * 상단바의 MoneyInput은 입력 화면(`.entry-screen`)의 그것보다 작다 —
+ * 여기서는 결과를 보는 중에 곁눈으로 고치는 자리라, 폼처럼 커지면
+ * 상단바가 무대(지도·목록)를 밀어낸다. 라벨은 읽기 전용 칸의 라벨
+ * (`.result-topbar-item-label`)과 같은 크기로 맞춰 두 칸이 한 줄에서
+ * 서로 어긋나 보이지 않게 한다.
+ */
+.result-topbar-item--field .money-input label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--result-gray);
+}
+
+/*
+ * SEED TextInput의 기본 크기는 폼용(높이 52px, 좌우 여백 16px)이라 상단바
+ * 한 줄에 그대로 두면 상단바가 두 배로 자라 무대(지도·목록)를 밀어낸다.
+ * 입력 화면의 그것은 그대로 두고 **이 자리에서만** 줄인다 — 그래서
+ * `.result-topbar-item--field` 아래로 스코프를 좁혔다.
+ *
+ * `--seed-*` 변수가 아니라 실제 클래스를 직접 짚는 이유: 설치된
+ * @seed-design/css의 text-input 레시피에는 크기를 바깥에서 줄일 수 있는
+ * 변수 훅이 없다(높이·여백이 `size_large` 레시피에 박혀 있다).
+ */
+.result-topbar-item--field .money-input .seed-text-input__root {
+  min-height: 0;
+  height: 32px;
+}
+
+.result-topbar-item--field .money-input .seed-text-input__value {
+  height: 32px;
+  padding: 0 8px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 상단바에서는 라벨과 입력란 사이 여백도 읽기 전용 칸(3px)에 맞춘다. */
+.result-topbar-item--field .money-input .seed-field__root {
+  gap: 3px;
+}
+
+/*
+ * 지역 바꾸기 — 지금 지역을 읽는 줄 **아래**에 놓는 두 select.
+ * `RegionQuickSelect.tsx` 참고(입력 화면의 `RegionSelect`와 별도
+ * 컴포넌트인 이유가 거기 적혀 있다).
+ */
+.region-quick-select {
+  display: flex;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.region-quick-select-field {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+/*
+ * 두 select의 라벨은 화면에서 숨긴다 — 바로 위 "지역" 라벨과 그 아래
+ * 지역 이름이 이미 이 자리가 무엇인지 말하고 있어서, 여기 또 적으면
+ * 좁은 상단바에 같은 말이 세 줄로 쌓인다. **DOM에서 지우지는 않는다** —
+ * 스크린 리더에는 두 select가 각각 무엇을 고르는 것인지 남아야 한다
+ * (`clip` 방식은 이 저장소가 다른 자리에서도 쓰는 시각적 숨김이다).
+ */
+.region-quick-select-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.region-quick-select select {
+  font: inherit;
+  font-size: 0.75rem;
+  max-width: 7rem;
+  padding: 2px 4px;
+  color: var(--result-ink);
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 0.25rem;
+}
+
+.region-quick-select select:disabled {
+  color: var(--result-gray);
+}
+
+/*
+ * 상단바에서 지역을 바꾸면 조회가 이 화면 위에서 일어난다 — 그 진행과
+ * 실패를 여기서 말한다(예전에는 입력 화면 안에만 있었다). `role`은
+ * 진행이면 `status`, 실패면 `alert`다(App.tsx) — 실패만 즉시 읽히게
+ * 한다.
+ */
+.result-topbar-status {
+  margin: 0;
+  align-self: center;
+  font-size: 0.75rem;
+  color: var(--result-gray);
+}
+
+.result-topbar-status--error {
+  color: var(--result-warn-ink);
+}
+
+.result-topbar-status button {
+  font: inherit;
+  font-weight: 600;
+  color: var(--result-signal-ink);
+  background: none;
+  border: none;
+  padding: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/*
+ * 규제 여부 배지("지역" 칸에서만 쓰인다 — RegulationBadge.tsx).
+ * 아이콘·글자를 함께 넣어 색으로만 뜻을 전하지 않는다. 세 상태
+ * (확정 규제/확정 비규제/가정)를 배경색이 아니라 **테두리 실선·점선**
+ * 으로도 가른다 — 확정과 가정을 색맹이라도 구분할 수 있게 한다.
+ */
+.regulation-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  padding: 2px 7px 2px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--result-rule);
+  color: var(--result-ink);
+  background: var(--result-alt);
+  white-space: nowrap;
+}
+
+.regulation-badge--regulated {
+  border-color: var(--result-warn);
+  /*
+   * `--result-warn`(#e8663c) 자체는 이 배경 위 글자로 2.94:1이라
+   * 못 넘는다 — 어두운 변형을 쓴다(정의부 주석 참고).
+   */
+  color: var(--result-warn-ink);
+  background: #fdf0ea;
+}
+
+.regulation-badge--unregulated {
+  border-color: var(--result-signal-ink);
+  color: var(--result-signal-ink);
+  background: var(--result-signal-wash);
+}
+
+.regulation-badge--assumed {
+  border-style: dashed;
+  color: var(--result-gray);
+}
+
+.regulation-badge-qualifier {
+  color: inherit;
+  opacity: 0.85;
+}
+
+/*
+ * 실구매 가능 가격 — **화면에서 가장 중요한 숫자다.** 그래서 채움색
+ * (`--result-signal`, 흰 글자 2.65:1)이 아니라 글자용 어두운 변형을 쓴다
+ * (흰 면 대비 5.44:1). prototype-results.html의 `.stat .v.money`와 같은
+ * 값이고, 그 파일의 `:root` 주석이 이 갈림의 이유를 적어 두었다.
+ */
+.result-topbar-item-value--money {
+  color: var(--result-signal-ink);
+}
+
+/*
+ * 값 자리가 문장일 때(실구매 가능 가격이 0원 — ResultShell.tsx의
+ * `notice` prop 문서 참고). 황동 강조를 쓰지 않고, `.result-topbar-item`이
+ * 건 `nowrap`을 여기서만 되돌린다 — 24자짜리 문장을 한 줄로 붙들면
+ * 좁은 화면에서 상단바가 통째로 가로 스크롤 상자가 된다.
+ */
+.result-topbar-item-value--notice {
+  /*
+   * 금액이 아니라 문장이다 — 강조색(`--result-signal-ink`)을 쓰지 않고,
+   * 18px짜리 문장이 상단바를 밀지 않게 한 단계 줄인다.
+   */
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: -0.012em;
+  white-space: normal;
+  color: var(--result-ink);
+}
+
+.result-topbar-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+/*
+ * 상단바 오른쪽 버튼(prototype-results.html의 `.ghost`에서 시작했으나,
+ * 사용자 지시로 글자 라벨을 홈 아이콘으로 바꿨다 — 접근 가능한 이름은
+ * `App.tsx`의 `aria-label`이 진다). 정사각형에 원형으로, 아이콘을
+ * 가운데 둔다.
+ *
+ * ⚠ **파랑 채움 위 흰 아이콘은 2.65:1이다.** 글자였을 때부터
+ * 사용자가 명시적으로 지시한 채움이고(커밋 `1c47333`) 그 값은 그대로
+ * 옮겨 왔다 — 지금은 비텍스트 콘텐츠라 WCAG 1.4.11의 3:1이 기준이지만
+ * 여전히 못 미친다. `scripts/seed-semantic-tokens.test.ts`의 예외
+ * 목록이 이 선택자를 이름으로 적고 실측값을 다시 잰다: 채움이 움직이면
+ * 거기서 먼저 깨진다. 통과시키는 방법은 채움을 `--result-signal-ink`로
+ * 내리는 것이고(흰 아이콘 5.44:1), 그만큼 지정하신 색에서 멀어진다.
+ */
+.back-to-entry-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  color: #ffffff;
+  background: var(--result-signal);
+  border: 0;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.back-to-entry-button:hover {
+  background: #59b4f4;
+}
+
+/*
+ * 채움이 옅어 기본 포커스 링이 그 위에서 잘 보이지 않는다 — 어두운
+ * 링을 바깥에 따로 그린다.
+ */
+.back-to-entry-button:focus-visible {
+  outline: 2px solid var(--result-ink);
+  outline-offset: 2px;
+}
+
+/*
+ * 무대(design.md §4의 `.stage`). 왼쪽 사이드바 + 오른쪽 지도.
+ *
+ * ⚠ **행은 반드시 `minmax(0, 1fr)`이다.** `auto`로 두면 지도 칸이
+ * 내용 높이(지도의 자식은 전부 absolute라 0)만큼만 받아 타일이 아예
+ * 뜨지 않는다 — 프로토타입에서 실제로 겪은 버그이고, 이 규칙 하나가
+ * 그것을 막는다. design.md §4의 두 경고 중 첫째.
  */
 .region-results-grid {
   display: grid;
-  grid-template-columns: 320px 1fr;
-  gap: 1rem;
-  margin: 1.5rem 0;
-  width: 100%;
+  /*
+   * 사이드바 열 **298px**(사용자 지시 ②: "사이드바 폭을 20%쯤 줄일 것",
+   * 372 → 298). 예산 상세 패널(`.budget-panel`)이 이 열을 정확히 덮는
+   * 오버레이라 **같은 값이어야 한다** — `scripts/result-screen-layout.test.ts`
+   * 가 두 값을 함께 잠근다.
+   */
+  grid-template-columns: 298px minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  /*
+   * 예산 상세 패널(`.budget-panel`)의 절대 배치 기준이다(Task 5).
+   * 상단바 안에 두지 않은 이유는 `.result-topbar`가 `overflow-x: auto`라
+   * 그 안의 절대 배치 자식이 상단바 높이에서 잘리기 때문이다.
+   *
+   * `position: relative`는 배치를 가두지 않는다(오버플로도 스크롤도 걸지
+   * 않는다) — 그래서 인쇄에서 풀 것이 없다. 인쇄에서는 이 그리드 자체가
+   * `display: block`이 되고 패널은 `position: static`이 되어 흐름에
+   * 합류한다(아래 @media print).
+   */
+  position: relative;
 }
 
+/*
+ * 사이드바만 스크롤한다(페이지 자체는 스크롤하지 않는다 —
+ * `body.body-scroll-locked`). **이 `overflow`는 인쇄에서 반드시
+ * 풀린다**(아래 @media print) — `overflow: auto`로 갇힌 상자는 CSS
+ * 페이지네이션이 여러 쪽으로 나누지 못해, 넘치는 목록 행이 종이에서
+ * 조용히 잘린다.
+ */
 .region-results-sidebar {
-  max-height: 600px;
+  min-height: 0;
   overflow-y: auto;
+  padding: 14px 12px 22px;
+  /*
+   * **흰색**(사용자 지시 ③). 그래서 그 위의 흰 카드는 그림자만으로
+   * 가장자리가 서지 않는다 — `.complex-row`가 헤어라인 테두리를 함께
+   * 가지는 이유다(프로토타입 머리주석).
+   */
+  background: var(--result-paper);
+  border-right: 1px solid var(--result-rule);
+}
+
+/*
+ * 매물 유형·행정동 좁히기 select 둘 — 화면 2 재스킨(prototype-results.html)
+ * 대상에 이 둘이 빠져 있어, 사이드바가 흰색이 된 뒤에도 옛 전역
+ * `.field select` 규칙(`var(--border)`, 화면 1의 어두운 면 대비로 잡힌 값)을
+ * 그대로 물려받아 흰 배경 위에 어긋난 회색 상자로 남아 있었다. `--result-*`
+ * 토큰으로 옮긴다 — 값·이유는 위 `.result-shell`의 토큰 정의 주석 참고.
+ */
+.region-results-sidebar .field select {
+  border-color: var(--result-rule);
+  border-radius: 0.5rem;
+  color: var(--result-ink);
+  background: var(--result-paper);
+}
+
+.region-results-sidebar .field select:focus-visible {
+  outline: 2px solid var(--result-signal);
+  outline-offset: 1px;
+}
+
+.region-results-sidebar .housing-type-select select:disabled {
+  color: var(--result-gray);
+  background: var(--result-alt);
 }
 
 .region-results-map {
   min-width: 0; /* 그리드 아이템이 내용물 크기로 넘치지 않도록 */
+  min-height: 0;
+  /*
+   * 지도가 남는 높이를 전부 쓰고, 그 아래 캐비앗 한 줄들(마커 상한·
+   * 부분 실패)은 내용 높이만 쓴다.
+   */
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
 }
 
-@media (max-width: 768px) {
+/*
+ * design.md §4: 900px 아래에서는 1열 — 지도 위, 목록 아래.
+ *
+ * 예전 규칙(768px)은 여기서 사이드바의 높이 제한·스크롤을 **풀었다**.
+ * 그때는 페이지 자체가 세로로 흐르는 문서였기 때문이다. 지금은 셸이
+ * 뷰포트에 고정돼 페이지가 스크롤하지 않으므로, 사이드바가 자기
+ * 스크롤을 잃으면 목록의 아래쪽에 닿을 방법이 아예 없어진다 —
+ * 그래서 두 행 모두 `minmax(0, 1fr)`로 두고 각자 스크롤하게 한다.
+ */
+@media (max-width: 900px) {
   .region-results-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   }
 
   .region-results-map {
     order: -1; /* 지도를 목록보다 먼저 보여준다 */
   }
 
-  /*
-   * 1열이 되면 사이드바의 높이 제한·자체 스크롤을 푼다.
-   *
-   * 2열에서는 이 제한이 "지도 옆 칸이 지도보다 길어지지 않게" 하는
-   * 장치지만, 1열에서는 페이지 스크롤 **안에** 600px짜리 중첩 스크롤
-   * 영역을 만든다. 게다가 바로 위 `order: -1` 때문에 그 앞에 600px
-   * 지도가 먼저 온다 — 결과 화면에 막 도착한 휴대폰 사용자는 화면
-   * 가득 지도만 보고, 목록은 그 아래에서 다시 손가락으로 굴려야 하는
-   * 작은 창 안에 갇힌다. 인쇄에서 같은 제한을 푸는 것과 같은 이유다
-   * (@media print의 .region-results-sidebar 참고).
-   */
+  /* 1열이면 사이드바 오른쪽에 지도가 없다 — 세로 경계선만 남긴다. */
   .region-results-sidebar {
-    max-height: none;
-    overflow-y: visible;
+    border-right: none;
+  }
+
+  .complex-map-frame {
+    border-left: none;
+    border-bottom: 1px solid var(--result-rule);
   }
 }
 
 /*
- * 마커를 눌렀을 때 뜨는 InfoWindow 안의 내용. 이 마크업만은 React가
- * 아니라 SDK가 그리므로(ComplexMap.tsx가 HTML 문자열을 넘긴다) 앱의
- * 폰트·여백을 여기서 직접 준다.
+ * ══════════════════════════════════════════════════════════════════
+ * 예산 상세 패널 (BudgetPanel.tsx, design.md §5)
  *
- * 한 단지에 평형이 여럿이면 줄이 여러 개 온다 — 세로로 길어질 수 있어
- * 최대 높이를 두고 넘치면 스크롤한다.
+ * ⚠ **이 블록 전체가 `@media screen`이다. 밖으로 옮기지 마라.**
+ *
+ * 이 패널 안에는 `MUST_SURVIVE_PRINT_CLASSES`가 여럿 들어 있다
+ * (`no-budget`, `binding-explainer`, `cost-breakdown`, `policy-loan-list`,
+ * `slider-price`, `slider-warning`). 패널의 기본 상태는
+ * **닫힘**이고 `Cmd+P`는 어느 단계에서든 눌린다 — 닫힘 규칙
+ * (`display: none`)이 인쇄에 닿는 순간 이들이 종이에서 통째로 사라진다.
+ *
+ * **그리고 기존 가드는 그 형태를 잡지 못한다.** `scripts/printCss.test.ts`
+ * 의 동기화 검사는 `@media print` 블록 **안**만 파싱하므로, 블록 밖의
+ * `.budget-panel--closed { display: none }`은 조용히 통과한다 — 미디어
+ * 조건이 없는 규칙은 인쇄에도 그대로 적용되는데도. Task 3이 인라인
+ * `body.style.overflow`로 인쇄를 다시 깬 것과 정확히 같은 실패 모양이다.
+ *
+ * `screen`은 인쇄 미디어와 절대 매치되지 않는다 — "선언하고 인쇄에서 다시
+ * 푼다"보다 한 단계 강한 보장이다. 그래서 닫힘 숨김뿐 아니라 **오버레이
+ * 배치·스크롤·높이 제한까지 전부** 여기 넣는다(design.md §6: `overflow`/
+ * `max-height` 제약을 건 요소는 반드시 인쇄에서 푼다 — 여기서는 애초에
+ * 걸리지 않게 한다). 아래 `@media print`에 같은 해제를 **안전망으로 한 벌
+ * 더** 둔다. printCss.test.ts가 이 블록 밖에 패널을 가두는 규칙이 없는지,
+ * 그리고 그 안전망이 있는지 둘 다 검사한다.
+ * ══════════════════════════════════════════════════════════════════
  */
-.complex-map-popup {
-  padding: 0.625rem 0.75rem;
-  font-size: 0.875rem;
-  line-height: 1.5;
-  max-width: 16rem;
-  max-height: 12rem;
-  overflow-y: auto;
-}
+@media screen {
+  /*
+   * 사이드바 열(372px)만 덮는 오버레이. **지도 칸은 덮지 않는다** —
+   * 열려 있는 동안에도 지도가 그대로 조작돼야 한다(task-5-brief).
+   * 대신 패널 뒤에 가려지는 사이드바를 바꾸는 조작(목록 행·지도 마커)은
+   * App.tsx가 이 패널을 닫는다.
+   */
+  .budget-panel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    z-index: 2;
+    /*
+     * ⚠ 이 파일에는 전역 `box-sizing: border-box`가 없다(딱 한 자리에만
+     * 있다). 없이 두면 아래 `padding`이 폭·높이에 **더해져** 실측
+     * 405×838px가 됐다 — 사이드바 열(372px)을 33px 넘어 지도 왼쪽을
+     * 덮었고, 무대 높이(770px)를 68px 넘어 뷰포트 아래로 흘렀다.
+     * 브라우저에서 `getBoundingClientRect()`로 잡은 실제 값이다.
+     */
+    box-sizing: border-box;
+    /*
+     * 사이드바 열과 **같은 값**이어야 한다(`.region-results-grid`의
+     * `grid-template-columns` 첫 항, 사용자 지시 ②로 298px). 어긋나면
+     * 지도 왼쪽을 덮거나 열이 삐져나온다 — 예전에 실측으로 잡은 결함이다.
+     */
+    width: 298px;
+    max-width: 100%;
+    max-height: 100%;
+    overflow-y: auto;
+    padding: 14px 12px 22px;
+    /*
+     * 구조·레이아웃은 그대로 두고 **색만** 결과 화면의 새 팔레트로
+     * 맞춘다 — 이 패널은 프로토타입에 없는 요소라 새로 디자인하지 않는다.
+     */
+    background: var(--result-paper);
+    border-right: 1px solid var(--result-rule);
+    box-shadow: 0 8px 24px rgb(18 41 77 / 12%);
+  }
 
-.complex-map-popup .complex-map-popup-name {
-  display: block;
-  font-weight: 700;
-  margin-bottom: 0.25rem;
-}
+  /* 접힌 상태. **언마운트가 아니다** — 위 블록 주석 참고. */
+  .budget-panel--closed {
+    display: none;
+  }
 
-.complex-map-popup .complex-map-popup-row {
-  display: block;
-  margin: 0.15rem 0;
+  /* 글자체는 body의 Pretendard를 그대로 쓴다(위 body 규칙 주석 참고). */
+  .budget-panel-title {
+    margin: 0 0 0.75rem;
+    font-size: 1.0625rem;
+    color: var(--result-ink);
+  }
+
+  .budget-detail-close {
+    position: absolute;
+    top: 0.875rem;
+    right: 0.875rem;
+    padding: 0.25rem 0.625rem;
+    font: inherit;
+    font-size: 0.8125rem;
+    color: var(--result-ink);
+    background: var(--result-paper);
+    border: 1px solid var(--result-rule);
+    border-radius: 18px;
+    cursor: pointer;
+  }
+
+  /* 좁은 화면에서는 1열이라 사이드바 폭이라는 것이 없다 — 전폭 시트다. */
+  @media (max-width: 900px) {
+    .budget-panel {
+      width: 100%;
+      border-right: none;
+      border-bottom: 1px solid var(--border);
+    }
+  }
 }
 
 /*
- * 마커 위에 항상 보이는 라벨(단지명+가격범위). 클릭 전에도 보여야 해서
- * InfoWindow와 달리 지도에 바로 얹힌다. 흰 바탕에 색 테두리 — 색은
- * 대출필요여부만 나타낸다(파랑=대출 없이, 주황=대출 필요). "필요/불필요"
- * 문구는 따로 적지 않는다(ComplexMap.tsx의 markerLabel 주석 참고).
+ * 상단바의 "실구매 가능 가격" 칸은 버튼이다(design.md §5의 트리거).
+ * 버튼 겉모양을 지우고 옆 칸들과 똑같이 보이게 한다 — 이 자리는 값이지
+ * 액션이 아니고, 종이에서도 값으로 읽혀야 한다(인쇄에서 이 규칙들은
+ * 뜻이 없지만 해로울 것도 없어 미디어를 가르지 않는다 — `position`도
+ * `overflow`도 걸지 않는다).
+ */
+.result-topbar-item--button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.result-topbar-item--button .fold-more-hint {
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  color: var(--result-signal-ink);
+}
+
+.result-topbar-item--button:hover .result-topbar-item-value {
+  text-decoration: underline;
+}
+
+/*
+ * 예전에는 여기 `.complex-map-popup`(마커를 누르면 뜨던 흰 InfoWindow
+ * 안의 내용)이 있었다. **사용자 지시로 없앴다 — 내용이 중복이었다.**
+ * 아래 마커 라벨이 이미 단지명과 가격 범위를 적고, 평형별 줄과 거래
+ * 건수는 단지 상세가 훨씬 자세히 보여준다(ComplexMap.tsx 주석 참고).
+ */
+
+/*
+ * 마커 위에 항상 보이는 라벨 — **단지명과 가격 범위, 둘뿐이다.**
+ * 이제 지도 위에서 눌러서 열리는 상자는 없고, 이 라벨이 지도가 말하는
+ * 전부다(누르면 목록·상세 쪽 선택이 움직인다).
  *
- * 상단 컬러 탭(단지명)엔 흰 글자, 하단 흰 배경(가격)엔 색 글자를 쓴다.
- * 기존 SEED 토큰(tier-high #0f5f96, warning-contrast #b45309)은 어둡게
- * 가라앉아 있어(요청: "더 밝은 블루·주황") 이 마커 전용 색을 따로 뒀다 —
- * 흰 배경 위 흰 글자·색 글자 양쪽 다 4.5:1(WCAG AA 본문 크기)을 넘도록
- * 실측해 골랐다:
- *   no-loan     #2563eb — 5.17:1
- *   loan-needed #cb4a0d — 4.64:1 (요청한 밝기(#f97316대)는 2.8:1로 기준을
- *     크게 벗어나 — 대비 기준을 지키는 선에서 최대한 밝힌 값)
+ * **분류(파랑 "대출 없이" / 주황 "대출 필요")는 색으로만 낸다.** 한때
+ * 이 글자가 마커 아래 줄에도 있었지만(색만으로 말하지 않기 위해), 사용자
+ * 지시로 마커 밖 지도 좌측 하단 범례(`.complex-map-legend`, 아래)로
+ * 옮겼다 — 마커마다 반복하는 대신 한 번만 설명한다. 목록 행의 부담
+ * 배지는 그대로다 — `lib/complex-list.ts`의 `burdenTierOf`는 살아
+ * 있고, 이번 변경은 **지도만**의 일이다.
+ *
+ * ── 모양: 흰 바탕 + 색 테두리, 단지명은 색 탭 · 가격은 흰 바탕 ──────
+ * 사용자가 첨부한 시안(사각 배지, 상단 색 탭+하단 흰 가격)을 그대로
+ * 따른다. 채움·글자색 조합은 아래 `.complex-map-pin--no-loan`/`--loan`
+ * 규칙 참고 — 색 탭의 흰 글자는 `scripts/seed-semantic-tokens.test.ts`의
+ * `USER_MANDATED_LOW_CONTRAST_FILLS` 예외(2.65:1/3.28:1, 사용자 지시)를
+ * 그대로 물려받고, 가격 글자는 같은 계열의 어두운 `-ink` 변형을 써
+ * 4.5:1을 넘는다.
+ */
+
+/*
+ * 마커 바깥 상자 — 라벨 상자와 그 아래 삼각 꼬리를 세로로 쌓는다.
+ *
+ * ⚠ **`width: 0`과 `align-items: center`가 앵커 x=0의 근거다.**
+ * 자식들은 폭 0인 이 축을 기준으로 좌우로 똑같이 넘쳐 나므로, 단지
+ * 이름이 길든 짧든 꼬리 꼭짓점의 x는 언제나 0이다 — `ComplexMap.tsx`의
+ * `MARKER_ANCHOR` 주석 참고. 폭을 주는 순간 그 산수가 깨진다.
+ *
+ * `position: absolute`를 쓰지 않는다: 세로로 쌓아야 아이콘 높이가 곧
+ * 꼬리 끝의 y가 되고(앵커 y의 근거), `scripts/map-overlay-guard.test.ts`가
+ * "지도 위 절대 배치 상자는 클릭을 통과시킨다"로 잡는 규칙에 **눌려야
+ * 하는** 마커가 걸리지도 않는다.
+ */
+.complex-map-pin {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 0;
+  /* 인라인 SVG 아래 생기는 베이스라인 여백을 없앤다 — 앵커 y가 어긋난다. */
+  line-height: 0;
+}
+
+/*
+ * ⚠ **크기를 `rem`이 아니라 px로 적는다.** 이 여섯 값(테두리 위/아래,
+ * 단지명·가격 각각의 위/아래 패딩과 line-height, 꼬리 높이)의 합이
+ * `ComplexMap.tsx`의 `MARKER_ANCHOR.y`다. `rem`으로 두면 루트 글꼴
+ * 크기가 바뀌는 순간 앵커와 실제 높이가 갈라지고, 마커가 가리키는
+ * 자리가 조용히 틀어진다. `scripts/result-screen-layout.test.ts`의
+ * "앵커 y가 styles.css의 실제 박스 모델 높이와 같다"가 이 값들을
+ * 여기서 직접 읽어 합을 다시 잰다.
+ *
+ * 테두리를 둔다(1px) — 흰 바탕에서 테두리 없이는 색 구분이 옅어진다.
+ * 그만큼(위/아래 합 2px) 위 앵커 합에 들어간다.
+ *
+ * **채움·글자색은 여기 없다.** 이름 탭(색)·가격(흰 바탕) 각각
+ * `.complex-map-marker-name`/`-price`가 스스로 지고, 테두리 색은 다시
+ * 티어의 몫이다(`.complex-map-pin--no-loan .complex-map-marker`/`--loan`
+ * 아래) — 기본 규칙에 색을 두면 스코프 규칙 없이도 "이 마커는 이 색"을
+ * 주장하게 되어, 티어를 매기지 못한 자리(있어서는 안 되지만)가 조용히
+ * 통과한다.
  */
 .complex-map-marker {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1.5px solid;
-  border-radius: 0.5rem;
+  border: 1px solid;
+  border-radius: 10px;
+  background: var(--result-paper);
+  letter-spacing: -0.02em;
   white-space: nowrap;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-}
-
-.complex-map-marker-name {
-  padding: 0.15rem 0.5rem;
-  font-size: 0.625rem;
-  font-weight: 600;
-  text-align: center;
-  color: var(--seed-color-palette-static-white);
-}
-
-.complex-map-marker-price {
-  padding: 0.25rem 0.5rem;
-  font-size: 0.8125rem;
-  font-weight: 700;
-  text-align: center;
-  background: var(--seed-color-palette-static-white);
-}
-
-.complex-map-marker--no-loan {
-  border-color: #2563eb;
-}
-.complex-map-marker--no-loan .complex-map-marker-name {
-  background: #2563eb;
-}
-.complex-map-marker--no-loan .complex-map-marker-price {
-  color: #2563eb;
-}
-
-.complex-map-marker--loan-needed {
-  border-color: #cb4a0d;
-}
-.complex-map-marker--loan-needed .complex-map-marker-name {
-  background: #cb4a0d;
-}
-.complex-map-marker--loan-needed .complex-map-marker-price {
-  color: #cb4a0d;
+  font-variant-numeric: tabular-nums;
+  box-shadow: 0 1px 4px rgb(18 41 77 / 22%);
+  cursor: pointer;
 }
 
 /*
- * 인쇄 버튼. 화면 어조("해요체")를 그대로 쓴다 — 버튼 문구는 짧은 동사형
- * 명사구("인쇄하기")라 tone-guard의 대상(문장 종결)이 아니다.
+ * 첫 줄 — 단지명, 색 탭. 채움 위 흰 글자라 대비가 낮다(아래
+ * `.complex-map-pin--no-loan .complex-map-marker-name`/`--loan` 참고,
+ * 사용자 지시로 받아들인 예외) — 그래서 **가격 줄보다 작게** 둬 가장
+ * 중요한 숫자(가격)의 위계를 가리지 않는다.
  */
-.print-button {
-  margin: 1.5rem 0 0;
-  padding: 0.625rem 1.25rem;
-  font: inherit;
+.complex-map-marker-name {
+  padding: 3px 10px;
+  font-size: 12px;
+  line-height: 15px;
   font-weight: 600;
+  text-align: center;
+}
+
+/*
+ * 둘째 줄 — 가격 범위, 흰 바탕. **`opacity`를 걸지 않는다**: 불투명도는
+ * 대비 전수 검사가 보지 못하는 값이라 화면만 조용히 나빠진다. 위계는
+ * 크기·굵기가 진다 — 단지명보다 크고 굵다.
+ */
+.complex-map-marker-price {
+  padding: 3px 10px 4px;
+  font-size: 13px;
+  line-height: 16px;
+  font-weight: 700;
+  text-align: center;
+  background: var(--result-paper);
+}
+
+/*
+ * 말풍선 꼬리. **이 삼각형의 꼭짓점이 좌표에 앉는 점이다** — 마커가
+ * "정확히 여기"를 가리키게 하는 유일한 부분이라 장식이 아니다.
+ * 채움은 `fill="currentColor"`(ComplexMap.tsx)라 여기 `color`가 곧
+ * 삼각형 색이다. **기본값을 두지 않는다** — 라벨 상자와 같은 티어
+ * 스코프 규칙에서만 색을 받아, 라벨 상자 색이 바뀌는데 꼬리만 안
+ * 바뀌는 사고를 구조적으로 막는다(`.complex-map-pin--no-loan
+ * .complex-map-marker-tail`/`--loan` 참고).
+ *
+ * ⚠ **테두리·이름 탭과 정확히 같은 토큰을 쓰지 않는다.** `--result-signal`/
+ * `--result-warn`을 `color`로 쓰면
+ * "--result-signal을 글자색으로 쓰지 않는다" 검사가 막는다(흰 배경
+ * 2.65:1) — 그 검사는 예외를 두지 않는 하드 룰이다. 그래서 꼬리는
+ * 같은 색 계열의 **어두운 변형**(`-ink`, 글자로도 안전한 값)을 쓴다.
+ * 라벨 상자와 색상이 완전히 같지는 않지만 같은 계열이라 눈으로는
+ * 갈라지지 않는다.
+ */
+.complex-map-marker-tail {
+  display: block;
+  height: 7px;
+}
+
+/*
+ * 부담 수준 2분류 — 테두리·이름 탭 채움·가격 글자·꼬리 색을 함께
+ * 정한다. `.complex-map-pin`(바깥 상자, 앵커 산수를 지키는 폭 0 flex
+ * 컨테이너)에 티어 클래스를 붙이고 자손 선택자로 자식들을 함께
+ * 물들인다 — 형제 요소라 CSS 상속만으로는 안 닿는다.
+ *
+ * ⚠ 이름 탭의 흰 글자 + 밝은 채움은 대비 기준(4.5:1)에 못 미친다
+ * (2.65:1 / 3.28:1) — **사용자가 명시적으로 지시한 색**이다(`scripts/
+ * seed-semantic-tokens.test.ts`의 `USER_MANDATED_LOW_CONTRAST_FILLS`에
+ * 실측값과 함께 예외로 올랐다). 가격 줄은 같은 계열의 어두운 `-ink`
+ * 변형을 써 4.5:1을 넘고, 지도 범례(`.complex-map-legend`)에도 같은
+ * 뜻이 글자로 있어 색이 하나도 전달되지 않아도 뜻은 남는다.
+ */
+.complex-map-pin--no-loan .complex-map-marker {
+  border-color: var(--result-signal);
+}
+
+.complex-map-pin--no-loan .complex-map-marker-name {
+  background: var(--result-signal);
+  color: #ffffff;
+}
+
+.complex-map-pin--no-loan .complex-map-marker-price {
+  color: var(--result-signal-ink);
+}
+
+.complex-map-pin--no-loan .complex-map-marker-tail {
+  color: var(--result-signal-ink);
+}
+
+.complex-map-pin--loan .complex-map-marker {
+  border-color: var(--result-warn);
+}
+
+.complex-map-pin--loan .complex-map-marker-name {
+  background: var(--result-warn);
+  color: #ffffff;
+}
+
+.complex-map-pin--loan .complex-map-marker-price {
+  color: var(--result-warn-ink);
+}
+
+.complex-map-pin--loan .complex-map-marker-tail {
+  color: var(--result-warn-ink);
+}
+
+/*
+ * 가장 축소한 줌(12 이하)의 마커 — 이름도 가격도 없는 점 하나
+ * (`markerDetailForZoom`의 `"dot"`). 사용자 지시: "지도를 축소할 경우
+ * 마커나 이름 정도만 나오도록 해줘."
+ *
+ * ⚠ **`box-sizing: border-box`를 반드시 명시한다.** 이 파일에는 전역
+ * `box-sizing`이 없어서(위 2563 근처 주석), 이걸 빼면 흰 테 2px이 지름에
+ * 더해져 실제 크기가 16px이 되고 `MARKER_ANCHOR.dot.y`(지름의 절반)가
+ * 실제 한가운데를 벗어난다 — 점이 가리키는 자리가 틀어진다.
+ *
+ * 점은 `.complex-map-marker` 클래스를 그대로 달고 있다(markerLabel 참고)
+ * — 선택 강조(`.complex-map-marker--focused`)와 클릭이 그 클래스·
+ * `data-complex-key`로 마커를 찾기 때문이다. 그래서 여기서는 그 기본
+ * 규칙의 사각 배지 모양만 덮어쓴다.
+ */
+.complex-map-dot {
+  box-sizing: border-box;
+  width: 12px;
+  height: 12px;
+  border-width: 2px;
+  border-radius: 50%;
+}
+
+/*
+ * 점의 채움은 티어 색, 테는 흰색이다 — 지도 타일 위에서 색점 하나만
+ * 두면 배경과 섞여 잘 안 보인다. 배지의 "흰 바탕 + 색 테두리"와 안팎이
+ * 뒤집힌 모양인데, 이 크기에서는 색이 면으로 있어야 분류가 읽힌다.
+ * 범례 견본(`.complex-map-legend-swatch--*`)과 같은 토큰을 쓴다.
+ */
+.complex-map-pin--no-loan .complex-map-dot {
+  background: var(--result-signal);
+  border-color: var(--result-paper);
+}
+
+.complex-map-pin--loan .complex-map-dot {
+  background: var(--result-warn);
+  border-color: var(--result-paper);
+}
+
+/*
+ * 지도 좌측 하단 마커 색 안내(design.md §4의 옛 범례 자리를 되살렸다).
+ * 부담 수준 글자가 마커 밖으로 옮겨 오며(위 참고) 색이 무슨 뜻인지
+ * 알릴 자리가 필요해졌다. 색은 덧말이고 같은 뜻이 여기 글자로도
+ * 적혀 있다 — 이 상자가 없어도(인쇄 등) 마커 자체의 흰/색 배치는
+ * 남지만, 그 뜻은 이 범례가 진다.
+ */
+.complex-map-legend {
   /*
-   * 흰 글자는 배경 토큰(bg-layer-floating)이 아니라 팔레트의 정적
-   * 흰색으로 낸다 — `.complex-map-marker-name`과 같은 토큰을 쓴다.
-   * 배경 토큰을 글자색으로 빌려 쓰면, 그 토큰이 "떠 있는 면의 배경"
-   * 이라는 이유로 값이 바뀌는 날 이 글자색이 함께 끌려간다.
+   * 지도 좌측 하단은 마커가 놓이는 자리이기도 하다 — 겹치면 그 마커는
+   * 지도를 움직이기 전까지 눌리지 않는다(scripts/map-overlay-guard.test.ts
+   * 머리 주석의 실제 사고). 범례엔 누를 것이 없으니 클릭을 그대로
+   * 통과시킨다.
    */
-  color: var(--seed-color-palette-static-white);
-  background: var(--seed-color-bg-brand-solid);
-  border: none;
+  pointer-events: none;
+  position: absolute;
+  left: 1rem;
+  bottom: 1rem;
+  z-index: 2;
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  list-style: none;
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  color: var(--result-ink);
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
   border-radius: 0.375rem;
-  cursor: pointer;
+  box-shadow: 0 1px 4px rgb(18 41 77 / 15%);
+}
+
+.complex-map-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+}
+
+.complex-map-legend-swatch {
+  width: 0.75rem;
+  height: 0.75rem;
+  border-radius: 0.25rem;
+  border: 1px solid;
+}
+
+.complex-map-legend-swatch--no-loan {
+  background: var(--result-signal);
+  border-color: var(--result-signal);
+}
+
+.complex-map-legend-swatch--loan {
+  background: var(--result-warn);
+  border-color: var(--result-warn);
+}
+
+/*
+ * 목록에서 고른(또는 방금 누른) 단지의 마커.
+ *
+ * ⚠ **채움색을 바꾸지 않는다.** 채움이 곧 분류다(파랑=대출 없이,
+ * 주황=대출 필요) — 고른 순간 색이 바뀌면 그 마커가 어느 분류였는지
+ * 사라진다. 선택은 종류가 아니라 상태이므로 바깥 테로 말한다.
+ * `scripts/result-screen-layout.test.ts`가 이 규칙에
+ * `background`·`color`가 없는지 검사한다(`outline`이 아니라 `box-shadow`인
+ * 이유: 라벨 상자의 둥근 모서리 곡률을 그대로 따라간다).
+ *
+ * 테는 라벨 상자에만 두른다 — 꼬리까지 감싸려면 절대 배치가 필요하고,
+ * 그러면 위 `.complex-map-pin`이 지키는 앵커 산수가 깨진다.
+ */
+.complex-map-marker--focused {
+  box-shadow:
+    0 0 0 2px #ffffff,
+    0 0 0 4px var(--result-ink),
+    0 1px 4px rgb(18 41 77 / 22%);
+  z-index: 1;
 }
 
 /*
@@ -1059,37 +3089,9 @@ body {
  * 꼭 필요해요 / 확인했어요 / 아직 낼 수 없어요)은 **언제나 글자로 먼저**
  * 있고, 아래 색은 그 글자를 거들 뿐이다. 색이 하나도 적용되지 않아도
  * (흑백 인쇄·색각 이상) 뜻이 그대로 남아야 한다. 새 hex를 만들지 않고
- * 이 파일이 이미 쓰던 의미 변수(--danger·--caution·--safe)와 SEED 배경
+ * 이 파일이 이미 쓰던 의미 변수(--risk·--warn·--safe)와 SEED 배경
  * 토큰만 재사용한다.
  */
-.purchase-type {
-  margin: 0 0 1.5rem;
-}
-
-.purchase-type-fieldset {
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  padding: 0.75rem 1rem 1rem;
-  margin: 0;
-}
-
-.purchase-type-question {
-  font-weight: 700;
-  padding: 0 0.25rem;
-}
-
-/*
- * 저장해 둔 유형을 읽지 못했다는 안내. 뜻은 전부 글자가 말하고, 색은
- * 눈에 띄게 하는 역할만 한다(색만으로 전달하는 정보가 없다).
- */
-.purchase-type-restore-notice {
-  border-left: 4px solid var(--caution);
-  background: var(--seed-color-bg-warning-weak);
-  padding: 0.75rem 1rem;
-  margin: 0 0 1rem;
-  font-weight: 600;
-}
-
 /*
  * 투자 경로 인쇄물 요약(PurchasePrintSummary)의 머리줄. 화면에서는
  * 부모가 숨겨져 보이지 않고, 종이에서 이 종이가 어떤 룰셋·언제 기준인지를
@@ -1101,46 +3103,11 @@ body {
   color: var(--seed-color-fg-neutral-muted);
 }
 
-.purchase-type-why {
-  margin: 0.35rem 0 0.75rem;
-  font-size: 0.875rem;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
-.purchase-type-options {
-  display: grid;
-  gap: 0.5rem;
-}
-
-.purchase-type-option {
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  cursor: pointer;
-}
-
-.purchase-type-option input {
-  margin-top: 0.35rem;
-}
-
-.purchase-type-option-body {
-  display: grid;
-  gap: 0.1rem;
-}
-
-.purchase-type-label {
-  font-weight: 600;
-}
-
-.purchase-type-summary {
-  font-size: 0.875rem;
-  color: var(--seed-color-fg-neutral-muted);
-}
-
 /*
- * 종이에만 나오는 유형 표시. 화면에는 라디오가 이미 있어 중복이고,
- * 인쇄에서는 그 라디오가 지워진다(.purchase-type-form). PrintSummary와
- * 같은 패턴이다.
+ * 종이에만 나오는 유형 표시. 유형이 실거주 하나뿐이 된 뒤에도 종이에는
+ * 남긴다 — 이 종이의 한도·부담률이 "내가 들어가 사는 집"을 전제로
+ * 계산됐다는 사실을 다시 적는 곳이 여기뿐이다(hiddenInPrint.ts의
+ * `purchase-type-print` 주석). 화면에서는 숨긴다.
  */
 .purchase-type-print {
   display: none;
@@ -1156,7 +3123,7 @@ body {
  * 아래 지표들만 남아 한도가 문제되지 않는 것처럼 읽힌다.
  */
 .purchase-loan-note {
-  border-left: 4px solid var(--caution);
+  border-left: 4px solid var(--warn);
   background: var(--seed-color-bg-warning-weak);
   padding: 0.75rem 1rem;
   margin: 0 0 1rem;
@@ -1213,11 +3180,11 @@ body {
 }
 
 .purchase-overall[data-verdict="stop"] {
-  color: var(--danger);
+  color: var(--risk);
 }
 
 .purchase-overall[data-verdict="expert"] {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 .purchase-overall[data-verdict="incomplete"] {
@@ -1253,12 +3220,12 @@ body {
 }
 
 .purchase-metric[data-verdict="stop"] {
-  border-left-color: var(--danger);
+  border-left-color: var(--risk);
   background: var(--seed-color-bg-critical-weak);
 }
 
 .purchase-metric[data-verdict="expert"] {
-  border-left-color: var(--caution);
+  border-left-color: var(--warn);
   background: var(--seed-color-bg-warning-weak);
 }
 
@@ -1337,7 +3304,7 @@ body {
 
 /* 막을 수 있는지는 이미 글자로 적혀 있다. 색은 그 글자를 거들 뿐이다. */
 .purchase-stage[data-covered="no"] .purchase-stage-covered {
-  color: var(--danger);
+  color: var(--risk);
   font-weight: 600;
 }
 
@@ -1402,11 +3369,11 @@ body {
 }
 
 .price-overall[data-verdict="stop"] {
-  color: var(--danger);
+  color: var(--risk);
 }
 
 .price-overall[data-verdict="expert"] {
-  color: var(--caution);
+  color: var(--warn);
 }
 
 .price-overall[data-verdict="incomplete"],
@@ -1471,12 +3438,12 @@ body {
 }
 
 .price-finding[data-verdict="stop"] {
-  border-left-color: var(--danger);
+  border-left-color: var(--risk);
   background: var(--seed-color-bg-critical-weak);
 }
 
 .price-finding[data-verdict="expert"] {
-  border-left-color: var(--caution);
+  border-left-color: var(--warn);
   background: var(--seed-color-bg-warning-weak);
 }
 
@@ -1707,6 +3674,35 @@ body {
 }
 
 /*
+ * 화면 1이 떠 있는 동안의 문서 스크롤 잠금(EntryScreen.tsx가 이 클래스를
+ * `<body>`에 붙였다 뗀다 — 클래스 이름의 유일한 출처는
+ * `src/print/bodyScrollLock.ts`다).
+ *
+ * **왜 잠그는가.** 화면 1은 `position: fixed; inset: 0`이라 자기 자신은
+ * 문서 높이에 기여하지 않지만, 그 **뒤에** 깔린 결과 트리
+ * (`.results-screen`)는 언마운트되지 않고 그대로 높이를 만든다 — 그래서
+ * 아무것도 움직이지 않는 페이지 스크롤바가 생긴다.
+ *
+ * **왜 클래스인가, 그리고 왜 하필 여기 있는가(재검토 수정 Critical 2).**
+ * 예전에는 `document.body.style.overflow = "hidden"`이었다. 인라인
+ * 스타일은 `!important` 없이 CSS로 덮을 수 없어, 아래 `@media print`가
+ * 이 잠금을 풀 방법이 없었다 — `<html>`의 `overflow` 기본값이
+ * `visible`이라 `<body>`의 `hidden`이 뷰포트로 전파되고, 그 상태로
+ * 인쇄하면(인쇄는 브라우저의 Cmd+P로만 한다) 크롬·파이어폭스에서
+ * 종이가 첫 장에서 잘린다. design.md §6의 규칙
+ * (`overflow`/`max-height` 제약을 건 요소는 반드시 `@media print`에서
+ * 푼다)이 그대로 걸리는 자리다.
+ *
+ * 이 규칙이 화면 1 섹션(파일 맨 아래)이 아니라 `@media print` **바로
+ * 위**에 있는 것은 의도다: 두 규칙의 특정도가 (0,1,1)로 같아 순서가
+ * 승패를 가르므로, 해제 규칙이 뒤에 와야 `!important` 없이 이긴다.
+ * `scripts/printCss.test.ts`가 이 순서까지 검사한다.
+ */
+body.body-scroll-locked {
+  overflow: hidden;
+}
+
+/*
  * 인쇄 전용 CSS.
  *
  * 이 서비스의 제품 방침은 "사지 말아야 할 때를 말해주는 것"이다 — 인쇄물은
@@ -1725,21 +3721,41 @@ body {
  *    잠근다.
  */
 @media print {
+  /*
+   * `.entry-screen`은 화면 1의 전체화면 고정 레이어다 — 인쇄에서 풀지
+   * 않으면 불투명한 어두운 상자가 첫 장을 덮는다(src/print/hiddenInPrint.ts의
+   * `.entry-screen` 항목에 이유를 자세히 적었다). 이 배열과 아래 선택자
+   * 목록은 반드시 함께 움직인다(printCss.test.ts).
+   */
+  .entry-screen,
   .profile-form,
   .price-slider-control,
   .region-select,
   .dong-narrow,
-  .print-button,
+  .complex-filters,
+  .back-to-entry-button,
   .complex-more,
   .complex-detail-back,
-  .subtitle-privacy-note,
-  .assumption-action,
+  .budget-detail-close,
   .slider-action,
   .fold-more-hint,
-  .purchase-type-form,
   .purchase-form,
   .price-check-form,
+  /*
+   * 단지 상세의 매물가격 입력란. 위 `.price-check-form`과 같은 이유다 —
+   * 종이에서는 채울 수 없다. 넣은 값은 아래 결과들이 다시 적는다.
+   */
+  .complex-detail-price-form,
+  /*
+   * 매달 나가는 돈 계산기의 입력란(대출금액·금리·상환방식). 바로 위
+   * `.price-check-form`과 같은 이유다 — 종이에서는 채울 수 없다.
+   * **결과 카드(`.loan-calc-result`)는 지우지 않는다**: 그 안에 무엇을
+   * 전제로 계산했는지와 이 숫자가 가정이라는 사실이 함께 있다.
+   */
+  .loan-input-form,
+  .price-slider-rate-input,
   .complex-map,
+  .complex-map-frame,
   .complex-map-status,
   .complex-map-caveat,
   .complex-map-empty,
@@ -1747,21 +3763,26 @@ body {
     display: none;
   }
 
-  /* 라디오가 지워진 자리에 고른 유형을 평문으로 남긴다. */
-  .purchase-type-print {
-    display: block;
+  /*
+   * 화면 1의 문서 스크롤 잠금을 푼다(재검토 수정 Critical 2).
+   *
+   * `phase === "입력"`인 채로 인쇄하는 것은 정상 경로다 — 인쇄는
+   * 브라우저의 Cmd+P로만 하고, 그 단계에서도 눌린다. 잠금이
+   * 남아 있으면 `<body>`의 `overflow: hidden`이 (`<html>`의 기본값
+   * `visible`을 통해) 뷰포트로 전파돼 종이가 첫 장에서 잘린다.
+   *
+   * `!important`를 쓰지 않는다 — 위 화면용 규칙과 특정도가 같고
+   * 이 블록이 뒤에 있어 순서로 이긴다(그 순서를
+   * `scripts/printCss.test.ts`가 검사한다). 공용 스타일시트의
+   * `!important`는 그 자체로 다음 함정이 된다.
+   */
+  body.body-scroll-locked {
+    overflow: visible;
   }
 
-  /*
-   * 가정 문구(AssumptionLine)는 인쇄에서도 남지만, 대시 테두리·호버
-   * 배경은 "눌러서 고칠 수 있다"는 신호다. 종이 위에서는 누를 수 없으니
-   * 그 신호(조작 장치의 겉모양)만 지우고 문구(정보)는 그대로 둔다.
-   */
-  .assumption-item {
-    border: none;
-    background: none;
-    padding: 0;
-    cursor: default;
+  /* 이 종이가 어떤 구매 유형을 전제하는지 평문 한 줄로 남긴다. */
+  .purchase-type-print {
+    display: block;
   }
 
   /* 인쇄물 전용 요약을 이제 드러낸다. */
@@ -1813,10 +3834,11 @@ body {
    * 요소로, 접힌 <details>에서는 `content-visibility: hidden`과
    * `block-size: 0`이 걸려 있다(직접 확인: getComputedStyle(el,
    * '::details-content')). 이 둘을 뒤집으면 중첩된 <details>
-   * (CostBreakdown, BindingExplainer의 "네 가지 한도 모두 보기")까지
-   * 각 단계마다 그대로 펼쳐진다 — 실측: 이 규칙을 넣은 뒤
-   * `document.body.innerText`에 "부대비용 907만 7,341원"과 그 내역,
-   * "네 가지 한도 모두 보기" 안의 네 항목이 모두 나타난다.
+   * (CostBreakdown의 부대비용 내역 등)까지 각 단계마다 그대로
+   * 펼쳐진다 — 실측: 이 규칙을 넣은 뒤 `document.body.innerText`에
+   * "부대비용 907만 7,341원"과 그 내역이 모두 나타난다. 대출 한도의
+   * "네 가지 한도"는 이제 `<details>`가 아니라 언제나 펼쳐진 표라
+   * (BindingExplainer.tsx) 이 규칙에 기대지 않는다.
    */
   details:not([open])::details-content {
     content-visibility: visible !important;
@@ -1836,9 +3858,8 @@ body {
   .no-budget,
   .binding-explainer,
   .policy-loan-list li,
-  .assumption-item,
-  .assumption-notice,
-  .safe-line-item,
+  .binding-limit-table > div,
+  .price-slider-burden-table > div,
   .print-summary dl > div,
   .purchase-print-summary dl > div,
   .purchase-metric,
@@ -1861,22 +3882,29 @@ body {
   }
 
   /*
-   * `.region-results-sidebar`의 `overflow-y: auto` + `max-height: 600px`는
-   * 화면 전용 스크롤 상자다 — CSS 페이지네이션은 `overflow: auto`로 갇힌
-   * 상자 안의 내용을 여러 쪽으로 나누지 못하므로, 이 제약이 인쇄에 그대로
-   * 남으면 600px를 넘는 목록 행은 스크롤해야 보이던 자리에서 그냥 잘려
-   * 종이에 나오지 않는다 — 그 안에는 토지임대부 경고처럼 없으면 월
-   * 상환액 일부를 전체로 오해하게 만드는 문구도 있다(land-lease-note,
-   * hiddenInPrint.ts 참고). 그래서 인쇄에서는 높이 제한과 스크롤을 모두
-   * 풀어 목록이 페이지를 넘어가며 이어지게 한다.
+   * `.region-results-sidebar`는 화면 전용 스크롤 상자다
+   * (`min-height: 0` + `overflow-y: auto`) — CSS 페이지네이션은
+   * `overflow: auto`로 갇힌 상자 안의 내용을 여러 쪽으로 나누지 못하므로,
+   * 이 제약이 인쇄에 그대로 남으면 상자 밖으로 넘치는 목록 행은
+   * 스크롤해야 보이던 자리에서 그냥 잘려 종이에 나오지 않는다 — 그
+   * 안에는 토지임대부 경고처럼 없으면 월 상환액 일부를 전체로 오해하게
+   * 만드는 문구도 있다(land-lease-note, hiddenInPrint.ts 참고). 그래서
+   * 인쇄에서는 스크롤과 높이 계산을 모두 풀어 목록이 페이지를 넘어가며
+   * 이어지게 한다.
+   *
+   * 아래 `max-height: none`은 지금 화면 규칙에 대응하는 짝이 없다
+   * (Task 4에서 셸이 높이를 주게 되면서 화면 쪽 `max-height: 600px`가
+   * 사라졌다). 그래도 남겨 둔다 — 높이 상한이 다시 들어오는 날 인쇄
+   * 해제를 함께 넣는 것을 잊어도 이미 풀려 있게 하는 값이고,
+   * `printCss.test.ts`가 그 해제를 구조로 잠그고 있다.
    *
    * `.region-results-grid`를 `display: block`으로 바꾸는 것은 별개
-   * 문제다 — 두 컬럼 그리드(320px 사이드바 + 지도 컬럼)는 위에서
+   * 문제다 — 두 컬럼 그리드(298px 사이드바 + 지도 컬럼)는 위에서
    * `.complex-map`을 지워도 그리드 자체는 남아, 인쇄 여백을 "없음"으로
-   * 두면(Letter/A4 모두) 인쇄 가능 영역이 768px보다 넓어져 아래
-   * `@media (max-width: 768px)`의 모바일 1열 전환이 인쇄 중엔 걸리지
-   * 않는다 — 빈 오른쪽 절반이 그대로 종이에 남는다. `display: block`은
-   * 폭 조건 없이 무조건 1열로 흘러, 그 여백 설정에서도 안전하다.
+   * 두면(Letter/A4 모두) 인쇄 가능 영역이 넓어져 화면 쪽 1열 전환
+   * (`@media (max-width: 900px)`)이 인쇄 중엔 걸리지 않는다 — 빈 오른쪽
+   * 절반이 그대로 종이에 남는다. `display: block`은 폭 조건 없이 무조건
+   * 1열로 흘러, 그 여백 설정에서도 안전하다.
    */
   .region-results-grid {
     display: block;
@@ -1885,5 +3913,995 @@ body {
   .region-results-sidebar {
     max-height: none;
     overflow: visible;
+    /*
+     * 화면에서 이 상자는 `min-height: 0`인 그리드 아이템이자 스크롤
+     * 상자다. 인쇄에서는 둘 다 뜻이 없고, 남겨 두면 위 `overflow:
+     * visible`만으로는 풀리지 않는 높이 계산이 남는다.
+     */
+    min-height: auto;
+    padding: 0;
+  }
+
+  /*
+   * **전체화면 셸을 통째로 푼다**(design.md §6).
+   *
+   * `.result-shell`은 `position: fixed; inset: 0`에 뷰포트 높이를 두
+   * 행으로 나눈 그리드다. 인쇄는 정적 문서라 고정 요소는 첫 장에 한 번만
+   * 찍히고, 그 안의 내용은 뷰포트 한 화면 분량에서 잘린다 — 목록 행·
+   * 토지임대부 경고·면책까지 통째로 종이에서 사라진다. `.entry-screen`을
+   * 인쇄에서 지운 것과 같은 이유지만, 이쪽은 **지울 수 없다**: 종이에
+   * 나가야 하는 것이 전부 이 안에 들어 있다. 그래서 지우는 대신 푼다.
+   *
+   * `display: block`은 두 행 그리드도 함께 푼다 — 자식(상단바·무대)이
+   * 세로로 흐른다.
+   */
+  .result-shell {
+    position: static;
+    display: block;
+    height: auto;
+    overflow: visible;
+  }
+
+  /*
+   * 상단바의 가로 스크롤(`overflow-x: auto`)도 같은 규칙에 걸린다 —
+   * `overflow`로 갇힌 상자는 종이에서 잘린다. 요약 항목은 값이라
+   * 지우지 않고 흐르게 둔다(줄바꿈도 함께 푼다 — `white-space: nowrap`인
+   * 항목들이 종이 폭을 넘으면 그대로 잘린다).
+   */
+  .result-topbar {
+    display: block;
+    overflow: visible;
+  }
+
+  .result-topbar-summary,
+  .result-topbar-item {
+    display: block;
+  }
+
+  .result-topbar-item,
+  .result-topbar-brand,
+  .result-topbar-item-value {
+    white-space: normal;
+  }
+
+  /*
+   * **예산 상세 패널의 안전망**(Task 5, design.md §6).
+   *
+   * 패널의 화면 전용 규칙(닫힘 숨김·절대 배치·스크롤)은 전부 위쪽
+   * `@media screen` 블록 안에 있어 여기까지 오지 못한다 — 그러니
+   * 엄밀히는 풀 것이 없다. 그래도 한 벌 더 쓴다: 언젠가 누가 그 규칙
+   * 하나를 블록 밖으로 옮기는 날(가장 흔한 형태다), 이 네 줄이 종이를
+   * 지킨다. 패널 안에는 보호 대상 클래스가 열 개 들어 있고, 패널의 기본
+   * 상태는 **닫힘**이며 Cmd+P는 어느 단계에서든 눌린다.
+   *
+   * `display: block`이 그중 핵심이다 — 미디어 조건 없이 걸린
+   * `.budget-panel--closed { display: none }`(0,1,0)과 특정도가 같고
+   * 이 블록이 파일 뒤에 있어 순서로 이긴다. `!important`를 쓰지 않는
+   * 이유는 이 파일의 다른 해제 규칙들과 같다.
+   *
+   * `scripts/printCss.test.ts`가 이 네 값을 그대로 검사한다.
+   */
+  .budget-panel {
+    display: block;
+    position: static;
+    overflow: visible;
+    max-height: none;
+    width: auto;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+  }
+
+  /*
+   * 한도 결정 내역 팝업(단지 상세). 화면에서는 지도 위에 뷰포트 기준
+   * (`position: fixed`)으로 떠 있는 상자지만, 종이에서는 **흐름에
+   * 놓는다** — `fixed`인 채로 인쇄되면 페이지마다 같은 자리에 겹쳐
+   * 찍히거나 페이지 밖으로 나간다.
+   *
+   * 지우지 않고 푸는 이유: 이 표가 "왜 이 한도인지"를 말하는 근거이고,
+   * 종이를 건네받은 사람에게 그 근거가 빠지면 남은 금액이 설명 없는
+   * 숫자가 된다. `<details>`로 만든 덕에 위 `::details-content` 규칙이
+   * 이미 펼쳐 주므로, 여기서는 배치만 되돌린다. `width`도 함께 되돌린다
+   * — 화면용 고정폭(19rem)을 그대로 두면 종이 위에서 카드보다 넓은
+   * 상자가 어색하게 튀어나온다.
+   */
+  .detail-binding-popup {
+    position: static;
+    width: auto;
+    max-width: none;
+    margin-top: 0.5rem;
+    box-shadow: none;
+  }
+
+  /* 말풍선 꼬리는 화면에서 아이콘을 가리키는 장치다 — 흐름에 놓이는 종이에서는 뜻이 없다 */
+  .detail-binding-popup::before {
+    display: none;
+  }
+}
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 화면 1 — 영상 위 입력 화면 (EntryScreen.tsx)
+ * design.md §3을 그대로 따른다.
+ * ══════════════════════════════════════════════════════════════════
+ */
+
+/*
+ * 전체 화면을 덮는 고정 레이어. `phase === "결과"`가 되면
+ * `.entry-screen--hidden`이 붙어 시각적으로만 사라진다 —
+ * `ProfileForm`·`RegionSelect`는 리액트 트리에서
+ * 언마운트되지 않는다(EntryScreen.tsx의 `phase` prop 문서 참고). 그래서
+ * 여기서 `display: none`을 쓴다 — `visibility: hidden`이나
+ * `opacity: 0`은 자식(입력란·버튼)이 여전히 포커스·클릭을 받을 수 있어
+ * "화면 2를 보는 동안 화면 1이 뒤에서 조작된다"는 사고가 난다.
+ */
+.entry-screen {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  overflow: hidden;
+  background: var(--ink);
+  color: var(--paper);
+
+  /*
+   * 화면 1 전용 값 — **전역 팔레트를 건드리지 않는다.**
+   *
+   * `prototype.html`의 `:root` 값 대부분은 이 저장소의 토큰과 이미 같은
+   * 값이거나(`--haze` #8d9aa7, `--paper` #eef1f4는 글자 하나까지 같다)
+   * 대비를 위해 이미 한 칸 조정된 짝이 있다(프로토타입의 황동 #d9a84e ↔
+   * `--brass-lift` #e0aa54). 같은 값을 이름만 바꿔 한 벌 더 두면 색의
+   * 출처가 둘이 되어 한쪽만 움직이는 날이 온다 — 그래서 새 이름은
+   * **여기 없는 값에만** 준다.
+   *
+   * `--entry-rule`이 그 하나다. 프로토타입은 입력 밑줄을
+   * `rgba(238,241,244,.22)`로 뒀는데 그 값은 이 화면의 면(영상 위 스크림
+   * 바닥 #2a2f35) 대비 **1.94:1**이라 WCAG 1.4.11(비텍스트 3:1)을 넘지
+   * 못한다. 상자를 없앤 입력에서 밑줄은 그 컨트롤을 식별하는 유일한
+   * 경계라 그 기준이 그대로 걸린다 — 같은 방식(면 위에 `--paper`를
+   * 얹는다)으로 불투명도만 .40으로 올려 다시 합성한 값이 이 hex(3.24:1)
+   * 이다. `rgba()`로 적지 않고 hex로 박는 이유는
+   * `scripts/colorSurfaces.ts`의 `resolveColor`가 `rgba()`를 풀지 못해
+   * 검사에서 조용히 빠지기 때문이다. 근거 계산은
+   * `scripts/seed-semantic-tokens.test.ts`가 못박는다.
+   */
+  --entry-rule: #787d81;
+
+  /*
+   * 카드 제목이 테두리를 가리는 조각의 색(아래 `.seed-field-label__root`
+   * 등 "카드 제목" 규칙 참고). `rgb(13 19 25 / .92)`(--scrim-ink 채널을
+   * 0.92로 얹은 값)을 그대로 쓰지 않는 이유는 `scripts/colorSurfaces.ts`의
+   * `resolveColor`가 `var()`와 `#rrggbb`만 풀고 `rgb(… / <alpha>)` 문법은
+   * 풀지 못해서다(`--entry-rule` 바로 위 주석과 같은 사정) — 미리 합성한
+   * hex를 대신 토큰으로 둔다. 흰(가장 밝은 배경, 안전한 방향) 위에
+   * `composite(#0d1319, .92, #ffffff)`로 계산한 값이 이 hex(#20262b)다.
+   */
+  --card-title-bg: #20262b;
+}
+
+.entry-screen--hidden {
+  display: none;
+}
+
+.entry-screen-video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/*
+ * 스크림 두 겹(design.md §3) — 왼쪽에서 오른쪽으로 어두움→투명(입력
+ * 패널이 놓일 자리를 읽히게 하고), 아래에서 위로 한 번 더 어둡게(패널
+ * 하단의 글자 대비를 보강한다). CSS 다중 배경은 먼저 적은 레이어가
+ * 위에 그려지므로 순서를 지킨다.
+ *
+ * 이 그리드가 패널 폭(`minmax(420px, 44%)`)을 정한다 — `.entry-screen-panel`
+ * 자신은 그 칸을 꽉 채우기만 한다.
+ */
+.entry-screen-scrim {
+  /*
+   * `--ink`의 채널 값. `rgb(… / <alpha>)` 문법이 채널과 불투명도를
+   * 나눠 받아야 해서 hex 토큰을 그대로 쓸 수 없다 — 두 값이 갈라지지
+   * 않게 `scripts/seed-semantic-tokens.test.ts`가 `--ink`와 같은지
+   * 검사한다.
+   */
+  --scrim-ink: 13 19 25;
+  /*
+   * **입력 패널이 덮는 범위에서 스크림이 가장 옅어지는 지점의
+   * 불투명도.** 이 한 숫자가 화면 1 본문의 대비를 정한다 —
+   * `.entry-screen-panel`은 자기 배경이 없어서, 그 안의 글자는 `--ink`가
+   * 아니라 **여기서 합성된 면** 위에 앉는다.
+   *
+   * `scripts/seed-semantic-tokens.test.ts`가 이 값을 읽어 영상에서 가장
+   * 밝은 픽셀과 합성한 뒤 `--haze` 등 화면 1의 모든 텍스트 색과 대비를
+   * 잰다. 여기를 낮추면 그 테스트가 먼저 깨진다.
+   *
+   * 리뷰 findings I2 수정 전에는 가로 그라디언트의 둘째 정지점이 34%에
+   * 있어(그 뒤 62%에서 0.34로 급락) 패널 열(0~44%)의 오른쪽 절반이
+   * 계산상 0.58까지 옅어졌다 — 그 면 위에서 옛 --haze는 2.55:1이었다.
+   * 스크림이 "입력 패널이 놓일 자리를 읽히게 한다"고 적어 놓고 실제로는
+   * 그 자리를 다 덮지 못하고 있었다. 정지점을 52%로 밀어 패널 열 전체가
+   * 이 바닥값 위에 있게 했다(52%인 이유: 100deg 그라디언트는 기울어
+   * 있어 화면 폭 44% 지점이 화면 비율에 따라 그라디언트 선의 38~52%
+   * 사이에 대응한다 — 그 최댓값을 잡았다. 1440×840에서 실측한 패널 폭
+   * 633.6px, 본문 오른쪽 끝 593.6px 기준으로 최대 46.7%였다).
+   */
+  --scrim-panel-alpha: 0.88;
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  display: grid;
+  grid-template-columns: minmax(420px, 44%) 1fr;
+  background-image:
+    linear-gradient(to top, rgb(var(--scrim-ink) / 0.6) 0%, transparent 40%),
+    linear-gradient(
+      100deg,
+      rgb(var(--scrim-ink) / 0.95) 0%,
+      rgb(var(--scrim-ink) / var(--scrim-panel-alpha)) 52%,
+      rgb(var(--scrim-ink) / 0.34) 72%,
+      rgb(var(--scrim-ink) / 0.3) 100%
+    );
+}
+
+@media (max-width: 900px) {
+  .entry-screen-scrim {
+    grid-template-columns: 1fr;
+    /*
+     * 한 열이 되면 패널이 **화면 전체**를 쓴다 — 오른쪽에 영상을 드러낼
+     * 여백이 없으므로 가로 그라디언트가 할 일도 없다. 그대로 두면 글자가
+     * 화면 오른쪽에서 불투명도 0.30 구간(영상 평균색 위 합성 #4d5864, 계산값)까지 밀려
+     * 나가 본문 대비가 무너진다. 바닥값 한 겹으로 평평하게 덮는다.
+     */
+    background-image:
+      linear-gradient(to top, rgb(var(--scrim-ink) / 0.6) 0%, transparent 40%),
+      linear-gradient(
+        rgb(var(--scrim-ink) / var(--scrim-panel-alpha)),
+        rgb(var(--scrim-ink) / var(--scrim-panel-alpha))
+      );
+  }
+}
+
+/*
+ * 입력 패널 — `prototype.html`의 `.col`이다.
+ *
+ * **바닥 정렬은 `justify-content: flex-end`가 아니라 자식(표제)의
+ * `margin-top: auto`로 한다.** 프로토타입의 같은 자리 주석이 그 이유를
+ * 적어 뒀다: flex-end로 하면 내용이 칸보다 길어졌을 때 **위쪽이 잘리고
+ * 스크롤로도 닿지 못한다**(지난 프로토타입이 겪은 버그이고, 이번에도
+ * 처음엔 제목 윗줄이 사라졌다). `margin-top: auto`는 남는 자리가 있을
+ * 때만 밀어내므로 넘칠 때는 저절로 0이 되어 위가 잘리지 않는다.
+ *
+ * 예전에는 `justify-content: safe center`였다 — `safe`가 잘림은 막아
+ * 줬지만 프로토타입이 정한 비대칭(아래 왼쪽에 붙인다)이 아니었다.
+ *
+ * `max-width`는 스크림 계산을 **안전한 방향으로만** 움직인다. 이 열의
+ * 폭은 `.entry-screen-scrim`의 그리드(`minmax(420px, 44%)`)가 정하고
+ * 그 44%에 맞춰 그라디언트 정지점이 잡혀 있다(아래 `--scrim-panel-alpha`
+ * 주석) — 여기서 폭을 **줄이기만** 하므로 글자는 늘 더 어두운 쪽으로
+ * 물러난다. 늘리면 그 계산이 깨진다.
+ */
+.entry-screen-panel {
+  height: 100%;
+  max-width: 40rem;
+  min-height: 0;
+  overflow-y: auto;
+  /* 프로토타입과 같이 스크롤 막대를 숨긴다 — 영상 위 화면이다 */
+  scrollbar-width: none;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(1.75rem, 5vh, 3.5rem) clamp(1.75rem, 5vw, 4.5rem);
+  box-sizing: border-box;
+}
+
+.entry-screen-panel::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .entry-screen-panel {
+    max-width: none;
+    padding: 2.5rem 1.5rem;
+  }
+}
+
+/*
+ * 워드마크 — 서비스 이름. **이것이 이 문서의 `<h1>`이다.**
+ *
+ * 프로토타입에서는 장식용 `<div>`였지만, 이 앱에서 문서의 제목은 서비스
+ * 이름이고 그 계약을 검사하는 테스트가 이미 있다(App.test.tsx "서비스
+ * 제목을 표시한다"). 그래서 태그는 `<h1>`으로 두고 **모양만** 프로토타입의
+ * 워드마크로 만든다 — 크게 보이는 문장(아래 `.entry-headline`)은 문서
+ * 제목이 아니라 이 폼이 묻는 질문이라 `<h2>`다.
+ *
+ * `flex: none` — 패널이 flex 열이라, 이것이 없으면 내용이 넘칠 때 이
+ * 줄이 먼저 눌린다.
+ *
+ * 프로토타입은 `--paper`에 `opacity: .85`를 걸었다. 여기서는 같은 효과를
+ * **토큰으로** 낸다(`--paper-dim`, 9.20:1) — 불투명도는
+ * `scripts/seed-semantic-tokens.test.ts`의 전수 검사가 보지 못하는
+ * 값이라, 투명도로 물러나게 하면 검사와 화면이 서로 다른 것을 보게 된다.
+ */
+.entry-screen .entry-wordmark {
+  flex: none;
+  margin: 0 0 clamp(1rem, 4vh, 2.5rem);
+  /*
+   * 이 화면의 활자는 **Pretendard 한 벌**이고, 위계는 크기가 아니라
+   * 굵기와 자간이 만든다(prototype.html 머리주석). 예전에는 이 선언이
+   * 전역 `h1, h2` 명조 규칙을 이 화면에서만 되돌리는 역할이었다 — 그
+   * 전역 규칙은 이제 없지만(사용자 지시로 앱 전체가 Pretendard가 됐다)
+   * 선언은 그대로 둔다: 이 화면의 활자 규율이 여기 붙어 있고,
+   * `scripts/entry-screen-layout.test.ts`가 그 존재를 잠근다.
+   */
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  line-height: 1.4;
+  color: var(--paper-dim);
+}
+
+/* 워드마크 아래 짧은 황동 선. 장식이라 텍스트 대비 기준 밖이다. */
+.entry-screen .entry-wordmark::after {
+  content: "";
+  display: block;
+  width: 34px;
+  height: 1px;
+  margin-top: 9px;
+  background: var(--brass);
+}
+
+/*
+ * 큰 질문 한 줄. 이 화면에서 가장 큰 활자다.
+ *
+ * **바닥 정렬을 만드는 자리가 여기다** — 워드마크 다음의 첫 형제에
+ * `margin-top: auto`를 걸면 그 아래 전부가 함께 바닥으로 내려간다.
+ */
+.entry-screen .entry-headline {
+  margin: 0 0 0.75rem;
+  margin-top: auto;
+  font-family: inherit;
+  font-size: clamp(1.75rem, 3.4vw, 2.75rem);
+  font-weight: 700;
+  line-height: 1.22;
+  letter-spacing: -0.035em;
+  color: var(--paper);
+}
+
+.entry-screen .subtitle {
+  margin: 0 0 clamp(1.125rem, 3.4vh, 2.125rem);
+  max-width: 44ch;
+  font-size: 0.8125rem;
+  line-height: 1.65;
+  color: var(--haze);
+}
+
+/* 프로토타입의 `.field` 리듬. 폼 자체의 여백은 패널이 정한다. */
+.entry-screen .profile-form {
+  gap: clamp(1rem, 2.6vh, 1.625rem);
+  margin: 0;
+}
+
+/*
+ * 샘플(사용자 확인 대기 중) — 각 질문을 배경(영상 위 스크림)과 어울리는
+ * 반투명 카드로 감싸 서로 갈라 보이게 한다. 지금까지는 질문마다 밑줄
+ * 하나가 유일한 경계라(위 `.seed-text-input__root` 등 "상자를 없앤다"
+ * 규칙 참고) 두 필드 사이에 아무 면 차이가 없었다 — 폼 전체가 한 덩어리로
+ * 읽힌다는 지적이 그 결과다.
+ *
+ * `rgba(255,255,255,…)` 흰 계열을 아주 낮은 불투명도로 얹고
+ * `backdrop-filter: blur()`로 카드 뒤 영상만 부드럽게 흐려, 카드 자체가
+ * 새 색을 들여오지 않고 배경의 톤을 그대로 옅게 반사하게 한다 — "배경과
+ * 어울리는" 요구를 그렇게 만족시킨다. 테두리도 같은 흰 계열의 더 낮은
+ * 불투명도라 카드 경계가 과하게 도드라지지 않는다.
+ *
+ * 리뷰 수정(사용자 피드백, 첨부 스크린샷): 폭은 패널 전체(40rem)가 아니라
+ * **내용에 맞춘다**(`width: fit-content`) — 패널의 대략 2/3인 26rem을
+ * 상한으로 둔다. 짧은 카드(라디오 둘)는 그 폭까지 좁아지고, 긴 카드
+ * (설명 문장이 있는 카드)는 26rem 안에서 줄바꿈한다. 위아래 패딩도
+ * 줄였다 — 예전 값은 카드 안에 빈 자리가 많다는 지적을 받았다. 위쪽만
+ * 넉넉한 이유는 아래 제목 규칙(테두리에 걸치는 제목) 자리를 남기기
+ * 위해서다.
+ *
+ * 값은 전부 실험적이다 — 사용자가 확인하면 시맨틱 토큰(예: `--card-*`)
+ * 으로 옮기고 `scripts/seed-semantic-tokens.test.ts`의 대비 검사에도
+ * 새 규칙을 추가해야 한다. 지금은 하드코딩한 rgba로만 남긴다.
+ */
+/*
+ * 폭은 "어느 평형대요?" 카드(`.area-band-select`)에 맞춘다(사용자 지시).
+ * 넷 다 각자 콘텐츠에 맞춰 `fit-content`였을 때는 카드마다 폭이 달라
+ * 줄이 안 맞았다 — `.area-band-select`의 실측 렌더 폭(칩 3열 + 힌트
+ * 줄바꿈 기준, 1280px 뷰포트에서 422.5px ≈ 26.4rem)을 고정값으로 넷에
+ * 공용으로 건다. `.area-band-select`의 문구(칩 이름·힌트)가 크게
+ * 바뀌면 이 값도 다시 재야 한다 — 브라우저 실측값이라 계산으로
+ * 유도된 값이 아니다.
+ */
+.entry-screen .profile-form > .money-input,
+.entry-screen .profile-form > .household-select,
+.entry-screen .profile-form > .first-time-buyer-select,
+.entry-screen .profile-form > .area-band-select,
+.entry-screen .profile-form > .region-select {
+  position: relative;
+  width: min(26.5rem, 100%);
+  /* 사용자 지시로 더 투명하게 — 흰 틴트·테두리 불투명도를 함께 낮췄다 */
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(20px) saturate(130%);
+  -webkit-backdrop-filter: blur(20px) saturate(130%);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 0.875rem;
+  padding: 1.375rem 1.125rem 0.875rem;
+}
+
+/*
+ * SEED가 `.money-input` 안에 두 겹의 래퍼 div를 끼워 넣는데
+ * (`.seed-field__root` > `.seed-field__header` > 라벨), 그중 하나가
+ * 스스로 `position`을 걸면 아래 제목 규칙의 `position: absolute`가
+ * `.money-input`이 아니라 그 래퍼를 기준으로 뜬다 — 명시적으로
+ * `static`을 강제해 `.money-input` 자신이 항상 위치 기준이 되게 한다.
+ */
+.entry-screen .money-input .seed-field__root,
+.entry-screen .money-input .seed-field__header {
+  position: static;
+}
+
+/*
+ * 카드 제목 — 카드 테두리 위에 걸친다(사용자 지시, 첨부 스크린샷의
+ * 스타일). 굵은 흰 글자 + 카드와 같은 톤의 불투명한 조각을 뒤에 깔아
+ * 그 조각이 지나가는 자리의 테두리선을 시각적으로 끊는다 — `<fieldset>`
+ * 의 네이티브 `<legend>` 렌더링(테두리에 걸치는 그 모양)을 그대로
+ * 흉내 내되, `.money-input`처럼 진짜 `<fieldset>`이 아닌 자리에도 같은
+ * 모양을 낼 수 있도록 절대 위치로 직접 만든다.
+ *
+ * 예전엔 "작은 눈썹 라벨"(11px → 15px, 옅은 색, 넓은 자간)이었다 —
+ * 이제는 진짜 "카드 제목"이라 자간을 지우고 굵기·크기·색을 올렸다.
+ *
+ * **SEED 클래스 이름을 직접 적는다**(`.seed-field-label__root`).
+ * 요소 이름(`label`)에만 기대면 두 가지로 진다:
+ *
+ * 1. SEED는 라벨 텍스트를 바깥 `<label>`이 아니라 안쪽 요소에 그리고,
+ *    그 요소에 `color: var(--seed-color-fg-neutral)`(all.css)을 다시
+ *    못박는다. `label`에 건 우리 색은 바깥 요소에만 닿아 안쪽에서
+ *    졌다 — 예전에 체크박스 라벨 두 개가 실측 대비 **1.13:1**로
+ *    사실상 보이지 않은 채 나간 사고가 정확히 이 형태였다.
+ * 2. SEED가 태그를 바꾸면(예: `<label>` → `<span>`) 요소 이름에 건
+ *    규칙은 아무 말 없이 사라진다.
+ *
+ * `scripts/seed-vendor-colors.test.ts`가 벤더 CSS를 훑어 이 짝을
+ * 양방향으로 잠근다.
+ */
+.entry-screen .seed-field-label__root,
+.entry-screen .area-band-select legend,
+.entry-screen .household-select legend,
+.entry-screen .first-time-buyer-select legend,
+.entry-screen .region-select legend {
+  position: absolute;
+  top: 0;
+  left: 1rem;
+  transform: translateY(-50%);
+  /*
+   * `--card-title-bg`(위 `.entry-screen` 정의) — `--scrim-ink`(이 패널이
+   * 실제로 앉는 바닥색) 채널을 0.92로 미리 합성해 둔 hex다. 카드 자체
+   * (rgba(255,255,255,0.05))보다 훨씬 불투명해야 테두리선을 실제로
+   * 가린다.
+   */
+  background: var(--card-title-bg);
+  padding: 0.1875rem 0.5rem;
+  border-radius: 0.25rem;
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: normal;
+  line-height: 1.3;
+  margin: 0;
+}
+
+/*
+ * SEED가 그리는 오류 문구(`MoneyInput`이 `errorMessage`로 넘긴다).
+ * 기본값 `--seed-color-fg-critical`은 이 저장소가 덮지 않은 SEED
+ * 기본값(#fa342c)이라 이 어두운 패널 위에서 3.59:1이다 — 어두운 면의
+ * 위험색(`--risk-lift`, 5.05:1)으로 되돌린다. 값을 고른 근거는
+ * `src/seed-brand.css`의 `--risk-lift` 주석에 적었다.
+ */
+.entry-screen .seed-field__errorMessage {
+  color: var(--risk-lift);
+}
+
+/*
+ * "상자를 없앤다. 밑줄만 남긴다"(prototype.html `.field .line`).
+ *
+ * SEED `TextField`를 재구현하지 않는다(design.md Global Constraints) —
+ * 그 컴포넌트가 실제로 그리는 입력 상자(`.seed-text-input__root`)와 이
+ * 화면의 커스텀 `<select>`만 밑줄 모양으로 다시 칠한다.
+ *
+ * ⚠ **밑줄 색으로 `--rule`을 쓰지 않는다.** `--rule`(#26313c)은 불투명한
+ * `--ink` 면 위에서 쓰라고 고른 값이라, 이 화면이 실제로 앉는 면(영상 위
+ * 스크림 바닥 #2a2f35) 위에서는 **1.02:1**로 사실상 보이지 않는다.
+ * 상자를 없앤 입력에서 밑줄은 그 컨트롤을 식별하는 **유일한 경계**라
+ * WCAG 1.4.11의 3:1이 그대로 걸린다 — 그래서 아래 `--entry-rule`을
+ * 따로 계산했다(`.entry-screen` 규칙의 주석 참고).
+ */
+.entry-screen .seed-text-input__root,
+.entry-screen .field input[type="number"],
+.entry-screen .field select,
+.entry-screen .region-select select {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--entry-rule);
+  border-radius: 0;
+  padding: 0 0 7px;
+  transition: border-color var(--seed-duration-d3) var(--seed-timing-function-easing);
+  /*
+   * 벤더 `.seed-text-input__root`는 `overflow: hidden`이다 — 입력 활자가
+   * 26~34px로 커지면 그 상자가 아래쪽(밑줄 자리)을 잘라 낸다.
+   */
+  overflow: visible;
+}
+
+/*
+ * ⚠ **`border`를 지우는 것만으로는 상자가 사라지지 않는다.** SEED가 실제로
+ * 그리는 테두리는 `border`가 아니라 두 가지다(브라우저 `getComputedStyle`
+ * 로 확인했다 — 이 규칙을 적기 전 화면에는 밑줄이 아니라 둥근 상자가
+ * 그려져 있었다):
+ *
+ * 1. `.seed-text-input__root--variant_outline`의
+ *    `box-shadow: inset 0 0 0 1px …`(#dde4ea — 밝은 면 전용 값이라 이
+ *    어두운 화면에서 흰 상자로 보였다),
+ * 2. 같은 변형의 `::after`에 걸린 2px `border`(평소 투명, 포커스에서
+ *    `--seed-color-stroke-neutral-contrast`로 켜진다).
+ *
+ * 높이도 벤더가 정한다(`--variant_outline-size_large`의
+ * `min-height: 52px`) — 그대로 두면 밑줄이 활자에서 한참 떨어진다.
+ * 렌더되는 변형 클래스 이름에 기대지 않고 **기본 클래스에 걸어** 덮는다:
+ * SEED가 변형 이름을 바꿔도 이쪽이 그대로 이긴다.
+ */
+.entry-screen .seed-text-input__root {
+  box-shadow: none;
+  min-height: 0;
+}
+
+.entry-screen .seed-text-input__root::after {
+  border: none;
+}
+
+.entry-screen .money-input input,
+.entry-screen .money-input .seed-text-input__value,
+.entry-screen .field input[type="number"] {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  padding: 0;
+  color: var(--paper);
+  font-family: inherit;
+  /*
+   * 활자 한 벌로 위계를 만드는 규칙(prototype.html 머리주석): 큰 글자일수록
+   * 굵게 + 자간을 좁게. 크기만 키우면 큰 글자가 흩어져 보인다.
+   *
+   * 사용자 지시로 20% 줄였다 — 원래 clamp(1.625rem, 3vw, 2.125rem)의
+   * 세 값(최소·가변·최대) 전부에 0.8을 곱했다.
+   */
+  font-size: clamp(1.3rem, 2.4vw, 1.7rem);
+  font-weight: 600;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.25;
+}
+
+.entry-screen .money-input input::placeholder,
+.entry-screen .money-input .seed-text-input__value::placeholder {
+  color: var(--haze);
+  font-size: 0.9375rem;
+  font-weight: 400;
+  letter-spacing: normal;
+}
+
+/*
+ * 포커스 표시. 프로토타입의 "포커스 시 밑줄이 황동색"을 지키되,
+ * 리뷰 수정(Minor 8)으로 **두께도 함께** 바꾼다 — 색만 바꾼 1px 밑줄은
+ * WCAG 2.4.11(포커스 표시의 최소 크기·대비) 기준으로 너무 얇고, 색
+ * 대비만으로 상태 변화를 알리는 셈이 된다. `outline: none`을 쓰는
+ * 자리라 이 밑줄이 유일한 표시다.
+ *
+ * 늘어난 1px만큼 아래 여백에서 덜어내, 포커스가 옮겨 다닐 때 줄이
+ * 흔들리지 않게 한다(위 규칙의 `padding: 0 0 7px`).
+ */
+.entry-screen .seed-text-input__root:focus-within,
+.entry-screen .field select:focus-visible,
+.entry-screen .region-select select:focus-visible,
+.entry-screen .field input[type="number"]:focus-visible {
+  outline: none;
+  border-bottom-color: var(--brass-lift);
+  border-bottom-width: 2px;
+  padding-bottom: 6px;
+}
+
+/*
+ * 즉시 환산값("20000" → "1억 5,000만원") — 황동색으로 강조한다.
+ *
+ * 사용자 지시로 입력 숫자 아래가 아니라 **같은 줄, 숫자 오른쪽의 빈
+ * 자리**로 옮겼다(첨부 스크린샷). `.money-input`이 카드 규칙에서 이미
+ * `position: relative`이므로 그 기준으로 절대 위치를 잡는다 — 입력
+ * 요소 자체의 폭은 건드리지 않는다(글자만큼만 차지하므로 짧은 숫자
+ * 뒤에는 원래도 빈 자리가 있었다). `top` 값은 카드 padding-top(1.375rem)
+ * 과 입력 줄 높이(line-height 1.25 × font-size)를 손으로 맞춘 값이라,
+ * 위 입력 font-size가 다시 바뀌면 이 값도 같이 봐야 한다.
+ */
+.entry-screen .echo {
+  position: absolute;
+  /*
+   * 사용자 지시로 글자를 2배 키웠다(0.8125rem → 1.625rem) — 커진
+   * 만큼 위로 올려 입력 줄과 다시 나란해지게 `top`도 같이 낮췄다(옛
+   * top은 옛 글자 높이 기준으로 손으로 맞춘 값이었다).
+   */
+  top: 1.5rem;
+  right: 1.125rem;
+  margin: 0;
+  font-size: 1.625rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  color: var(--brass-lift);
+}
+
+.entry-screen .hint {
+  color: var(--haze);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/*
+ * SEED가 그리는 힌트 슬롯(`MoneyInput`이 `description`으로 넘긴다).
+ * 기본값은 `--seed-color-fg-neutral-subtle` → `--on-sheet-faint`로
+ * **밝은 면 전용** 값이라, 이 어두운 패널 위에서는 거의 읽히지 않는다
+ * (#637280 on 스크림 바닥 = 3.37~2.72:1, 계산값).
+ *
+ * 같은 역할(`.hint`)과 같은 색을 쓴다 — 두 힌트가 나란히 서는 화면이라
+ * 색이 갈리면 뜻이 다른 것처럼 읽힌다. 클래스 이름은 SEED가 정하는
+ * 것이라 우리 계약이 아니지만, 어긋나도 화면이 **덜 읽히는 쪽으로만**
+ * 틀어지는 자리다(SEED 기본값으로 되돌아갈 뿐 배치는 그대로다).
+ */
+.entry-screen .seed-field__description {
+  color: var(--haze);
+  font-size: 0.75rem;
+  line-height: 1.6;
+}
+
+/*
+ * 무엇이 모자라서 조회가 안 되는지 말하는 한 줄(App.tsx의 Important 5
+ * 주석) — 프로토타입의 `.hintline` 자리다.
+ *
+ * 프로토타입은 이 줄에 `--haze-dim`(#66727e)을 쓴다. 이 면에서 **2.75:1**
+ * 이라 본문 기준을 넘지 못해 그대로 옮기지 않았다(계산은
+ * `scripts/seed-semantic-tokens.test.ts`에 남겼다). 무엇이 모자란지
+ * 말하는 유일한 줄이라, 안 읽히면 사용자는 화면이 고장 났다고 읽는다.
+ */
+.entry-screen .prompt {
+  margin: 0.75rem 0 0;
+  font-size: 0.75rem;
+  color: var(--paper-dim);
+}
+
+/*
+ * 평형대 — 프로토타입의 `.band`. **상자가 아니라 밑줄 토글이다.**
+ *
+ * 배치(3열)는 위 `.area-band-options` 기본 규칙이 그대로 정한다 —
+ * 여기서 덮지 않는다. 그 열 수는 구간 수에 잠겨 있고
+ * (`scripts/area-band-chips.test.ts`), 이 화면이 칩이 그려지는 유일한
+ * 자리라 여기서 배치를 덮으면 그 가드가 아무것도 지키지 않게 된다.
+ * 간격만 프로토타입의 값으로 벌린다.
+ */
+.entry-screen .area-band-options {
+  /*
+   * 가로 간격만 프로토타입의 값(26px)으로 벌린다. 세로는 좁게 둔다 —
+   * 좁은 화면에서는 이 칸이 한 열로 서므로(`@media (max-width: 480px)`
+   * 의 기본 규칙) 가로 간격이 그대로 세로로 쌓이면 칩 셋이 한 눈금이
+   * 아니라 따로 선 항목 셋으로 읽힌다.
+   */
+  column-gap: 1.625rem;
+  row-gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.entry-screen .area-band-select {
+  border: none;
+  padding: 0;
+}
+
+/*
+ * 칩 자체. 명시도를 `.area-band-select`까지 적어 (0,3,0)으로 올린다 —
+ * 위 라벨 규칙(`.entry-screen .field label`)도 (0,2,1)로 이 `<label>`에
+ * 닿으므로, 같은 자리에서 소스 순서에 기대지 않고 확실히 이겨야 한다.
+ */
+.entry-screen .area-band-select .area-band-option {
+  position: relative;
+  display: block;
+  padding: 4px 0 8px;
+  border: none;
+  border-bottom: 1.5px solid transparent;
+  color: var(--haze-lift);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  transition:
+    color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    border-color var(--seed-duration-d3) var(--seed-timing-function-easing);
+}
+
+/*
+ * 네이티브 체크박스는 **지우지 않고 시각적으로만 감춘다** — 키보드
+ * 조작·포커스 순서·스크린 리더의 선택 상태 안내를 브라우저가 그대로
+ * 담당한다(AreaBandSelect.tsx의 설계 그대로다). 눈에 보이는 상태는
+ * 아래 밑줄이 말한다: 색이 아니라 **모양**이라 색이 보이지 않아도 뜻이
+ * 남는다.
+ */
+.entry-screen .area-band-select .area-band-option input[type="checkbox"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.entry-screen .area-band-select .area-band-option:has(input:checked) {
+  color: var(--paper);
+  border-bottom-color: var(--brass-lift);
+}
+
+.entry-screen .area-band-name {
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+/* 고르지 않은 칩의 범위 라벨. 어두운 면의 보조 색이다. */
+.entry-screen .area-band-range {
+  color: var(--haze);
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+}
+
+.entry-screen .area-band-select .area-band-option:has(input:checked) .area-band-range {
+  color: var(--paper-dim);
+}
+
+/*
+ * 체크박스는 네이티브 그대로 두고 포커스 표시만 이 화면의 규칙
+ * (황동 아웃라인)에 맞춘다 — `:focus-visible`이 input에 걸리므로 칩
+ * 전체를 감싸 어디에 포커스가 있는지 한눈에 보이게 한다.
+ */
+.entry-screen .area-band-option:has(input:focus-visible) {
+  outline: 2px solid var(--brass-lift);
+  outline-offset: 3px;
+}
+
+/*
+ * 무주택/생애최초 — `.area-band-option`과 같은 "밑줄 토글" 모양을
+ * 그대로 옮긴다(위 블록 참고). `.area-band-select`를 재사용하지 않고
+ * 새 클래스를 두는 이유는 뜻이 다른 질문이라서다 — 시각만 맞추고
+ * `scripts/area-band-chips.test.ts`(평형대 칩 개수를 잠그는 가드)가
+ * 다른 fieldset을 세지 않게 한다.
+ *
+ * 리뷰 수정(사용자 지시): 생애최초 질문이 체크박스 하나에서 무주택과
+ * 똑같은 "라디오 둘" 모양으로 바뀌면서 `.first-time-buyer-select`도
+ * `.household-select`와 완전히 같은 구조(fieldset > .household-options
+ * > .household-option)가 됐다 — 그래서 이제 선택자를 그대로 공유한다.
+ */
+.entry-screen .household-select,
+.entry-screen .first-time-buyer-select {
+  border: none;
+  padding: 0;
+}
+
+.entry-screen .household-select .household-options,
+.entry-screen .first-time-buyer-select .household-options {
+  display: flex;
+  gap: 1.625rem;
+  margin-top: 0.25rem;
+}
+
+/*
+ * 명시도를 부모 fieldset까지 적어 (0,3,0)으로 올린다 —
+ * `.area-band-option`과 같은 이유(그 규칙 주석 참고)다: 위 카드 제목
+ * 규칙은 `legend`만 겨누므로 더 이상 이 `<label>`과 부딪히지 않지만,
+ * 이 라디오 줄에는 그 대신 지켜야 할 자기 규칙(밑줄 토글)이 있으니
+ * 소스 순서에 기대지 않고 명시도로 확실히 이기게 둔다.
+ */
+.entry-screen .household-select .household-option,
+.entry-screen .first-time-buyer-select .household-option {
+  position: relative;
+  display: block;
+  padding: 4px 0 8px;
+  border: none;
+  border-bottom: 1.5px solid transparent;
+  color: var(--haze-lift);
+  font-size: 0.875rem;
+  font-weight: 500;
+  letter-spacing: normal;
+  cursor: pointer;
+  transition:
+    color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    border-color var(--seed-duration-d3) var(--seed-timing-function-easing);
+}
+
+.entry-screen .household-select .household-option input[type="radio"],
+.entry-screen .first-time-buyer-select .household-option input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.entry-screen .household-select .household-option:has(input:checked),
+.entry-screen .first-time-buyer-select .household-option:has(input:checked) {
+  color: var(--paper);
+  border-bottom-color: var(--brass-lift);
+}
+
+.entry-screen .household-select .household-option:has(input:focus-visible),
+.entry-screen .first-time-buyer-select .household-option:has(input:focus-visible) {
+  outline: 2px solid var(--brass-lift);
+  outline-offset: 3px;
+}
+
+/*
+ * 지역 — 두 단 select(prototype.html `.region`). 이제 다른 질문
+ * 카드(`.household-select` 등)와 같은 `<fieldset>` 카드다(사용자 지시로
+ * 3번째 자리로 옮기며 카드 모양도 맞췄다) — 카드 테두리·패딩은 위 공용
+ * 카드 규칙(`.entry-screen .profile-form > .region-select`)이 이미 주므로
+ * 여기서는 UA 기본 fieldset 테두리·패딩만 지운다.
+ */
+.entry-screen .region-select {
+  border: none;
+  padding: 0;
+  display: grid;
+  /*
+   * 사용자 지시로 조회 버튼이 아이콘이 되어 셋째 열로 들어왔다 — 두
+   * select와 같은 줄, 오른쪽 끝(`auto` 폭)에 선다.
+   */
+  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  gap: 0.75rem;
+  align-items: end;
+  /* 다른 카드의 라디오·칩 줄과 같은 간격(0.25rem) — 제목은 이미 테두리에 뜬다 */
+  margin-top: 0.25rem;
+}
+
+.entry-screen .region-select .field {
+  margin: 0;
+  min-width: 0;
+}
+
+/*
+ * "광역단체"·"자치구" — 사용자 지시로 값(select)보다 훨씬 작은 라벨로
+ * 낮춘다. `AreaBandSelect.tsx`가 이미 쓰는 "라벨 작게 위, 값 크게 아래"
+ * Stat Block 규율(DESIGN.md)과 같은 위계다.
+ */
+.entry-screen .region-select .field label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: var(--haze-lift);
+  margin: 0 0 0.25rem;
+}
+
+/*
+ * 어두운 드롭다운. `<option>`은 OS가 그리는 목록이라 부모의 색을 물려받지
+ * 않는 플랫폼이 있다 — 배경을 적지 않으면 흰 목록 위에 `--paper` 글자가
+ * 얹혀 읽히지 않는다.
+ */
+.entry-screen .region-select select {
+  color: var(--paper);
+  font-family: inherit;
+  font-size: 0.9375rem;
+}
+
+.entry-screen .region-select select option {
+  background: var(--ink-2);
+  color: var(--paper);
+}
+
+/*
+ * "이 지역으로 조회하기" — 사용자 지시로 텍스트+자라는 선 버튼을
+ * 원형 아이콘 버튼으로 바꿨다. `.field` 두 칸과 같은 줄, 셋째 열
+ * (`auto` 폭)에 선다 — select의 밑줄과 바닥이 맞도록 `align-self:end`
+ * (부모의 `align-items:end`를 그대로 물려받는다)를 쓴다.
+ */
+.entry-screen .region-select-query {
+  grid-column: 3;
+  align-self: end;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.25rem;
+  height: 2.25rem;
+  /* select 밑줄(`border-bottom`) 두께만큼 내려 바닥선을 맞춘다 */
+  margin-bottom: 1px;
+  background: none;
+  border: 1.5px solid var(--brass-lift);
+  border-radius: 50%;
+  color: var(--brass-lift);
+  cursor: pointer;
+  transition:
+    background-color var(--seed-duration-d3) var(--seed-timing-function-easing),
+    color var(--seed-duration-d3) var(--seed-timing-function-easing);
+}
+
+.entry-screen .region-select-query:not(:disabled):hover {
+  background: var(--brass-lift);
+  color: var(--ink);
+}
+
+/*
+ * 비활성은 WCAG 1.4.3의 명시적 예외지만, 그래도 읽히는 값을 쓴다 —
+ * 이 버튼은 "아직 고르지 않았다"를 말하는 자리라 안 보이면 그 사실도
+ * 전달되지 않는다. 프로토타입의 `--haze-dim`(2.75:1) 대신 `--haze`
+ * (4.70:1)다.
+ */
+.entry-screen .region-select-query:disabled {
+  border-color: var(--haze);
+  color: var(--haze);
+  cursor: default;
+}
+
+.entry-screen .region-select-query:focus-visible {
+  outline: 2px solid var(--brass-lift);
+  outline-offset: 3px;
+}
+
+/* 예산이 덜 찼을 때만 뜨는 이유 문구 — 버튼과 같은 전체 폭에 놓는다 */
+.entry-screen .region-select .hint {
+  grid-column: 1 / -1;
+}
+
+.entry-screen .region-query-error p {
+  color: var(--paper-dim);
+  margin: 0 0 0.5rem;
+  font-size: 0.8125rem;
+}
+
+/* "다시 시도" — 조회 실패에서 빠져나오는 유일한 길이다. */
+.entry-screen .region-query-error button {
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--brass-lift);
+  border-radius: 0;
+  padding: 0 0 2px;
+  color: var(--brass-lift);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.entry-screen .region-query-error button:focus-visible {
+  outline: 2px solid var(--brass-lift);
+  outline-offset: 3px;
+}
+
+/*
+ * 낮은 창에서는 활자와 여백을 함께 줄인다.
+ *
+ * `prototype.html`의 `@media (max-height: 780px)`를 그대로 옮긴 규칙이다
+ * — 프로토타입이 제목 윗줄이 잘리던 버그를 고치며 추가했다. 안 옮기면
+ * 세로가 짧은 창에서 같은 버그가 재현된다.
+ */
+@media (max-height: 780px) {
+  .entry-screen .entry-wordmark {
+    margin-bottom: 0.875rem;
+  }
+
+  .entry-screen .entry-headline {
+    font-size: clamp(1.625rem, 2.8vw, 2.125rem);
+  }
+
+  .entry-screen .subtitle {
+    margin-bottom: 1.125rem;
+  }
+
+  .entry-screen .profile-form {
+    gap: 0.875rem;
+  }
+
+  .entry-screen .money-input .seed-text-input__value {
+    font-size: 1.5rem;
   }
 }

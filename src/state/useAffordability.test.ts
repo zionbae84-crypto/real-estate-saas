@@ -1,7 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import type { BuyerProfile } from "../lib/finance";
-import { calcSafePrice, PRICE_STEP } from "../lib/finance";
+import { calcSafePrice, ownFundsRequired, PRICE_STEP } from "../lib/finance";
 import { rules, useAffordability } from "./useAffordability";
 
 function profile(overrides: Partial<BuyerProfile> = {}): BuyerProfile {
@@ -51,13 +51,32 @@ describe("useAffordability", () => {
     expect(result.current!.safety.burdenRatio).toBeLessThan(atMax.burdenRatio);
   });
 
-  it("실구매력을 넘는 가격은 상한으로 조인다", () => {
+  /**
+   * ⚠ **조이는 상한이 실구매력이 아니라 `sliderMax`다**(사용자 지시로
+   * 눈금이 그 위까지 열렸다). 실구매력을 조금 넘긴 값은 이제 그대로
+   * 유지된다 — 못 사는 가격을 짚어 볼 수 있어야 "현금이 얼마 모자란지"를
+   * 말할 수 있기 때문이다.
+   */
+  it("실구매력을 넘겨도 눈금 상한까지는 그대로 둔다", () => {
     const { result } = renderHook(() => useAffordability(profile()));
-    const max = result.current!.result.affordablePrice;
+    const affordable = result.current!.result.affordablePrice;
+    const over = affordable + 10 * PRICE_STEP;
+    // 전제: 그 값이 아직 눈금 상한 안이다(안 그러면 이 테스트가
+    // 검증하려는 구간을 지나쳐 버린다).
+    expect(over).toBeLessThanOrEqual(result.current!.sliderMax);
 
-    act(() => result.current!.setPrice(max + 10 * PRICE_STEP));
+    act(() => result.current!.setPrice(over));
 
-    expect(result.current!.price).toBe(max);
+    expect(result.current!.price).toBe(over);
+  });
+
+  it("눈금 상한을 넘는 가격은 그 상한으로 조인다", () => {
+    const { result } = renderHook(() => useAffordability(profile()));
+    const sliderMax = result.current!.sliderMax;
+
+    act(() => result.current!.setPrice(sliderMax + 10 * PRICE_STEP));
+
+    expect(result.current!.price).toBe(sliderMax);
   });
 
   it("음수 가격은 0으로 조인다", () => {
@@ -136,6 +155,121 @@ describe("useAffordability", () => {
     const { result } = renderHook(() => useAffordability(profile()));
     act(() => result.current!.setPrice(Infinity));
     expect(result.current!.price).toBe(0);
+  });
+
+  /**
+   * 사용자 지시로 슬라이더가 실구매 가능 가격 **위**까지 올라간다.
+   * 그 구간이 존재하는 이유는 하나다 — 거기서 **현금이 얼마 모자란지**를
+   * 말하기 위해서다. 아래 테스트들이 그 두 값(상한과 부족액)을 잠근다.
+   */
+  describe("sliderMax·cashShortfall — 못 사는 가격을 짚어 본다", () => {
+    it("눈금 상한은 실구매 가능 가격보다 위다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      expect(result.current!.sliderMax).toBeGreaterThan(
+        result.current!.result.affordablePrice,
+      );
+    });
+
+    it("눈금 상한은 PRICE_STEP의 배수다 — End 키가 어중간한 값에 안 떨어진다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      expect(result.current!.sliderMax % PRICE_STEP).toBe(0);
+    });
+
+    it("실구매 가능 가격 이하에서는 모자란 현금이 0이다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      // 기본 위치(=실구매 가능 가격)에서 이미 0이어야 한다.
+      expect(result.current!.cashShortfall).toBe(0);
+
+      act(() => result.current!.setPrice(100_000_000));
+      expect(result.current!.cashShortfall).toBe(0);
+    });
+
+    it("그 위로 올리면 모자란 현금이 생기고, 올릴수록 늘어난다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      const affordable = result.current!.result.affordablePrice;
+      const sliderMax = result.current!.sliderMax;
+      const mid = Math.floor((affordable + sliderMax) / 2 / PRICE_STEP) * PRICE_STEP;
+
+      act(() => result.current!.setPrice(mid));
+      const atMid = result.current!.cashShortfall;
+      expect(atMid).toBeGreaterThan(0);
+
+      act(() => result.current!.setPrice(sliderMax));
+      expect(result.current!.cashShortfall).toBeGreaterThan(atMid);
+    });
+
+    /**
+     * 화면이 자기 식으로 다시 유도하지 않는다 — 부족액은 엔진의
+     * `ownFundsRequired`(그 가격에서 현금으로 내야 하는 총액)에서
+     * 가용현금을 뺀 값이다. 두 계산이 갈리면 "얼마가 모자라다"와
+     * "얼마까지 살 수 있다"가 서로 다른 근거 위에 서게 된다.
+     */
+    it("부족액은 엔진의 ownFundsRequired에서 그대로 나온다", () => {
+      const p = profile();
+      const { result } = renderHook(() => useAffordability(p));
+      const sliderMax = result.current!.sliderMax;
+
+      act(() => result.current!.setPrice(sliderMax));
+
+      expect(result.current!.cashShortfall).toBe(
+        ownFundsRequired(sliderMax, p, rules) -
+          result.current!.result.availableCash,
+      );
+    });
+  });
+
+  /**
+   * 사용자 지시: "어떤이자율을 적용했는지 알려주고, 이자율은 조정이
+   * 가능하도록 입력값으로 수정해줘". `safety`(월 상환액·부담률)만
+   * 이 입력을 본다 — `loanAtPrice`(받을 수 있는 최대 대출)는 언제나
+   * 룰셋의 규제 금리로 정해지는 심사 기준이라 사용자가 조정할 대상이
+   * 아니다.
+   */
+  describe("ratePercentText — 부담 계산용 금리 입력", () => {
+    it("기본값은 룰셋의 기준 금리다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      expect(result.current!.ratePercentText).toBe(
+        String(+(rules.baseRate * 100).toFixed(2)),
+      );
+      expect(result.current!.effectiveRate).toBe(rules.baseRate);
+    });
+
+    it("금리를 올리면 월 상환액이 늘어난다 — 같은 대출액, 다른 금리", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      const before = result.current!.safety.monthlyPayment;
+
+      act(() => result.current!.setRatePercentText("7"));
+
+      expect(result.current!.effectiveRate).toBe(0.07);
+      expect(result.current!.safety.monthlyPayment).toBeGreaterThan(before);
+    });
+
+    it("금리를 조정해도 받을 수 있는 최대 대출액은 그대로다 — 은행 심사 기준은 규제 금리로 고정된다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      const before = result.current!.loanAtPrice.amount;
+
+      act(() => result.current!.setRatePercentText("7"));
+
+      expect(result.current!.loanAtPrice.amount).toBe(before);
+    });
+
+    it("빈 입력이면 기준 금리로 조용히 되돌아간다 — 표가 통째로 사라지지 않는다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      act(() => result.current!.setRatePercentText(""));
+
+      expect(result.current!.ratePercentText).toBe("");
+      expect(result.current!.effectiveRate).toBe(rules.baseRate);
+      expect(Number.isFinite(result.current!.safety.monthlyPayment)).toBe(
+        true,
+      );
+    });
+
+    it("범위 밖 입력(20% 초과)이면 기준 금리로 되돌아간다", () => {
+      const { result } = renderHook(() => useAffordability(profile()));
+      act(() => result.current!.setRatePercentText("25"));
+
+      expect(result.current!.effectiveRate).toBe(rules.baseRate);
+    });
   });
 
   describe("safePrice", () => {

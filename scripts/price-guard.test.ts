@@ -68,8 +68,19 @@ describe("호가 위치의 예산 줄은 실거주 프로필에서만 나온다"
     "",
   );
 
+  /**
+   * ⚠ **`priceBudget:` 바로 뒤에 객체 리터럴이 오지 않는다.** 단지 상세가
+   * 실거주 프로필 없이도 열리게 되면서(가격을 넣기 전에도 주소·평형·
+   * 실거래 내역은 보여준다) 이 값이 `residentialProfile === null ? null :
+   * {...}` 꼴이 됐다. 그래도 **이 검사가 지키는 것은 그대로다** —
+   * 객체가 실제로 만들어질 때 그 `profile`이 `residentialProfile`인가.
+   * 그 사이의 널 가드만 건너뛰고 본다(아래 변이 검사가 여전히
+   * `effectiveProfile`로 바꿔치기하는 것을 잡는다).
+   */
   function gatesPriceBudget(code: string): boolean {
-    return /priceBudget:\s*\{\s*profile:\s*residentialProfile,/.test(code);
+    return /priceBudget:[\s\S]{0,160}?\{\s*profile:\s*residentialProfile,/.test(
+      code,
+    );
   }
 
   it("App이 priceBudget에 residentialProfile을 넘긴다", () => {
@@ -77,9 +88,11 @@ describe("호가 위치의 예산 줄은 실거주 프로필에서만 나온다"
   });
 
   it("다른 프로필을 넘기면 잡아낸다(변이 검사)", () => {
+    // `priceBudget:` 바로 뒤가 널 가드라, 바꿔치기할 문자열은 실제로
+    // 객체를 만드는 쪽이다(위 `gatesPriceBudget` 문서 참고).
     const poisoned = APP.replace(
-      "priceBudget: { profile: residentialProfile,",
-      "priceBudget: { profile: effectiveProfile,",
+      "{ profile: residentialProfile, financeRules: rules }",
+      "{ profile: effectiveProfile, financeRules: rules }",
     );
     expect(poisoned).not.toBe(APP);
     expect(gatesPriceBudget(poisoned)).toBe(false);

@@ -22,6 +22,8 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     minFloor: 3,
     maxFloor: 18,
     unknownFloorCount: 0,
+    address: null,
+    trades: [],
     lowConfidence: false,
     ...overrides,
   };
@@ -220,25 +222,6 @@ describe("ComplexList", () => {
     screen.getByRole("button", { name: /테스트아파트/ }).click();
 
     expect(onSelect).toHaveBeenCalledWith(u);
-  });
-
-  describe("리뷰 수정: 목록이 어느 면적 기준인지 밝힌다", () => {
-    it("각 줄은 실제 전용면적, 위 숫자는 가정 면적이라는 것을 목록 상단에서 말한다", () => {
-      // 헤드라인은 가정 면적(기본 86㎡)으로, 각 행은 그 평형의 실제
-      // 면적으로 계산한다. 85㎡ 이하 행은 농특세가 붙지 않아 헤드라인
-      // 실구매 가능 가격보다 비싼 가격까지 통과하는데, 그 차이를
-      // 밝히지 않으면 화면이 서로 모순돼 보인다.
-      const { container } = renderList({ withinSafe: [entry(unit())] });
-      const note = container.querySelector(".complex-list-note")?.textContent ?? "";
-      expect(note).toMatch(/실제 전용면적/);
-      expect(note).toMatch(/가정한 면적/);
-    });
-
-    it("0개일 때는 이 안내를 붙이지 않는다", () => {
-      // 보여줄 행이 없으면 기준을 밝힐 행도 없다.
-      const { container } = renderList();
-      expect(container.querySelector(".complex-list-note")).toBeNull();
-    });
   });
 
   describe("리뷰 수정: 버튼 안의 마크업이 유효하다", () => {

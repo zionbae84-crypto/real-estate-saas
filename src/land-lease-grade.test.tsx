@@ -11,6 +11,7 @@ import * as regionQuery from "./lib/regionQuery";
 import {
   calcAcquisitionCosts,
   calcBurdenAt,
+  calcMaxLoan,
   householdCountNoteFor,
   parseRules,
   type BuyerProfile,
@@ -350,18 +351,50 @@ describe("대출 0원 + 토지임대부", () => {
 describe("목록과 상세가 같은 판단을 보여 준다", () => {
   const p = profile({ cash: 2_000_000_000, annualIncome: 400_000_000 });
 
-  function detailOf(u: ComplexUnit) {
+  /**
+   * 상세를 열고 **예상 매수금액까지 명시적으로 넣는다.**
+   *
+   * 사용자 지시로 이 화면의 계산이 `unit.maxPrice` 고정에서 사용자가
+   * 넣는 예상 매수금액 기준으로 바뀌었다. 이 칸은 이제 그 평형의
+   * 실거래 범위 위쪽(`unit.maxPrice`)으로 채워진 채 시작하므로 사실
+   * 아무것도 안 넣어도 목록과 같은 가격이지만, 이 테스트가 검사하는
+   * 것은 "목록과 상세가 같은 가격에서 같은 등급을 말하는가"이므로 그
+   * 가격을 명시적으로 넣는 형태를 유지한다.
+   */
+  async function detailOf(u: ComplexUnit) {
+    // App.tsx의 `effectiveProfile`과 **같은 규칙**으로 만든다 — 이 평형의
+    // 실제 전용면적을 반영한 프로필이라야 85㎡ 임계값(농특세)을 낙관
+    // 방향으로 넘기지 않는다.
     const rowProfile = { ...p, exclusiveAreaSqm: u.maxExclusiveAreaSqm };
-    return render(
+    const rendered = render(
       <ComplexDetail
         unit={u}
-        burden={calcBurdenAt(rowProfile, rules, u.maxPrice)}
-        costs={calcAcquisitionCosts(u.maxPrice, rowProfile, rules)}
+        units={[u]}
+        onSelectUnit={() => undefined}
         householdCountNote={householdCountNoteFor(rowProfile, rules)}
         priceBudget={{ profile: rowProfile, financeRules: rules }}
+        profile={rowProfile}
         onClose={() => undefined}
       />,
     );
+    /*
+     * MoneyInput은 만원 단위로 읽는다(입력 힌트 참고) — 원 단위 값을
+     * 그대로 넣지 않도록 만원으로 바꿔서 넣는다.
+     *
+     * ⚠ **먼저 비운다.** 이 칸은 이제 `unit.maxPrice`로 채워진 채
+     * 시작하므로(`ComplexDetail`의 `askingPrice` 문서), 그냥 타이핑하면
+     * 기본값 뒤에 붙어 훨씬 큰 금액이 되고 부담 등급이 달라진다.
+     * (여기서 넣는 값이 곧 그 기본값과 같지만, 이 테스트가 검사하는 것은
+     * "목록과 상세가 같은 가격에서 같은 등급을 말하는가"이므로 그 가격을
+     * 명시적으로 넣는 형태를 유지한다.)
+     */
+    const priceInput = screen.getByLabelText("예상 매수금액");
+    await userEvent.clear(priceInput);
+    await userEvent.type(priceInput, String(u.maxPrice / 10_000));
+    // 이 입력란은 `commitOn="blur"`다 — 벗어나야 값이 확정되고, 아래
+    // 등급이 그 값을 기준으로 다시 계산된다.
+    await userEvent.tab();
+    return rendered;
   }
 
   it.each(
@@ -370,14 +403,14 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
     ),
   )(
     "%s의 목록 등급과 상세 등급이 같다",
-    (_key, u) => {
+    async (_key, u) => {
       const result = build([u], p);
       const list = renderList(result);
       const rows = [...list.container.querySelectorAll(".complex-row")];
       expect(rows).toHaveLength(1);
       const rowLevel = levelTextOf(rows[0] as Element);
 
-      const detail = detailOf(u);
+      const detail = await detailOf(u);
       const badgeLevel = detail.container
         .querySelector(".safety-level")
         ?.textContent?.trim();
@@ -390,15 +423,33 @@ describe("목록과 상세가 같은 판단을 보여 준다", () => {
     },
   );
 
-  it("상세도 왜 멈췄는지를 등급 글자 바로 아래에서 말한다", () => {
+  /**
+   * 등급이 왜 "안전"까지 못 갔는지는 **등급 글자 바로 다음**에서 말한다.
+   * 낯선 등급 글자만 남지 않게 한다는 계약은 그대로다.
+   *
+   * ⚠ **더 이상 "같은 `<div>` 안"이 아니다.** 사용자 지시로 등급 낱말
+   * ("안전")을 카드 오른쪽 위로 올리면서(`ComplexDetail.tsx`의
+   * `.detail-monthly-header`), 등급은 제목 줄과 나란히 서고 근거 문장은
+   * 그 아래 **전체 폭**을 쓰는 별도 줄이 됐다 — 카드 하나에서 오른쪽
+   * 끝에 짧게 붙은 낱말과 그 아래 긴 문장을 같은 폭의 상자에 억지로
+   * 가두면 문장이 좁게 줄바꿈된다. 그래서 지금 확인하는 것은 "같은
+   * 상자 안"이 아니라 **"등급 머리 바로 다음에 온다"**(둘 사이에
+   * 다른 내용이 끼어들지 않는다)는 순서 계약이다.
+   */
+  it("상세도 왜 멈췄는지를 등급 글자 바로 다음에서 말한다", async () => {
     const u = REAL_LAND_LEASE[0];
     expect(u).toBeDefined();
     if (u === undefined) return;
-    const { container } = detailOf(u);
+    const { container } = await detailOf(u);
     const level = container.querySelector(".safety-level");
     const note = container.querySelector(".safety-grade-note");
     expect(note?.textContent).toBe(landLeaseRules.grade.note);
-    expect(level?.nextElementSibling).toBe(note);
+
+    const header = level?.closest(".detail-monthly-header");
+    expect(header).not.toBeNull();
+    // 등급 머리(.detail-monthly-header) 바로 다음 형제가 근거 문장이다
+    // — 둘 사이에 다른 내용이 끼어들면 등급과 근거가 멀어져 읽힌다.
+    expect(header?.nextElementSibling).toBe(note);
   });
 });
 
@@ -462,9 +513,9 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
 
     render(<App />);
     // 16억 현금 · 2억 소득이면 토지임대부 평형이 목록에 뜬다.
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "160000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "20000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "160000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "20000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
@@ -480,15 +531,41 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
     if (row !== undefined) await userEvent.click(row);
   }
 
-  it("두 배지가 같은 등급을 말하되 이유는 한 번만 적는다", async () => {
+  /**
+   * 예산 상세 쪽 등급은 `PriceSlider`와 합쳐지며 `.price-slider-grade`가
+   * 됐고(사용자 지시), 단지 상세 쪽도 이제 `SafetyBadge`를 거치지 않고
+   * `ComplexDetail`이 직접 `.safety-level`을 그린다(사용자 지시로
+   * "매달 나가는 돈" 머리를 다시 짜면서 — `ComplexDetail.tsx`의
+   * `.detail-monthly-header` 문서 참고). **클래스 이름은 그대로다.**
+   *
+   * **계약은 그대로다**: 두 자리가 같은 등급을 말하고, 왜 "안전"까지
+   * 못 갔는지는 **한 번만** 적는다.
+   *
+   * 예상 매수금액은 이제 이 평형의 실거래 범위 위쪽으로 채워진 채
+   * 시작하므로(`ComplexDetail`의 `askingPrice` 문서) **먼저 비우고**
+   * 이 테스트가 정한 값을 넣는다 — 안 그러면 기본값 뒤에 붙어 훨씬 큰
+   * 금액이 되고, 두 자리가 서로 다른 등급을 말하게 된다. 이 입력란은
+   * `commitOn="blur"`이므로 벗어나야(`tab()`) 값이 확정된다.
+   */
+  it("두 자리가 같은 등급을 말하되 이유는 한 번만 적는다", async () => {
     await openLandLeaseDetail();
+    const priceInput = screen.getByLabelText("예상 매수금액");
+    await userEvent.clear(priceInput);
+    await userEvent.type(priceInput, "150000");
+    await userEvent.tab();
 
-    const levels = [...document.querySelectorAll(".safety-level")].map(
-      (n) => n.textContent?.trim(),
-    );
+    const levels = [
+      ...document.querySelectorAll(".price-slider-grade, .safety-level"),
+    ].map((n) => n.textContent?.trim());
     expect(levels.length).toBe(2);
-    expect(levels).toEqual([landLeaseRules.grade.label, landLeaseRules.grade.label]);
+    expect(levels).toEqual([
+      landLeaseRules.grade.label,
+      landLeaseRules.grade.label,
+    ]);
 
+    // 예산 상세 쪽은 explainGrade={false}라 근거를 내지 않는다 —
+    // 단지 상세 쪽(.safety-grade-note)만 낸다.
+    expect(document.querySelectorAll(".price-slider-grade-note")).toHaveLength(0);
     const notes = [...document.querySelectorAll(".safety-grade-note")].map(
       (n) => n.textContent,
     );

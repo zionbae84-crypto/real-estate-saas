@@ -16,6 +16,19 @@ const BANK_CONSTRAINTS = ["LTV", "DSR", "CAP"] as const;
 export const NO_POLICY_LIMIT = 0;
 
 /**
+ * 비규제지역이라 절대캡 자체가 적용되지 않을 때의 CAP 값.
+ *
+ * POLICY의 "선택지 없음"과 반대 방향이다 — POLICY는 `max()`로 합쳐지므로
+ * 부재를 0으로 표현해야 안전했다(Infinity를 넣으면 "정책대출이 무조건
+ * 이긴다"는 오답이 된다, `calcMaxLoan` 주석·이 파일의 옛 이력 참고).
+ * 반면 CAP은 은행 경로에서 `min(LTV, DSR, CAP)`로 합쳐지므로, "이 제약이
+ * 존재하지 않는다"의 수학적으로 정확한 항등값은 `+Infinity`다 —
+ * min(x, Infinity) = x이지 Infinity가 아니다. 그래서 여기서는
+ * `LoanLimit.breakdown`이 유한하지 않은 유일한 자리가 된다(타입 doc 참고).
+ */
+export const NO_ABSOLUTE_CAP = Number.POSITIVE_INFINITY;
+
+/**
  * 자격이 되는 정책대출 상품 하나와, 그 상품을 택했을 때 **실제로 받을 수
  * 있는** 한도(원, 정수).
  *
@@ -153,6 +166,18 @@ export function calcAbsoluteCap(rules: Rules, price: number): number {
  * 반대로 정책 경로에서 LTV·DSR을 빼면 연소득 0원 구매자에게 3.6억을
  * 제시하게 된다 — 정책대출은 심사 면제가 아니라 금리 우대다.
  *
+ * **절대캡은 `profile.isRegulatedArea`일 때만 은행 경로에 들어간다.**
+ * 10·15 대책 원문의 절대캡(15억 이하 6억/15~25억 4억/25억 초과 2억)은
+ * 규제지역에만 붙는 규제다 — 비수도권이라도 정부가 규제지역으로
+ * 지정하면 같은 캡이 걸리고, 반대로 수도권이라도 규제지역이 아니면
+ * 캡 자체가 없다. "수도권"이 아니라 "규제지역"이 방아쇠라는 뜻이다.
+ * 예전에는 이 함수가 지역을 보지 않고 `calcAbsoluteCap`을 무조건
+ * 적용해, 비규제지역 구매자도 규제지역과 똑같이 캡에 묶여 실구매력이
+ * 실제보다 낮게 나왔다(`rules/2026-08.json`의 `_scope` 주석이 이미
+ * 문서화해 둔 단순화였다). 비규제지역에서는 `NO_ABSOLUTE_CAP`
+ * (=Infinity)을 넣어 은행 경로의 `min()`에서 이 제약이 실질적으로
+ * 빠지게 한다.
+ *
  * 정책대출 한도는 이 함수가 직접 도출한다. 예전에는 호출자가 넘기는
  * 선택적 인자였는데, 그 값을 구하는 함수가 공개되어 있지도 않아서
  * "이 매물을 이 구매자 기준으로 채점" 같은 자연스러운 호출이 엔진 내부
@@ -173,7 +198,9 @@ export function calcMaxLoan(
     DSR: Math.floor(
       calcDsrLimit(profile, rules, rules.baseRate + rules.stressDSR.surcharge),
     ),
-    CAP: Math.floor(calcAbsoluteCap(rules, price)),
+    CAP: profile.isRegulatedArea
+      ? Math.floor(calcAbsoluteCap(rules, price))
+      : NO_ABSOLUTE_CAP,
     POLICY: Math.floor(policyLimit),
   };
 
@@ -204,18 +231,31 @@ function assertNoNaN(breakdown: Record<BindingConstraint, number>): void {
   }
 }
 
+/**
+ * 이 프로필에 적용되는 담보인정비율(LTV). `calcLtvLimit`과 같은 표
+ * (`rules.ltv`)에서 같은 규칙으로 고른다 — 화면(`BindingExplainer`)이
+ * "규제지역 기준 LTV 40%를 적용했어요" 같은 설명을 낼 때, 계산과
+ * 다른 숫자를 말하지 않도록 이 함수 하나를 함께 쓴다.
+ *
+ * 규제지역 무주택자는 40%, 비규제 수도권은 70%. 생애최초는 양쪽 모두
+ * 70%라, 규제지역에서만 생애최초 우대가 실제 의미를 갖는다.
+ */
+export function ltvRateFor(
+  profile: Pick<BuyerProfile, "isRegulatedArea" | "isFirstTimeBuyer">,
+  rules: Rules,
+): number {
+  const table = profile.isRegulatedArea
+    ? rules.ltv.regulated
+    : rules.ltv.unregulated;
+  return profile.isFirstTimeBuyer ? table.firstTimeBuyer : table.default;
+}
+
 function calcLtvLimit(
   profile: BuyerProfile,
   rules: Rules,
   price: number,
 ): number {
-  // 규제지역 무주택자는 40%, 비규제 수도권은 70%. 생애최초는 양쪽 모두
-  // 70%라, 규제지역에서만 생애최초 우대가 실제 의미를 갖는다.
-  const table = profile.isRegulatedArea
-    ? rules.ltv.regulated
-    : rules.ltv.unregulated;
-  const rate = profile.isFirstTimeBuyer ? table.firstTimeBuyer : table.default;
-  return price * rate;
+  return price * ltvRateFor(profile, rules);
 }
 
 /**

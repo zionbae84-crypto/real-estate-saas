@@ -5,6 +5,7 @@ import { App } from "./App";
 import { COMPLEX_UNITS, type ComplexUnit } from "./data/complexes";
 import * as regionQuery from "./lib/regionQuery";
 import { rules as financeRules } from "./state/useAffordability";
+import { STORAGE_KEY } from "./state/useProfileForm";
 
 /**
  * 지역 실거래가 조회를 모의한다.
@@ -29,6 +30,21 @@ async function selectRegion(sido: string, sigungu: string) {
   await userEvent.selectOptions(screen.getByLabelText("자치구"), sigungu);
   await userEvent.click(
     screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+  );
+}
+
+/**
+ * 화면 1(입력)로 돌아간다.
+ *
+ * Task 3에서 화면이 갈리며 `RegionSelect`는 "입력" 화면 전용이 됐다 —
+ * 지역 조회가 한 번 성공하면 화면은 "결과"로 넘어가고 "입력" 화면은
+ * 시각적으로 숨는다(`EntryScreen`). 이미 지역을 한 번 조회한 뒤 **다른
+ * 지역을 다시 조회**하려면 먼저 이 버튼으로 "입력" 화면에 돌아와야
+ * `selectRegion`이 다시 그 select들을 찾을 수 있다.
+ */
+async function backToEntry() {
+  await userEvent.click(
+    screen.getByRole("button", { name: "조건 다시 넣기" }),
   );
 }
 
@@ -90,10 +106,39 @@ function readPayment(): number {
   return parseFormattedWon(text);
 }
 
-/** 화면에 그려진 실구매 가능 가격(.affordable-price)을 원 단위 숫자로 읽는다. */
+/**
+ * 화면에 그려진 실구매 가능 가격을 원 단위 숫자로 읽는다.
+ *
+ * 예전엔 예산 상세 패널 안의 헤드라인 카드(`.affordable-price`)를
+ * 읽었다 — 사용자 지시로 그 카드가 없어졌다(상단바와 중복이었다).
+ * 이제 이 값을 보여주는 유일한 자리는 상단바다
+ * (`.result-topbar-item-value--money`, 이 앱에서 `emphasis`를 쓰는
+ * 유일한 요약 항목이라 선택자가 겹칠 일이 없다).
+ */
 function readAffordablePrice(): number {
-  const text = document.querySelector(".affordable-price")?.textContent ?? "";
+  const text =
+    document.querySelector(".result-topbar-item-value--money")?.textContent ??
+    "";
   return parseFormattedWon(text);
+}
+
+/**
+ * 인쇄 요약(`PrintSummary`, 화면에서는 숨어 있고 DOM에는 있다)의 한 줄을
+ * 읽는다.
+ *
+ * 사용자 지시로 화면의 "계산 전제" 문구 덩어리(구 `AssumptionLine`)가
+ * 삭제된 뒤로, 기존 대출·규제지역 판정 여부 같은 가정 사실을 확인할 수
+ * 있는 자리는 이 요약 하나뿐이다 — `PrintSummary`는 같은 원본(`state`)에서
+ * 읽으므로 지금도 사실 그대로다.
+ */
+function printValueOf(label: string): string | null {
+  const rows = document.querySelectorAll(".print-summary dl > div");
+  for (const row of rows) {
+    if (row.querySelector("dt")?.textContent === label) {
+      return row.querySelector("dd")?.textContent ?? null;
+    }
+  }
+  return null;
 }
 
 describe("예산 계산기 통합", () => {
@@ -103,108 +148,106 @@ describe("예산 계산기 통합", () => {
   it("필수값을 채우기 전에는 결과를 그리지 않는다", () => {
     render(<App />);
     expect(screen.queryByText("실구매 가능 가격")).not.toBeInTheDocument();
-    expect(screen.getByText(/현금·연소득·주택 수를 알려주면/)).toBeInTheDocument();
+    expect(
+      screen.getByText(/현금·연 소득·주택 수를 알려주면/),
+    ).toBeInTheDocument();
   });
 
   /**
-   * 주택 수는 현금·소득과 같은 층위의 **필수 답**이다.
+   * 주택 수(무주택이세요?)·생애최초는 사용자 지시로 다시 화면 1의 실제
+   * 질문이 됐다 — cash·annualIncome과 같은 자리에 서므로 답하지 않으면
+   * 결과가 뜨지 않는다(`ProfileFormState.ownedHomeCount` 참고).
    *
-   * 미입력을 무주택으로 대신 채우면 디딤돌·보금자리론 자격이 모두 열려
-   * 정책 한도가 커지고 실구매력이 올라간다 — 사용자가 확인한 적 없는
-   * 값으로 "더 빌릴 수 있다"고 답하는, 이 제품이 가장 피해야 하는
-   * 방향이다. 그래서 답을 듣기 전에는 아무 숫자도 내지 않는다.
+   * 남은 진짜 가정은 기존 대출뿐이다. 그 가정은 낙관 방향이므로(기존
+   * 대출이 없으면 DSR 여력이 그대로 남아 한도가 커진다) 그 사실이
+   * 반드시 어딘가에 남아 있어야 한다 — 화면의 "계산 전제" 문구 덩어리
+   * (구 `AssumptionLine`)는 사용자 지시로 삭제됐지만, 같은 사실이
+   * `PrintSummary`(인쇄 요약, DOM에는 항상 있다)에 그대로 남는다.
    */
-  it("현금·소득만 넣고 주택 수를 답하지 않으면 결과가 나오지 않는다", async () => {
+  it("현금·소득·주택 수를 넣으면 결과가 나오고, 기존 대출 가정이 인쇄 요약에 남는다", async () => {
     render(<App />);
 
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.queryByText("실구매 가능 가격")).not.toBeInTheDocument();
-    expect(screen.getByText(/현금·연소득·주택 수를 알려주면/)).toBeInTheDocument();
+    expect(
+      screen.queryByText(/현금·연 소득·주택 수를 알려주면/),
+    ).not.toBeInTheDocument();
 
-    await userEvent.click(screen.getByLabelText("무주택"));
-    expect(screen.getByText("실구매 가능 가격")).toBeInTheDocument();
+    // 상단바의 트리거 버튼으로 찾는다 — 예산 상세 패널을 여는 그
+    // 자리가 "실구매 가능 가격"의 유일한 출처다(헤드라인 카드는
+    // 사용자 지시로 없앴다 — 상단바와 중복이었다).
+    expect(
+      screen.getByRole("button", { name: /실구매 가능 가격/ }),
+    ).toBeInTheDocument();
+
+    expect(printValueOf("기존 대출(연간 상환액)")).toBe("없음 (가정)");
   });
 
   /**
-   * 유주택을 고르면 몇 채인지 적을 수 있고, 그 답이 실제 계산을 좁힌다 —
-   * 물어만 보고 쓰지 않으면 사용자는 반영됐다고 믿는다.
+   * 무주택 가정이 **실제 계산에도** 그대로 들어간다 — 문구만 적고 다른
+   * 값을 넘기면 화면이 두 말을 하게 된다. 무주택이면 보금자리론 자격이
+   * 열린다는 사실로 확인한다.
    */
-  it("유주택을 고르면 주택 수를 적을 수 있고, 그 답이 정책대출 자격을 좁힌다", async () => {
+  it("무주택 가정이 정책대출 자격에 실제로 반영된다", async () => {
     render(<App />);
-
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "5000");
-    await userEvent.click(screen.getByLabelText("무주택"));
-
-    // 무주택이면 보금자리론 자격이 있다.
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "5000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
     expect(screen.getByText("보금자리론")).toBeInTheDocument();
-
-    await userEvent.click(screen.getByLabelText("유주택"));
-    const countInput = screen.getByLabelText("갖고 있는 주택 수 (채)");
-    expect(countInput).toHaveValue(1);
-    // 1주택도 보금자리론까지는 받을 수 있다(공시: 본건 담보주택 제외
-    // 무주택 또는 1주택).
-    expect(screen.getByText("보금자리론")).toBeInTheDocument();
-
-    // 2주택이 되면 받을 수 있는 정책대출이 사라진다.
-    await userEvent.clear(countInput);
-    await userEvent.type(countInput, "2");
-    expect(screen.queryByText("보금자리론")).not.toBeInTheDocument();
   });
 
   /**
-   * **묻고 나서 쓰지 않으면 사용자는 반영됐다고 믿는다.**
-   *
-   * 취득세는 주택 수를 반영하지 못한다(중과세율을 확인하지 못했다).
-   * 그래서 유주택이라고 답한 사람에게는 그 사실이 화면에 있어야 하고,
-   * 무주택이라고 답한 사람에게는 그 경고가 나가면 안 된다 — 그 사람에게는
-   * 거짓이고, 거짓 경고는 진짜 경고까지 함께 닳게 만든다.
+   * 취득세는 주택 수를 반영하지 못한다 — `calcAcquisitionCosts`는
+   * 항상 무주택 기준 세율로 계산한다(acquisition-cost.ts). 사용자 지시로
+   * 부대비용 카드의 취득세 고지를 "무주택 기준, 다주택인 경우 달라질
+   * 수 있음" 정도로 짧게 요약했다 — 실제 계산이 답과 무관하게 항상
+   * 같으므로, 문구도 답에 따라 갈리지 않는 **고정 문구**가 됐다(예전의
+   * 두 긴 문구는 `PriceCheck`가 여전히 쓴다).
    */
-  it("취득세 고지가 주택 수 답에 따라 갈린다", async () => {
-    const 유주택문구 = financeRules.acquisitionTax.householdCountNote;
-    const 무주택문구 = financeRules.acquisitionTax.householdCountNoteNoHome;
-
+  it("부대비용 카드의 취득세 고지는 짧은 계산 기준 문구다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "5000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "5000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.getByText(무주택문구)).toBeInTheDocument();
-    expect(screen.queryByText(유주택문구)).not.toBeInTheDocument();
-
-    await userEvent.click(screen.getByLabelText("유주택"));
-
-    expect(screen.getByText(유주택문구)).toBeInTheDocument();
-    expect(screen.queryByText(무주택문구)).not.toBeInTheDocument();
+    expect(
+      screen.getByText(/무주택 기준으로 계산했어요\. 다주택이면 세율이 달라질 수 있어요/),
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByText(financeRules.acquisitionTax.householdCountNote),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByText(financeRules.acquisitionTax.householdCountNoteNoHome),
+    ).not.toBeInTheDocument();
   });
 
   it("현금과 소득을 넣으면 결과와 슬라이더가 나타난다", async () => {
-    render(<App />);
+    const { container } = render(<App />);
 
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.getByText("실구매 가능 가격")).toBeInTheDocument();
+    // 위와 같은 이유로 트리거 버튼으로 찾는다(상단바 요약이 같은 라벨을 쓴다).
+    expect(
+      screen.getByRole("button", { name: /실구매 가능 가격/ }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("slider")).toBeInTheDocument();
-    // BudgetResult의 2단("무엇이 막았는지 한 줄")은 이제 <h2>가 아니라
-    // 평범한 문단이다 — 제목 계층은 "실구매 가능 가격"(1단) 하나로
-    // 좁혔다. BindingExplainer 자신의 <h3>는 접힌 4단 안에서
-    // showTitle={false}로 꺼져 있으므로, 이 문구는 화면에 정확히 한
-    // 번만 나타난다.
-    // 리뷰 수정(Critical): DSR title을 형제들과 나란한 "…걸렸어요" 형태로
-    // 되돌렸으므로("소득이 한도를 정했어요"는 더 이상 어떤 title도 아니다),
-    // 대안 목록에서 그 표현을 뺀다 — 넓히지 않고 좁힌다.
-    expect(screen.getByText(/걸렸어요|최대치예요/)).toBeInTheDocument();
+    // 대출 한도 카드의 네 가지 한도 표에 "무엇이 결정됐는지"가
+    // `data-active`로 표시된다 — 제약별 제목 문장(구 "…걸렸어요")은
+    // 사용자 지시로 없앴다.
+    expect(
+      container.querySelector('.binding-limit-table [data-active="true"]'),
+    ).not.toBeNull();
   });
 
   it("슬라이더를 내리면 월 상환액과 부담률이 줄어든다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     const slider = screen.getByRole("slider");
     // SEED 썸은 <div role="slider">라 네이티브 max 속성이 없다 —
@@ -226,9 +269,9 @@ describe("예산 계산기 통합", () => {
 
   it("최대치에서는 그것이 한계라는 경고가 뜬다", async () => {
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     expect(
       screen.getByText(/빌릴 수 있는 한계예요\. 무리 없는 선은 따로 있어요/),
@@ -237,41 +280,41 @@ describe("예산 계산기 통합", () => {
 
   it("입력이 localStorage에 남아 새로고침 후 복원된다", async () => {
     const { unmount } = render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
     unmount();
 
     render(<App />);
-    expect(screen.getByLabelText("사용가능 현금 예산")).toHaveValue("20000");
+    // 입력란 표시는 만원 단위에 셋째 자리마다 쉼표다(사용자 지시,
+    // `MoneyInput`의 `toText`) — 저장된 값은 여전히 원 단위 2억이다.
+    expect(screen.getByLabelText(/얼마 있어요/)).toHaveValue("20,000");
   });
 
   /**
    * 폼에서 엔진을 거쳐 화면 숫자까지 이어지는 유일한 종단 검증.
    *
-   * Task 3에서 규제지역 체크박스가 ProfileForm 첫 화면에서 빠지고
-   * AssumptionLine 뒤의 openField로만 도달하게 되면서 지워졌던 테스트다
-   * (그때는 AssumptionLine이 App에 배선되지 않아 열 방법이 없었다). 이제
-   * AssumptionLine이 배선됐으니 그 버튼을 눌러 규제지역 필드를 열고,
-   * 체크를 끄면(비규제지역 = 수도권) LTV 한도가 40% → 70%로 올라 실구매력이
-   * 오른다는 사실을 화면 숫자로 직접 확인한다.
+   * ⚠ **규제지역 체크박스는 사라졌다**(스펙 §2) — 이제 그 값을 정하는
+   * 것은 **지역 조회의 자동 판정**이다. 그래서 검증 경로도 바뀌었다:
+   * 비규제로 판정된 지역을 조회하면 LTV 한도가 40% → 70%로 올라
+   * 실구매력이 오른다. 체크박스를 없앤 대신 그 축이 죽지 않았다는 것을
+   * 화면 숫자로 직접 확인하는 자리다.
    */
-  it("규제지역 체크를 끄면 실구매력이 올라간다", async () => {
+  it("지역이 비규제로 판정되면 실구매력이 올라간다", async () => {
+    mockRegionQuery(cheapestIn("11680", 3), true);
+
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "10000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "10000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     const priceBefore = readAffordablePrice();
     expect(priceBefore).toBeGreaterThan(0);
 
-    // 기본값(가정)은 규제지역(true)이므로 AssumptionLine 문구는
-    // "규제지역으로 계산했어요"다(AssumptionLine.tsx의 buildAssumptionItems 참고).
-    await userEvent.click(screen.getByText(/규제지역으로 계산했어요/));
+    const spy = mockRegionQuery(cheapestIn("11680", 3), false);
+    await selectRegion("서울특별시", "강남구");
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
+    expect(spy).toHaveBeenCalled();
 
-    const checkbox = screen.getByRole("checkbox", { name: /규제지역/ });
-    expect(checkbox).toBeChecked();
-    await userEvent.click(checkbox);
-    expect(checkbox).not.toBeChecked();
-
+    expect(printValueOf("규제지역 여부")).toBe("비규제지역 (지역 판정)");
     expect(readAffordablePrice()).toBeGreaterThan(priceBefore);
   });
 
@@ -282,70 +325,74 @@ describe("예산 계산기 통합", () => {
    * 근거가 "모르니까 안전하게 규제지역"에서 "당신이 고른 지역이라서
    * 규제지역"으로 바뀌는 순간, 그것은 더 이상 가정이 아니다.
    */
-  it("지역을 고르면 규제지역 가정이 문구에서 빠진다", async () => {
+  it("지역을 고르면 인쇄 요약이 '가정'에서 '지역 판정'으로 바뀐다", async () => {
     mockRegionQuery(cheapestIn("11680", 3), true);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (지역 판정)");
   });
 
   /**
-   * 위 테스트의 대조군(symmetric case) — `isRegulatedArea`가
-   * `true`가 아니라 `null`(모르는 지역)이면 조회 전부터 있던 규제지역
-   * 가정이 조회가 끝난 뒤에도 **가정인 채로 남아야** 한다. null을
-   * false로 오인해 프로필을 덮어쓰면 안 된다.
+   * 위 테스트의 대조군(symmetric case) — 응답의 `isRegulatedArea`가
+   * `true`가 아니라 `null`이면 조회 전부터 있던 규제지역 가정이 조회가
+   * 끝난 뒤에도 **가정인 채로 남아야** 한다. null을 false로 오인해
+   * 프로필을 덮어쓰면 안 된다.
+   *
+   * 지금 백엔드(`resolveIsRegulated`)는 성공 응답에서 이 null을 내지
+   * 않는다 — `regulated` 목록에 없으면 확정 `false`(비규제)를 낸다.
+   * 그래도 `RegionComplexesResult.isRegulatedArea`의 타입은 여전히
+   * `boolean | null`이다(`regionQuery.ts`) — 이 테스트는 그 계약이
+   * 실제로 null을 보내는 경우(오래된 배포판 등) 화면이 함부로 확정
+   * 짓지 않는지를 지키는 방어 테스트다.
    */
-  it("지역의 규제지역 여부를 모르면(null) 규제지역 가정이 가정으로 남는다", async () => {
+  it("API가 규제지역 여부로 null을 보내면 규제지역 가정이 가정으로 남는다", async () => {
     mockRegionQuery(cheapestIn("11680", 3), null);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
     // null이었으므로 프로필의 isRegulatedArea는 확정되지 않았다 —
-    // 가정 문구가 여전히 남아 있다.
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    // 인쇄 요약이 여전히 "(가정)"이다.
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
   });
 
   /**
    * 위 두 테스트를 **이어 붙였을 때** 드러나는 결함.
    *
-   * 아는 지역을 먼저 조회하면 규제지역 값이 확정되어 가정 문구에서
-   * 빠진다. 그 다음 모르는 지역을 조회했을 때 값을 손대지 않고 두면,
-   * 새 지역의 화면이 앞 지역의 값을 **확정 지위까지** 물려받는다 —
-   * 우리가 이 지역에 대해 아무것도 확인하지 못했는데 화면은 더 이상
-   * 그것을 가정이라고 말하지 않는다. 지금은 `nonRegulated` 목록이 비어
-   * 있어 넘어오는 값이 보수적인 true뿐이라 눈에 띄지 않지만, 그 목록이
-   * 채워지는 순간 비규제(LTV 70%) 판정이 모르는 지역으로 새어 나가
-   * 한도를 30%p 과대평가한다.
+   * 한 지역을 먼저 조회하면 규제지역 값이 확정되어 가정 문구에서
+   * 빠진다. 그 다음 API가 null을 보내는 지역을 조회했을 때 값을 손대지
+   * 않고 두면, 새 지역의 화면이 앞 지역의 값을 **확정 지위까지**
+   * 물려받는다 — 이번 응답이 아무것도 확인해 주지 않았는데 화면은 더
+   * 이상 그것을 가정이라고 말하지 않는다.
    */
-  it("아는 지역 다음에 모르는 지역(null)을 조회하면 규제지역이 다시 가정으로 돌아간다", async () => {
+  it("확정된 지역 다음에 API가 null을 보내는 지역을 조회하면 규제지역이 다시 가정으로 돌아간다", async () => {
     const spy = mockRegionQuery(cheapestIn("11680", 3), true);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
+    // 아는 지역: 규제지역으로 확정되어 인쇄 요약이 "(지역 판정)"이 된다.
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
-    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (지역 판정)");
 
     // 모르는 지역: 확정할 근거가 없다.
     spy.mockResolvedValue({
@@ -353,12 +400,13 @@ describe("예산 계산기 통합", () => {
       isRegulatedArea: null,
       dataAsOf: null,
     });
+    await backToEntry();
     await selectRegion("서울특별시", "서초구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    // 가정 고지가 되살아나야 한다 — 앞 지역의 확정이 이 지역까지
-    // 따라오면 안 된다.
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    // 가정으로 되살아나야 한다 — 앞 지역의 확정이 이 지역까지 따라오면
+    // 안 된다.
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
   });
 
   /**
@@ -369,30 +417,30 @@ describe("예산 계산기 통합", () => {
    * 빠진다. 그 다음 지역 조회가 실패하면, 이번 조회는 이 지역에 대해
    * 아무것도 확인해 주지 못했다 — 그런데도 앞 지역의 확정값이 화면에
    * 남으면 "새 지역도 규제지역"이라는 확정 사실을 실제로는 아무도
-   * 검증하지 않은 채 말하는 셈이 된다. `nonRegulated` 목록이 채워지는
-   * 순간 이 경로로도 한도 과대평가가 새어 나간다.
+   * 검증하지 않은 채 말하는 셈이 된다.
    */
   it("아는 지역 다음에 조회가 실패하면 규제지역이 다시 가정으로 돌아간다", async () => {
     const spy = mockRegionQuery(cheapestIn("11680", 3), true);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
-    // 아는 지역: 규제지역으로 확정되어 가정 문구가 사라진다.
+    // 아는 지역: 규제지역으로 확정되어 인쇄 요약이 "(지역 판정)"이 된다.
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
-    expect(screen.queryByText(/규제지역으로 계산했어요/)).not.toBeInTheDocument();
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (지역 판정)");
 
     // 다음 지역 조회는 실패한다 — 이 지역에 대해 아무것도 알아내지 못했다.
     spy.mockRejectedValueOnce(new Error("네트워크 오류"));
+    await backToEntry();
     await selectRegion("서울특별시", "서초구");
     await screen.findByText(/불러오지 못했어요/);
 
-    // 가정 고지가 되살아나야 한다 — 앞 지역의 확정이 실패한 조회까지
-    // 그대로 따라오면 안 된다.
-    expect(screen.getByText(/규제지역으로 계산했어요/)).toBeInTheDocument();
+    // 가정으로 되살아나야 한다 — 앞 지역의 확정이 실패한 조회까지 그대로
+    // 따라오면 안 된다.
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
   });
 
   /**
@@ -410,9 +458,9 @@ describe("예산 계산기 통합", () => {
     const spy = mockRegionQuery(강남, true);
 
     render(<App />);
-    await userEvent.type(screen.getByLabelText("사용가능 현금 예산"), "20000");
-    await userEvent.type(screen.getByLabelText("연 소득 (세전)"), "6000");
-    await userEvent.click(screen.getByLabelText("무주택"));
+    await userEvent.type(screen.getByLabelText(/얼마 있어요/), "20000");
+    await userEvent.type(screen.getByLabelText(/연 소득은요/), "6000");
+    await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
 
     await selectRegion("서울특별시", "강남구");
     await screen.findByRole("region", { name: "살 수 있는 단지" });
@@ -431,9 +479,83 @@ describe("예산 계산기 통합", () => {
     // 빠진 이유가 예산이 아니라 "그 지역 조회 결과가 아니어서"임을
     // 못박는다.
     spy.mockResolvedValue({ units: [...서초], isRegulatedArea: true, dataAsOf: null });
+    await backToEntry();
     await selectRegion("서울특별시", "서초구");
     await screen.findByText(서초단지);
 
     expect(screen.queryByText(강남단지)).not.toBeInTheDocument();
+  });
+});
+
+/**
+ * ⚠ **저장된 상태를 실제로 심고 시작하는 유일한 스위트다.**
+ *
+ * 나머지 스위트는 전부 `beforeEach`에서 localStorage를 지우고 빈
+ * 저장소로 시작한다. 그래서 "저장본이 이번 세션에 무엇을 되살리는가"는
+ * 전체 스위트 중 어느 것도 보지 않는 축이었고, 리뷰가 실제 브라우저에서
+ * 잡은 결함(저장된 규제지역 **판정**이 지역을 고르지도 않은 세션에서
+ * 사실로 다시 주장됨)이 그 틈으로 통과했다.
+ *
+ * 여기서만 `setItem`으로 저장본을 심는다. 심는 값은 리뷰가 브라우저에서
+ * 재현한 그것과 같다.
+ */
+describe("저장본에서 시작하는 세션", () => {
+  beforeEach(() => window.localStorage.clear());
+  afterEach(() => vi.restoreAllMocks());
+
+  /** 리뷰가 브라우저에서 재현한 저장본을 그대로 심는다. */
+  function seedStoredState(overrides: Record<string, unknown> = {}) {
+    window.localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        cash: 200_000_000,
+        annualIncome: 100_000_000,
+        // 주택 수는 사용자 지시로 다시 필수값이 됐다 — 빠지면
+        // toProfile이 null을 돌려주고 이 블록의 렌더 전제(결과 화면이
+        // 바로 뜬다) 자체가 깨진다.
+        ownedHomeCount: 0,
+        isRegulatedArea: true,
+        touched: ["regulatedArea"],
+        ...overrides,
+      }),
+    );
+  }
+
+  /**
+   * 마운트 시점에는 **불러온 지역이 없다**(상단바에 지역 줄조차 없다).
+   * 판정은 불러온 지역에 매인 사실이므로, 지역이 없는 세션에서 그 판정을
+   * 되살리면 화면이 이름도 대지 못하는 지역에 대해 단정하게 된다.
+   */
+  it("저장된 판정을 화면이 사실로 다시 주장하지 않는다", () => {
+    seedStoredState();
+    render(<App />);
+
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
+  });
+
+  it("종이도 저장된 판정을 '(지역 판정)'으로 찍지 않는다", () => {
+    seedStoredState();
+    render(<App />);
+
+    expect(printValueOf("규제지역 여부")).toBe("규제지역 (가정)");
+  });
+
+  /**
+   * 방향까지 잠근다. 저장된 `false`(비규제)가 살아남으면 LTV가 40%가
+   * 아니라 70%로 계산돼 헤드라인이 **부풀려진다** — 사용자가 이번 세션에
+   * 지역을 고르지도 않았고, 그 값을 볼 입력란도 없다.
+   */
+  it("저장된 비규제 판정이 헤드라인을 부풀리지 않는다", () => {
+    seedStoredState({ isRegulatedArea: false });
+    const { unmount } = render(<App />);
+    const priceFromStored = readAffordablePrice();
+    unmount();
+
+    window.localStorage.clear();
+    seedStoredState({ isRegulatedArea: true, touched: [] });
+    render(<App />);
+
+    expect(priceFromStored).toBeGreaterThan(0);
+    expect(priceFromStored).toBe(readAffordablePrice());
   });
 });

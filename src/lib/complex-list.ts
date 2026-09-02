@@ -173,6 +173,31 @@ export function buildComplexList(input: ComplexListInput): ComplexListResult {
   };
 }
 
+/**
+ * 부담 수준 2분류 — **대출 없이 살 수 있는가, 대출이 필요한가.**
+ *
+ * 목록 행이 이 값으로 "대출 없이 살 수 있어요"와 "월 …· 부담률 …"을
+ * 가른다. 지도 마커도 대표 평형 기준으로 같은 값을 읽어 채움 색(밝은
+ * 블루/주황)과 아래쪽 "대출 없이"/"대출 필요" 글자로 낸다 —
+ * `ComplexMap.tsx`의 `burdenTiers`가 `App.tsx`에서 넘어온
+ * `burdenByUnit: Map<unitKey, BurdenTier>`를 단지별로 접어 쓴다.
+ */
+export type BurdenTier = "no-loan" | "loan";
+
+/**
+ * 그 행이 대출 없이 살 수 있는 집인가.
+ *
+ * 목록 행(`ComplexList`의 `ComplexRow`)이 이 값으로 "대출 없이 살 수
+ * 있어요"(`NoLoanLine`)와 "월 …· 부담률 …"을 가른다.
+ *
+ * 판정 근거는 `entry.burden`(= `calcBurdenAt`이 그 행의 실제 전용면적
+ * 프로필로 `maxPrice`에서 낸 값)뿐이다. 새 계산을 하지 않고, 이미
+ * 그 행이 화면에 그리고 있는 숫자를 그대로 읽는다.
+ */
+export function burdenTierOf(entry: ComplexListEntry): BurdenTier {
+  return entry.burden.neededLoan === 0 ? "no-loan" : "loan";
+}
+
 /** 이름·법정동만으로는 구분되지 않는 단지의 키 */
 function nameKey(u: ComplexUnit): string {
   return `${u.legalDongName}|${u.complexName}`;

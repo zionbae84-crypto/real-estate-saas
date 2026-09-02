@@ -1,10 +1,35 @@
+import { useId } from "react";
 import { Slider } from "seed-design/ui/slider";
 import { formatWon } from "../format/won";
-import { PRICE_STEP } from "../lib/finance";
+import { burdenGrade, plainGrade } from "../lib/burden-grade";
+import { PRICE_STEP, type SafetyScore } from "../lib/finance";
+import { MAX_RATE_PERCENT } from "../lib/rate-input";
+import { landLeaseRules } from "../state/landLeaseRules";
+import { formatRatio } from "./SafetyBadge";
 
 export interface PriceSliderProps {
   price: number;
+  /**
+   * 슬라이더 눈금의 **상한**. 사용자 지시로 이제 실구매 가능 가격보다
+   * 위다(`useAffordability`의 `sliderMax`) — 못 사는 가격도 짚어 볼 수
+   * 있어야 "현금이 얼마 더 필요한지"를 말할 수 있다.
+   */
   max: number;
+  /**
+   * 지금 현금으로 살 수 있는 최대가. 눈금 위 어디까지가 "살 수 있는
+   * 구간"인지를 가르는 값이라, 상한(`max`)과 **뜻이 다르다**.
+   *
+   * 기본값은 `max`다 — 그러면 둘이 같아져 이 컴포넌트는 상한이 곧
+   * 한계였던 예전 그대로 움직인다(초과 구간 자체가 없다).
+   */
+  affordablePrice?: number;
+  /**
+   * 지금 가격에서 모자란 현금(원). `useAffordability`의 `cashShortfall`을
+   * 그대로 받는다 — 이 컴포넌트는 금액을 스스로 계산하지 않는다.
+   *
+   * 0이면 모자라지 않다는 뜻이고, 그때 초과 경고는 나오지 않는다.
+   */
+  cashShortfall?: number;
   /**
    * 안전선 위치. 있으면 눈금에 마커로 표시한다. `null`/`undefined`면
    * 표시하지 않는다 — `calcSafePrice`가 `null`을 돌려줄 수 있다는 사실을
@@ -12,6 +37,47 @@ export interface PriceSliderProps {
    */
   safePrice?: number | null;
   onChange: (price: number) => void;
+  /**
+   * 지금 가격에서 **최대로 빌렸을 때**의 상환 부담. 계산은
+   * `useAffordability`가 하고 이 컴포넌트는 표시만 한다 — 필요 대출이
+   * 아니라 받을 수 있는 최대 대출을 기준으로 잰 값이라는 사실은
+   * `.price-slider-burden-label`이 문장으로 밝힌다(사용자 지시).
+   */
+  safety: SafetyScore;
+  /**
+   * 이 가격에서 받을 수 있는 **최대 대출액**(원, `calcMaxLoan`). 사용자
+   * 지시로 가격을 조정할 때마다 이 자리에서 함께 보인다. 아래 금리
+   * 입력과 무관한 값이다 — 은행 심사 기준(DSR 스트레스 금리)으로 정해지고,
+   * 사용자가 조정하는 것은 "받은 대출을 갚을 때"의 가정 금리뿐이다.
+   */
+  loanAmount: number;
+  /**
+   * 부담 계산에 쓰는 금리 입력란의 문자열 값(`useAffordability`의
+   * `ratePercentText`). 숫자가 아니라 문자열인 이유는 그 훅의 문서와
+   * 같다 — "4."처럼 아직 다 치지 않은 상태를 표현해야 한다.
+   */
+  ratePercentText: string;
+  onRateChange: (text: string) => void;
+  /**
+   * 실제로 `safety` 계산에 쓰인 금리(소수, 예: 0.0453). `ratePercentText`가
+   * 비어 있거나 범위 밖이면 룰셋 기준 금리로 조용히 되돌아가므로, 입력
+   * 그대로가 아니라 이 값을 화면에 다시 적어 "지금 무엇으로 계산했는지"를
+   * 감추지 않는다.
+   */
+  effectiveRate: number;
+  /**
+   * 이 배지가 **특정 평형**에 대한 것일 때만 넘긴다(`SafetyBadge`와
+   * 같은 계약). 넘기지 않으면 이 배지는 어떤 집도 가리키지 않는다는
+   * 뜻이다 — 프로필과 슬라이더 가격으로만 잰다.
+   */
+  landLeasehold?: "Y" | "N" | null;
+  /**
+   * 등급이 왜 거기서 멈췄는지를 이 카드가 직접 설명하는가. 기본은
+   * 설명한다. `false`를 주는 자리는 단지 상세가 함께 열려 있을 때뿐이다
+   * — 그때는 `ComplexDetail`의 배지가 같은 설명을 이미 말한다
+   * (`SafetyBadge`의 같은 이름 prop과 같은 이유).
+   */
+  explainGrade?: boolean;
 }
 
 /**
@@ -33,24 +99,86 @@ function toPrice(values: number[], max: number): number | undefined {
   return first === undefined ? undefined : Math.min(first, max);
 }
 
-export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProps) {
-  const markers =
-    safePrice !== null && safePrice !== undefined && safePrice >= 0 && safePrice <= max
-      ? [{ value: safePrice, label: "무리 없는 선" }]
-      : [];
+/** 0.0453 → "4.53%". 소수점은 있는 만큼만 남긴다. */
+function formatPercent(rate: number): string {
+  return `${Number((rate * 100).toFixed(2))}%`;
+}
 
-  // 리뷰 수정(색 일관성): 슬라이더가 최대값에 있을 때 이 숫자는
-  // BudgetResult의 `.affordable-price`가 방금 보여준 것과 같은 데이터
-  // (같은 "실구매 가능 가격")다. 같은 의미는 같은 색으로 반복한다.
-  // 슬라이더를 내려 사용자가 임의의 값을 탐색 중이 되면 더는 그
-  // 데이터가 아니므로(최대치가 아니라 지금 보는 값일 뿐) 기본색으로
-  // 되돌린다 — "최대 가격이라 파랑"이지 "지금 보는 값이라 파랑"이
+export function PriceSlider({
+  price,
+  max,
+  affordablePrice = max,
+  cashShortfall = 0,
+  safePrice,
+  onChange,
+  safety,
+  loanAmount,
+  ratePercentText,
+  onRateChange,
+  effectiveRate,
+  landLeasehold,
+  explainGrade = true,
+}: PriceSliderProps) {
+  const rateInputId = useId();
+
+  const markers: { value: number; label: string }[] = [];
+  if (
+    safePrice !== null &&
+    safePrice !== undefined &&
+    safePrice >= 0 &&
+    safePrice <= max
+  ) {
+    markers.push({ value: safePrice, label: "무리 없는 선" });
+  }
+  /*
+   * 눈금이 실구매 가능 가격 위로도 이어지면서 "어디까지가 살 수 있는
+   * 구간인지"가 눈금만 봐서는 사라졌다 — 그 경계를 마커로 되돌린다.
+   *
+   * 안전선과 **값이 같으면 붙이지 않는다.** 같은 자리에 마커 둘이 겹쳐
+   * 라벨이 서로를 덮고, 무엇보다 같은 지점을 두 이름으로 부르게 된다.
+   */
+  if (affordablePrice < max && affordablePrice !== safePrice) {
+    markers.push({ value: affordablePrice, label: "살 수 있는 최대" });
+  }
+
+  // 리뷰 수정(색 일관성): 슬라이더가 실구매 가능 가격에 있을 때 이 숫자는
+  // 상단바가 이미 "실구매 가능 가격"으로 보여준 것과 같은 데이터다.
+  // 같은 의미는 같은 색 계열(강조색)로 반복한다.
+  // 슬라이더를 움직여 사용자가 임의의 값을 탐색 중이 되면 더는 그
+  // 데이터가 아니므로(한계가 아니라 지금 보는 값일 뿐) 기본색으로
+  // 되돌린다 — "한계 가격이라 황동"이지 "지금 보는 값이라 황동"이
   // 아니다.
-  const isAtMax = price === max;
+  //
+  // ⚠ 기준이 `max`가 아니라 `affordablePrice`다. 눈금 상한이 그 위로
+  // 열리면서 둘이 갈렸고, 색이 말하는 것은 "이 숫자가 실구매 가능
+  // 가격이다"이지 "슬라이더가 끝까지 갔다"가 아니다.
+  const isAtLimit = price === affordablePrice;
+  /*
+   * 초과 구간. **`cashShortfall > 0`을 함께 요구한다** — 금액을 말하는
+   * 경고라 금액이 0이면 낼 말이 없다. 두 조건은 정상 상태에서 함께
+   * 참이지만, 하나만 보고 문장을 내면 엔진과 화면이 어긋난 날 "현금이
+   * 0원 더 필요해요"라는 답의 모양을 한 거짓말이 나간다.
+   */
+  const overLimit = price > affordablePrice && cashShortfall > 0;
+
+  /*
+   * 목록 화면과 같은 함수에서 등급을 낸다(`SafetyBadge`와 같은 계약).
+   * `landLeasehold`를 넘기지 않으면(main 예산 패널) 어떤 집도 가리키지
+   * 않는 배지라 `plainGrade`를 쓰고, 단지 상세가 함께 열려 있으면
+   * `burdenGrade`가 토지임대부 미확인을 "확인 필요"로 내려 준다.
+   */
+  const grade =
+    landLeasehold === undefined
+      ? plainGrade(safety.level)
+      : burdenGrade(safety.level, landLeasehold, landLeaseRules);
 
   return (
     <section className="price-slider">
-      <p className={isAtMax ? "slider-price slider-price--max" : "slider-price"}>
+      <p
+        className={
+          isAtLimit ? "slider-price slider-price--max" : "slider-price"
+        }
+      >
         {formatWon(price)}
       </p>
 
@@ -59,7 +187,7 @@ export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProp
         (`src/print/hiddenInPrint.ts`의 `.price-slider-control`).
         드래그로 값을 바꾸는 장치는 종이 위에서 무의미하지만, 지금 가리키는
         **값**(위의 `.slider-price`)과 한계 안내(아래 `.slider-warning`)는
-        바로 아래 대출 배지가 이 가격을 기준으로 계산되므로(전제) 남긴다 —
+        바로 아래 부담 표가 이 가격을 기준으로 계산되므로(전제) 남긴다 —
         그래서 Slider만 별도 div로 감싼다.
       */}
       <div className="price-slider-control">
@@ -84,7 +212,33 @@ export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProp
         />
       </div>
 
-      {price === max && (
+      {/*
+        ⚠ **초과 경고가 한계 경고보다 먼저다.** 두 문장은 같은 자리를
+        두고 배타적으로 갈린다(`price > affordablePrice` vs `===`).
+        초과 구간에서 "이건 빌릴 수 있는 한계예요"만 나가면, 지금 현금으로
+        살 수 없는 가격을 살 수 있는 것처럼 말하게 된다 — 이 앱이 가장
+        경계하는 방향(낙관 쪽으로 틀리는 것)이다.
+
+        `.slider-warning`은 인쇄에서 살아남아야 하는 클래스다
+        (`MUST_SURVIVE_PRINT_CLASSES`) — 두 갈래 모두 그 클래스를 그대로
+        쓴다. 종이를 건네받은 사람에게 "이 가격은 현금이 모자란다"는
+        사실이 빠지면, 남은 숫자를 그냥 살 수 있는 가격으로 읽는다.
+      */}
+      {overLimit && (
+        <p className="slider-warning slider-warning--over">
+          지금 현금으로는 이 가격을 살 수 없어요. 현금이{" "}
+          <span className="slider-shortfall">{formatWon(cashShortfall)}</span>{" "}
+          더 필요해요. 지금 살 수 있는 최대는 {formatWon(affordablePrice)}
+          {/*
+            `formatWon`은 언제나 "원"으로 끝나고(won.ts) "원"에는 받침이
+            있으므로 계사는 항상 "이에요"다 — 받침 유무로 갈릴 일이 없어
+            분기를 두지 않는다.
+          */}
+          이에요.
+        </p>
+      )}
+
+      {isAtLimit && (
         <p className="slider-warning">
           {/*
             리뷰 수정(인쇄 결함 2): "이건 빌릴 수 있는 한계예요. 무리
@@ -99,6 +253,107 @@ export function PriceSlider({ price, max, safePrice, onChange }: PriceSliderProp
           </span>
         </p>
       )}
+
+      {/*
+        사용자 지시로 이 슬라이더 카드와 옛 `SafetyBadge` 카드를 하나로
+        합쳤다 — 둘 다 "지금 가리키는 가격"을 두고 하는 말이라 따로 있을
+        이유가 없었다. 라벨을 항상 낸다(예전에는 단지를 골랐을 때만
+        냈는데, 그러면 메인 예산 패널에서는 이 표가 "실제로 사면 이렇게
+        된다"처럼 읽혔다 — 실제로는 최대로 빌렸을 때를 가정한 값이다).
+      */}
+      <div className="price-slider-burden">
+        <p className="price-slider-burden-label">
+          이 가격으로 샀을 때 최대로 빌린다면
+        </p>
+
+        <dl className="price-slider-burden-table">
+          <div>
+            <dt>
+              부담 등급
+              {grade.note !== null && explainGrade && (
+                <p className="hint price-slider-grade-note">{grade.note}</p>
+              )}
+            </dt>
+            <dd className="price-slider-grade" data-level={grade.level}>
+              {grade.label}
+            </dd>
+          </div>
+
+          <div>
+            <dt>최대 대출 가능 금액</dt>
+            <dd>{formatWon(loanAmount)}</dd>
+          </div>
+
+          <div>
+            <dt>월 상환액</dt>
+            <dd data-field="payment">{formatWon(safety.monthlyPayment)}</dd>
+          </div>
+
+          <div>
+            <dt>소득 대비 상환부담률</dt>
+            <dd data-field="ratio">{formatRatio(safety.burdenRatio)}</dd>
+          </div>
+
+          <div>
+            <dt>금리 2%p 오르면 월 상환액</dt>
+            <dd data-field="stressedPayment">
+              {formatWon(safety.stressedMonthlyPayment)}
+            </dd>
+          </div>
+
+          <div>
+            <dt>금리 2%p 오르면 부담률</dt>
+            <dd data-field="stressedRatio">
+              {formatRatio(safety.stressedBurdenRatio)}
+            </dd>
+          </div>
+
+          <div>
+            <dt>
+              <label htmlFor={rateInputId}>적용 금리 (연 %)</label>
+              <p className="hint">
+                {`금리를 조정하면 위 상환액·부담률이 다시 계산돼요. 지금은 연 ${formatPercent(effectiveRate)}로 계산했어요.`}
+              </p>
+            </dt>
+            {/*
+              입력란은 종이에서는 조작할 수 없는 장치다(`LoanCalculator`의
+              `.loan-input-form`과 같은 이유) — `.price-slider-rate-input`을
+              인쇄에서 지우고(`hiddenInPrint.ts`), 실제로 쓰인 금리는 바로
+              위 `.hint`가 평문으로 남긴다.
+            */}
+            <dd className="price-slider-rate-input">
+              <input
+                id={rateInputId}
+                type="number"
+                inputMode="decimal"
+                autoComplete="off"
+                min={0}
+                max={MAX_RATE_PERCENT}
+                step={0.01}
+                value={ratePercentText}
+                onChange={(event) => onRateChange(event.target.value)}
+              />
+              <span aria-hidden="true">%</span>
+            </dd>
+          </div>
+        </dl>
+
+        {/*
+          대출 없이 전액 현금인 경우(월 상환액 0원)의 설명. 엔진(safety.ts)은
+          소득이 0이면 부담률을 Infinity로 돌려주고 등급이 "위험"이 되는데,
+          "월 상환액 0원"과 "위험" 배지가 나란히 있으면 모순처럼 보인다 —
+          실제로는 상환 부담이 큰 게 아니라 소득 정보 자체가 없다는 뜻이므로
+          그 사실을 풀어 적는다(`SafetyBadge`의 `ZeroPaymentNote`와 같은
+          판단).
+        */}
+        {safety.monthlyPayment === 0 && (
+          <p className="safety-note">
+            {Number.isFinite(safety.burdenRatio)
+              ? "대출 없이 전액 현금으로 사는 경우예요."
+              : "대출 없이 전액 현금으로 사는 경우예요. 이 등급은 상환 부담이 아니라 소득 정보가 없다는 사실을 반영해요."}
+          </p>
+        )}
+      </div>
     </section>
   );
 }

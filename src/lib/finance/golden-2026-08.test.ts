@@ -59,9 +59,21 @@ describe("골든 테스트 2026-08 — 현행 고시 대조", () => {
 
   // 소득을 극단적으로 높여 DSR을 무력화하고, 캡이 실제로 한도를 결정하는지
   // 본다. 30억 주택이므로 캡은 2억이다.
-  it("30억 주택에서는 한도가 2억이고 CAP이 제약이다", () => {
+  //
+  // isRegulatedArea: true를 명시한다 — 절대캡은 규제지역에만 걸린다
+  // (loan-limit.ts의 calcMaxLoan 참고). base의 기본값(false)을 그대로
+  // 쓰면 캡이 아예 적용되지 않아 LTV(70%×30억=21억)가 대신 binding이
+  // 된다 — 이 테스트가 표적으로 삼는 "캡이 한도를 결정한다"를 더 이상
+  // 검증하지 못한다. 비규제지역에서 캡이 안 걸리는 사실은 바로 아래
+  // 대조군 테스트가 고정한다.
+  it("규제지역·30억 주택에서는 한도가 2억이고 CAP이 제약이다", () => {
     const result = calcMaxLoan(
-      { ...base, annualIncome: 5_000_000_000, cash: 10_000_000_000 },
+      {
+        ...base,
+        annualIncome: 5_000_000_000,
+        cash: 10_000_000_000,
+        isRegulatedArea: true,
+      },
       rules,
       3_000_000_000,
     );
@@ -69,10 +81,40 @@ describe("골든 테스트 2026-08 — 현행 고시 대조", () => {
     expect(result.binding).toBe("CAP");
   });
 
-  // 20억 주택 → 캡 4억. LTV 70% = 14억이므로 캡이 이긴다.
-  it("20억 주택에서는 한도가 4억이고 CAP이 제약이다", () => {
+  // 대조군: 같은 30억 주택이라도 비규제지역이면 캡 자체가 없어 LTV
+  // 70%(21억)가 그대로 한도가 된다 — 이번 수정이 고치는 바로 그 결함이
+  // 사라졌다는 증거다.
+  it("비규제지역·30억 주택에서는 절대캡이 적용되지 않고 LTV가 제약이다", () => {
     const result = calcMaxLoan(
-      { ...base, annualIncome: 5_000_000_000, cash: 10_000_000_000 },
+      {
+        ...base,
+        annualIncome: 5_000_000_000,
+        cash: 10_000_000_000,
+        isRegulatedArea: false,
+      },
+      rules,
+      3_000_000_000,
+    );
+    expect(result.breakdown.CAP).toBe(Number.POSITIVE_INFINITY);
+    expect(result.binding).toBe("LTV");
+    // 이론값은 0.7 × 3,000,000,000 = 2,100,000,000이지만, 0.7이 이진
+    // 부동소수점으로 정확히 표현되지 않아 실제 곱셈 결과가
+    // 2,099,999,999.9999998...로 나온다 — Math.floor가 한 원 아래인
+    // 2,099,999,999를 내는 건 이 곱셈의 실제 부동소수점 결과이지 버그가
+    // 아니다.
+    expect(result.amount).toBe(2_099_999_999);
+  });
+
+  // 20억 주택 → 캡 4억. LTV 70% = 14억이므로 캡이 이긴다. 위와 같은
+  // 이유로 isRegulatedArea: true를 명시한다.
+  it("규제지역·20억 주택에서는 한도가 4억이고 CAP이 제약이다", () => {
+    const result = calcMaxLoan(
+      {
+        ...base,
+        annualIncome: 5_000_000_000,
+        cash: 10_000_000_000,
+        isRegulatedArea: true,
+      },
       rules,
       2_000_000_000,
     );

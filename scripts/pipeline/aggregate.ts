@@ -1,5 +1,31 @@
+import { buildAddressString } from "./address";
 import type { NormalizedTrade } from "./normalize";
 import type { LandLeasehold, ReportConfig } from "./types";
+
+/**
+ * 이 평형의 실거래 한 건. **집계값이 아니라 국토부가 공개한 사실 그대로다.**
+ *
+ * `medianPrice`를 산출물에서 뺀 규칙("가격은 항상 범위로만 말한다")과
+ * 어긋나지 않는다. 그 규칙이 막는 것은 **우리가 대표값을 골라 단정하는
+ * 것**이고, 여기 담기는 것은 우리가 고르거나 계산한 값이 아니라 실제로
+ * 체결된 계약 한 건이다. 사용자가 자기가 들은 호가를 견줄 대상은
+ * 우리가 만든 숫자가 아니라 이 사실이어야 한다.
+ */
+export interface TradeRecord {
+  /** 원 단위 정수 */
+  price: number;
+  /** YYYY-MM-DD */
+  contractDate: string;
+  /**
+   * 층. **믿을 수 없으면 `null`이다**({@link isTrustworthyFloor}).
+   *
+   * 모르는 층을 0층·1층으로 채우지 않는다 — `minFloor`/`maxFloor`가
+   * 못 믿을 층을 범위에서 빼는 것과 같은 규칙이고, 이 표는 그보다 더
+   * 직접적으로 "이 거래는 몇 층이었다"고 말하는 자리라 더더욱 지어내면
+   * 안 된다.
+   */
+  floor: number | null;
+}
 
 export interface ComplexUnit {
   /** 국토부 단지 고유 ID(`aptSeq`). `normalize.ts`의 buildComplexKey 참고 */
@@ -51,9 +77,35 @@ export interface ComplexUnit {
    * **`!== "Y"`를 "토지임대부 아님"으로 읽지 말 것.** "아님"은 `=== "N"`뿐이다.
    */
   landLeasehold: LandLeasehold;
+  /**
+   * 이 단지의 지번주소("서울특별시 강남구 대치동 316"). 만들 수 없으면 `null`.
+   *
+   * 창은 `recent`가 아니라 그룹 **전체**다 — 건물 주소는 시간과 무관한
+   * 그 단지의 성질이라 `maxExclusiveAreaSqm`·`landLeasehold`와 같은 갈래다.
+   * 주소를 만들 수 있는 첫 거래의 것을 쓴다(한 건물의 주소는 어느 거래를
+   * 봐도 같다).
+   *
+   * ⚠ **예전에는 산출물에서 뺐다.** `emit.ts`가 그 이유를 "금지된 값이라서가
+   * 아니라 아직 쓸 화면이 없어서"라고 적어 뒀는데, 사용자 지시로 단지 상세
+   * 화면이 주소를 보여주게 되면서 그 이유가 사라졌다. 지오코딩이 여전히
+   * 거래별 원본 주소(`data/raw/`)를 쓴다는 사실은 그대로다 — 이 값은
+   * **표시용**이고, 같은 함수(`buildAddressString`)로 만들어 지도가 찍은
+   * 자리와 화면이 적은 주소가 갈리지 않게 한다.
+   */
+  address: string | null;
   /** 최근 6개월 거래의 중위값(원) */
   medianPrice: number;
   tradeCount: number;
+  /**
+   * `minPrice`~`maxPrice`·`tradeCount`를 만든 바로 그 거래들. 거래일
+   * **내림차순**(최신이 앞)이다.
+   *
+   * 창이 `recent`인 것은 의도적이다 — 층 범위와 같은 이유로, 이 표는
+   * "이 가격 범위를 만든 거래들"에 대한 사실이라 그 범위를 만든 창과
+   * 정확히 같아야 한다. 그래서 `trades.length === tradeCount`가 언제나
+   * 참이고, `aggregate.test.ts`가 그 불변식을 잠근다.
+   */
+  trades: TradeRecord[];
   minPrice: number;
   maxPrice: number;
   /**
@@ -163,6 +215,45 @@ export function areaBucket(sqm: number): number {
  */
 export function isTrustworthyFloor(floor: number): boolean {
   return Number.isInteger(floor) && floor >= 1;
+}
+
+/**
+ * 거래들을 화면에 그대로 낼 수 있는 형태로 옮긴다. **거래일 내림차순**
+ * (최신이 앞)이고, 같은 날이면 금액 내림차순이다.
+ *
+ * 2차 정렬 키가 있는 이유는 **결정론** 때문이다 — 산출물이 매번 같은
+ * 순서여야 커밋 diff가 실제 데이터 변화만 보여준다(이 파일 아래
+ * `units.sort`가 같은 이유로 2차 키를 둔다). 같은 날 같은 금액이면 어느
+ * 쪽이 앞이든 화면에 같은 줄이라 3차 키는 두지 않는다.
+ *
+ * 층은 못 믿을 값이면 `null`로 바꾼다 — {@link TradeRecord.floor} 참고.
+ */
+export function toTradeRecords(trades: NormalizedTrade[]): TradeRecord[] {
+  return trades
+    .map((t) => ({
+      price: t.price,
+      contractDate: t.contractDate,
+      floor: isTrustworthyFloor(t.floor) ? t.floor : null,
+    }))
+    .sort((a, b) =>
+      a.contractDate === b.contractDate
+        ? b.price - a.price
+        : a.contractDate < b.contractDate
+          ? 1
+          : -1,
+    );
+}
+
+/**
+ * 이 단지의 대표 주소. 주소를 만들 수 있는 첫 거래의 것을 쓰고, 어느
+ * 거래로도 못 만들면 `null`이다 — 지어내지 않는다.
+ */
+export function firstAddress(trades: NormalizedTrade[]): string | null {
+  for (const trade of trades) {
+    const address = buildAddressString(trade);
+    if (address !== null) return address;
+  }
+  return null;
 }
 
 /**
@@ -361,8 +452,11 @@ export function aggregate(
       maxExclusiveAreaSqm: Math.max(...group.map((t) => t.exclusiveAreaSqm)),
       // 창은 recent가 아니라 group 전체 — 시간과 무관한 그 단지의 성질이다.
       landLeasehold: mergeLandLeasehold(group.map((t) => t.landLeasehold)),
+      // 주소도 같은 갈래다(건물의 성질). 만들 수 있는 첫 거래의 것을 쓴다.
+      address: firstAddress(group),
       medianPrice: median(recentPrices),
       tradeCount: recent.length,
+      trades: toTradeRecords(recent),
       minPrice: Math.min(...recentPrices),
       maxPrice: Math.max(...recentPrices),
       minFloor: knownFloors.length === 0 ? null : Math.min(...knownFloors),

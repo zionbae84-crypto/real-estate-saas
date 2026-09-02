@@ -1,0 +1,603 @@
+<!doctype html>
+<!--
+  디자인 프로토타입 — 앱 코드가 아니다.
+
+  http://localhost:4173/prototype.html 에서 열린다 (npm run dev:full).
+  Vite가 루트의 html을 그대로 서빙하고 `%VITE_...%`를 치환한다.
+  프로덕션 빌드에는 들어가지 않는다(rollupOptions.input에 없다).
+
+  지난번 프로토타입은 커밋하지 않아 사라졌다. 이번에는 커밋해서 남긴다.
+-->
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>프로토타입 — 내 예산으로 살 수 있는 집</title>
+<script type="module">
+  import "pretendard/dist/web/static/pretendard.css";
+</script>
+<style>
+  /* ── 팔레트: 배경 영상에서 뽑은 값 ─────────────────────────── */
+  :root {
+    --ink:        #0b1116;
+    --ink-2:      #121a22;
+    --haze:       #8d9aa7;
+    --haze-dim:   #66727e;
+    --paper:      #eef1f4;
+    --brass:      #d9a84e;
+    --brass-deep: #8a5f14;
+
+    --sheet:      #f4f6f8;
+    --sheet-2:    #ffffff;
+    --rule:       #dfe5ea;
+    --on-sheet:   #141d25;
+    --on-sheet-2: #5f6d79;
+
+    /*
+      전부 Pretendard 한 벌이다. 명조를 뺐으므로 위계는 **굵기와 자간**이
+      만든다 — 큰 글자일수록 굵게, 그리고 자간을 좁힌다. 크기만 키우고
+      자간을 그대로 두면 큰 글자가 흩어져 보여 밋밋해진다.
+    */
+    --display: "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+    --sans:    "Pretendard", -apple-system, BlinkMacSystemFont, "Apple SD Gothic Neo", sans-serif;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    font-family: var(--sans);
+    background: var(--ink);
+    color: var(--paper);
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
+  }
+
+  /* 작고 넓게 벌린 라벨. 이 화면의 모든 "이름표"는 이 규칙 하나를 쓴다 */
+  .label {
+    font-size: 11px;
+    letter-spacing: .14em;
+    text-transform: none;
+    color: var(--haze);
+    font-weight: 500;
+  }
+
+  .tnum { font-variant-numeric: tabular-nums; }
+
+  /*
+    한 벌뿐인 활자로 위계를 만드는 규칙:
+    큰 글자일수록 **굵게 + 자간을 좁게**. 크기만 키우면 큰 글자가 흩어져
+    보이고, 화면 전체가 "기본값 그대로"처럼 밋밋해진다.
+      14px 이하  → 500, 자간 0 ~ +.14em(라벨은 넓게)
+      17~19px    → 600, 자간 -.01 ~ -.02em
+      26px 이상  → 700, 자간 -.035em
+    각 규칙에 직접 적어 두었다. 헬퍼 클래스를 만들지 않은 이유는 자리마다
+    크기가 달라 어차피 값을 따로 써야 하기 때문이다.
+  */
+
+  /* ══ 화면 1 — 영상 위 입력 ═══════════════════════════════════ */
+
+  .entry { position: fixed; inset: 0; overflow: hidden; }
+  .entry[hidden] { display: none; }
+
+  .entry video {
+    position: absolute; inset: 0;
+    width: 100%; height: 100%;
+    object-fit: cover;
+  }
+
+  /* 스크림은 왼쪽만 짙게. 오른쪽은 영상이 살아 있어야 한다 */
+  .entry .scrim {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(100deg,
+        rgba(11,17,22,.96) 0%,
+        rgba(11,17,22,.93) 30%,
+        rgba(11,17,22,.55) 56%,
+        rgba(11,17,22,.20) 78%,
+        rgba(11,17,22,.34) 100%);
+  }
+
+  /* 비대칭: 가운데 정렬하지 않는다. 아래 왼쪽에 붙인다 */
+  .entry .stage {
+    position: relative;
+    height: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 560px) 1fr;
+    padding: clamp(28px, 5vh, 56px) clamp(28px, 5vw, 72px);
+  }
+  .entry .col {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+  .entry .col::-webkit-scrollbar { display: none; }
+  /*
+    바닥 정렬은 `justify-content: flex-end`가 아니라 자식의 `margin-top: auto`로
+    한다. flex-end로 하면 내용이 칸보다 길어졌을 때 **위쪽이 잘리고 스크롤로도
+    닿지 못한다** — 지난 프로토타입이 실제로 겪은 버그이고, 이번에도 처음엔
+    제목 윗줄이 사라졌다.
+  */
+  .entry .col > .inner { margin-top: auto; }
+
+  /* 흐름 안에 둔다. absolute로 띄우면 제목과 겹친다(실제로 겹쳤다) */
+  .wordmark {
+    flex: none;
+    font-family: var(--display);
+    font-size: 13px; font-weight: 600;
+    letter-spacing: .02em;
+    color: var(--paper);
+    opacity: .85;
+    margin-bottom: clamp(16px, 4vh, 40px);
+  }
+  .wordmark::after {
+    content: "";
+    display: block;
+    width: 34px; height: 1px;
+    background: var(--brass);
+    margin-top: 9px;
+  }
+
+  h1 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(28px, 3.4vw, 44px);
+    line-height: 1.22;
+    letter-spacing: -.035em;
+    margin: 0 0 12px;
+  }
+  .sub {
+    font-size: 13px;
+    line-height: 1.65;
+    color: var(--haze);
+    margin: 0 0 clamp(18px, 3.4vh, 34px);
+    max-width: 44ch;
+  }
+
+  /* 낮은 창에서는 활자와 여백을 함께 줄인다 */
+  @media (max-height: 780px) {
+    h1 { font-size: clamp(26px, 2.8vw, 34px); }
+    .sub { margin-bottom: 18px; }
+    .field { margin-bottom: 14px; }
+    .field input { font-size: 24px; }
+    .wordmark { margin-bottom: 14px; }
+  }
+
+  /* 상자를 없앤다. 밑줄만 남긴다 */
+  .field { margin-bottom: clamp(16px, 2.6vh, 26px); }
+  .field .label { display: block; margin-bottom: 6px; }
+  .field .line {
+    display: flex; align-items: baseline; gap: 10px;
+    border-bottom: 1px solid rgba(238,241,244,.22);
+    padding-bottom: 7px;
+    transition: border-color .18s;
+  }
+  .field .line:focus-within { border-bottom-color: var(--brass); }
+  .field input {
+    flex: 1; min-width: 0;
+    background: none; border: 0; outline: none;
+    color: var(--paper);
+    font-family: var(--display);
+    font-size: clamp(26px, 3vw, 34px);
+    font-weight: 600; letter-spacing: -.03em;
+    font-variant-numeric: tabular-nums;
+    padding: 0;
+  }
+  .field input::placeholder { color: rgba(238,241,244,.26); font-family: var(--sans); font-size: 15px; }
+  .field .unit { font-size: 14px; color: var(--haze); flex: none; }
+  .field .echo {
+    font-size: 12.5px; color: var(--brass);
+    margin-top: 7px; min-height: 1.2em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* 평형대 — 칩. 상자가 아니라 밑줄 토글 */
+  .bands { display: flex; gap: 26px; flex-wrap: wrap; padding-top: 2px; }
+  .band {
+    background: none; border: 0; padding: 4px 0 8px;
+    color: rgba(238,241,244,.42);
+    font-family: var(--sans); font-size: 14px; font-weight: 500;
+    cursor: pointer; text-align: left;
+    border-bottom: 1.5px solid transparent;
+    transition: color .16s, border-color .16s;
+  }
+  .band small { display: block; font-size: 11px; letter-spacing: .06em; margin-top: 3px; opacity: .8; }
+  .band[aria-pressed="true"] { color: var(--paper); border-bottom-color: var(--brass); }
+  .band:focus-visible { outline: 1px solid var(--brass); outline-offset: 3px; }
+
+  .region { display: flex; gap: 12px; }
+  .region select {
+    flex: 1; min-width: 0;
+    background: rgba(238,241,244,.05);
+    border: 0; border-bottom: 1px solid rgba(238,241,244,.22);
+    color: var(--paper);
+    font-family: var(--sans); font-size: 15px;
+    padding: 9px 10px; border-radius: 2px 2px 0 0;
+    outline: none;
+  }
+  .region select:focus { border-bottom-color: var(--brass); }
+  .region select option { background: var(--ink-2); color: var(--paper); }
+
+  .go {
+    margin-top: clamp(18px, 3vh, 30px);
+    display: inline-flex; align-items: center; gap: 12px;
+    background: none; border: 0; padding: 0;
+    color: var(--brass);
+    font-family: var(--display); font-size: 16px;
+    font-weight: 600; letter-spacing: -.015em;
+    cursor: pointer;
+  }
+  .go:disabled { color: var(--haze-dim); cursor: default; }
+  .go .arrow {
+    width: 46px; height: 1px; background: currentColor;
+    transition: width .2s;
+  }
+  .go:not(:disabled):hover .arrow { width: 66px; }
+  .hintline { margin-top: 12px; font-size: 12px; color: var(--haze-dim); min-height: 1.2em; }
+
+  /* ══ 화면 2 — 전체화면 지도 ══════════════════════════════════ */
+
+  .results { position: fixed; inset: 0; background: var(--sheet); color: var(--on-sheet); }
+  .results[hidden] { display: none; }
+
+  .shell {
+    height: 100%;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr);   /* ⚠ auto면 지도 높이가 0이 된다 */
+  }
+
+  .topbar {
+    display: flex; align-items: center; gap: clamp(18px, 3vw, 44px);
+    padding: 0 clamp(18px, 2.4vw, 30px);
+    height: 66px;
+    background: var(--sheet-2);
+    border-bottom: 1px solid var(--rule);
+  }
+  .topbar .mark {
+    font-family: var(--display); font-size: 13px;
+    font-weight: 600; letter-spacing: -.01em;
+    color: var(--on-sheet); flex: none;
+  }
+  .topbar .stats { display: flex; gap: clamp(16px, 2.6vw, 40px); flex: 1; min-width: 0; }
+  .stat .label { color: var(--on-sheet-2); display: block; margin-bottom: 3px; }
+  .stat .v {
+    font-family: var(--display); font-size: 17px;
+    font-weight: 600; letter-spacing: -.018em;
+    font-variant-numeric: tabular-nums; white-space: nowrap;
+  }
+  .stat .v.money { color: var(--brass-deep); }
+  .back {
+    background: none; border: 0; padding: 0; flex: none;
+    color: var(--on-sheet-2); font-family: var(--sans); font-size: 13px;
+    cursor: pointer; border-bottom: 1px solid var(--rule);
+  }
+  .back:hover { color: var(--on-sheet); border-bottom-color: var(--on-sheet); }
+
+  .stage2 { display: grid; grid-template-columns: 372px minmax(0, 1fr); min-height: 0; }
+
+  .side {
+    background: var(--sheet-2);
+    border-right: 1px solid var(--rule);
+    overflow-y: auto; min-height: 0;
+  }
+  .side-head { padding: 20px 22px 14px; }
+  .side-head h2 {
+    font-family: var(--display); font-size: 17px; margin: 0 0 5px;
+    font-weight: 700; letter-spacing: -.028em;
+  }
+  .side-head p { margin: 0; font-size: 12px; color: var(--on-sheet-2); line-height: 1.6; }
+
+  /* 카드 껍데기 없음. 머리카락 같은 구분선만 */
+  .row {
+    display: block; width: 100%; text-align: left;
+    background: none; border: 0;
+    border-top: 1px solid var(--rule);
+    padding: 15px 22px 16px 22px;
+    cursor: pointer; position: relative;
+    font-family: var(--sans);
+  }
+  .row::before {
+    content: ""; position: absolute; left: 0; top: -1px; bottom: 0;
+    width: 2px; background: var(--brass); opacity: 0;
+    transition: opacity .16s;
+  }
+  .row:hover { background: #fafbfc; }
+  .row[aria-current="true"] { background: #fbfaf6; }
+  .row[aria-current="true"]::before { opacity: 1; }
+  .row .name { font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
+  .row .name em { font-style: normal; color: var(--on-sheet-2); font-weight: 500; }
+  .row .price {
+    font-family: var(--display); font-size: 19px;
+    font-weight: 600; letter-spacing: -.028em;
+    margin-top: 7px; font-variant-numeric: tabular-nums;
+  }
+  .row .meta {
+    margin-top: 5px; font-size: 11.5px; color: var(--on-sheet-2);
+    letter-spacing: .01em;
+  }
+  .row .tag {
+    display: inline-block; margin-top: 9px;
+    font-size: 11px; letter-spacing: .06em;
+    padding: 2px 0 0; color: var(--brass-deep);
+    border-top: 1px solid var(--brass);
+  }
+  .row .tag.loan { color: var(--on-sheet-2); border-top-color: var(--rule); }
+
+  .mapwrap { position: relative; min-height: 0; }
+  /* ⚠ 네이버 SDK가 position을 인라인으로 덮어써서 inset:0이 무력화된다.
+     그래서 폭·높이를 명시적으로 채운다. */
+  #map { width: 100%; height: 100%; }
+
+  .legend {
+    position: absolute; left: 16px; bottom: 16px; z-index: 2;
+    background: rgba(255,255,255,.94);
+    border: 1px solid var(--rule);
+    padding: 9px 12px;
+    font-size: 11.5px; color: var(--on-sheet-2);
+    pointer-events: none;             /* 아래 마커 클릭을 먹지 않게 */
+    line-height: 1.9;
+  }
+  .legend i { display: inline-block; width: 8px; height: 8px; margin-right: 7px; vertical-align: 1px; }
+  .legend .a { background: var(--on-sheet); }
+  .legend .b { background: #fff; border: 1px solid var(--on-sheet-2); }
+
+  /* 지도 마커 — 채움 vs 테두리. 색이 아니라 무게로 가른다 */
+  .pin {
+    font-family: "Pretendard", sans-serif;
+    font-size: 11.5px; font-weight: 600;
+    white-space: nowrap;
+    padding: 4px 9px;
+    border: 1px solid var(--on-sheet);
+    background: #fff; color: var(--on-sheet);
+    font-variant-numeric: tabular-nums;
+    box-shadow: 0 1px 4px rgba(0,0,0,.16);
+    cursor: pointer;
+  }
+  .pin.cash { background: var(--on-sheet); color: #fff; }
+  .pin.on   { background: var(--brass-deep); border-color: var(--brass-deep); color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- ══ 화면 1 ══════════════════════════════════════════════ -->
+<section class="entry" id="entry">
+  <video src="/media/cheongdam-hero.mp4" poster="/media/cheongdam-han-river-hero.png"
+         autoplay muted loop playsinline></video>
+  <div class="scrim"></div>
+
+  <div class="stage">
+    <div class="col">
+     <div class="wordmark">내 예산으로 살 수 있는 집</div>
+     <div class="inner">
+      <h1>얼마가 있고,<br />어디서 찾고 계신가요.</h1>
+      <p class="sub">
+        국토교통부 실거래가로 계산해요. 입력한 재무정보는 이 브라우저를 벗어나지 않아요 —
+        조회에는 고른 지역 코드만 서버로 갑니다.
+      </p>
+
+      <div class="field">
+        <span class="label">가진 현금</span>
+        <div class="line">
+          <input id="cash" inputmode="numeric" placeholder="3억 5000" autocomplete="off" />
+          <span class="unit">원</span>
+        </div>
+        <div class="echo" id="cashEcho"></div>
+      </div>
+
+      <div class="field">
+        <span class="label">연 소득 · 세전</span>
+        <div class="line">
+          <input id="income" inputmode="numeric" placeholder="7000" autocomplete="off" />
+          <span class="unit">원</span>
+        </div>
+        <div class="echo" id="incomeEcho"></div>
+      </div>
+
+      <div class="field">
+        <span class="label">찾는 평형</span>
+        <div class="bands" id="bands">
+          <button class="band" data-band="소형"   aria-pressed="true">소형<small>60㎡ 이하</small></button>
+          <button class="band" data-band="중소형" aria-pressed="true">중소형<small>60–85㎡</small></button>
+          <button class="band" data-band="중대형" aria-pressed="true">중대형<small>85㎡ 초과</small></button>
+        </div>
+      </div>
+
+      <div class="field">
+        <span class="label">지역</span>
+        <div class="region">
+          <select id="sido">
+            <option value="">광역단체</option>
+            <option>서울특별시</option><option>경기도</option><option>인천광역시</option>
+          </select>
+          <select id="gugun">
+            <option value="">시·군·구</option>
+            <option>노원구</option><option>도봉구</option><option>강북구</option><option>성북구</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="go" id="go" disabled>
+        <span>이 조건으로 찾아보기</span><span class="arrow"></span>
+      </button>
+      <div class="hintline" id="hint"></div>
+     </div>
+    </div>
+  </div>
+</section>
+
+<!-- ══ 화면 2 ══════════════════════════════════════════════ -->
+<section class="results" id="results" hidden>
+  <div class="shell">
+    <header class="topbar">
+      <div class="mark">내 예산으로 살 수 있는 집</div>
+      <div class="stats">
+        <div class="stat"><span class="label">가진 현금</span><span class="v tnum" id="tCash">—</span></div>
+        <div class="stat"><span class="label">연 소득</span><span class="v tnum" id="tIncome">—</span></div>
+        <div class="stat"><span class="label">살 수 있는 가격</span><span class="v money tnum" id="tMax">—</span></div>
+        <div class="stat"><span class="label">지역</span><span class="v" id="tRegion">—</span></div>
+      </div>
+      <button class="back" id="back">조건 다시 넣기</button>
+    </header>
+
+    <div class="stage2">
+      <aside class="side">
+        <div class="side-head">
+          <h2>살 수 있는 단지</h2>
+          <p>최근 6개월 실거래 범위예요. 하나의 적정가를 매기지 않고 범위로만 말해요.</p>
+        </div>
+        <div id="list"></div>
+      </aside>
+
+      <div class="mapwrap">
+        <div id="map"></div>
+        <div class="legend">
+          <div><i class="a"></i>대출 없이 살 수 있어요</div>
+          <div><i class="b"></i>대출이 필요해요</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+/* ─── 목업 데이터 (실제 노원구 실거래 형태) ─────────────────── */
+const DATA = [
+  { name:"벽산",   area:43, dong:"상계동", lo:30000, hi:38000, n:15, cash:true,  lat:37.6603, lng:127.0596 },
+  { name:"사슴3",  area:33, dong:"월계동", lo:30000, hi:37650, n:15, cash:true,  lat:37.6301, lng:127.0554 },
+  { name:"주공2",  area:39, dong:"월계동", lo:28000, hi:35000, n:15, cash:true,  lat:37.6288, lng:127.0602 },
+  { name:"청백3",  area:40, dong:"월계동", lo:31500, hi:31500, n:1,  cash:true,  lat:37.6325, lng:127.0521 },
+  { name:"초안2",  area:40, dong:"월계동", lo:25000, hi:29500, n:5,  cash:true,  lat:37.6270, lng:127.0578 },
+  { name:"상계주공7", area:59, dong:"상계동", lo:52000, hi:61000, n:22, cash:false, lat:37.6650, lng:127.0640 },
+  { name:"중계무지개", area:59, dong:"중계동", lo:58000, hi:67000, n:18, cash:false, lat:37.6452, lng:127.0762 },
+  { name:"하계장미", area:84, dong:"하계동", lo:72000, hi:83000, n:9,  cash:false, lat:37.6386, lng:127.0698 },
+];
+
+const won = m => {
+  if (!m) return "0원";
+  const eok = Math.floor(m / 10000), man = m % 10000;
+  if (eok && man) return `${eok}억 ${man.toLocaleString()}만원`;
+  if (eok) return `${eok}억원`;
+  return `${man.toLocaleString()}만원`;
+};
+const parseMan = s => {
+  if (!s) return 0;
+  const t = String(s).replace(/[\s,]/g, "");
+  const m = t.match(/^(?:(\d+)억)?\s*(\d+)?(?:만)?원?$/);
+  if (m && (m[1] || m[2])) return (+(m[1]||0)) * 10000 + (+(m[2]||0));
+  const n = parseInt(t.replace(/\D/g, ""), 10);
+  return isNaN(n) ? 0 : n;
+};
+
+/* ─── 화면 1 상태 ────────────────────────────────────────── */
+const $ = id => document.getElementById(id);
+const cashEl = $("cash"), incomeEl = $("income"), goBtn = $("go"), hintEl = $("hint");
+const bands = new Set(["소형", "중소형", "중대형"]);
+
+function echo(inputEl, outEl) {
+  const v = parseMan(inputEl.value);
+  outEl.textContent = v ? won(v) : "";
+}
+function refresh() {
+  echo(cashEl, $("cashEcho"));
+  echo(incomeEl, $("incomeEcho"));
+  const missing = [];
+  if (!parseMan(cashEl.value)) missing.push("가진 현금");
+  if (!parseMan(incomeEl.value)) missing.push("연 소득");
+  if (!bands.size) missing.push("찾는 평형");
+  if (!$("sido").value || !$("gugun").value) missing.push("지역");
+  goBtn.disabled = missing.length > 0;
+  hintEl.textContent = missing.length ? missing.join(" · ") + "을 알려주시면 계산해요." : "";
+}
+[cashEl, incomeEl].forEach(el => el.addEventListener("input", refresh));
+["sido", "gugun"].forEach(id => $(id).addEventListener("change", refresh));
+$("bands").addEventListener("click", e => {
+  const b = e.target.closest(".band"); if (!b) return;
+  const on = b.getAttribute("aria-pressed") === "true";
+  b.setAttribute("aria-pressed", String(!on));
+  on ? bands.delete(b.dataset.band) : bands.add(b.dataset.band);
+  refresh();
+});
+refresh();
+
+/* ─── 화면 전환 ──────────────────────────────────────────── */
+let map = null, pins = [], current = -1;
+
+goBtn.addEventListener("click", () => {
+  const cash = parseMan(cashEl.value), income = parseMan(incomeEl.value);
+  $("tCash").textContent = won(cash);
+  $("tIncome").textContent = won(income);
+  $("tMax").textContent = won(Math.round(cash + income * 3.4));
+  $("tRegion").textContent = `${$("sido").value} ${$("gugun").value}`;
+  $("entry").hidden = true;
+  $("results").hidden = false;
+  renderList();
+  if (!map) initMap(); else setTimeout(() => map.refresh(true), 60);
+});
+$("back").addEventListener("click", () => {
+  $("results").hidden = true;
+  $("entry").hidden = false;
+});
+
+function renderList() {
+  $("list").innerHTML = DATA.map((d, i) => `
+    <button class="row" data-i="${i}">
+      <div class="name">${d.name} <em>${d.area}㎡ · ${d.dong}</em></div>
+      <div class="price">${d.lo === d.hi ? won(d.lo) : won(d.lo) + " – " + won(d.hi)}</div>
+      <div class="meta">최근 6개월 거래 ${d.n}건</div>
+      <div class="tag ${d.cash ? "" : "loan"}">${d.cash ? "대출 없이 살 수 있어요" : "대출이 필요해요"}</div>
+    </button>`).join("");
+  $("list").querySelectorAll(".row").forEach(r =>
+    r.addEventListener("click", () => select(+r.dataset.i, true)));
+}
+
+function select(i, pan) {
+  current = i;
+  $("list").querySelectorAll(".row").forEach((r, k) =>
+    r.setAttribute("aria-current", String(k === i)));
+  pins.forEach((p, k) => {
+    const el = p.getElement && p.getElement();
+    if (el) el.querySelector(".pin")?.classList.toggle("on", k === i);
+  });
+  if (pan && map) map.panTo(new naver.maps.LatLng(DATA[i].lat, DATA[i].lng));
+}
+
+/* ─── 지도 ───────────────────────────────────────────────── */
+function initMap() {
+  const s = document.createElement("script");
+  s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=%VITE_NAVER_MAP_CLIENT_ID%";
+  s.onload = drawMap;
+  s.onerror = () => {
+    $("map").innerHTML =
+      '<div style="height:100%;display:grid;place-items:center;color:#5f6d79;font-size:13px">' +
+      '지도를 불러오지 못했어요 — 등록된 주소(포트 4173)에서 열어 주세요.</div>';
+  };
+  document.head.appendChild(s);
+}
+function drawMap() {
+  map = new naver.maps.Map("map", {
+    center: new naver.maps.LatLng(37.642, 127.062),
+    zoom: 13,
+    scaleControl: false, mapDataControl: false, logoControlOptions: { position: 3 },
+  });
+  pins = DATA.map((d, i) => {
+    const m = new naver.maps.Marker({
+      position: new naver.maps.LatLng(d.lat, d.lng),
+      map,
+      icon: {
+        content: `<div class="pin ${d.cash ? "cash" : ""}">${won(d.hi)}</div>`,
+        anchor: new naver.maps.Point(34, 12),
+      },
+    });
+    naver.maps.Event.addListener(m, "click", () => {
+      select(i, false);
+      document.querySelector(`.row[data-i="${i}"]`)
+        ?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    });
+    return m;
+  });
+}
+</script>
+</body>
+</html>
