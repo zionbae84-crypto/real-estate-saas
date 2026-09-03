@@ -52,6 +52,33 @@ export function formatWon(won: number): string {
  *
  * @throws RangeError `formatWon`과 같은 이유로 유한하지 않은 값에 던진다.
  */
+/**
+ * 억 단위로, 소수 첫째 자리까지 반올림해 표기한다. "4억 1,000만원"이
+ * 아니라 "4.1억"처럼 짧게 쓴다 — 자리가 좁아 여러 값을 한눈에 비교해야
+ * 하는 자리에 쓴다(사용자 지시: "표기를 억단위로 해줘. 소숫점 첫째자리
+ * 까지. 4.1억, 3.5억 이렇게(반올림해서)" — 지도 마커 가격,
+ * `ComplexMap.tsx`의 `markerLabel` 참고).
+ *
+ * 소수 첫째 자리를 **항상** 낸다(딱 떨어져도 "6.0억"이지 "6억"이 아니다)
+ * — 자릿수를 고정해야 마커를 훑을 때 숫자 폭이 들쭉날쭉하지 않다.
+ *
+ * **화면 표시 전용이다 — 계산에 쓰지 마라**(`formatWonRoundedToMan`과
+ * 같은 이유).
+ *
+ * @throws RangeError `formatWon`과 같은 이유로 유한하지 않은 값에 던진다.
+ */
+export function formatWonAsEok(won: number): string {
+  if (!Number.isFinite(won)) {
+    throw new RangeError(`유효한 숫자가 아닙니다: formatWonAsEok 인자 (${String(won)})`);
+  }
+  const sign = won < 0 ? "-" : "";
+  const eok = Math.round((Math.abs(won) / EOK) * 10) / 10;
+  return `${sign}${eok.toLocaleString("ko-KR", {
+    minimumFractionDigits: 1,
+    maximumFractionDigits: 1,
+  })}억`;
+}
+
 export function formatWonRoundedToMan(won: number): string {
   // throw는 한 줄로 모은다 — `scripts/tone-guard.test.ts`가 던지는
   // 메시지를 줄 단위로 걸러내므로, 여러 줄로 나누면 둘째 줄부터 화면

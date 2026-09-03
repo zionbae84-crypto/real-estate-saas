@@ -389,12 +389,18 @@ describe("ComplexMap", () => {
    * 추가해줘." — 부담 수준 글자는 마커가 아니라 지도 범례(아래 별도
    * 테스트)의 몫이다.
    *
-   * **단서 없는 가격 숫자 하나가 되지 않는다.** `formatRange`는 min===max면
-   * 숫자 하나로 접히는데("23억 5,000만원"), 예전에는 그 단서를 거래
-   * 건수가 졌다. 지금은 **단지명**이 진다 — 오히려 더 분명한 단서다.
-   * 숫자 하나가 아무 이름 없이 떠 있으면 감정평가·적정가로 읽히지만
-   * (부모 스펙 §6), "테스트아파트 23억 5,000만원"은 그 단지 거래가를
-   * 가리키는 말이지 평가액이 아니다.
+   * **단서 없는 가격 숫자 하나가 되지 않는다.** `formatEokRange`는 min===max면
+   * 숫자 하나로 접히는데("23.5억"), 예전에는 그 단서를 거래 건수가
+   * 졌다. 지금은 **단지명**이 진다 — 오히려 더 분명한 단서다. 숫자
+   * 하나가 아무 이름 없이 떠 있으면 감정평가·적정가로 읽히지만(부모
+   * 스펙 §6), "테스트아파트 23.5억"은 그 단지 거래가를 가리키는 말이지
+   * 평가액이 아니다.
+   *
+   * **평형(㎡)은 다시 돌아왔다 — 단, 옛 모양이 아니라 가격 옆 괄호로만.**
+   * 사용자 지시로 가격 옆에 "그 가격이 어느 평형 것인가"를 괄호로
+   * 밝히게 됐다(`pricePick`/`markerLabel` 문서 참고) — "84㎡ㆍ거래
+   * 3건"처럼 따로 떨어진 옛 문구가 되살아난 게 아니라는 걸 이 테스트가
+   * 구분해서 잠근다.
    */
   it("마커 라벨은 단지명·가격 범위를 낸다 — 면적·거래건수·부담 수준 문구는 없다", async () => {
     const { naverGlobal, createdMaps, markers } = fakeNaverMaps();
@@ -434,13 +440,12 @@ describe("ComplexMap", () => {
 
     const marker = document.querySelector(".complex-map-marker");
     expect(marker?.textContent).toContain("라벨아파트");
-    expect(marker?.textContent).toContain("23억 5,000만원");
+    // 평형은 옛 "84㎡ㆍ거래 3건"처럼 따로 붙지 않고, 가격 옆 괄호로만 나온다.
+    expect(marker?.textContent).toContain("23.5억 (84㎡)");
     // 부담 수준 글자는 마커가 아니라 범례로 옮겼다 — 마커 안에는 없다.
     expect(marker?.textContent).not.toContain("대출 없이");
     expect(marker?.textContent).not.toContain("대출 필요");
-    // 빠진 둘 — 하나라도 남으면 이 변경이 절반만 된 것이다.
-    expect(marker?.textContent).not.toContain("84㎡");
-    expect(marker?.textContent).not.toContain("㎡");
+    // 거래 건수 문구는 여전히 없다 — 하나라도 남으면 이 변경이 절반만 된 것이다.
     expect(marker?.textContent).not.toContain("거래");
   });
 
@@ -700,8 +705,170 @@ describe("ComplexMap", () => {
     // 대표 평형은 거래건수 최다인 84㎡ — 면적은 라벨에 적지 않지만,
     // **그 평형의** 가격 범위가 보여야 한다(59㎡의 5억대가 아니다).
     const marker = document.querySelector(".complex-map-marker");
-    expect(marker?.textContent).toMatch(/7억/); // formatRange(700_000_000, 750_000_000)
-    expect(marker?.textContent).not.toContain("5억");
+    expect(marker?.textContent).toContain("7.0억 ~ 7.5억 (84㎡)"); // formatEokRange(700_000_000, 750_000_000)
+    expect(marker?.textContent).not.toContain("5.0억");
+  });
+
+  /**
+   * 사용자 지시: "표시되는 가격을 84타입 기준의 최근 3건의 거래가격
+   * 평균 가격으로 수정할수 있어? (84가 없는 경우 59타입)". 이 저장소의
+   * "단일 숫자를 안 낸다" 원칙(위 "단서 없는 가격 숫자 하나가 되지
+   * 않는다" 테스트)의 의도적 예외라, 마커 가격만 별도로 잠근다.
+   */
+  describe("마커 가격 — 84㎡(없으면 59㎡) 최근 3건 평균", () => {
+    async function renderWithUnits(units: ComplexUnit[]) {
+      const { naverGlobal, createdMaps, markers } = fakeNaverMaps();
+      vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+        naverGlobal as unknown as typeof naver,
+      );
+      const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
+      render(
+        <ComplexMap
+          units={units}
+          coordinates={coordinates}
+          burdenByUnit={new Map()}
+          naverMapClientId="test"
+          filterBounds={TEST_FILTER_BOUNDS}
+          filterValue={TEST_FILTER_BOUNDS}
+          onFilterChange={() => {}}
+        />,
+      );
+      await vi.waitFor(() => expect(markers).toHaveLength(1));
+      createdMaps[0]!.setZoom(16); // 가격이 나오는 상세도로 옮긴다.
+      return document.querySelector(".complex-map-marker");
+    }
+
+    it("84㎡ 거래가 3건 이상이면 최근 3건만 평균 낸다 — 범위(~)가 아니다", async () => {
+      const units = [
+        unit({
+          complexKey: "1",
+          areaBucket: 84,
+          tradeCount: 4,
+          // 최신이 앞이다(ComplexUnit.trades 문서 참고) — 맨 뒤 1억짜리는
+          // 4번째(오래된 거래)라 평균에서 빠져야 한다. 다 넣으면 4.8억,
+          // 최근 3건만 넣으면 6.0억이 나온다.
+          trades: [
+            { price: 500_000_000, contractDate: "2026-08-01", floor: 5 },
+            { price: 600_000_000, contractDate: "2026-07-01", floor: 6 },
+            { price: 700_000_000, contractDate: "2026-06-01", floor: 7 },
+            { price: 100_000_000, contractDate: "2026-01-01", floor: 1 },
+          ],
+        }),
+      ];
+
+      const marker = await renderWithUnits(units);
+
+      expect(marker?.textContent).toContain("6.0억 (84타입)"); // (5+6+7)/3=6억
+      expect(marker?.textContent).not.toContain("4.8억");
+      expect(marker?.textContent).not.toMatch(/~/);
+    });
+
+    /**
+     * 실측으로 확인한 것: "84타입" 실거래 다수가 반올림하면 `areaBucket`이
+     * 84가 아니라 85로 잡힌다(강남구 표본 25곳 vs 83곳). 그래서 84타입
+     * 판정은 `areaBucket`이 아니라 전용면적 실측값(`maxExclusiveAreaSqm`)
+     * 83.5~84.99㎡로 본다 — 이 테스트는 `areaBucket: 85`짜리도 실측
+     * 전용면적이 그 범위 안이면 84타입으로 잡히는지 잠근다.
+     */
+    it("areaBucket이 85여도 전용면적이 83.5~84.99㎡면 84타입으로 잡는다", async () => {
+      const units = [
+        unit({
+          complexKey: "1",
+          areaBucket: 85, // 반올림하면 85지만, 실측 전용면적은 84타입 범위 안이다.
+          maxExclusiveAreaSqm: 84.7,
+          tradeCount: 2,
+          trades: [
+            { price: 1_000_000_000, contractDate: "2026-08-01", floor: 5 },
+            { price: 1_200_000_000, contractDate: "2026-07-01", floor: 6 },
+          ],
+        }),
+      ];
+
+      const marker = await renderWithUnits(units);
+
+      expect(marker?.textContent).toContain("11.0억 (84타입)"); // (10+12)/2=11억, areaBucket은 85지만 84타입으로 잡힌다
+      expect(marker?.textContent).not.toMatch(/~/);
+    });
+
+    it("84㎡ 거래가 1~2건뿐이어도 있는 만큼만 평균 낸다 — 59㎡로 넘어가지 않는다", async () => {
+      const units = [
+        unit({
+          complexKey: "1",
+          areaBucket: 84,
+          tradeCount: 2,
+          // minPrice/maxPrice는 일부러 평균과 다른 값을 둔다 — 평균이
+          // trades에서 나오지 minPrice/maxPrice의 범위에서 나오지 않는지
+          // 확인한다.
+          minPrice: 1_000_000_000,
+          maxPrice: 1_200_000_000,
+          trades: [
+            { price: 800_000_000, contractDate: "2026-08-01", floor: 5 },
+            { price: 900_000_000, contractDate: "2026-07-01", floor: 6 },
+          ],
+        }),
+        unit({
+          complexKey: "1",
+          areaBucket: 59,
+          // maxExclusiveAreaSqm도 59㎡대로 맞춘다 — `unit()` 기본값
+          // 84.9는 84타입 판정 범위(83.5~84.99) 안이라, 안 바꾸면 이
+          // "59㎡ 평형"이 84타입으로 잘못 잡혀 두 평형의 거래가 섞인다.
+          maxExclusiveAreaSqm: 59.4,
+          tradeCount: 5,
+          trades: Array.from({ length: 5 }, (_, i) => ({
+            price: 500_000_000,
+            contractDate: `2026-0${i + 1}-01`,
+            floor: 1,
+          })),
+        }),
+      ];
+
+      const marker = await renderWithUnits(units);
+
+      expect(marker?.textContent).toContain("8.5억 (84타입)"); // (8+9)/2=8.5억
+      expect(marker?.textContent).not.toContain("5.0억");
+      expect(marker?.textContent).not.toContain("10.0억");
+    });
+
+    it("84㎡ 거래가 아예 없으면(그 평형 자체가 없어도) 59㎡ 최근 3건 평균으로 넘어간다", async () => {
+      const units = [
+        unit({
+          complexKey: "1",
+          areaBucket: 59,
+          // 위 테스트와 같은 이유로 maxExclusiveAreaSqm을 59㎡대로 맞춘다
+          // — 안 바꾸면 이 유닛이 84타입 판정에도 걸려 "84가 없어서
+          // 59로 넘어간다"는 이 테스트의 전제 자체가 깨진다.
+          maxExclusiveAreaSqm: 59.4,
+          tradeCount: 3,
+          trades: [
+            { price: 400_000_000, contractDate: "2026-08-01", floor: 3 },
+            { price: 500_000_000, contractDate: "2026-07-01", floor: 4 },
+            { price: 600_000_000, contractDate: "2026-06-01", floor: 5 },
+          ],
+        }),
+      ];
+
+      const marker = await renderWithUnits(units);
+
+      expect(marker?.textContent).toContain("5.0억 (59타입)"); // (4+5+6)/3=5억
+      expect(marker?.textContent).not.toMatch(/~/);
+    });
+
+    it("84·59㎡ 둘 다 거래가 없으면(trades가 비어 있으면) 대표 평형의 범위로 되돌아간다", async () => {
+      const units = [
+        unit({
+          complexKey: "1",
+          areaBucket: 84,
+          tradeCount: 3,
+          minPrice: 700_000_000,
+          maxPrice: 750_000_000,
+          trades: [], // 실거래 원본을 못 받은 상태(ComplexUnit.trades 문서의 "번들 데이터엔 비어 있다" 참고)
+        }),
+      ];
+
+      const marker = await renderWithUnits(units);
+
+      expect(marker?.textContent).toContain("7.0억 ~ 7.5억 (84㎡)");
+    });
   });
 
   /**
@@ -798,7 +965,7 @@ describe("ComplexMap", () => {
       // 확대 — 가격까지 나온다.
       map.setZoom(16);
       expect(marker().textContent).toContain("줌테스트단지");
-      expect(marker().textContent).toMatch(/7억/);
+      expect(marker().textContent).toContain("7.0억 ~ 7.5억 (84㎡)");
       expect(markers[0]!.anchor).toEqual(MARKER_ANCHOR.full);
 
       // 축소 — 글자가 통째로 사라지고 점만 남는다.

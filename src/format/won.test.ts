@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatWon, formatWonRoundedToMan } from "./won";
+import { formatWon, formatWonAsEok, formatWonRoundedToMan } from "./won";
 
 describe("formatWon", () => {
   it("0은 0원이다", () => {
@@ -137,5 +137,47 @@ describe("formatWonRoundedToMan", () => {
   it("유한하지 않은 값은 formatWon과 같은 이유로 RangeError를 던진다", () => {
     expect(() => formatWonRoundedToMan(NaN)).toThrow(RangeError);
     expect(() => formatWonRoundedToMan(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+  });
+});
+
+/**
+ * 억 단위·소수 첫째 자리 표기(`formatWonAsEok`). 사용자 지시: "표기를
+ * 억단위로 해줘. 소숫점 첫째자리까지. 4.1억, 3.5억 이렇게(반올림해서)".
+ *
+ * `formatWonRoundedToMan`과 달리 **부호를 먼저 떼고 절댓값을 반올림한
+ * 뒤 다시 붙인다** — 음수에서 `Math.round`가 절반을 0에 가까운 쪽으로
+ * 접는 방향 갈림(그 함수의 "음수도 반올림한다" 테스트 참고)을 피하려는
+ * 의도적 선택이다. 이 값은 마커 가격에만 쓰여 음수가 실제로 나올 일이
+ * 없지만, `formatWon`처럼 함수 자체는 부호에 대해 정직해야 한다.
+ */
+describe("formatWonAsEok", () => {
+  it("정확히 억 단위여도 소수 첫째 자리를 0으로 채운다", () => {
+    expect(formatWonAsEok(600_000_000)).toBe("6.0억");
+  });
+
+  it("소수 둘째 자리가 절반 이상이면 올린다", () => {
+    expect(formatWonAsEok(635_000_000)).toBe("6.4억");
+  });
+
+  it("소수 둘째 자리가 절반 미만이면 내린다", () => {
+    expect(formatWonAsEok(634_000_000)).toBe("6.3억");
+  });
+
+  it("1억 미만도 같은 규칙으로 표기한다", () => {
+    expect(formatWonAsEok(85_000_000)).toBe("0.9억");
+  });
+
+  it("0은 0.0억이다", () => {
+    expect(formatWonAsEok(0)).toBe("0.0억");
+  });
+
+  it("음수는 절댓값을 반올림하고 앞에 마이너스를 붙인다", () => {
+    expect(formatWonAsEok(-635_000_000)).toBe("-6.4억");
+  });
+
+  it("유한하지 않은 값은 formatWon과 같은 이유로 RangeError를 던진다", () => {
+    expect(() => formatWonAsEok(NaN)).toThrow(RangeError);
+    expect(() => formatWonAsEok(Number.POSITIVE_INFINITY)).toThrow(RangeError);
+    expect(() => formatWonAsEok(Number.NEGATIVE_INFINITY)).toThrow(RangeError);
   });
 });

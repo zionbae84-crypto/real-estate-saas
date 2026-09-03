@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ComplexUnit } from "../data/complexes";
+import type { ComplexUnit, TradeRecord } from "../data/complexes";
 import {
   ELEMENTARY_SCHOOLS,
   ELEMENTARY_SCHOOL_DETAILS,
@@ -16,8 +16,9 @@ import type { ComplexFilterState } from "../lib/complex-filters";
 import { loadNaverMaps } from "../lib/loadNaverMaps";
 import { loadSchoolZones } from "../lib/loadSchoolZones";
 import { regionSchoolBounds, schoolsWithinBounds, type LatLonBounds } from "../lib/school-bounds";
+import { formatWonAsEok } from "../format/won";
 import { ComplexFilters } from "./ComplexFilters";
-import { formatRange, unitKey } from "./ComplexList";
+import { unitKey } from "./ComplexList";
 
 export interface ComplexMapProps {
   /**
@@ -155,6 +156,110 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
 }
 
 /**
+ * '84타입'(국민평형)인가 — 전용 83.5~84.99㎡(사용자 확인).
+ *
+ * **`areaBucket`이 아니라 `maxExclusiveAreaSqm`(반올림 전 실측값)로
+ * 본다.** 실측으로 확인했다 — 강남구 표본에서 `areaBucket === 84`는
+ * 25개 단지뿐이고 `=== 85`가 83개 단지였다. "84타입" 실제 전용면적이
+ * 84.3~85.1㎡ 사이에 걸쳐 있어 `Math.round`가 대부분 85로 올려 버리기
+ * 때문이다 — `areaBucket`으로만 잡으면 "84타입 평균"이 대다수 단지에서
+ * 조용히 적용되지 않는다. 85㎡ 세제 임계값 판정에 `areaBucket`이 아니라
+ * 이 필드를 쓰는 것과 같은 이유다(`ComplexUnit.maxExclusiveAreaSqm`
+ * 문서 참고).
+ */
+function isType84(unit: ComplexUnit): boolean {
+  return unit.maxExclusiveAreaSqm >= 83.5 && unit.maxExclusiveAreaSqm <= 84.99;
+}
+
+/** '59타입'인가 — `areaBucket` 59 또는 60(사용자 확인, 84타입과 같은 반올림 문제). */
+function isType59(unit: ComplexUnit): boolean {
+  return unit.areaBucket === 59 || unit.areaBucket === 60;
+}
+
+/** 평균을 낼 때 쓰는 최근 거래 건수 상한. */
+const AVERAGE_PRICE_TRADE_COUNT = 3;
+
+/**
+ * 평균가를 시도할 타입 순서와, 마커에 괄호로 함께 낼 그 타입 이름
+ * (사용자 지시: "금액 옆에 () 해서 면적타입을 적어줘").
+ */
+const AVERAGE_PRICE_TYPES: ReadonlyArray<{
+  matches: (unit: ComplexUnit) => boolean;
+  label: string;
+}> = [
+  { matches: isType84, label: "84타입" },
+  { matches: isType59, label: "59타입" },
+];
+
+/**
+ * 마커에 낼 가격. `representativeUnit`과 별개다 — 평균은 84·59㎡ 전용이라,
+ * 마커 색(부담 수준)을 정하는 대표 평형과는 다른 평형에서 올 수 있다.
+ *
+ * `typeLabel`(평균)·`unit.areaBucket`(범위)이 마커에 괄호로 함께 나가는
+ * "어느 평형 가격인가" 단서다 — 숫자만 있으면 어느 평형인지 몰라 오해할
+ * 수 있다(사용자 지시).
+ */
+type MarkerPrice =
+  | { kind: "average"; value: number; typeLabel: string }
+  | { kind: "range"; unit: ComplexUnit };
+
+/**
+ * 그 타입에 해당하는 **모든** 버킷의 거래를 하나로 모아 최신순으로
+ * 정렬한다. 한 단지 안에 그 타입에 걸리는 버킷이 둘 이상일 수 있어서다
+ * (예: `areaBucket` 84짜리와 85짜리가 둘 다 83.5~84.99㎡ 안에 걸리는
+ * 경우) — 그때 버킷 하나만 보면 "최근 3건"이 진짜 최근이 아닐 수 있다.
+ * `ComplexUnit.trades`는 이미 각자 최신순이므로(`toTradeRecords` 참고)
+ * 합친 뒤 다시 정렬하면 된다.
+ */
+function mergedTradesFor(
+  units: readonly ComplexUnit[],
+  matches: (unit: ComplexUnit) => boolean,
+): TradeRecord[] {
+  return units
+    .filter(matches)
+    .flatMap((u) => u.trades)
+    .sort((a, b) =>
+      a.contractDate === b.contractDate ? 0 : a.contractDate < b.contractDate ? 1 : -1,
+    );
+}
+
+/**
+ * 마커에 낼 가격을 고른다.
+ *
+ * **이 앱의 "단일 숫자를 안 낸다" 원칙의 의도적 예외다**(아래
+ * {@link markerLabel} 문서, `medianPrice`를 타입에서부터 뺀 이유와 같은
+ * 자리). 마커 가격만은 사용자 지시로 84㎡(없으면 59㎡) 최근 3건 평균가
+ * **하나**를 낸다.
+ *
+ * **84·59 둘 다 거래가 없으면**(그 단지에 그 타입 자체가 없거나, 있어도
+ * `trades`가 비어 평균 낼 원본이 없으면 — `ComplexUnit.trades` 문서의
+ * "번들 데이터에는 비어 있다" 참고) 평균을 만들 수 없으므로 예전처럼
+ * 대표 평형(`representativeUnit`)의 최저~최고 범위로 되돌아간다.
+ */
+function pricePick(units: readonly ComplexUnit[]): MarkerPrice {
+  for (const { matches, label } of AVERAGE_PRICE_TYPES) {
+    const trades = mergedTradesFor(units, matches);
+    if (trades.length === 0) continue;
+    const recent = trades.slice(0, AVERAGE_PRICE_TRADE_COUNT);
+    const sum = recent.reduce((total, t) => total + t.price, 0);
+    return { kind: "average", value: Math.round(sum / recent.length), typeLabel: label };
+  }
+  return { kind: "range", unit: representativeUnit(units) };
+}
+
+/**
+ * `pricePick`이 "range"를 고를 때 쓰는 최저~최고 문구. `ComplexList.tsx`의
+ * `formatRange`와 같은 모양(같으면 한 점으로 접는다)이지만, 단위를
+ * `formatWonAsEok`로 바꿔 마커 가격(평균 쪽)과 자릿수를 맞춘다(사용자
+ * 지시: "표기를 억단위로 해줘").
+ */
+function formatEokRange(minPrice: number, maxPrice: number): string {
+  const low = formatWonAsEok(minPrice);
+  const high = formatWonAsEok(maxPrice);
+  return low === high ? high : `${low} ~ ${high}`;
+}
+
+/**
  * 마커가 한 번에 얼마나 말하는가 — 줌에 따라 갈린다.
  *
  * 사용자 지시: "지도를 확대할 경우 지금처럼 모든 정보가 보이도록하고,
@@ -267,11 +372,15 @@ export const MARKER_ANCHOR: Record<MarkerDetail, { x: number; y: number }> = {
  * 추가해줘." — 부담 수준을 알리는 글자는 마커 **밖**(지도 범례)으로
  * 옮겨 갔고, 마커 자신은 색(채움)만으로 분류를 낸다.
  *
- * **단일 "적정가" 숫자를 내지 않는다는 원칙은 그대로다** — 언제나
- * `formatRange`(범위) 결과만 쓴다. `formatRange`는 min===max일 때 숫자
- * 하나로 접히는데("23억 5,000만원"), **바로 위에 붙은 단지명**이 그
- * 단서를 진다 — 아무 이름 없는 숫자 하나는 감정평가로 읽히지만, 이름이
- * 붙은 가격 범위는 그 단지의 거래가를 가리키는 말이다(부모 스펙 §6).
+ * **가격은 `pricePick`이 고른다** — 84㎡(없으면 59㎡) 최근 3건 평균가가
+ * 있으면 그 숫자 하나("3.5억 (84타입)")를 내고, 둘 다 거래가 없으면
+ * 예전처럼 대표 평형의 최저~최고 범위("3.5억 ~ 3.9억 (59㎡)")로
+ * 되돌아간다. 원래 "단일 숫자를 내지 않는다"는 원칙이 있었는데(감정평가로
+ * 읽힐 위험) 마커 가격만은 사용자 지시로 예외를 뒀다 — `pricePick` 문서
+ * 참고. 억 단위·소수 첫째 자리 반올림 표기(`formatWonAsEok`)와 괄호 안
+ * 평형 표기도 사용자 지시다 — 자리가 좁은 마커에서 여러 단지 가격을
+ * 한눈에 비교하기 쉽도록 자릿수를 맞추고, 그 값이 **어느 평형** 가격인지
+ * 함께 밝힌다.
  *
  * 여기 들어가는 단지 유래 값은 전부 {@link escapeHtml}을 거친다 —
  * 이 파일은 이 앱에서 유일하게 React를 거치지 않는 HTML 문자열 자리다
@@ -297,12 +406,17 @@ export const MARKER_ANCHOR: Record<MarkerDetail, { x: number; y: number }> = {
 function markerLabel(
   complexKey: string,
   representative: ComplexUnit,
+  price: MarkerPrice,
   tier: BurdenTier,
   detail: MarkerDetail,
 ): string {
   const key = escapeHtml(complexKey);
   const name = escapeHtml(representative.complexName);
-  const range = escapeHtml(formatRange(representative.minPrice, representative.maxPrice));
+  const range = escapeHtml(
+    price.kind === "average"
+      ? `${formatWonAsEok(price.value)} (${price.typeLabel})`
+      : `${formatEokRange(price.unit.minPrice, price.unit.maxPrice)} (${price.unit.areaBucket}㎡)`,
+  );
   const open = `<div class="complex-map-pin complex-map-pin--${tier}">`;
   const tail =
     `<svg class="complex-map-marker-tail" width="14" height="7" viewBox="0 0 14 7" ` +
@@ -323,13 +437,13 @@ function markerLabel(
     );
   }
 
-  const price =
+  const priceHtml =
     detail === "full" ? `<span class="complex-map-marker-price">${range}</span>` : "";
   return (
     `${open}` +
     `<div class="complex-map-marker" data-complex-key="${key}">` +
     `<span class="complex-map-marker-name">${name}</span>` +
-    price +
+    priceHtml +
     `</div>` +
     tail +
     `</div>`
@@ -863,14 +977,17 @@ export function ComplexMap({
         });
 
         /*
-         * 마커 라벨이 낼 대표 평형을 단지마다 하나 고른다 — 거래 건수가
-         * 가장 많은 평형이다(`representativeUnit`). 라벨에 면적을 더는
-         * 적지 않지만, **어느 평형의 가격 범위인가**는 여전히 이 선택이
-         * 정한다.
+         * 단지마다 마커 색을 정할 대표 평형(`representativeUnit` — 거래
+         * 건수가 가장 많은 평형)과, 마커에 낼 가격(`pricePick` — 84㎡
+         * 없으면 59㎡ 최근 3건 평균, 둘 다 없으면 대표 평형의 범위)을
+         * 각각 고른다. **둘이 같은 평형이라는 보장이 없다** — 예를 들어
+         * 59㎡ 거래가 가장 많아 마커 색은 그 평형 기준인데, 84㎡ 거래가
+         * 있으면 가격은 84㎡ 평균을 낸다.
          */
         const groupsWithRepresentative = drawn.map((g) => ({
           ...g,
           representative: representativeUnit(g.units),
+          price: pricePick(g.units),
         }));
         const tiers = burdenTiers(groupsWithRepresentative, burdenByUnit);
 
@@ -892,16 +1009,18 @@ export function ComplexMap({
           marker: naver.maps.Marker;
           complexKey: string;
           representative: ComplexUnit;
+          price: MarkerPrice;
           tier: BurdenTier;
         }> = [];
 
         const iconFor = (
           complexKey: string,
           representative: ComplexUnit,
+          price: MarkerPrice,
           tier: BurdenTier,
           forDetail: MarkerDetail,
         ) => ({
-          content: markerLabel(complexKey, representative, tier, forDetail),
+          content: markerLabel(complexKey, representative, price, tier, forDetail),
           /*
            * 말풍선 **꼬리 끝**(점이면 원의 한가운데)을 좌표에 앉힌다.
            * 예전 `(0, 0)`은 라벨 상자의 왼쪽 위 모서리를 앉혀 아무 데도
@@ -920,12 +1039,13 @@ export function ComplexMap({
           const marker = new naverGlobal.maps.Marker({
             position: new naverGlobal.maps.LatLng(coord.lat, coord.lon),
             map,
-            icon: iconFor(group.complexKey, group.representative, tier, detail),
+            icon: iconFor(group.complexKey, group.representative, group.price, tier, detail),
           });
           drawnMarkers.push({
             marker,
             complexKey: group.complexKey,
             representative: group.representative,
+            price: group.price,
             tier,
           });
           const clickListener = naverGlobal.maps.Event.addListener(marker, "click", () => {
@@ -964,7 +1084,7 @@ export function ComplexMap({
           if (next === detail) return;
           detail = next;
           for (const m of drawnMarkers) {
-            m.marker.setIcon(iconFor(m.complexKey, m.representative, m.tier, next));
+            m.marker.setIcon(iconFor(m.complexKey, m.representative, m.price, m.tier, next));
           }
           applyFocus(focusedRef.current);
         });
