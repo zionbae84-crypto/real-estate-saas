@@ -1,6 +1,5 @@
 import { formatRuleVersionLabel } from "../format/ruleVersionLabel";
 import { formatWon } from "../format/won";
-import { describeAreaBands, includesAreaAboveThreshold } from "../lib/area-band";
 import type { Rules } from "../lib/finance";
 import {
   ASSUMED_REMOVED_INPUTS,
@@ -30,15 +29,14 @@ import {
 /**
  * 지금 계산이 어느 면적 위에 서 있는지(App.tsx가 판단해 넘긴다).
  *
- * ⚠ **`"assumed"`에는 숫자가 없다.** 매물을 고르기 전 헤드라인은 면적
- * 값이 아니라 "고른 평형대에 85㎡ 초과가 섞였는가"라는 전제 하나로
- * 계산되므로(`useProfileForm`의 `assumedExclusiveAreaSqm`), 종이에 적을
- * 대표값이 없다 — 그 전제는 `state.areaBands`에서 다시 읽는다. 숫자를
- * 하나 만들어 넘기면 종이가 지어낸 값을 사실처럼 말하게 된다.
+ * **`"assumed"`에는 숫자가 없다** — 매물을 고르기 전 헤드라인은 항상
+ * `ruralTaxAreaThresholdSqm`(85㎡) 이하로 가정한다(`useProfileForm`의
+ * `toProfile` 참고). 사용자 지시로 평형대 선택 자체가 사라져 이제 이
+ * 가정에 조건 분기가 없다 — 언제나 같은 값이라 그 값 자체를
+ * `describeAreaBasis`가 룰셋에서 다시 읽는다.
  *
- * `"touched"`는 사라졌다 — 전용면적을 직접 입력하는 칸이 화면에서
- * 없어졌으므로, 이 값은 언제나 평형대에서 온 전제이거나(목록 화면) 고른
- * 매물의 실제 면적이다(상세 화면).
+ * `"selectedUnit"`은 그대로다 — 매물을 고른 화면(단지 상세)에서는 그
+ * 평형의 실제 전용면적으로 계산한다.
  */
 export type AreaBasis =
   | { source: "assumed" }
@@ -81,13 +79,6 @@ export function buildPrintSummaryItems(
         state.annualIncome === null ? "입력 안 함" : formatWon(state.annualIncome),
     },
     {
-      // 네 번째 질문의 답. 이 종이의 목록에 어떤 평형이 실렸는지를
-      // 정하는 값이라, 종이만 보는 사람에게 목록이 전부인지 걸러진
-      // 일부인지를 알려주는 유일한 자리다.
-      label: "찾는 평형대",
-      value: describeAreaBands(state.areaBands, ruralTaxAreaThresholdSqm),
-    },
-    {
       // 사용자가 화면 1에서 직접 답한 값이다 — "(가정)"을 달지 않는다.
       // null(미답변)은 이 컴포넌트에 도달하지 않는다: toProfile이 그
       // 상태에서 null을 돌려주므로 결과 화면 자체가 뜨지 않는다
@@ -121,7 +112,7 @@ export function buildPrintSummaryItems(
     },
     {
       label: "전용면적",
-      value: describeAreaBasis(areaBasis, state, ruralTaxAreaThresholdSqm),
+      value: describeAreaBasis(areaBasis, ruralTaxAreaThresholdSqm),
     },
   ];
 }
@@ -139,39 +130,24 @@ function describeOwnedHomeCount(count: number): string {
 /**
  * 종이에 적을 전용면적 전제.
  *
- * ⚠ **매물을 고르기 전에는 숫자 하나를 적지 않는다.** 헤드라인이 쓴
- * 것은 "85㎡ 초과가 섞였는가"라는 전제이지 면적 값이 아니다 — 대표값을
- * 지어내 적으면 종이가 계산에 쓰이지 않은 숫자를 사실처럼 말하게 된다.
- *
- * **"(가정)"은 초과가 섞였을 때만 붙는다.** 안 섞였으면 고른 구간이
- * 전부 임계값 이하라 그 전제는 가정이 아니라 **사실**이고, 그때
- * "(가정)"을 달면 확인된 것을 못 미더워하게 만든다 — 화면(`AssumptionLine`)이
- * 그 경우 아무 말도 하지 않는 것과 같은 판단이다.
+ * 사용자 지시로 평형대 선택이 사라진 뒤, 매물을 고르기 전 헤드라인은
+ * **언제나** `ruralTaxAreaThresholdSqm`(85㎡) 이하로 가정한다 — 조건 분기가
+ * 없다. 다만 그 가정이 실제 매물과 어긋날 수 있다는 사실(85㎡ 초과 시
+ * 농어촌특별세가 붙고 디딤돌대출을 받을 수 없다)은 화면의 목록·상세와
+ * 같은 문구로 함께 적는다 — 헤드라인만 보고 그 초과분을 안 붙는 것으로
+ * 오해하지 않게 한다.
  */
 function describeAreaBasis(
   basis: AreaBasis,
-  state: ProfileFormState,
   ruralTaxAreaThresholdSqm: number,
 ): string {
   if (basis.source === "selectedUnit") {
     return `${basis.sqm}㎡ (선택한 매물의 실제 면적)`;
   }
-  /*
-   * ⚠ **하나도 고르지 않은 상태는 "전부 이하"가 아니다.** 빈 선택은
-   * "전체"가 아니라 "고르지 않았다"이고(`lib/area-band`의
-   * `matchesAreaBands`), 같은 종이의 "찾는 평형대" 줄도 그렇게 적는다.
-   * 그런데 아래 else 분기로 떨어지면 종이가 "고른 평형대가 전부 이
-   * 범위"라고 **고른 것이 없는데** 단언하게 된다.
-   *
-   * 화면은 이 상태를 맞게 다룬다("평형대를 하나 이상 골라 주세요").
-   * 종이에는 화면을 보지 않은 사람이 읽으므로 더더욱 지어내지 않는다.
-   */
-  if (state.areaBands.length === 0) {
-    return "기준 없음 (찾는 평형대를 고르지 않았어요)";
-  }
-  return includesAreaAboveThreshold(state.areaBands, ruralTaxAreaThresholdSqm)
-    ? `${ruralTaxAreaThresholdSqm}㎡ 초과 기준 (고른 평형대에 맞춘 가정)`
-    : `${ruralTaxAreaThresholdSqm}㎡ 이하 (고른 평형대가 전부 이 범위)`;
+  return (
+    `${ruralTaxAreaThresholdSqm}㎡ 이하로 가정 — 초과하는 매물은 농어촌특별세가 ` +
+    "붙고 디딤돌대출을 받을 수 없어요"
+  );
 }
 
 export interface PrintSummaryProps {

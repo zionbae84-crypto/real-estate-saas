@@ -48,11 +48,10 @@ describe("formatPrintDate", () => {
 });
 
 describe("buildPrintSummaryItems", () => {
-  it("여덟 전제를 모두 낸다 — 물어본 셋과 가정한 넷, 그리고 전용면적", () => {
+  it("일곱 전제를 모두 낸다 — 물어본 셋과 가정한 셋, 그리고 전용면적", () => {
     expect(items().map((i) => i.label)).toEqual([
       "얼마 있어요(현금)",
       "연 소득(세전)",
-      "찾는 평형대",
       "주택 수",
       "생애최초 주택 구입",
       "기존 대출(연간 상환액)",
@@ -132,18 +131,6 @@ describe("buildPrintSummaryItems", () => {
     });
   });
 
-  describe("찾는 평형대 — 이 종이의 목록이 전부인지 일부인지 말한다", () => {
-    it("전부 고르면 '전체'다", () => {
-      expect(valueOf("찾는 평형대")).toBe("전체");
-    });
-
-    it("일부만 고르면 구간과 범위를 함께 적는다", () => {
-      expect(
-        valueOf("찾는 평형대", { ...FIXED_STATE, areaBands: ["중소형"] }),
-      ).toBe("중소형(60~85㎡)");
-    });
-  });
-
   describe("규제지역 — 판정과 가정을 가른다", () => {
     it("지역 조회가 판정했으면 '(지역 판정)'이다", () => {
       expect(valueOf("규제지역 여부")).toBe("비규제지역 (지역 판정)");
@@ -156,49 +143,18 @@ describe("buildPrintSummaryItems", () => {
     });
   });
 
-  describe("전용면적은 고른 평형대가 정한다 — 숫자를 지어내지 않는다", () => {
+  describe("전용면적 — 매물을 고르기 전엔 언제나 룰셋 임계값이다", () => {
     /**
-     * ⚠ **종이에 대표값 하나를 적지 않는다.** 헤드라인이 쓴 것은 면적
-     * 값이 아니라 "85㎡ 초과가 섞였는가"라는 전제 하나이고, 종이도 그
-     * 전제를 적어야 화면과 두 말을 하지 않는다.
+     * ⚠ **평형대 질문이 사라진 뒤(사용자 지시), 이 값은 조건 분기가
+     * 없다.** 언제나 룰셋의 `ruralTaxAreaThresholdSqm`(85㎡) 이하를
+     * 가정하고, 그 가정이 실제 매물과 어긋날 수 있다는 사실(농특세·
+     * 디딤돌대출)을 같은 줄에서 함께 고지한다.
      */
-    it("85㎡ 초과가 섞였으면 '초과 기준 (가정)'이라고 적는다", () => {
-      const area = valueOf("전용면적", {
-        ...FIXED_STATE,
-        areaBands: ["중대형"],
-      });
-      expect(area).toMatch(new RegExp(`${THRESHOLD}㎡ 초과`));
-      expect(area).toMatch(/가정/);
-    });
-
-    /**
-     * 고른 구간이 전부 85㎡ 이하이면 그건 가정이 아니라 **사실**이다 —
-     * 종이에 "(가정)"을 달면 읽는 사람이 확인된 것을 못 미더워하게 된다.
-     */
-    it("85㎡ 초과가 안 섞였으면 '이하'라고 적고 가정이라 하지 않는다", () => {
-      const area = valueOf("전용면적", {
-        ...FIXED_STATE,
-        areaBands: ["소형", "중소형"],
-      });
+    it("매물을 고르기 전엔 임계값 이하 가정과 초과 시 고지를 함께 적는다", () => {
+      const area = valueOf("전용면적");
       expect(area).toMatch(new RegExp(`${THRESHOLD}㎡ 이하`));
-      expect(area).not.toMatch(/가정/);
-    });
-
-    /**
-     * ⚠ **하나도 안 골랐으면 기준이 없다.** 같은 종이에 "찾는 평형대 =
-     * 고르지 않음"이 찍히는데 그 아래에서 "85㎡ 이하 (고른 평형대가 전부
-     * 이 범위)"를 단언하면, 종이가 스스로 모순된다 — 고른 것이 없는데
-     * "전부 이 범위"라고 말한다.
-     *
-     * 도달 경로: 현금·소득 입력 → 평형대 고름 → 지역 조회 → "조건 다시
-     * 넣기" → 평형대 전부 해제 → Cmd+P. 화면은 이 상태를 맞게 다룬다
-     * ("하나 이상 골라 주세요"). 종이에서만 어긋났다.
-     */
-    it("평형대를 하나도 안 골랐으면 면적 기준을 단언하지 않는다", () => {
-      const area = valueOf("전용면적", { ...FIXED_STATE, areaBands: [] });
-      expect(area).not.toMatch(/이하/);
-      expect(area).not.toMatch(/초과/);
-      expect(area).toBe("기준 없음 (찾는 평형대를 고르지 않았어요)");
+      expect(area).toMatch(/농어촌특별세/);
+      expect(area).toMatch(/디딤돌대출/);
     });
 
     it("매물을 골랐으면 그 평형의 실제 면적을 적고, 가정이라 하지 않는다", () => {
@@ -208,7 +164,7 @@ describe("buildPrintSummaryItems", () => {
       });
       expect(area).toContain("72");
       expect(area).toMatch(/매물/);
-      expect(area).not.toMatch(/가정/);
+      expect(area).not.toMatch(/이하로 가정/);
     });
   });
 });
@@ -230,12 +186,11 @@ describe("PrintSummary", () => {
     expect(screen.getByText(/2026년 8월 23일/)).toBeInTheDocument();
   });
 
-  it("여덟 전제를 모두 DOM에 낸다", () => {
+  it("일곱 전제를 모두 DOM에 낸다", () => {
     renderIt();
     for (const label of [
       "얼마 있어요(현금)",
       "연 소득(세전)",
-      "찾는 평형대",
       "주택 수",
       "생애최초 주택 구입",
       "기존 대출(연간 상환액)",

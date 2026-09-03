@@ -5,6 +5,8 @@ import {
   COMPLEX_COORDINATES,
   coordinateOf,
   ELEMENTARY_SCHOOLS,
+  HIGH_SCHOOLS,
+  MIDDLE_SCHOOLS,
   SUBWAY_STATIONS,
 } from "./location";
 import { COMPLEX_UNITS } from "./complexes";
@@ -36,7 +38,12 @@ describe("입지 데이터 자리", () => {
   it("목록의 '아직 없음'은 빈 배열이 아니라 null이다", () => {
     // 빈 배열은 "확인해 봤는데 없더라"로 읽히기 시작한다. 지금 우리가
     // 아는 것은 아무것도 모른다는 것뿐이다.
-    for (const list of [SUBWAY_STATIONS, ELEMENTARY_SCHOOLS]) {
+    for (const list of [
+      SUBWAY_STATIONS,
+      ELEMENTARY_SCHOOLS,
+      MIDDLE_SCHOOLS,
+      HIGH_SCHOOLS,
+    ]) {
       expect(list === null || list.length > 0).toBe(true);
     }
   });
@@ -59,12 +66,21 @@ describe("실린 목록 — 학교·역은 값이 있고 단지 좌표는 없다
     // null이면 아래 검사들이 공허하게 통과한다.
     expect(SUBWAY_STATIONS).not.toBeNull();
     expect(ELEMENTARY_SCHOOLS).not.toBeNull();
+    expect(MIDDLE_SCHOOLS).not.toBeNull();
+    expect(HIGH_SCHOOLS).not.toBeNull();
     expect(SUBWAY_STATIONS?.length ?? 0).toBeGreaterThan(0);
     expect(ELEMENTARY_SCHOOLS?.length ?? 0).toBeGreaterThan(0);
+    expect(MIDDLE_SCHOOLS?.length ?? 0).toBeGreaterThan(0);
+    expect(HIGH_SCHOOLS?.length ?? 0).toBeGreaterThan(0);
   });
 
   it("모든 항목이 좌표를 갖고, 0·NaN이 없다", () => {
-    for (const place of [...(SUBWAY_STATIONS ?? []), ...(ELEMENTARY_SCHOOLS ?? [])]) {
+    for (const place of [
+      ...(SUBWAY_STATIONS ?? []),
+      ...(ELEMENTARY_SCHOOLS ?? []),
+      ...(MIDDLE_SCHOOLS ?? []),
+      ...(HIGH_SCHOOLS ?? []),
+    ]) {
       expect(Number.isFinite(place.coordinate.lat)).toBe(true);
       expect(Number.isFinite(place.coordinate.lon)).toBe(true);
       expect(place.coordinate.lat).not.toBe(0);

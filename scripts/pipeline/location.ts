@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { DATA_DIR } from "./config";
@@ -50,6 +50,12 @@ export const LOCATION_CONFIG_PATH = join(HERE, "location-config.json");
 export const SOURCES_DIR = join(DATA_DIR, "sources");
 export const SCHOOLS_SOURCE_PATH = join(SOURCES_DIR, "schools.csv");
 export const SUBWAY_SOURCE_PATH = join(SOURCES_DIR, "subway-stations.csv");
+/**
+ * 학교알리미 공시(전화·학생 수·교원 수). **없어도 파이프라인은 돈다** —
+ * 이 파일은 별도 수집 단계(`npm run pipeline:school-info`)가 만들고 인증키가
+ * 필요하므로, 없으면 그 값들만 빠진 채로 굽는다(화면은 그 줄을 내지 않는다).
+ */
+export const SCHOOL_INFO_SOURCE_PATH = join(SOURCES_DIR, "school-info.csv");
 export const LOCATION_OUTPUT_PATH = join(DATA_DIR, "location.json");
 
 /**
@@ -255,41 +261,136 @@ export interface EmittedSubwayStation {
   lon: number;
 }
 
-export interface EmittedElementarySchool {
+/**
+ * 학교 하나(급 무관). 중·고 두 배열이 이 모양을 쓰고, 초등학교는 여기에
+ * 기본정보를 더한 {@link EmittedElementarySchool}을 쓴다.
+ */
+export interface EmittedSchool {
   id: string;
   name: string;
   lat: number;
   lon: number;
 }
 
-export interface LocationFile {
-  schemaVersion: 1;
-  complexes: EmittedComplexCoordinate[];
-  subwayStations: EmittedSubwayStation[];
-  elementarySchools: EmittedElementarySchool[];
+/**
+ * 초등학교 하나 — 좌표에 **화면에 내는 기본정보**를 더한 모양이다.
+ *
+ * 사용자 지시로 지도에서 초등학교 마커를 누르면 기본정보를 띄우게 되며
+ * 실었다. **초등학교에만 싣는다** — 중·고등학교는 지금도 좌표뿐이다
+ * (`middleSchools`·`highSchools`). 학교급을 늘려 기본정보까지 붙이면
+ * 화면이 "학군"처럼 읽히기 시작하고, 그건 이 앱이 하지 않기로 한
+ * 가치판단이다(`buildElementarySchools`의 주석 참고).
+ *
+ * 값은 전부 원본 「전국초중등학교위치표준데이터」가 준 그대로다 — 우리가
+ * 만들거나 추정한 값이 하나도 없다.
+ */
+export interface EmittedElementarySchool extends EmittedSchool {
+  /** 설립형태 — 공립·국립·사립 중 하나 */
+  foundationType: string;
+  /** 설립일자(YYYY-MM-DD) */
+  foundedOn: string;
+  /**
+   * 소재지 주소. **도로명주소를 쓰고, 없으면 지번주소로 물러난다**
+   * (원본에서 초등학교 6,303곳 중 10곳이 도로명주소가 비어 있다) —
+   * 둘 다 없으면 빈 문자열이고, 화면은 그 줄을 통째로 내지 않는다.
+   */
+  address: string;
+  /** 시도교육청명(예: 서울특별시교육청) */
+  officeOfEducation: string;
+  /**
+   * 아래 넷은 **학교알리미 공시**에서 온다(`data/sources/school-info.csv`,
+   * 위 다섯 필드의 출처인 위치표준데이터와 다른 원본이다). 공시는 해마다
+   * 한 번이라 값이 오늘 기준이 아니고, 그래서 화면이 공시 연도를 함께
+   * 낸다(`LocationFile.elementarySchoolInfoYear`).
+   *
+   * **모르는 값은 키를 아예 넣지 않는다** — `null`도 `0`도 아니다. 전화번호는
+   * 실제로 285곳 중 50곳이 공시에 없다. 없는 키는 화면에서 자연히 "그 줄을
+   * 내지 않는다"가 되지만, `0`을 넣으면 "교원이 0명"이라는 **틀린 사실**이
+   * 된다(`data/README.md`의 단지 좌표 관련 같은 이유).
+   */
+  phone?: string;
+  /** 설립유형 — 단설·병설·부설·부속 중 하나 */
+  foundationForm?: string;
+  /** 학생 수(계·남·여). 계는 남+여이고, 원본의 합계와 맞는지 확인한 값이다 */
+  students?: { total: number; male: number; female: number };
+  /**
+   * 교원 수(계·남·여). 공식 명세(`OpenAPI_Output.xlsx`의 "직위별 교원
+   * 현황")의 총계 열이고, 기간제교사·강사를 포함하고 원어민강사는 뺀
+   * 수다 — 휴직 교원은 남·여 안에 들어 있다.
+   */
+  teachers?: { total: number; male: number; female: number };
+  /**
+   * 교육지원청명(예: 서울특별시동부교육지원청).
+   *
+   * 이 값을 싣는 이유는 고지 문구와 짝이 맞기 때문이다 — 배정은 학구도로
+   * 정해지니 "관할 교육지원청에 확인하라"고 말해 왔는데, 그 교육지원청이
+   * 어디인지는 정작 말해 주지 못했다.
+   */
+  districtOfficeOfEducation: string;
 }
 
-export const LOCATION_SCHEMA_VERSION = 1;
+export interface LocationFile {
+  schemaVersion: 3;
+  complexes: EmittedComplexCoordinate[];
+  subwayStations: EmittedSubwayStation[];
+  /**
+   * 초등학교 좌표 **+ 기본정보**(설립·주소·교육청 — 사용자 지시로 지도에서
+   * 마커를 누르면 띄운다, {@link EmittedElementarySchool} 참고). 기본정보를
+   * 더한 것은 세 학교급 중 이 배열뿐이다.
+   *
+   * **입지 화면(`LocationFacts.tsx`, `src/lib/location/`)이 쓰는 유일한
+   * 학교급이다** — 반경 안 개수를 세고 "학구도가 아니다"라는 고지와 함께
+   * 낸다. 그 엔진은 더한 필드를 읽지 않는다(`src/data/location.ts`의
+   * `ELEMENTARY_SCHOOLS`는 지금도 좌표·이름만 넘긴다).
+   *
+   * 아래 `middleSchools`·`highSchools`와 **절대 같은 자리에서 섞지 않는다.**
+   * 그 둘은 지도 위 참고 표시(`ComplexMap.tsx`)만을 위한 것이라 반경 집계도,
+   * 배정학교 판정도 하지 않는다 — 이 배열 하나만 그 판정 로직에 닿는다.
+   */
+  elementarySchools: EmittedElementarySchool[];
+  /**
+   * 위 학교들의 공시 값(전화·학생 수·교원 수)이 **몇 년 공시인가.**
+   * 공시는 해마다 한 번이라 값이 오늘 기준이 아니고, 화면은 이 연도를
+   * 함께 낸다. 공시 원본을 아직 안 받았으면 이 키가 없다.
+   */
+  elementarySchoolInfoYear?: string;
+  /**
+   * 중학교 좌표. **지도 위 참고 표시 전용이다.** 사용자 지시(지도 필터에
+   * "학교: 초등/중등/고등학교 표시" 추가)로 새로 실었다 — 지하철역 마커와
+   * 같은 성격의 "여기 있다"는 사실 표시일 뿐, 반경 집계·배정학교 판정에는
+   * 쓰지 않는다. 그 경계를 넘으면 위 `elementarySchools`가 지키던 "학군처럼
+   * 읽히지 않는다"는 원칙이 깨진다 — `src/lib/location/`(입지 화면 엔진)은
+   * 이 배열을 절대 들여오지 않는다.
+   */
+  middleSchools: EmittedSchool[];
+  /** 고등학교 좌표. 위 `middleSchools`와 같은 이유·같은 제약. */
+  highSchools: EmittedSchool[];
+}
 
-/** 이 화면이 세는 학교급. **초등학교 하나뿐이다** */
+/**
+ * 3: 초등학교 항목에 기본정보(설립·주소·교육청)를 더했다. 2까지는 초등·중·고가
+ * 전부 `{id, name, lat, lon}` 하나로 같았다 — 더한 필드는 초등학교에만 있다.
+ */
+export const LOCATION_SCHEMA_VERSION = 3;
+
+/** 입지 화면이 세는 학교급. **초등학교 하나뿐이다**(위 `elementarySchools` 문서 참고) */
 export const SCHOOL_LEVEL = "초등학교";
 /** 원본의 운영상태 중 이 값만 싣는다 — 폐교는 다닐 수 없다 */
 export const SCHOOL_OPERATING = "운영";
 
 /**
- * 초등학교만, 상자 안의 것만 남긴다.
- *
- * **중·고등학교를 넣지 않는다.** 이 화면이 말하는 것은 초등학교 하나뿐이고,
- * 학교급을 늘리면 화면이 "학군"처럼 읽히기 시작한다 — 그건 이 앱이 하지
- * 않기로 한 가치판단이다.
+ * 학교급 하나, 상자 안의 것만 남긴다. 초등·중·고 세 배열이 공유하는
+ * 필터링이다 — 담는 학교급만 다르고 나머지 규칙(운영 중인 것만, 상자 안만,
+ * 좌표·이름·id가 있는 것만, id 오름차순 정렬)은 같다.
  */
-export function buildElementarySchools(
+function schoolsAtLevel(
   rows: Array<Record<string, string>>,
   bounds: Bounds,
-): EmittedElementarySchool[] {
-  const out: EmittedElementarySchool[] = [];
+  level: string,
+): Array<{ base: EmittedSchool; row: Record<string, string> }> {
+  const out: Array<{ base: EmittedSchool; row: Record<string, string> }> = [];
   for (const row of rows) {
-    if (row["학교급구분"] !== SCHOOL_LEVEL) continue;
+    if (row["학교급구분"] !== level) continue;
     if (row["운영상태"] !== SCHOOL_OPERATING) continue;
     const lat = parseCoordinate(row["위도"] ?? "");
     const lon = parseCoordinate(row["경도"] ?? "");
@@ -298,10 +399,114 @@ export function buildElementarySchools(
     const id = (row["학교ID"] ?? "").trim();
     const name = (row["학교명"] ?? "").trim();
     if (id === "" || name === "") continue;
-    out.push({ id, name, lat, lon });
+    out.push({ base: { id, name, lat, lon }, row });
   }
-  out.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  out.sort((a, b) => (a.base.id < b.base.id ? -1 : a.base.id > b.base.id ? 1 : 0));
   return out;
+}
+
+/**
+ * 소재지 주소 한 줄. **도로명주소를 쓰고, 비어 있으면 지번주소로 물러난다**
+ * — 원본에서 초등학교 6,303곳 중 10곳이 도로명주소가 비어 있다. 둘 다
+ * 비어 있으면 빈 문자열이고, 그 경우 화면이 주소 줄을 통째로 내지 않는다
+ * (없는 것을 아는 척하지 않는다).
+ */
+function schoolAddress(row: Record<string, string>): string {
+  const road = (row["소재지도로명주소"] ?? "").trim();
+  if (road !== "") return road;
+  return (row["소재지지번주소"] ?? "").trim();
+}
+
+/**
+ * 초등학교만, 상자 안의 것만 남긴다.
+ *
+ * **중·고등학교를 넣지 않는다.** 입지 화면이 말하는 것은 초등학교 하나뿐이고,
+ * 학교급을 늘리면 화면이 "학군"처럼 읽히기 시작한다 — 그건 이 앱이 하지
+ * 않기로 한 가치판단이다. 지도 위 참고 표시용 중·고등학교는 별도
+ * 배열(`buildMiddleSchools`·`buildHighSchools`)로 나가고, 이 함수·이 배열은
+ * 절대 건드리지 않는다.
+ */
+export function buildElementarySchools(
+  rows: Array<Record<string, string>>,
+  bounds: Bounds,
+  infoRows: Array<Record<string, string>> = [],
+): EmittedElementarySchool[] {
+  const info = new Map(infoRows.map((r) => [(r["학교ID"] ?? "").trim(), r]));
+  return schoolsAtLevel(rows, bounds, SCHOOL_LEVEL).map(({ base, row }) => ({
+    ...base,
+    foundationType: (row["설립형태"] ?? "").trim(),
+    foundedOn: (row["설립일자"] ?? "").trim(),
+    address: schoolAddress(row),
+    officeOfEducation: (row["시도교육청명"] ?? "").trim(),
+    districtOfficeOfEducation: (row["교육지원청명"] ?? "").trim(),
+    ...schoolDisclosure(info.get(base.id)),
+  }));
+}
+
+/** 정수로 읽히면 그 수, 아니면 `null`(=모른다) */
+function wholeNumber(value: string | undefined): number | null {
+  const text = (value ?? "").trim();
+  if (text === "") return null;
+  const n = Number(text);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
+/**
+ * 공시에서 온 값들(`data/sources/school-info.csv`)을 학교 항목에 얹을
+ * 모양으로 바꾼다. **모르는 값은 키를 만들지 않는다**(위
+ * {@link EmittedElementarySchool}의 `phone` 주석 참고).
+ *
+ * 계·남·여는 **셋이 다 있고 계 = 남 + 여일 때만** 싣는다. 원본이 어긋나면
+ * 그건 우리가 컬럼을 잘못 짚었다는 뜻이라, 어긋난 수를 화면에 내보내느니
+ * 그 학교만 조용히 비우는 편이 낫다(어긋나는 학교가 있으면
+ * `scripts/location-data.test.ts`가 잡는다).
+ */
+function schoolDisclosure(
+  row: Record<string, string> | undefined,
+): Partial<EmittedElementarySchool> {
+  if (row === undefined) return {};
+  const out: Partial<EmittedElementarySchool> = {};
+
+  const phone = (row["전화번호"] ?? "").trim();
+  if (phone !== "") out.phone = phone;
+
+  const form = (row["설립유형"] ?? "").trim();
+  if (form !== "") out.foundationForm = form;
+
+  const counts = (totalKey: string, maleKey: string, femaleKey: string) => {
+    const total = wholeNumber(row[totalKey]);
+    const male = wholeNumber(row[maleKey]);
+    const female = wholeNumber(row[femaleKey]);
+    if (total === null || male === null || female === null) return undefined;
+    return total === male + female ? { total, male, female } : undefined;
+  };
+
+  const students = counts("학생수", "학생수남", "학생수여");
+  if (students !== undefined) out.students = students;
+  const teachers = counts("교원수", "교원수남", "교원수여");
+  if (teachers !== undefined) out.teachers = teachers;
+
+  return out;
+}
+
+/**
+ * 중학교만, 상자 안의 것만 남긴다. **지도 위 참고 표시 전용**(위
+ * `LocationFile.middleSchools` 문서 참고) — 반경 집계·배정학교 판정에는
+ * 쓰지 않는다.
+ */
+export function buildMiddleSchools(
+  rows: Array<Record<string, string>>,
+  bounds: Bounds,
+): EmittedSchool[] {
+  return schoolsAtLevel(rows, bounds, "중학교").map(({ base }) => base);
+}
+
+/** 고등학교만, 상자 안의 것만 남긴다. 위 `buildMiddleSchools`와 같은 이유·같은 제약. */
+export function buildHighSchools(
+  rows: Array<Record<string, string>>,
+  bounds: Bounds,
+): EmittedSchool[] {
+  return schoolsAtLevel(rows, bounds, "고등학교").map(({ base }) => base);
 }
 
 /**
@@ -378,12 +583,37 @@ export function buildSubwayStations(
  *
  * `complexes`는 **언제나 빈 배열**이다 — 지오코딩이 붙기 전까지 채울 수
  * 있는 정직한 값이 없다.
+ *
+ * 중·고등학교는 초등학교와 **같은 버퍼**(`elementarySchoolBufferMeters`)를
+ * 쓴다 — 둘 다 반경 규칙이 없는 순수 지도 표시용이라 버퍼의 역할이 "상자
+ * 경계 근처에서도 패닝하면 학교가 보이게"뿐이고, 초등학교 버퍼가 이미 그
+ * 여유(1,500m)를 넉넉히 두고 있어 새 설정값을 늘릴 이유가 없다.
  */
+/**
+ * 공시 연도. 행마다 같은 값이지만 **여러 값이 섞여 있으면 싣지 않는다** —
+ * 그건 두 해의 공시가 한 파일에 섞였다는 뜻이고, 그때 한 해를 골라 적으면
+ * 화면이 틀린 연도를 말하게 된다.
+ */
+function disclosureYearOf(
+  infoRows: Array<Record<string, string>>,
+): { elementarySchoolInfoYear?: string } {
+  const years = new Set(
+    infoRows.map((r) => (r["공시연도"] ?? "").trim()).filter((y) => y !== ""),
+  );
+  const only = [...years];
+  return only.length === 1 ? { elementarySchoolInfoYear: only[0]! } : {};
+}
+
 export function buildLocationFile(
   schoolRows: Array<Record<string, string>>,
   stationRows: Array<Record<string, string>>,
   config: LocationConfig,
+  infoRows: Array<Record<string, string>> = [],
 ): LocationFile {
+  const schoolBounds = expandBounds(
+    config.targetBounds,
+    config.elementarySchoolBufferMeters,
+  );
   return {
     schemaVersion: LOCATION_SCHEMA_VERSION,
     complexes: [],
@@ -391,10 +621,10 @@ export function buildLocationFile(
       stationRows,
       expandBounds(config.targetBounds, config.subwayBufferMeters),
     ),
-    elementarySchools: buildElementarySchools(
-      schoolRows,
-      expandBounds(config.targetBounds, config.elementarySchoolBufferMeters),
-    ),
+    elementarySchools: buildElementarySchools(schoolRows, schoolBounds, infoRows),
+    ...disclosureYearOf(infoRows),
+    middleSchools: buildMiddleSchools(schoolRows, schoolBounds),
+    highSchools: buildHighSchools(schoolRows, schoolBounds),
   };
 }
 
@@ -407,10 +637,16 @@ export function buildLocationFile(
  * 경우가 그렇다). 사람이 놓칠 수 없어야 한다.
  */
 export function assertNonEmpty(file: LocationFile): void {
-  if (file.subwayStations.length === 0 || file.elementarySchools.length === 0) {
+  if (
+    file.subwayStations.length === 0 ||
+    file.elementarySchools.length === 0 ||
+    file.middleSchools.length === 0 ||
+    file.highSchools.length === 0
+  ) {
     throw new Error(
       `거른 결과가 비었습니다(역 ${file.subwayStations.length}곳 / 초등학교 ` +
-        `${file.elementarySchools.length}곳). location-config.json의 targetBounds가 ` +
+        `${file.elementarySchools.length}곳 / 중학교 ${file.middleSchools.length}곳 / ` +
+        `고등학교 ${file.highSchools.length}곳). location-config.json의 targetBounds가 ` +
         "우리 단지가 있는 지역을 가리키는지, data/sources/의 원본이 비어 있지 않은지 " +
         "확인하세요.",
     );
@@ -428,17 +664,21 @@ export function runLocationPipeline(): void {
   const config = loadLocationConfig();
   const schoolRows = readTable(readFileSync(SCHOOLS_SOURCE_PATH, "utf8"));
   const stationRows = readTable(readFileSync(SUBWAY_SOURCE_PATH, "utf8"));
+  const infoRows = existsSync(SCHOOL_INFO_SOURCE_PATH)
+    ? readTable(readFileSync(SCHOOL_INFO_SOURCE_PATH, "utf8"))
+    : [];
   console.log(
     `원본: 학교 ${schoolRows.length}행 / 역 ${stationRows.length}행`,
   );
 
-  const file = buildLocationFile(schoolRows, stationRows, config);
+  const file = buildLocationFile(schoolRows, stationRows, config, infoRows);
   assertNonEmpty(file);
   emitLocation(file);
 
   console.log(
     `실은 것: 지하철역 ${file.subwayStations.length}곳(노선별 행) / ` +
-      `초등학교 ${file.elementarySchools.length}곳 / 단지 좌표 ${file.complexes.length}개`,
+      `초등학교 ${file.elementarySchools.length}곳 / 중학교 ${file.middleSchools.length}곳 / ` +
+      `고등학교 ${file.highSchools.length}곳 / 단지 좌표 ${file.complexes.length}개`,
   );
   console.log("완료. data/location.json");
 }

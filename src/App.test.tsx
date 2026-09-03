@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "./App";
@@ -49,10 +49,11 @@ const DETAIL_TEST_UNIT: ComplexUnit = {
   regionCode: "11680",
   legalDongName: "테스트동",
   builtYear: 2015,
-  // 85㎡ 초과다(중대형). 기본 선택은 전체이므로 헤드라인도 85㎡ 초과를
-  // 가정하고, 그래서 이 평형의 상세를 열어도 **부대비용이 달라지지
-  // 않는다** — 그 차이를 보는 테스트는 아래 NARROW_DETAIL_UNIT(전용
-  // 59㎡)을 쓴다.
+  // 85㎡ 초과다. 사용자 지시로 평형대 질문이 사라진 뒤, 헤드라인은
+  // 언제나 룰셋 임계값(85㎡) 이하를 가정하므로 이 평형(90㎡)의 상세를
+  // 열면 그 가정을 넘어서 부대비용이 달라진다 — 그 차이를 직접 보는
+  // 테스트는 아래 WIDE_DETAIL_UNIT(전용 100㎡, 같은 이유로 다르다는
+  // 것을 한 번 더 확인한다)을 쓴다.
   areaBucket: 90,
   maxExclusiveAreaSqm: 90,
   landLeasehold: "N",
@@ -336,18 +337,28 @@ describe("App - 지역 조회의 네 상태", () => {
  * 평형대·동·예산으로 다르다. 섞으면 틀린 해법을 준다 — 이 저장소가 여섯
  * 번 반복한 실패의 정확한 형태다.
  */
-describe("App - 평형대로 좁히기", () => {
+describe("App - 매매가·면적·입주년차 슬라이더 필터", () => {
   beforeEach(() => {
     window.localStorage.clear();
+    // 슬라이더는 지도의 "필터" 버튼 팝오버 안에 있다(사용자 지시로
+    // 사이드바에서 옮겼다) — 지도는 좌표 조회(complexCoordinates)가
+    // success여야 뜬다. 실 네트워크로 나가지 않게 고정한다.
+    vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
+      units: [
+        { complexKey: "11680|테스트동|2015|테스트단지", lat: 37.1, lon: 127.1 },
+        { complexKey: "11680|테스트동|2015|소형단지", lat: 37.2, lon: 127.2 },
+      ],
+      partialFailureCount: 0,
+    });
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  /** 전용 90㎡ — 중대형이다(85㎡ 초과) */
+  /** 전용 90㎡ */
   const LARGE_UNIT = DETAIL_TEST_UNIT;
-  /** 전용 45㎡ — 소형이다 */
+  /** 전용 45㎡ — 나머지는 LARGE_UNIT과 같다(면적만 다르다) */
   const SMALL_UNIT: ComplexUnit = {
     ...DETAIL_TEST_UNIT,
     complexKey: "11680|테스트동|2015|소형단지",
@@ -370,16 +381,7 @@ describe("App - 평형대로 좁히기", () => {
     );
   }
 
-  const uncheckBandsExcept = async (keep: string) => {
-    for (const chip of screen.getAllByRole("checkbox")) {
-      const name = chip.getAttribute("value");
-      if (name !== keep && (chip as HTMLInputElement).checked) {
-        await userEvent.click(chip);
-      }
-    }
-  };
-
-  it("고른 평형대의 매물만 목록에 남는다", async () => {
+  it("면적 슬라이더로 좁히면 그 범위 밖 매물이 목록에서 빠진다", async () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [SMALL_UNIT, LARGE_UNIT],
       isRegulatedArea: null,
@@ -388,32 +390,57 @@ describe("App - 평형대로 좁히기", () => {
 
     render(<App />);
     await fillMoney();
-    await uncheckBandsExcept("소형");
     await chooseRegion();
     await screen.findByRole("region", { name: "살 수 있는 단지" });
-
     expect(screen.getByText("소형단지")).toBeInTheDocument();
+    expect(screen.getByText("테스트단지")).toBeInTheDocument();
+
+    // 면적 최대를 한 스텝 내려 90㎡(LARGE_UNIT)를 범위 밖으로 민다.
+    // 슬라이더는 지도의 "필터" 버튼 팝오버 안에 있다(사용자 지시로
+    // 사이드바에서 옮겼다 — ComplexMap.tsx의 filterBounds 문서 참고).
+    // SEED 슬라이더는 화살표 키가 움직일 손잡이를 focus로 기억한다 —
+    // keyDown 전에 반드시 그 손잡이로 focus를 먼저 보낸다
+    // (RangeSlider.test.tsx의 같은 주석 참고).
+    fireEvent.click(await screen.findByRole("button", { name: "필터" }));
+    const areaMax = screen.getByRole("slider", { name: "면적 최대" });
+    fireEvent.focus(areaMax);
+    fireEvent.keyDown(areaMax, { key: "ArrowLeft" });
+
+    await screen.findByText("소형단지");
     expect(screen.queryByText("테스트단지")).not.toBeInTheDocument();
   });
 
   /**
-   * 거래는 있었고 예산도 넉넉하다 — 원인은 오직 평형대다. 그 사실을
+   * 거래는 있었고 예산도 넉넉하다 — 원인은 오직 필터다. 그 사실을
    * 말하고, 지역·예산·동 탓으로 돌리지 않는다.
    */
-  it("고른 평형대에 매물이 없으면 평형대 탓이라고 말한다", async () => {
+  it("필터 범위 밖이라 0건이면 그 축(면적) 탓이라고 말한다", async () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
-      units: [LARGE_UNIT],
+      units: [SMALL_UNIT, LARGE_UNIT],
       isRegulatedArea: null,
       dataAsOf: null,
     });
 
     render(<App />);
     await fillMoney();
-    await uncheckBandsExcept("소형");
     await chooseRegion();
-    await screen.findByText(/고른 평형대에 해당하는 매물이/);
+    await screen.findByRole("region", { name: "살 수 있는 단지" });
 
-    expect(screen.getByText(/평형대를 넓혀 보세요/)).toBeInTheDocument();
+    // 면적을 [55, 80]으로 좁힌다 — 45(소형)도 90(테스트단지)도 이 범위
+    // 밖이다. 매매가·입주년차는 둘 다 그대로라(SMALL_UNIT이 LARGE_UNIT과
+    // 면적만 다르다) 도움이 되는 축은 면적 하나뿐이다. 각 키다운 전에
+    // focus를 먼저 보낸다(위 "면적 슬라이더로 좁히면" 테스트와 같은
+    // 이유). 슬라이더는 "필터" 버튼 팝오버 안에 있다.
+    fireEvent.click(await screen.findByRole("button", { name: "필터" }));
+    const areaMin = screen.getByRole("slider", { name: "면적 최소" });
+    fireEvent.focus(areaMin);
+    fireEvent.keyDown(areaMin, { key: "PageUp" });
+    const areaMax = screen.getByRole("slider", { name: "면적 최대" });
+    fireEvent.focus(areaMax);
+    fireEvent.keyDown(areaMax, { key: "PageDown" });
+
+    await screen.findByText(/면적 범위에 해당하는 매물이/);
+    expect(screen.getByText(/면적 범위를 넓혀 보세요/)).toBeInTheDocument();
     // 다른 세 원인은 말하지 않는다.
     expect(screen.queryByText(/실거래가 자체가 없어요/)).not.toBeInTheDocument();
     expect(
@@ -423,8 +450,8 @@ describe("App - 평형대로 좁히기", () => {
   });
 
   /**
-   * 거래가 아예 없는 지역에서는 평형대를 탓하지 않는다 — 평형대를
-   * 넓혀도 결과가 달라지지 않으므로 그 조언은 거짓이다.
+   * 거래가 아예 없는 지역에서는 필터를 탓하지 않는다 — 필터를 넓혀도
+   * 결과가 달라지지 않으므로 그 조언은 거짓이다.
    */
   it("지역에 거래가 아예 없으면 지역 탓이라고 말한다(대조군)", async () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
@@ -435,32 +462,10 @@ describe("App - 평형대로 좁히기", () => {
 
     render(<App />);
     await fillMoney();
-    await uncheckBandsExcept("소형");
     await chooseRegion();
     await screen.findByText(/실거래가 자체가 없어요/);
 
-    expect(screen.queryByText(/고른 평형대에 해당하는 매물이/)).toBeNull();
-  });
-
-  /**
-   * 평형대로 걸러 남은 것이 없으면 **동 좁히기 자체가 나오지 않아야**
-   * 한다 — 고를 수 있는 동이 남아 있으면, 그 동을 고른 사용자가 0건의
-   * 원인을 동으로 읽는다.
-   */
-  it("평형대로 0건이면 동 좁히기를 내지 않는다", async () => {
-    vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
-      units: [LARGE_UNIT],
-      isRegulatedArea: null,
-      dataAsOf: null,
-    });
-
-    render(<App />);
-    await fillMoney();
-    await uncheckBandsExcept("소형");
-    await chooseRegion();
-    await screen.findByText(/고른 평형대에 해당하는 매물이/);
-
-    expect(screen.queryByLabelText("행정동으로 좁히기")).toBeNull();
+    expect(screen.queryByText(/범위에 해당하는 매물이/)).toBeNull();
   });
 });
 
@@ -1028,12 +1033,12 @@ describe("App - 단지 상세(화면 4)", () => {
    * 85㎡ 초과 구간이라 같은 값이 나오고, 그러면 그 테스트가 아무것도
    * 증명하지 못한다.
    */
-  const NARROW_DETAIL_UNIT: ComplexUnit = {
+  const WIDE_DETAIL_UNIT: ComplexUnit = {
     ...DETAIL_TEST_UNIT,
-    complexKey: "11680|테스트동|2015|좁은단지",
-    complexName: "좁은단지",
-    areaBucket: 59,
-    maxExclusiveAreaSqm: 59,
+    complexKey: "11680|테스트동|2015|넓은단지",
+    complexName: "넓은단지",
+    areaBucket: 100,
+    maxExclusiveAreaSqm: 100,
   };
 
   it("단지 목록의 행을 누르면 그 평형의 상세가 열린다", async () => {
@@ -1068,15 +1073,16 @@ describe("App - 단지 상세(화면 4)", () => {
 
   it("상세가 열린 동안에는 실구매 가능 가격이 그 평형 기준으로 바뀌고, 목록으로 돌아가면 원래 값으로 되돌아간다", async () => {
     const { container } = render(<App />);
-    await fillProfile([NARROW_DETAIL_UNIT]);
+    await fillProfile([WIDE_DETAIL_UNIT]);
 
     const priceBefore = container.querySelector(".result-topbar-item-value--money")?.textContent;
 
-    await userEvent.click(screen.getByRole("button", { name: /좁은단지/ }));
+    await userEvent.click(screen.getByRole("button", { name: /넓은단지/ }));
     const priceWhileOpen = container.querySelector(".result-topbar-item-value--money")?.textContent;
-    // 상세가 열려 있는 동안에는 이 평형(전용 59㎡)의 실제 면적 기준으로
-    // 다시 계산된다 — 헤드라인은 고른 평형대(전체)에 85㎡ 초과가 있어
-    // 농특세가 붙는 기준이었으므로 값이 달라야 한다.
+    // 상세가 열려 있는 동안에는 이 평형(전용 100㎡)의 실제 면적 기준으로
+    // 다시 계산된다 — 헤드라인은 언제나 룰셋 임계값(85㎡) 이하를
+    // 가정하므로(사용자 지시로 평형대 질문이 사라졌다), 85㎡를 넘는 이
+    // 평형을 열면 농특세가 붙는 쪽으로 계산이 넘어가 값이 달라야 한다.
     expect(priceWhileOpen).not.toBe(priceBefore);
 
     await userEvent.click(screen.getByRole("button", { name: /목록으로/ }));
@@ -1240,60 +1246,6 @@ describe("App - 단지 상세(화면 4)", () => {
       ).toBeDisabled();
     });
 
-    /**
-     * 평형대를 전부 끄면 조회 버튼이 다시 잠긴다. **빈 선택을 조용히
-     * "전체"로 바꿔 읽지 않는다** — 그렇게 읽으면 화면이 사용자가 고른 적
-     * 없는 조건으로 결과를 그리면서 그 사실을 말하지 않게 된다. 조회
-     * 버튼도 같은 원칙을 따른다 — 평형대 없이 조회하면 결과 화면이 매물을
-     * 하나도 못 보여준다.
-     *
-     * 이 축을 보려면 먼저 돈·주택 수를 모두 채워야 한다 — 안 그러면
-     * 평형대를 아무리 껐다 켜도 "무엇이 모자란지" 조건이 여전히
-     * 돈/주택 수 쪽에 걸려 있어 평형대 안내 자체가 뜨지 않는다.
-     */
-    it("평형대를 전부 끄면 돈 안내가 아니라 평형대 안내가 나오고, 조회 버튼도 잠긴다", async () => {
-      render(<App />);
-      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
-      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
-      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
-      await userEvent.click(
-        screen.getByRole("radio", { name: "무주택이에요" }),
-      );
-
-      for (const chip of screen.getAllByRole("checkbox", { name: /㎡/ })) {
-        await userEvent.click(chip);
-      }
-
-      expect(screen.getByText(/찾는 평형대를 하나 이상/)).toBeInTheDocument();
-      // 원인을 섞지 않는다 — 돈·주택 수는 이미 넣었다.
-      expect(
-        screen.queryByText(/현금·연 소득·주택 수를 알려주면/),
-      ).not.toBeInTheDocument();
-      expect(
-        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
-      ).toBeDisabled();
-    });
-
-    it("칩을 하나 다시 켜면 곧바로 빠져나온다 — 갇히는 화면이 아니다", async () => {
-      render(<App />);
-      await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
-      await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
-      await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
-      await userEvent.click(
-        screen.getByRole("radio", { name: "무주택이에요" }),
-      );
-      const bandChips = screen.getAllByRole("checkbox", { name: /㎡/ });
-      for (const chip of bandChips) {
-        await userEvent.click(chip);
-      }
-
-      await userEvent.click(bandChips[0]!);
-
-      expect(screen.queryByText(/찾는 평형대를 하나 이상/)).toBeNull();
-      expect(
-        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
-      ).not.toBeDisabled();
-    });
   });
 
   describe("리뷰 수정: 오버레이 뒤의 결과 트리는 조작할 수 없다", () => {
@@ -1370,14 +1322,22 @@ describe("App - 단지 상세(화면 4)", () => {
               getZoom() {
                 return 14;
               }
+              // 지도 유형 토글이 부른다(ComplexMap.tsx).
+              setMapTypeId() {}
               fitBounds() {}
               panTo() {}
               destroy() {}
             },
+            // 지도 유형 토글이 지도를 만들 때 읽는다(`naverMapTypeId`).
+            MapTypeId: { NORMAL: "normal", HYBRID: "hybrid" },
             LatLng: class {},
             LatLngBounds: class {},
             Point: class {},
             Marker: class {
+              setMap() {}
+            },
+            // 통학구역 경계(ComplexMap의 학교 패널)가 쓰는 폴리곤.
+            Polygon: class {
               setMap() {}
             },
             InfoWindow: class {
@@ -1527,15 +1487,17 @@ describe("App - 단지 상세(화면 4)", () => {
       expect(subtitle?.textContent).not.toContain("수도권");
     });
 
-    it("목록 화면에서는 고른 평형대가 정한 전제를 적고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
+    it("목록 화면에서는 항상 룰셋 임계값 이하를 가정한다고 적고, 매물을 고르면 그 매물의 실제 면적이라고 밝힌다", async () => {
       const { container } = render(<App />);
       await fillProfile();
 
-      // 종이에도 대표값 하나를 지어내 적지 않는다 — 헤드라인이 쓴 것은
-      // "85㎡ 초과가 섞였는가"라는 전제다.
+      // 종이에도 대표값 하나를 지어내 적지 않는다 — 헤드라인은 언제나
+      // 룰셋 임계값(85㎡) 이하를 가정하고, 초과 시 고지(농특세·
+      // 디딤돌대출)를 함께 적는다.
       const summaryBefore = container.querySelector(".print-summary");
-      expect(summaryBefore?.textContent).toMatch(/85㎡ 초과 기준/);
-      expect(summaryBefore?.textContent).toMatch(/가정/);
+      expect(summaryBefore?.textContent).toMatch(/85㎡ 이하로 가정/);
+      expect(summaryBefore?.textContent).toMatch(/농어촌특별세/);
+      expect(summaryBefore?.textContent).toMatch(/디딤돌대출/);
 
       await userEvent.click(screen.getByRole("button", { name: /테스트단지/ }));
 
@@ -1792,9 +1754,13 @@ describe("App - 지도", () => {
           getZoom() {
             return 14;
           }
+          // 지도 유형 토글이 부른다(ComplexMap.tsx).
+          setMapTypeId() {}
           fitBounds() {}
           destroy() {}
         },
+        // 지도 유형 토글이 지도를 만들 때 읽는다(`naverMapTypeId`).
+        MapTypeId: { NORMAL: "normal", HYBRID: "hybrid" },
         LatLng: class {
           constructor(
             public lat: number,
@@ -1822,6 +1788,10 @@ describe("App - 지도", () => {
               markerEls.push(el);
             }
           }
+          setMap() {}
+        },
+        // 통학구역 경계(ComplexMap의 학교 패널)가 쓰는 폴리곤.
+        Polygon: class {
           setMap() {}
         },
         InfoWindow: class {
@@ -1998,12 +1968,16 @@ describe("전체화면 결과 셸", () => {
           getZoom() {
             return 14;
           }
+          // 지도 유형 토글이 부른다(ComplexMap.tsx).
+          setMapTypeId() {}
           fitBounds() {}
           panTo(coord: unknown) {
             panToCalls.push(coord);
           }
           destroy() {}
         },
+        // 지도 유형 토글이 지도를 만들 때 읽는다(`naverMapTypeId`).
+        MapTypeId: { NORMAL: "normal", HYBRID: "hybrid" },
         LatLng: class {
           constructor(
             public lat: number,
@@ -2032,6 +2006,10 @@ describe("전체화면 결과 셸", () => {
               mapContainer.appendChild(el);
             }
           }
+          setMap() {}
+        },
+        // 통학구역 경계(ComplexMap의 학교 패널)가 쓰는 폴리곤.
+        Polygon: class {
           setMap() {}
         },
         InfoWindow: class {

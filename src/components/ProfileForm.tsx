@@ -1,14 +1,17 @@
 import type { ReactNode } from "react";
-import { rules } from "../state/useAffordability";
 import type { ProfileFormState } from "../state/useProfileForm";
-import { AreaBandSelect } from "./AreaBandSelect";
 import { MoneyInput } from "./MoneyInput";
 
 /**
- * 화면 1이 묻는 것 — **여섯이다.**
+ * 화면 1이 묻는 것 — **다섯이다.**
  *
  * ① 얼마 있어요? ② 연 소득은요? ③ 어디에 살고 싶으세요?(지역) ④
- * 무주택이세요? ⑤ 생애최초 구입이에요? ⑥ 어느 평형대요?
+ * 무주택이세요? ⑤ 생애최초 구입이에요?
+ *
+ * ⚠ **여섯 번째 질문(어느 평형대요?)은 사용자 지시로 사라졌다.** 면적은
+ * 이제 결과 화면의 슬라이더 필터(`ComplexFilters.tsx`)가 맡고, 헤드라인
+ * (실구매 가능 가격)은 항상 룰셋의 `ruralTaxAreaThresholdSqm`(85㎡)
+ * 이하로 가정한다(`useProfileForm`의 `toProfile`).
  *
  * ⚠ **③(지역)은 이 컴포넌트 소유가 아니다.** `App.tsx`가
  * `regionSlot` prop으로 `<RegionSelect>`(+조회 로딩·실패 문구)를
@@ -148,15 +151,6 @@ export function ProfileForm({ state, setField, regionSlot }: ProfileFormProps) {
           생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요.
         </p>
       </fieldset>
-
-      <AreaBandSelect
-        value={state.areaBands}
-        onChange={(bands) => setField("areaBands", bands)}
-        // 85㎡ 경계는 농특세가 실제로 갈리는 지점이라 룰셋에서 온다 —
-        // 숫자를 화면에 박아 두면 룰셋이 바뀐 날 구간 이름의 뜻과
-        // 취득세 계산이 조용히 어긋난다.
-        ruralTaxAreaThresholdSqm={rules.acquisitionTax.ruralTaxAreaThresholdSqm}
-      />
     </form>
   );
 }

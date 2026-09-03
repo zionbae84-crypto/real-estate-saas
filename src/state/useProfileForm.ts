@@ -1,9 +1,4 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  AREA_BANDS,
-  includesAreaAboveThreshold,
-  type AreaBand,
-} from "../lib/area-band";
 import type { BuyerProfile, HouseholdStatus } from "../lib/finance";
 import { rules } from "./useAffordability";
 
@@ -123,20 +118,6 @@ export interface ProfileFormState {
   cash: number | null;
   annualIncome: number | null;
   /**
-   * 사용자가 고른 평형대(전용면적 구간). 화면 1의 네 번째 질문이다.
-   *
-   * **기본값은 전체 선택**(= 필터 없음)이다. 빈 배열은 "전체"가 아니라
-   * "하나도 고르지 않았다"이고, 그 상태에서는 지역 조회 자체를 시작하지
-   * 않는다(`src/lib/area-band.ts`의 `matchesAreaBands` 참고).
-   *
-   * ⚠ **이 값에서 유도되는 것은 면적 값이 아니라 참/거짓 하나다.**
-   * 헤드라인(실구매 가능 가격)은 고른 구간에 **85㎡ 초과가 섞였는가**만
-   * 보고 계산한다({@link assumedExclusiveAreaSqm}) — 범위에서 대표값
-   * 하나를 뽑는 규칙은 만들지 않는다. 목록의 각 줄과 상세는 지금까지처럼
-   * 그 평형의 **실제** 전용면적으로 계산한다.
-   */
-  areaBands: AreaBand[];
-  /**
    * 보유 주택 수(채). **이번에 사려는 집은 세지 않는다.**
    *
    * `null`은 "아직 답하지 않았다"는 뜻이다 — 미답변을 0(무주택)으로
@@ -173,63 +154,9 @@ export interface ProfileFormState {
   touched: AssumableField[];
 }
 
-/**
- * 고른 평형대에 85㎡ 초과가 섞였을 때 임계값 위로 얼마나 올릴지(㎡).
- *
- * **값 자체에는 뜻이 없다.** 면적이 계산을 가르는 지점은 `> 임계값`
- * 하나뿐이라(농특세 — `finance/acquisition-cost.ts`, 정책대출 면적 제한 —
- * `finance/policy-loans.ts`) 임계값을 넘기기만 하면 어떤 값을 써도 결과가
- * 같다. `useProfileForm.test.ts`의 "임계값 위에서는 어떤 값을 넣어도
- * 결과가 같다"가 그 사실을 증거로 만든다 — 언젠가 면적이 계산을 가르는
- * 지점이 하나 더 생기면 그 테스트가 먼저 깨진다.
- *
- * 그래서 이 숫자는 화면에도 종이에도 나오지 않는다. `AssumptionLine`과
- * `PrintSummary`는 "85㎡ 초과 기준"이라고 **전제**를 적는다.
- */
-const ABOVE_THRESHOLD_MARGIN_SQM = 1;
-
-/**
- * 헤드라인(실구매 가능 가격·안전선)을 계산할 전용면적을 **고른
- * 평형대에서** 유도한다.
- *
- * ⚠ **범위에서 대표값 하나를 지어내지 않는다.** 넘어가는 정보는 "고른
- * 구간에 85㎡ 초과가 섞였는가"라는 참/거짓 하나이고
- * (`includesAreaAboveThreshold`), 그것이 면적이 계산을 실제로 가르는
- * 유일한 지점이다. 대표값을 뽑는 규칙을 만들면 그 규칙이 화면 어디에도
- * 적히지 않은 채 헤드라인을 움직인다 — 한 축의 답이 다른 축의 기본값으로
- * 흡수되는, 이 저장소가 여섯 번 반복한 사고의 모양이다.
- *
- * - **섞였으면** 임계값 위로 잡는다: 농특세가 붙고 정책대출 면적 제한이
- *   걸린다. **보수적인 쪽**이다(살 수 있는 가격을 과대평가하지 않는다).
- * - **안 섞였으면** 임계값을 쓴다. 이때는 가정이 아니라 **사실**이다 —
- *   고른 구간이 전부 임계값 이하이므로 목록의 어느 줄도 농특세가 붙지
- *   않는다. 그래서 `AssumptionLine`도 `ComplexList`의 기준 안내도 그
- *   경우에는 아무 말을 하지 않는다.
- *
- * 예전에는 이 값이 **선택과 무관한 폼 상태**였다(항상 85㎡). 그때는
- * 85㎡ 초과만 고른 사용자에게 헤드라인이 낙관적으로 틀렸고(농특세가
- * 빠지고 정책대출 면적 제한이 안 걸렸다), 목록 위 문구가 그 사실을
- * 해명하고 있었다.
- *
- * 임계값을 인자로 받는 이유는 그대로다: 숫자를 박아 두면 룰셋이 바뀐 날
- * 방향이 조용히 어긋난다.
- */
-export function assumedExclusiveAreaSqm(
-  bands: readonly AreaBand[],
-  ruralTaxAreaThresholdSqm: number = rules.acquisitionTax
-    .ruralTaxAreaThresholdSqm,
-): number {
-  return includesAreaAboveThreshold(bands, ruralTaxAreaThresholdSqm)
-    ? ruralTaxAreaThresholdSqm + ABOVE_THRESHOLD_MARGIN_SQM
-    : ruralTaxAreaThresholdSqm;
-}
-
 export const DEFAULT_FORM_STATE: ProfileFormState = {
   cash: null,
   annualIncome: null,
-  // 기본값은 전체 선택 = 필터 없음. 처음 온 사용자는 네 번째 질문에
-  // 이미 답한 상태로 시작한다(스펙 §4).
-  areaBands: [...AREA_BANDS],
   // cash·annualIncome과 같은 이유로 null이다 — 답하기 전까지는 계산
   // 자체를 하지 않는다(ProfileFormState.ownedHomeCount 주석 참고).
   ownedHomeCount: null,
@@ -253,13 +180,6 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
 /**
  * 현금·연 소득·주택 수가 모두 채워졌을 때만 BuyerProfile을 만든다.
  *
- * **평형대는 이 조건에 없다.** 평형대는 "무엇을 보여줄까"를 정하는
- * 축이고, 여기서 만드는 것은 "얼마를 빌릴 수 있고 얼마짜리를 살 수
- * 있는가"다 — 두 축을 한 조건에 묶으면, 평형대를 비운 사용자에게 화면이
- * "예산을 계산할 수 없다"고 **원인을 틀리게** 말하게 된다. 이 저장소가
- * 여섯 번 반복한 사고의 모양이다. 평형대가 비었다는 사실은 화면 1이
- * 따로, 자기 문장으로 말한다(App.tsx).
- *
  * **주택 수는 현금·소득과 같은 자리에 있다.** 미답변을 0(무주택)으로
  * 채우면 정책대출 자격이 넓어져 한도가 커지는데, 그건 사용자가 확인한
  * 적 없는 값으로 낙관적인 답을 내는 것이다(`ProfileFormState.ownedHomeCount`
@@ -269,6 +189,15 @@ export const DEFAULT_FORM_STATE: ProfileFormState = {
  * `false`가 안전한 방향이라 답을 막지 않는다. 남은 가정 하나(기존 대출)만
  * {@link ASSUMED_REMOVED_INPUTS}에서 온다 — 값이 한 곳에만 있어야
  * `AssumptionLine`이 적는 문장과 실제 계산이 어긋날 수 없다.
+ *
+ * **`exclusiveAreaSqm`은 언제나 룰셋의 `ruralTaxAreaThresholdSqm`(85㎡)이다.**
+ * 예전에는 화면 1에서 고른 평형대에 따라 이 값이 갈렸지만, 사용자
+ * 지시로 그 질문 자체가 사라졌다 — 이제 헤드라인(실구매 가능 가격)은
+ * 항상 "85㎡ 이하라면"을 전제로 계산하고, 85㎡를 넘는 매물의 농특세·
+ * 정책대출 제한은 목록·상세가 그 매물의 **실제** 면적으로 다시 계산해
+ * 알린다(`ComplexList.tsx`·`ComplexDetail.tsx`). 숫자를 박아 두지 않고
+ * 룰셋에서 읽는 이유는 그대로다: 룰셋이 바뀐 날 이 값과 취득세 계산이
+ * 조용히 어긋나지 않게 하려는 것이다.
  */
 export function toProfile(state: ProfileFormState): BuyerProfile | null {
   if (
@@ -286,8 +215,7 @@ export function toProfile(state: ProfileFormState): BuyerProfile | null {
     isRegulatedArea: state.isRegulatedArea,
     ownedHomeCount: state.ownedHomeCount,
     isFirstTimeBuyer: state.isFirstTimeBuyer,
-    // 폼 상태에 면적은 없다 — 고른 평형대에서 유도한다(위 주석 참고).
-    exclusiveAreaSqm: assumedExclusiveAreaSqm(state.areaBands),
+    exclusiveAreaSqm: rules.acquisitionTax.ruralTaxAreaThresholdSqm,
     ...ASSUMED_REMOVED_INPUTS,
   };
 
@@ -351,7 +279,6 @@ export function loadStoredState(
   return {
     cash: amount(o.cash),
     annualIncome: amount(o.annualIncome),
-    areaBands: parseAreaBands(o.areaBands),
     // cash·annualIncome과 같은 취급이다 — 이제 화면에 실제 입력란이
     // 있으므로(없앤 입력이 아니다) 저장값을 되살린다. 형태가 어긋나면
     // null로 떨어져 "아직 답하지 않음"이 되고, toProfile이 계산을 막는다.
@@ -414,39 +341,6 @@ function parseTouched(value: unknown): AssumableField[] {
     (field) =>
       ASSUMABLE_FIELD_SCOPE[field] === "restorable" && value.includes(field),
   );
-}
-
-/**
- * 저장된 평형대 선택을 복원한다.
- *
- * 배열이 아니면(옛 저장본에는 이 키가 아예 없다) **전체 선택**으로
- * 되돌린다 — 필터를 걸지 않는 쪽이라 결과를 좁히지 않는다.
- *
- * ⚠ **모르는 값이 하나라도 섞여 있으면 아는 값만 남기지 않고 통째로
- * 버린다.** 구간이 넷에서 셋으로 바뀌면서 옛 이름("중형"·"대형")이
- * 저장본에 남은 사용자가 있다. 아는 값만 남기면 "중형·대형"(옛 뜻으로
- * 85㎡ 초과 전부)을 고른 사용자가 빈 선택으로 떨어지고, 화면은 그
- * 사실을 말하지 않는다 — 저장된 값이 사용자가 고른 적 없는 조건을
- * 만드는, 이 저장소가 이미 겪은 결함(커밋 `c90babf`)과 같은 모양이다.
- * 옛 이름을 새 구간으로 **번역**하지도 않는다: 옛 "중형"은 85~102㎡였고
- * 새 구간에 같은 뜻의 자리가 없어, 무엇으로 옮기든 사용자가 고른 적
- * 없는 조건이 된다.
- *
- * 전체 선택으로 되돌리는 것은 **결과를 좁히지 않는** 방향이고, 그 상태는
- * 화면 1의 칩에 그대로 보인다 — 사용자가 곧바로 다시 좁힐 수 있다.
- *
- * 빈 배열은 그대로 둔다. 그건 "하나도 고르지 않았다"는 정당한 상태다
- * (화면 1이 그 사실을 말하고, 칩을 하나 누르면 곧바로 빠져나온다).
- *
- * 순서는 저장본이 아니라 {@link AREA_BANDS}가 정한다 — 화면에 그리는
- * 순서와 종이에 적는 순서가 저장 순서에 좌우되지 않게 한다.
- */
-function parseAreaBands(value: unknown): AreaBand[] {
-  if (!Array.isArray(value)) return [...DEFAULT_FORM_STATE.areaBands];
-  const known = (band: unknown): band is AreaBand =>
-    AREA_BANDS.includes(band as AreaBand);
-  if (!value.every(known)) return [...DEFAULT_FORM_STATE.areaBands];
-  return AREA_BANDS.filter((band) => value.includes(band));
 }
 
 /**

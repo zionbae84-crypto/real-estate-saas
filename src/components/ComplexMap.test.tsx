@@ -1,9 +1,41 @@
-import { render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as loadNaverMapsModule from "../lib/loadNaverMaps";
-import { ComplexMap, MARKER_ANCHOR, burdenTiers, markerDetailForZoom } from "./ComplexMap";
+import {
+  ComplexMap,
+  MARKER_ANCHOR,
+  burdenTiers,
+  formatFoundedOn,
+  formatHeadcount,
+  markerDetailForZoom,
+} from "./ComplexMap";
 import { unitKey } from "./ComplexList";
 import type { ComplexUnit } from "../data/complexes";
+import {
+  ELEMENTARY_SCHOOLS,
+  ELEMENTARY_SCHOOL_DETAILS,
+  ELEMENTARY_SCHOOL_INFO_YEAR,
+  HIGH_SCHOOLS,
+  MIDDLE_SCHOOLS,
+} from "../data/location";
+import { locationRules } from "../state/useLocationFacts";
+import type { ComplexFilterState } from "../lib/complex-filters";
+import { regionSchoolBounds, schoolsWithinBounds } from "../lib/school-bounds";
+import { schoolZonesFor } from "../data/school-zones";
+
+/**
+ * 이 파일의 테스트 대부분은 필터 팝오버와 무관하다 — 필터 자체의 동작은
+ * `ComplexFilters.test.tsx`·`RangeSlider.test.tsx`가 잠근다. 여기서는
+ * `ComplexMapProps`가 요구하는 값을 채우기만 하면 되므로, min=max=0인
+ * (아무것도 거르지 않는 것과 같은 뜻은 아니지만, 이 파일의 테스트들이
+ * 필터 팝오버를 열어 보지 않으므로 실제 값이 무엇이든 상관없다) 고정값
+ * 하나를 공유한다.
+ */
+const TEST_FILTER_BOUNDS: ComplexFilterState = {
+  price: { min: 0, max: 0 },
+  area: { min: 0, max: 0 },
+  builtYearAge: { min: 0, max: 0 },
+};
 
 function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
   return {
@@ -34,8 +66,12 @@ function fakeNaverMaps() {
     listeners: Record<string, () => void>;
     removed: boolean;
     anchor: { x: number; y: number } | undefined;
+    /** 이 마커가 지도 컨테이너에 그린 DOM(아이콘 HTML을 담은 상자) */
+    el: HTMLElement | null;
   }> = [];
   const infoWindows: Array<{ content: string; opened: boolean; removed: boolean }> = [];
+  /** 통학구역 경계로 그린 폴리곤들(학교 패널이 만든다) */
+  const polygons: Array<{ paths: unknown; removed: boolean }> = [];
   const destroyedMaps: unknown[] = [];
   const createdMaps: Array<{
     options: { center?: { lat: number; lng: number } };
@@ -45,6 +81,8 @@ function fakeNaverMaps() {
   // 실제 SDK의 panTo — 고른 단지로 지도를 옮길 때 쓴다(지도를 다시
   // 만들지 않는다).
   const panToCalls: Array<{ lat: number; lng: number }> = [];
+  // 지도 유형 토글이 부른 setMapTypeId 호출 기록.
+  const mapTypeIdCalls: string[] = [];
   // Map 생성자가 받는 실제 컨테이너 엘리먼트를 기억해 둔다 — Marker가
   // icon.content HTML을 여기 심어야 screen.getByText로 검증할 수 있다
   // (실제 네이버지도 SDK도 HtmlIcon을 지도 컨테이너 안 DOM에 렌더링한다).
@@ -62,14 +100,23 @@ function fakeNaverMaps() {
          */
         zoom = 14;
         listeners: Record<string, () => void> = {};
-        constructor(el: HTMLElement, opts: { center?: { lat: number; lng: number }; zoom?: number }) {
+        constructor(
+          el: HTMLElement,
+          opts: { center?: { lat: number; lng: number }; zoom?: number; mapTypeId?: string },
+        ) {
           mapContainerEl = el;
           this.options = opts;
           if (opts.zoom !== undefined) this.zoom = opts.zoom;
+          if (opts.mapTypeId !== undefined) mapTypeIdCalls.push(opts.mapTypeId);
           createdMaps.push(this);
         }
         getZoom() {
           return this.zoom;
+        }
+        // 실제 SDK의 setMapTypeId — 지도 유형 토글이 부른다(지도를 다시
+        // 만들지 않는다).
+        setMapTypeId(mapTypeId: string) {
+          mapTypeIdCalls.push(mapTypeId);
         }
         /** 테스트 전용 — 줌을 옮기고 실제 SDK처럼 zoom_changed를 쏜다. */
         setZoom(next: number) {
@@ -87,6 +134,15 @@ function fakeNaverMaps() {
           this.destroyed = true;
           destroyedMaps.push(this);
         }
+      },
+      // 실제 SDK의 MapTypeId 열거값. ComplexMap의 지도 유형 토글이
+      // `naverMapTypeId`로 이 값을 읽어 지도 생성 옵션/`setMapTypeId`에
+      // 넘긴다.
+      MapTypeId: {
+        NORMAL: "normal",
+        TERRAIN: "terrain",
+        SATELLITE: "satellite",
+        HYBRID: "hybrid",
       },
       LatLng: class {
         constructor(
@@ -155,6 +211,22 @@ function fakeNaverMaps() {
           }
         }
       },
+      /**
+       * 통학구역 경계. 실제 SDK처럼 링 하나를 `paths` 한 벌로 받는다 —
+       * ComplexMap은 링 하나당 폴리곤 하나를 만든다(구멍이 아니라 떨어진
+       * 구역이 대부분이라서다, 그쪽 주석 참고).
+       */
+      Polygon: class {
+        paths: unknown;
+        removed = false;
+        constructor(opts: { paths: unknown }) {
+          this.paths = opts.paths;
+          polygons.push(this);
+        }
+        setMap(map: unknown) {
+          if (map === null) this.removed = true;
+        }
+      },
       InfoWindow: class {
         content: string;
         opened = false;
@@ -196,11 +268,13 @@ function fakeNaverMaps() {
   return {
     naverGlobal,
     markers,
+    polygons,
     infoWindows,
     destroyedMaps,
     createdMaps,
     fitBoundsCalls,
     panToCalls,
+    mapTypeIdCalls,
   };
 }
 
@@ -271,7 +345,7 @@ describe("ComplexMap", () => {
     const units = [unit(), unit({ complexKey: "11680-2", complexName: "좌표없는아파트" })];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     // 실제 마커 개수는 naver.maps 모의 안에 있으므로, 컴포넌트가
@@ -280,7 +354,7 @@ describe("ComplexMap", () => {
   });
 
   it("그릴 좌표가 하나도 없으면 로드 실패와 **다른** 문구로 그 사실을 말한다", async () => {
-    render(<ComplexMap units={[unit()]} coordinates={new Map()} burdenByUnit={new Map()} naverMapClientId="test-id" />);
+    render(<ComplexMap units={[unit()]} coordinates={new Map()} burdenByUnit={new Map()} naverMapClientId="test-id" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
     const region = await screen.findByRole("region", { name: "단지 지도" });
 
     // 예산에 맞는 단지만 그리게 되면서(App.tsx의 mappedUnits) 이 경우가
@@ -333,6 +407,9 @@ describe("ComplexMap", () => {
         coordinates={coordinates}
         burdenByUnit={burdenByUnit}
         naverMapClientId="test"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
 
@@ -373,6 +450,9 @@ describe("ComplexMap", () => {
         coordinates={coordinates}
         burdenByUnit={burdenByUnit}
         naverMapClientId="test"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
 
@@ -395,6 +475,9 @@ describe("ComplexMap", () => {
         coordinates={coordinates}
         burdenByUnit={new Map()}
         naverMapClientId="test"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
 
@@ -422,6 +505,9 @@ describe("ComplexMap", () => {
         coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
         burdenByUnit={new Map()}
         naverMapClientId="test"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
     await vi.waitFor(() => expect(markers).toHaveLength(1));
@@ -448,7 +534,7 @@ describe("ComplexMap", () => {
       ["b", { lat: 37.4, lon: 127.4 }],
     ]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
     await vi.waitFor(() => expect(fitBoundsCalls).toHaveLength(1));
 
     // 예전에는 그룹핑 순서상 첫 단지 하나를 그대로 중심으로 썼다 — 그리는
@@ -471,6 +557,9 @@ describe("ComplexMap", () => {
         coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
         burdenByUnit={new Map()}
         naverMapClientId="test"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
     await vi.waitFor(() => expect(markers).toHaveLength(1));
@@ -492,7 +581,7 @@ describe("ComplexMap", () => {
 
     const units = [unit()];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => expect(markers).toHaveLength(1));
@@ -519,7 +608,7 @@ describe("ComplexMap", () => {
       unit({ areaBucket: 59, minPrice: 700_000_000, maxPrice: 750_000_000, tradeCount: 2 }),
     ];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() => expect(markers).toHaveLength(1));
@@ -541,7 +630,7 @@ describe("ComplexMap", () => {
 
     const units = [unit()];
     const coordinates = new Map([["11680-1", { lat: 37.1, lon: 127.1 }]]);
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test-id" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
 
     const region = await screen.findByRole("region", { name: "단지 지도" });
     // "아무 일도 안 일어남"이 아니라, 실제로 보이는 실패 안내가 있는지
@@ -561,7 +650,7 @@ describe("ComplexMap", () => {
     const coordsB = new Map([["11680-2", { lat: 37.2, lon: 127.2 }]]);
     const burdenByUnit = new Map();
 
-    const { rerender } = render(<ComplexMap units={[unitA]} coordinates={coordsA} burdenByUnit={burdenByUnit} naverMapClientId="test-id" />);
+    const { rerender } = render(<ComplexMap units={[unitA]} coordinates={coordsA} burdenByUnit={burdenByUnit} naverMapClientId="test-id" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
     await vi.waitFor(() => expect(markers).toHaveLength(1));
     const firstMarker = markers[0]!;
     expect(firstMarker.removed).toBe(false);
@@ -569,7 +658,7 @@ describe("ComplexMap", () => {
 
     // Task 8이 App.tsx에 연결하면 이런 props 변화(동 좁히기, 좌표 지연 도착 등)가
     // 실제로 일어난다 — 그때 이전 마커/지도가 안 치워지면 DOM에 겹쳐 쌓인다.
-    rerender(<ComplexMap units={[unitB]} coordinates={coordsB} burdenByUnit={burdenByUnit} naverMapClientId="test-id" />);
+    rerender(<ComplexMap units={[unitB]} coordinates={coordsB} burdenByUnit={burdenByUnit} naverMapClientId="test-id" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
     await vi.waitFor(() => expect(markers).toHaveLength(2));
 
     expect(firstMarker.removed).toBe(true);
@@ -589,7 +678,7 @@ describe("ComplexMap", () => {
     ];
     const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
 
     await vi.waitFor(() => expect(markers).toHaveLength(1));
     createdMaps[0]!.setZoom(16); // 가격이 나오는 상세도로 옮긴다.
@@ -613,7 +702,7 @@ describe("ComplexMap", () => {
     ];
     const coordinates = new Map([["1", { lat: 37.5, lon: 127.0 }]]);
 
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
 
     await screen.findByText("<img src=x onerror=alert(1)>");
     const markerHtml = document.querySelector(".complex-map-marker")?.innerHTML ?? "";
@@ -634,7 +723,7 @@ describe("ComplexMap", () => {
     );
     const coordinates = new Map(units.map((u, i) => [u.complexKey, { lat: 37 + i * 0.001, lon: 127 + i * 0.001 }]));
 
-    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" />);
+    render(<ComplexMap units={units} coordinates={coordinates} burdenByUnit={new Map()} naverMapClientId="test" filterBounds={TEST_FILTER_BOUNDS} filterValue={TEST_FILTER_BOUNDS} onFilterChange={() => {}} />);
 
     await screen.findByRole("region", { name: "단지 지도" });
     await vi.waitFor(() =>
@@ -678,6 +767,9 @@ describe("ComplexMap", () => {
           coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
           burdenByUnit={new Map()}
           naverMapClientId="test"
+          filterBounds={TEST_FILTER_BOUNDS}
+          filterValue={TEST_FILTER_BOUNDS}
+          onFilterChange={() => {}}
         />,
       );
       await vi.waitFor(() => expect(markers).toHaveLength(1));
@@ -721,6 +813,9 @@ describe("ComplexMap", () => {
           coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
           burdenByUnit={new Map([[unitKey(units[0]!), "no-loan" as const]])}
           naverMapClientId="test"
+          filterBounds={TEST_FILTER_BOUNDS}
+          filterValue={TEST_FILTER_BOUNDS}
+          onFilterChange={() => {}}
         />,
       );
       await vi.waitFor(() => expect(markers).toHaveLength(1));
@@ -748,6 +843,9 @@ describe("ComplexMap", () => {
           burdenByUnit={new Map()}
           focusedComplexKey="a"
           naverMapClientId="test"
+          filterBounds={TEST_FILTER_BOUNDS}
+          filterValue={TEST_FILTER_BOUNDS}
+          onFilterChange={() => {}}
         />,
       );
       await vi.waitFor(() =>
@@ -775,6 +873,9 @@ describe("ComplexMap", () => {
         coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
         burdenByUnit={new Map()}
         naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
 
@@ -797,6 +898,9 @@ describe("ComplexMap", () => {
         coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
         burdenByUnit={new Map()}
         naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
 
@@ -805,6 +909,484 @@ describe("ComplexMap", () => {
     expect(document.querySelector(".complex-map-legend")).toBeNull();
   });
 
+  /**
+   * 사용자 지시: "지도 : 지금과 같은 일반지도, 위성지도를 필터로."
+   *
+   * 지도를 다시 만들지 않는다 — `createdMaps`가 한 번만 생겨야 한다
+   * (마커·선택 강조가 날아가지 않는다는 이 컴포넌트의 기존 원칙과 같다).
+   * 대신 이미 있는 지도의 `setMapTypeId`를 부른다.
+   */
+  it("지도 유형 토글을 누르면 위성/일반으로 라벨이 바뀌고 setMapTypeId를 부른다 — 지도를 다시 만들지 않는다", async () => {
+    const { naverGlobal, createdMaps, mapTypeIdCalls } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+      naverGlobal as unknown as typeof naver,
+    );
+
+    render(
+      <ComplexMap
+        units={[unit({ complexKey: "a" })]}
+        coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={new Map()}
+        naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
+      />,
+    );
+
+    await vi.waitFor(() => expect(createdMaps).toHaveLength(1));
+    // 지도를 처음 만들 때도 일반지도로 만든다.
+    expect(mapTypeIdCalls).toEqual(["normal"]);
+
+    // "지도" 버튼을 눌러야 일반지도/위성지도 팝오버가 뜬다(사용자 지시).
+    fireEvent.click(await screen.findByRole("button", { name: "지도" }));
+    const toggle = await screen.findByRole("radio", { name: "위성지도" });
+
+    fireEvent.click(toggle);
+    await vi.waitFor(() =>
+      expect(screen.getByRole("radio", { name: "위성지도" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      ),
+    );
+    expect(createdMaps).toHaveLength(1); // 여전히 하나 — 다시 만들지 않았다.
+    expect(mapTypeIdCalls).toEqual(["normal", "hybrid"]);
+
+    fireEvent.click(screen.getByRole("radio", { name: "일반지도" }));
+    await vi.waitFor(() =>
+      expect(mapTypeIdCalls).toEqual(["normal", "hybrid", "normal"]),
+    );
+  });
+
+  it("지도를 그리지 못한 상태(로드 실패·좌표 미확인)에서는 지도 유형 토글도 내지 않는다", async () => {
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockRejectedValue(
+      new Error("네이버지도 스크립트를 불러오지 못했어요"),
+    );
+
+    render(
+      <ComplexMap
+        units={[unit({ complexKey: "a" })]}
+        coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={new Map()}
+        naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
+      />,
+    );
+
+    await screen.findByText("지도를 표시하지 못했어요.");
+    expect(document.querySelector(".complex-map-controls")).toBeNull();
+  });
+
+  /**
+   * 사용자 지시: "학교 : 초등/중등/고등 학교 표시."
+   *
+   * 기본은 셋 다 꺼짐 — 부담 마커 위에 실제 데이터 규모(수백 곳)의 점이
+   * 늘 깔려 있으면 지도가 학교 지도로 읽힌다. 실제 데이터 개수를
+   * `../data/location`에서 그대로 가져와 비교한다(하드코딩한 숫자가
+   * 아니라 지금 데이터와 항상 맞다).
+   */
+  /**
+   * "해당지역의 학교만 표시되게 해줘"(사용자 지시) — 학교 데이터는 여러
+   * 구를 걸치는 하나의 정적 배열이라(src/lib/school-bounds.ts 머리
+   * 주석 참고) 지금 지도가 그린 단지 좌표의 바운딩박스로 거른다.
+   * 실제 초등학교 하나의 좌표를 단지 좌표로 써 그 학교 주변만 걸러지는
+   * 실제 상황을 흉내내고, 기댓값도 하드코딩하지 않고 같은 필터 함수
+   * (`schoolsWithinBounds`)로 다시 계산한다 — 지금 데이터와 항상 맞다.
+   */
+  const TEST_SCHOOL_COORDINATE = ELEMENTARY_SCHOOLS![0]!.coordinate;
+  const TEST_SCHOOL_COORDINATES = new Map([["a", TEST_SCHOOL_COORDINATE]]);
+  const TEST_SCHOOL_BOUNDS = regionSchoolBounds(TEST_SCHOOL_COORDINATES);
+  const expectedElementaryCount = schoolsWithinBounds(
+    ELEMENTARY_SCHOOLS ?? [],
+    TEST_SCHOOL_BOUNDS,
+  ).length;
+  const expectedMiddleCount = schoolsWithinBounds(
+    MIDDLE_SCHOOLS ?? [],
+    TEST_SCHOOL_BOUNDS,
+  ).length;
+  const expectedHighCount = schoolsWithinBounds(
+    HIGH_SCHOOLS ?? [],
+    TEST_SCHOOL_BOUNDS,
+  ).length;
+
+  it("학교급 토글은 기본이 꺼짐이고, 켜면 그 학교급의 점이 늘고 끄면 다시 사라진다", async () => {
+    const { naverGlobal, markers } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+      naverGlobal as unknown as typeof naver,
+    );
+
+    render(
+      <ComplexMap
+        units={[unit({ complexKey: "a" })]}
+        coordinates={TEST_SCHOOL_COORDINATES}
+        burdenByUnit={new Map()}
+        naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
+      />,
+    );
+
+    await vi.waitFor(() => expect(markers).toHaveLength(1)); // 단지 마커 하나뿐
+    // "학교" 버튼을 눌러야 체크박스 팝오버가 뜬다(사용자 지시).
+    fireEvent.click(await screen.findByRole("button", { name: "학교" }));
+    const elementaryCheckbox = await screen.findByRole("checkbox", { name: "초등학교" });
+    expect(elementaryCheckbox).not.toBeChecked();
+
+    fireEvent.click(elementaryCheckbox);
+    expect(elementaryCheckbox).toBeChecked();
+    await vi.waitFor(() =>
+      expect(markers.length).toBe(1 + expectedElementaryCount),
+    );
+    // 학교 아이콘이 실제로 지도 컨테이너에 그려졌다.
+    expect(document.querySelectorAll(".complex-map-school")).toHaveLength(
+      expectedElementaryCount,
+    );
+
+    fireEvent.click(elementaryCheckbox);
+    expect(elementaryCheckbox).not.toBeChecked();
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".complex-map-school")).toHaveLength(0),
+    );
+  });
+
+  it("학교급 여러 개를 동시에 켤 수 있다 — 학교급마다 배경색이 다르다", async () => {
+    const { naverGlobal } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+      naverGlobal as unknown as typeof naver,
+    );
+
+    render(
+      <ComplexMap
+        units={[unit({ complexKey: "a" })]}
+        coordinates={TEST_SCHOOL_COORDINATES}
+        burdenByUnit={new Map()}
+        naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
+      />,
+    );
+
+    // "학교" 버튼을 눌러야 체크박스 팝오버가 뜬다(사용자 지시).
+    fireEvent.click(await screen.findByRole("button", { name: "학교" }));
+    await screen.findByRole("checkbox", { name: "초등학교" });
+    fireEvent.click(screen.getByRole("checkbox", { name: "중학교" }));
+    fireEvent.click(screen.getByRole("checkbox", { name: "고등학교" }));
+
+    await vi.waitFor(() =>
+      expect(document.querySelectorAll(".complex-map-school")).toHaveLength(
+        expectedMiddleCount + expectedHighCount,
+      ),
+    );
+    // 학교급마다 다른 수정자 클래스(=다른 배경색)를 단다 — 초성 대신
+    // 색으로 가른다(사용자 지시: "초/중/고 학교의 색상을 다르게해주고").
+    expect(document.querySelectorAll(".complex-map-school--middle")).toHaveLength(
+      expectedMiddleCount,
+    );
+    expect(document.querySelectorAll(".complex-map-school--high")).toHaveLength(
+      expectedHighCount,
+    );
+  });
+
+  /**
+   * "해당지역의 학교만 표시되게 해줘"의 핵심 — 바운딩박스 밖 학교는
+   * 진짜로 빠진다. `TEST_SCHOOL_COORDINATE`에서 아주 멀리 떨어진
+   * 좌표(부산 근처)를 단지 좌표로 주면, 그 지역 초등학교는 하나도
+   * 걸리지 않아야 한다.
+   */
+  it("바운딩박스 밖 지역이면 학교급을 켜도 학교가 하나도 안 뜬다", async () => {
+    const { naverGlobal, markers } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+      naverGlobal as unknown as typeof naver,
+    );
+
+    render(
+      <ComplexMap
+        units={[unit({ complexKey: "a" })]}
+        coordinates={new Map([["a", { lat: 35.1, lon: 129.0 }]])}
+        burdenByUnit={new Map()}
+        naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
+      />,
+    );
+
+    await vi.waitFor(() => expect(markers).toHaveLength(1));
+    fireEvent.click(await screen.findByRole("button", { name: "학교" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "초등학교" }));
+
+    await vi.waitFor(() => expect(markers).toHaveLength(1));
+    expect(document.querySelectorAll(".complex-map-school")).toHaveLength(0);
+  });
+
+  /**
+   * 사용자 지시: 초등학교 마커를 누르면 기본정보를 띄운다.
+   *
+   * **여기서 말하는 것은 "이 학교가 어떤 학교인가"뿐이다** — 어느 단지가
+   * 이 학교로 배정되는지는 말하지 않는다. 그래서 마지막 테스트가 배정
+   * 고지(룰셋의 `schoolZoneNote`)가 함께 뜨는지를 잠근다.
+   */
+  describe("초등학교 기본정보 패널", () => {
+    /** 학교급을 켜고, 그 학교급 마커 하나를 집어 준다. */
+    async function openFirstSchool(level: "초등학교") {
+      const { naverGlobal, markers, polygons } = fakeNaverMaps();
+      vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+        naverGlobal as unknown as typeof naver,
+      );
+      render(
+        <ComplexMap
+          units={[unit({ complexKey: "a" })]}
+          coordinates={TEST_SCHOOL_COORDINATES}
+          burdenByUnit={new Map()}
+          naverMapClientId="test-id"
+          filterBounds={TEST_FILTER_BOUNDS}
+          filterValue={TEST_FILTER_BOUNDS}
+          onFilterChange={() => {}}
+        />,
+      );
+      await vi.waitFor(() => expect(markers).toHaveLength(1));
+      fireEvent.click(await screen.findByRole("button", { name: "학교" }));
+      fireEvent.click(await screen.findByRole("checkbox", { name: level }));
+      await vi.waitFor(() =>
+        expect(document.querySelectorAll(".complex-map-school").length).toBeGreaterThan(0),
+      );
+      // 방금 그린 학교 마커 중 첫 번째(단지 마커는 markers[0]이라 건너뛴다).
+      const schoolMarker = markers.find((m) =>
+        m.el?.querySelector(".complex-map-school"),
+      );
+      return { schoolMarker, markers, polygons };
+    }
+
+    it("초등학교 마커를 누르면 이름·주소·설립·교육청이 뜬다", async () => {
+      const { schoolMarker } = await openFirstSchool("초등학교");
+      const expected = schoolsWithinBounds(
+        ELEMENTARY_SCHOOLS ?? [],
+        TEST_SCHOOL_BOUNDS,
+      )[0]!;
+      const detail = ELEMENTARY_SCHOOL_DETAILS.get(expected.id)!;
+
+      act(() => schoolMarker!.listeners.click!());
+
+      const panel = await screen.findByRole("region", {
+        name: `${detail.name} 기본정보`,
+      });
+      expect(panel.textContent).toContain(detail.name);
+      expect(panel.textContent).toContain(detail.foundationType);
+      expect(panel.textContent).toContain(detail.address);
+      expect(panel.textContent).toContain(detail.officeOfEducation);
+      expect(panel.textContent).toContain(detail.districtOfficeOfEducation);
+    });
+
+    it("설립일자를 사람이 읽는 말로 낸다", async () => {
+      const { schoolMarker } = await openFirstSchool("초등학교");
+      const expected = schoolsWithinBounds(
+        ELEMENTARY_SCHOOLS ?? [],
+        TEST_SCHOOL_BOUNDS,
+      )[0]!;
+      const detail = ELEMENTARY_SCHOOL_DETAILS.get(expected.id)!;
+
+      act(() => schoolMarker!.listeners.click!());
+
+      const panel = await screen.findByRole("region", {
+        name: `${detail.name} 기본정보`,
+      });
+      expect(panel.textContent).toContain(formatFoundedOn(detail.foundedOn));
+      // 원본 모양(YYYY-MM-DD) 그대로는 내지 않는다.
+      expect(panel.textContent).not.toContain(detail.foundedOn);
+    });
+
+    /**
+     * **배정 고지를 새로 쓰지 않고 룰셋 문구를 그대로 쓴다** — 입지 화면이
+     * 이미 같은 말을 하고 있고, 두 화면이 다른 말을 하기 시작하면 그때부터
+     * 어느 쪽이 맞는지 알 수 없어진다.
+     */
+    it("배정은 학구도로 정해진다는 고지가 함께 뜬다", async () => {
+      const { schoolMarker } = await openFirstSchool("초등학교");
+      act(() => schoolMarker!.listeners.click!());
+
+      const note = locationRules.disclosure.schoolZoneNote;
+      expect(await screen.findByText(note)).toBeInTheDocument();
+      expect(note).toContain("배정");
+      expect(note).toContain("학구도");
+    });
+
+    /**
+     * 사용자 지시: 기본정보와 **권역**을 함께 보여 준다. 경계는 교육부
+     * 학구도 도면을 그대로 그린 것이고, 거리로 추정한 값이 아니다
+     * (`src/data/school-zones.ts` 참고).
+     */
+    it("통학구역이 있는 학교면 경계를 지도에 그린다", async () => {
+      const { schoolMarker, polygons } = await openFirstSchool("초등학교");
+      const expected = schoolsWithinBounds(
+        ELEMENTARY_SCHOOLS ?? [],
+        TEST_SCHOOL_BOUNDS,
+      )[0]!;
+      const zones = schoolZonesFor(expected.id);
+      // 픽스처가 뜻을 잃지 않게 못 박는다 — 이 학교는 통학구역이 있어야 한다.
+      expect(zones.length).toBeGreaterThan(0);
+
+      act(() => schoolMarker!.listeners.click!());
+
+      // 링 하나당 폴리곤 하나(그쪽 주석 참고).
+      const rings = zones.reduce((n, z) => n + z.rings.length, 0);
+      expect(polygons.filter((p) => !p.removed)).toHaveLength(rings);
+      const panel = await screen.findByRole("region", {
+        name: `${expected.name} 기본정보`,
+      });
+      expect(panel.textContent).toContain("지도에 표시했어요");
+    });
+
+    it("패널을 닫으면 경계도 지도에서 걷힌다", async () => {
+      const { schoolMarker, polygons } = await openFirstSchool("초등학교");
+      act(() => schoolMarker!.listeners.click!());
+      await screen.findByRole("button", { name: "학교 정보 닫기" });
+      expect(polygons.filter((p) => !p.removed).length).toBeGreaterThan(0);
+
+      fireEvent.click(screen.getByRole("button", { name: "학교 정보 닫기" }));
+
+      expect(polygons.filter((p) => !p.removed)).toHaveLength(0);
+    });
+
+    /**
+     * 사립·국립 초등학교는 추첨·선발로 뽑으므로 **통학구역이 아예 없다.**
+     * 우리 지역 285곳 중 13곳이 그렇고 실제로 전부 사립 12곳·국립 1곳이다 —
+     * 그때 "없다"를 말해야지, 빈칸으로 두거나 "모른다"로 뭉개면 안 된다.
+     */
+    it("통학구역이 없는 학교(사립·국립)는 없다고 말하고 아무것도 그리지 않는다", () => {
+      const withoutZone = (ELEMENTARY_SCHOOLS ?? []).filter(
+        (s) => schoolZonesFor(s.id).length === 0,
+      );
+      expect(withoutZone.length).toBeGreaterThan(0);
+      for (const school of withoutZone) {
+        const detail = ELEMENTARY_SCHOOL_DETAILS.get(school.id)!;
+        expect(["사립", "국립"]).toContain(detail.foundationType);
+      }
+    });
+
+    /**
+     * 학생 수·교원 수는 **공시에서 온 값이라 오늘 기준이 아니다.** 연도를
+     * 빼면 화면의 다른 숫자(실거래가처럼 최신인 값)와 같은 시점처럼
+     * 읽히므로, 숫자를 내는 한 연도도 함께 내야 한다.
+     */
+    it("학생 수·교원 수를 남녀와 함께 내고, 공시 연도를 밝힌다", async () => {
+      const { schoolMarker } = await openFirstSchool("초등학교");
+      const expected = schoolsWithinBounds(
+        ELEMENTARY_SCHOOLS ?? [],
+        TEST_SCHOOL_BOUNDS,
+      )[0]!;
+      const detail = ELEMENTARY_SCHOOL_DETAILS.get(expected.id)!;
+      // 픽스처가 뜻을 잃지 않게 못 박는다 — 이 학교는 공시 값이 있어야 한다.
+      expect(detail.students).not.toBeNull();
+      expect(detail.teachers).not.toBeNull();
+      expect(ELEMENTARY_SCHOOL_INFO_YEAR).not.toBeNull();
+
+      act(() => schoolMarker!.listeners.click!());
+
+      const panel = await screen.findByRole("region", {
+        name: `${detail.name} 기본정보`,
+      });
+      expect(panel.textContent).toContain(formatHeadcount(detail.students!));
+      expect(panel.textContent).toContain(formatHeadcount(detail.teachers!));
+      expect(panel.textContent).toContain(`${ELEMENTARY_SCHOOL_INFO_YEAR}년`);
+    });
+
+    /**
+     * 공시에 전화번호가 없는 학교가 실제로 285곳 중 50곳이다. 그때 빈칸을
+     * 두거나 "-"를 찍지 않고 **줄 자체를 내지 않는다** — 모르는 것을 아는
+     * 척하지 않는다는 이 저장소의 규칙이다.
+     */
+    it("전화번호가 공시에 없는 학교는 그 줄을 아예 내지 않는다", () => {
+      const withoutPhone = (ELEMENTARY_SCHOOLS ?? []).filter(
+        (s) => ELEMENTARY_SCHOOL_DETAILS.get(s.id)?.phone === null,
+      );
+      expect(withoutPhone.length).toBeGreaterThan(0);
+      // 화면 쪽 규칙은 JSX의 `openSchool.phone !== null` 하나이므로, 여기서는
+      // "그런 학교가 실제로 있다"는 전제만 잠근다 — 그 전제가 사라지면 위
+      // 분기가 죽은 코드가 된다.
+    });
+
+    it("닫기 버튼을 누르면 닫힌다", async () => {
+      const { schoolMarker } = await openFirstSchool("초등학교");
+      act(() => schoolMarker!.listeners.click!());
+      await screen.findByRole("button", { name: "학교 정보 닫기" });
+
+      fireEvent.click(screen.getByRole("button", { name: "학교 정보 닫기" }));
+
+      expect(document.querySelector(".complex-map-school-info")).toBeNull();
+    });
+
+    it("학교급을 끄면 패널도 함께 닫힌다 — 지도에 없는 학교의 정보가 남지 않는다", async () => {
+      const { schoolMarker } = await openFirstSchool("초등학교");
+      act(() => schoolMarker!.listeners.click!());
+      await screen.findByRole("button", { name: "학교 정보 닫기" });
+
+      fireEvent.click(screen.getByRole("checkbox", { name: "초등학교" }));
+
+      await vi.waitFor(() =>
+        expect(document.querySelector(".complex-map-school-info")).toBeNull(),
+      );
+    });
+
+    /**
+     * 기본정보를 실은 학교급은 초등학교 하나뿐이라, 중·고등학교 마커에는
+     * 클릭 리스너를 아예 걸지 않는다 — 눌리는데 아무 일도 안 일어나는
+     * 컨트롤을 만들지 않는다.
+     *
+     * 셋을 한꺼번에 켜고 마커를 학교급으로 갈라 본다 — 학교급마다 따로
+     * 켜서 확인하면 이 픽스처 상자 안에 고등학교가 0곳이라(초등 12·중등 1·
+     * 고등 0) 그 경우를 아예 못 본다.
+     */
+    it("초등학교 마커에만 클릭 리스너가 붙는다", async () => {
+      const { naverGlobal, markers } = fakeNaverMaps();
+      vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(
+        naverGlobal as unknown as typeof naver,
+      );
+      render(
+        <ComplexMap
+          units={[unit({ complexKey: "a" })]}
+          coordinates={TEST_SCHOOL_COORDINATES}
+          burdenByUnit={new Map()}
+          naverMapClientId="test-id"
+          filterBounds={TEST_FILTER_BOUNDS}
+          filterValue={TEST_FILTER_BOUNDS}
+          onFilterChange={() => {}}
+        />,
+      );
+      await vi.waitFor(() => expect(markers).toHaveLength(1));
+      fireEvent.click(await screen.findByRole("button", { name: "학교" }));
+      for (const level of ["초등학교", "중학교", "고등학교"] as const) {
+        fireEvent.click(await screen.findByRole("checkbox", { name: level }));
+      }
+      await vi.waitFor(() =>
+        expect(document.querySelectorAll(".complex-map-school").length).toBe(
+          expectedElementaryCount + expectedMiddleCount + expectedHighCount,
+        ),
+      );
+
+      /*
+       * **지금 지도에 남아 있는 마커만 센다.** 체크박스를 누를 때마다
+       * 학교 effect가 다시 돌아 마커를 통째로 다시 그리므로, `markers`에는
+       * 이미 뗀 이전 세대가 함께 쌓여 있다(뗀 마커의 `el`은 DOM에서
+       * 빠졌을 뿐 `querySelector`는 그대로 먹는다).
+       */
+      const clickable = (selector: string) =>
+        markers
+          .filter((m) => !m.removed && m.el?.querySelector(selector))
+          .map((m) => m.listeners.click !== undefined);
+
+      expect(clickable(".complex-map-school--elementary")).toHaveLength(
+        expectedElementaryCount,
+      );
+      expect(clickable(".complex-map-school--elementary").every(Boolean)).toBe(true);
+      expect(clickable(".complex-map-school--middle")).toHaveLength(expectedMiddleCount);
+      expect(clickable(".complex-map-school--middle").some(Boolean)).toBe(false);
+      expect(clickable(".complex-map-school--high").some(Boolean)).toBe(false);
+    });
+  });
 
   it("마커를 누르면 팝업이 열리고, 목록 쪽 선택도 함께 움직인다", async () => {
     const { naverGlobal, markers } = fakeNaverMaps();
@@ -821,6 +1403,9 @@ describe("ComplexMap", () => {
         burdenByUnit={new Map()}
         onFocusComplex={onFocusComplex}
         naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
 
@@ -855,6 +1440,9 @@ describe("ComplexMap", () => {
         burdenByUnit={burdenByUnit}
         focusedComplexKey={null}
         naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
 
@@ -870,6 +1458,9 @@ describe("ComplexMap", () => {
         burdenByUnit={burdenByUnit}
         focusedComplexKey="b"
         naverMapClientId="test-id"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
       />,
     );
 

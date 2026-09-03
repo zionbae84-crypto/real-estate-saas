@@ -23,11 +23,10 @@ import { STYLES_CSS, stripComments } from "./colorSurfaces";
  *    이제 명조는 앱 어디에도 없다(아래 "활자 한 벌" describe 참고).
  *
  * jsdom은 `styles.css`를 적용하지 않으므로 렌더 결과로는 확인할 수 없다.
- * `scripts/area-band-chips.test.ts`·`scripts/printCss.test.ts`와 같은
- * 방식으로 CSS 텍스트를 직접 읽는다 — 그래서 이 파일도 `src/`가 아니라
- * `scripts/`에 있다(`src/no-network.test.ts`가 `src/` 안의 `node:`
- * 임포트를 막는다. `colorSurfaces.ts`가 `node:fs`로 읽어 온 문자열을
- * 그대로 쓴다).
+ * `scripts/printCss.test.ts`와 같은 방식으로 CSS 텍스트를 직접 읽는다 —
+ * 그래서 이 파일도 `src/`가 아니라 `scripts/`에 있다(`src/no-network.test.ts`가
+ * `src/` 안의 `node:` 임포트를 막는다. `colorSurfaces.ts`가 `node:fs`로
+ * 읽어 온 문자열을 그대로 쓴다).
  */
 
 const DECLARATIONS = stripComments(STYLES_CSS);
@@ -72,7 +71,7 @@ function escapeRegExp(literal: string): string {
 /**
  * 선택자 하나의 규칙 본문. **일치가 정확히 하나임을 요구한다** —
  * 같은 선택자가 둘이면 어느 쪽을 봐야 하는지 이 파일이 정할 수 없으므로
- * 깨뜨린다(`scripts/area-band-chips.test.ts`의 같은 주석 참고).
+ * 깨뜨린다.
  */
 function ruleBody(selector: string): string {
   const matches = [
@@ -243,36 +242,14 @@ describe("입력 밑줄 — 화면 1 전용 토큰을 쓴다", () => {
   });
 });
 
-describe("평형대 칩 — 상자가 아니라 밑줄 토글", () => {
-  /**
-   * `prototype.html`의 `.band`: 상자를 없애고 고른 칩만 황동 밑줄이
-   * 붙는다. 색만으로 상태를 말하지 않는다는 기존 규율(styles.css의
-   * `.area-band-select` 주석)도 그대로 지켜진다 — 밑줄의 유무는 색이
-   * 아니라 모양이고, 네이티브 체크박스도 그 자리에 남는다.
-   */
-  it("고르지 않은 칩에 테두리 상자가 없다", () => {
-    const body = ruleBody(".entry-screen .area-band-select .area-band-option");
-    expect(body).toContain("border: none");
-    expect(body).toContain("border-bottom: 1.5px solid transparent");
-  });
-
-  it("고른 칩만 황동 밑줄이 붙는다", () => {
-    expect(
-      ruleBody(
-        ".entry-screen .area-band-select .area-band-option:has(input:checked)",
-      ),
-    ).toContain("border-bottom-color: var(--brass-lift)");
-  });
-
-  it("칩 배치는 그대로 3열이다 — area-band-chips.test.ts의 눈금 규칙을 덮지 않는다", () => {
-    // 이 화면이 칩이 실제로 그려지는 **유일한** 자리라, 여기서 배치를
-    // 덮으면 그쪽 가드가 아무것도 지키지 않게 된다.
-    expect(ruleBody(".entry-screen .area-band-options")).not.toContain(
-      "grid-template-columns",
-    );
-    expect(ruleBody(".entry-screen .area-band-options")).not.toContain("display:");
-  });
-});
+/**
+ * 예전에는 여기 "평형대 칩 — 상자가 아니라 밑줄 토글" describe가 있었다.
+ * 사용자 지시로 화면 1의 평형대 질문(칩 넷)이 통째로 사라졌다 —
+ * 면적·가격·입주년차는 이제 결과 화면의 슬라이더 필터가 맡는다
+ * (`src/components/ComplexFilters.tsx`). `.area-band-select`·
+ * `.area-band-option`·`.area-band-options` 선택자 자체가 `styles.css`에서
+ * 사라졌으므로 여기서 잠글 규칙이 없다.
+ */
 
 /**
  * 조회 버튼은 원래 `prototype.html`의 `.go`(글자 + 늘어나는 선)였다 —

@@ -1,14 +1,10 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, describe, expect, it } from "vitest";
-import { AREA_BANDS } from "../lib/area-band";
-import { calcAcquisitionCosts, calcAffordablePrice } from "../lib/finance";
 import { rules } from "./useAffordability";
 import {
   ASSUMED_REMOVED_INPUTS,
   DEFAULT_FORM_STATE,
-  assumedExclusiveAreaSqm,
   loadStoredState,
-  STORAGE_KEY,
   toProfile,
   useProfileForm,
   type ProfileFormState,
@@ -33,25 +29,17 @@ describe("DEFAULT_FORM_STATE", () => {
     expect(DEFAULT_FORM_STATE.isFirstTimeBuyer).toBe(false);
   });
 
-  /**
-   * 스펙 §4: 기본값은 전체 선택(= 필터 없음). 처음 온 사용자는 네 번째
-   * 질문에 이미 답한 상태로 시작한다.
-   */
-  it("평형대 기본값은 전체 선택이다", () => {
-    expect(DEFAULT_FORM_STATE.areaBands).toEqual([...AREA_BANDS]);
-  });
-
   it("규제지역 기본값은 true다 — 과대평가를 피하는 쪽이다", () => {
     expect(DEFAULT_FORM_STATE.isRegulatedArea).toBe(true);
   });
 
   /**
-   * ⚠ **전용면적은 이제 폼 상태에 없다.** 헤드라인이 쓰는 면적은 고른
-   * 평형대에서 유도한다(`assumedExclusiveAreaSqm`) — 상태에 한 벌 더
-   * 두면 그 값과 선택이 어긋나는 날이 오고, 어긋난 쪽이 조용히 계산을
-   * 움직인다.
+   * ⚠ **전용면적은 이제 폼 상태에 없다.** 헤드라인이 쓰는 면적은
+   * `toProfile`이 룰셋의 `ruralTaxAreaThresholdSqm`에서 직접 읽는다(사용자
+   * 지시로 평형대 질문 자체가 사라졌다) — 상태에 한 벌 더 두면 그 값과
+   * 룰셋이 어긋나는 날이 오고, 어긋난 쪽이 조용히 계산을 움직인다.
    */
-  it("전용면적은 폼 상태에 없다 — 고른 평형대에서 유도한다", () => {
+  it("전용면적은 폼 상태에 없다 — 룰셋에서 직접 읽는다", () => {
     expect(Object.keys(DEFAULT_FORM_STATE)).not.toContain("exclusiveAreaSqm");
   });
 
@@ -89,66 +77,6 @@ describe("ASSUMED_REMOVED_INPUTS — 남은 가정(기존 대출)이 계산에 �
   });
 });
 
-/**
- * ⚠ **헤드라인(실구매 가능 가격)이 평형대 선택에서 가져가는 것은 면적
- * 값이 아니라 "85㎡ 초과가 섞였는가"라는 참/거짓 하나다.**
- *
- * 범위에서 대표값 하나를 지어내지 않는다 — 그런 규칙을 만들면 그 규칙이
- * 화면 어디에도 적히지 않은 채 헤드라인을 움직인다. 면적이 계산을
- * 가르는 지점은 85㎡ 하나뿐이라(농특세·정책대출 면적 제한) 참/거짓이면
- * 충분하다.
- */
-describe("assumedExclusiveAreaSqm — 고른 평형대가 헤드라인에 넘기는 것", () => {
-  it("85㎡ 초과가 안 섞였으면 임계값이다 — 이건 가정이 아니라 사실이다", () => {
-    expect(assumedExclusiveAreaSqm(["소형"])).toBe(THRESHOLD);
-    expect(assumedExclusiveAreaSqm(["소형", "중소형"])).toBe(THRESHOLD);
-  });
-
-  it("85㎡ 초과가 섞이면 임계값을 넘는 값이다 — 농특세가 붙는 쪽(보수적)이다", () => {
-    expect(assumedExclusiveAreaSqm(["중대형"])).toBeGreaterThan(THRESHOLD);
-    expect(assumedExclusiveAreaSqm([...AREA_BANDS])).toBeGreaterThan(THRESHOLD);
-  });
-
-  /**
-   * 임계값을 넘기기만 하면 **어떤 값이든 결과가 같다.** 그래서 위에서
-   * 고른 값(임계값 + 1)에는 뜻이 없고, 화면·종이도 그 숫자를 내지 않는다.
-   * 이 테스트가 그 "뜻 없음"을 증거로 만든다 — 언젠가 면적이 계산을
-   * 가르는 지점이 하나 더 생기면 여기가 먼저 깨진다.
-   */
-  it("임계값 위에서는 어떤 값을 넣어도 결과가 같다", () => {
-    const base = toProfile(
-      state({ cash: 300_000_000, annualIncome: 80_000_000, ownedHomeCount: 0 }),
-    )!;
-    const prices = [THRESHOLD + 0.01, THRESHOLD + 1, 120, 200, 1000].map(
-      (sqm) => calcAffordablePrice({ ...base, exclusiveAreaSqm: sqm }, rules),
-    );
-    for (const p of prices) expect(p).toEqual(prices[0]);
-
-    const costs = [THRESHOLD + 0.01, THRESHOLD + 1, 200].map((sqm) =>
-      calcAcquisitionCosts(
-        500_000_000,
-        { ...base, exclusiveAreaSqm: sqm },
-        rules,
-      ),
-    );
-    for (const c of costs) expect(c).toEqual(costs[0]);
-  });
-
-  it("임계값은 룰셋에서 온다 — 인자로 받아 바뀌면 따라간다", () => {
-    // 임계값이 100이면 "중소형"(60~100)은 더 이상 초과를 품지 않는다.
-    expect(assumedExclusiveAreaSqm(["중소형"], 100)).toBe(100);
-    expect(assumedExclusiveAreaSqm(["중대형"], 100)).toBeGreaterThan(100);
-  });
-
-  /**
-   * 빈 선택은 결과 화면에 이르지 못한다(화면 1이 막는다). 그래도 값을
-   * 지어내지 않고, "초과가 섞였다고 말할 근거가 없다"는 쪽을 따른다.
-   */
-  it("빈 선택에서는 임계값을 쓴다", () => {
-    expect(assumedExclusiveAreaSqm([])).toBe(THRESHOLD);
-  });
-});
-
 describe("toProfile", () => {
   it("현금이 없으면 null이다", () => {
     expect(
@@ -173,25 +101,6 @@ describe("toProfile", () => {
     ).toBeNull();
   });
 
-  /**
-   * ⚠ **평형대는 이 조건에 없다.** 평형대는 "무엇을 보여줄까"이고 여기서
-   * 만드는 것은 "얼마짜리를 살 수 있는가"다 — 두 축을 한 조건에 묶으면
-   * 평형대를 비운 사용자에게 화면이 "예산을 계산할 수 없다"고 **원인을
-   * 틀리게** 말하게 된다. 이 저장소가 여섯 번 반복한 사고의 모양이다.
-   */
-  it("평형대를 하나도 안 골라도 예산은 계산된다 — 다른 축이다", () => {
-    const profile = toProfile(
-      state({
-        cash: 100_000_000,
-        annualIncome: 50_000_000,
-        ownedHomeCount: 0,
-        areaBands: [],
-      }),
-    );
-    expect(profile).not.toBeNull();
-    expect(profile?.cash).toBe(100_000_000);
-  });
-
   it("현금·소득·주택 수가 있으면 프로필을 만든다", () => {
     expect(
       toProfile(
@@ -209,9 +118,10 @@ describe("toProfile", () => {
       isRegulatedArea: true,
       ownedHomeCount: 0,
       isFirstTimeBuyer: false,
-      // 기본값은 전체 선택이라 85㎡ 초과가 섞여 있다 — 농특세가 붙는
-      // 쪽(보수적)으로 계산한다.
-      exclusiveAreaSqm: THRESHOLD + 1,
+      // 항상 룰셋 임계값(85㎡) 이하로 가정한다(사용자 지시로 평형대
+      // 질문이 사라졌다) — 목록·상세가 그 매물의 실제 면적으로 다시
+      // 계산해 85㎡ 초과분을 알린다.
+      exclusiveAreaSqm: THRESHOLD,
       ...ASSUMED_REMOVED_INPUTS,
     });
   });
@@ -251,24 +161,15 @@ describe("toProfile", () => {
   });
 
   /**
-   * 폼 상태에는 면적이 없다 — 엔진에 넘어가는 값은 고른 평형대에서
-   * 유도한 것이어야 한다. 두 축을 잇는 유일한 지점이라 여기서 잠근다.
+   * 폼 상태에는 면적이 없다 — 엔진에 넘어가는 값은 언제나 룰셋의
+   * `ruralTaxAreaThresholdSqm`이어야 한다(사용자 지시로 평형대 선택이
+   * 사라졌다). 입력값과 무관하게 항상 같은 값인지 여기서 잠근다.
    */
-  it("엔진에 넘기는 전용면적은 고른 평형대에서 유도한다", () => {
-    const narrow = toProfile(
-      state({
-        cash: 1,
-        annualIncome: 1,
-        ownedHomeCount: 0,
-        areaBands: ["소형", "중소형"],
-      }),
+  it("엔진에 넘기는 전용면적은 항상 룰셋 임계값이다", () => {
+    const profile = toProfile(
+      state({ cash: 1, annualIncome: 1, ownedHomeCount: 0 }),
     )!;
-    expect(narrow.exclusiveAreaSqm).toBe(THRESHOLD);
-
-    const wide = toProfile(
-      state({ cash: 1, annualIncome: 1, ownedHomeCount: 0, areaBands: ["중대형"] }),
-    )!;
-    expect(wide.exclusiveAreaSqm).toBeGreaterThan(THRESHOLD);
+    expect(profile.exclusiveAreaSqm).toBe(THRESHOLD);
   });
 
   it("규제지역을 그대로 전달한다", () => {
@@ -384,7 +285,6 @@ describe("loadStoredState", () => {
           JSON.stringify({
             cash: 300_000_000,
             annualIncome: 80_000_000,
-            areaBands: ["중소형", "중대형"],
           }),
         ),
       ),
@@ -392,7 +292,6 @@ describe("loadStoredState", () => {
       state({
         cash: 300_000_000,
         annualIncome: 80_000_000,
-        areaBands: ["중소형", "중대형"],
       }),
     );
   });
@@ -432,7 +331,7 @@ describe("loadStoredState", () => {
    * 되살리면 사용자가 **보지도 고치지도 못하는 값**이 계산을 움직인다.
    * 그래서 없앤 입력의 저장값은 통째로 버린다.
    */
-  describe("여전히 없앤 입력(기존 대출·전용면적)의 저장값은 되살리지 않는다", () => {
+  describe("여전히 없앤 입력(기존 대출·전용면적·평형대)의 저장값은 되살리지 않는다", () => {
     // ownedHomeCount·isFirstTimeBuyer는 이 블록에서 뺐다 — 사용자 지시로
     // 다시 실제 입력란이 됐으므로 이제는 되살아나는 쪽이 맞다. 그 사실은
     // 아래 별도 describe("주택 수·생애최초도 그대로 복원한다" 등, 위쪽)가
@@ -442,6 +341,7 @@ describe("loadStoredState", () => {
       annualIncome: 80_000_000,
       existingDebtAnnualPayment: 12_000_000,
       exclusiveAreaSqm: 84,
+      areaBands: ["중소형", "중대형"],
       touched: ["existingDebt", "area", "regulatedArea"],
     });
 
@@ -462,6 +362,19 @@ describe("loadStoredState", () => {
     });
 
     /**
+     * 평형대 질문 자체가 사라졌다(사용자 지시) — 옛 저장본에 남은
+     * `areaBands`는 읽지 않는다. `parseAreaBands`를 아예 지웠으므로
+     * 이 값이 실수로 되살아날 길이 코드에 없다.
+     */
+    it("평형대 키도 폼 상태에 아예 들어오지 않는다", () => {
+      const restored = loadStoredState(storage(legacy)) as unknown as Record<
+        string,
+        unknown
+      >;
+      expect(restored.areaBands).toBeUndefined();
+    });
+
+    /**
      * 없어진 항목(`existingDebt`·`area`)은 지금 존재하지 않아서 걸러지고,
      * `regulatedArea`는 존재하지만 **세션에 매인 지위**라 걸러진다
      * (아래 "저장본은 지역 판정을 되살리지 않는다" 참고). 그래서 남는
@@ -475,69 +388,6 @@ describe("loadStoredState", () => {
       const restored = { ...loadStoredState(storage(legacy)), ownedHomeCount: 0 };
       const profile = toProfile(restored)!;
       expect(profile.existingDebtAnnualPayment).toBe(0);
-    });
-  });
-
-  describe("평형대 복원", () => {
-    it("키가 없는 옛 저장본은 전체 선택으로 돌아온다 — 결과를 좁히지 않는다", () => {
-      expect(
-        loadStoredState(storage(JSON.stringify({ cash: 1 }))).areaBands,
-      ).toEqual([...AREA_BANDS]);
-    });
-
-    it("배열이 아니면 전체 선택으로 되돌린다", () => {
-      expect(
-        loadStoredState(storage(JSON.stringify({ areaBands: "소형" })))
-          .areaBands,
-      ).toEqual([...AREA_BANDS]);
-    });
-
-    /**
-     * ⚠ **모르는 값을 걸러내고 나머지를 살리지 않는다 — 통째로 버린다.**
-     *
-     * 구간이 넷에서 셋으로 바뀌면서 옛 이름("중형"·"대형")이 저장본에
-     * 남은 사용자가 있다. 아는 값만 남기면 그 사용자의 선택은 "중형·대형"
-     * (= 85㎡ 초과 전부)에서 빈 선택이나 엉뚱한 일부로 조용히 바뀌고,
-     * 화면은 그 사실을 말하지 않는다 — 저장된 값이 사용자가 고른 적 없는
-     * 조건을 만드는, 커밋 `c90babf`와 같은 모양이다.
-     *
-     * 전체 선택으로 되돌리는 쪽은 **결과를 좁히지 않는** 방향이고, 그
-     * 상태는 화면 1의 칩에 그대로 보인다.
-     */
-    it("모르는 값이 섞여 있으면 통째로 버리고 전체 선택으로 간다", () => {
-      expect(
-        loadStoredState(
-          storage(JSON.stringify({ areaBands: ["소형", "초대형", 7] })),
-        ).areaBands,
-      ).toEqual([...AREA_BANDS]);
-    });
-
-    it("옛 네 구간 이름이 남은 저장본도 전체 선택으로 되돌린다", () => {
-      expect(
-        loadStoredState(
-          storage(JSON.stringify({ areaBands: ["중형", "대형"] })),
-        ).areaBands,
-      ).toEqual([...AREA_BANDS]);
-    });
-
-    /**
-     * 빈 배열은 "하나도 고르지 않았다"는 정당한 상태다 — 화면 1이 그
-     * 사실을 말하고, 칩을 하나 누르면 곧바로 빠져나온다. 조용히
-     * "전체"로 바꿔 읽으면 사용자가 고른 적 없는 조건으로 결과를
-     * 그리면서 그 사실을 말하지 않게 된다.
-     */
-    it("명시적으로 저장된 빈 배열은 빈 채로 복원한다", () => {
-      expect(
-        loadStoredState(storage(JSON.stringify({ areaBands: [] }))).areaBands,
-      ).toEqual([]);
-    });
-
-    it("순서는 저장 순서가 아니라 좁은 쪽부터다", () => {
-      expect(
-        loadStoredState(
-          storage(JSON.stringify({ areaBands: ["중대형", "소형"] })),
-        ).areaBands,
-      ).toEqual(["소형", "중대형"]);
     });
   });
 
@@ -643,15 +493,14 @@ describe("useProfileForm — setField가 touched를 기록한다", () => {
   });
 
   /**
-   * 사용자가 직접 답한 것(현금·소득·평형대)은 가정이 아니므로 가정 문구
+   * 사용자가 직접 답한 것(현금·소득)은 가정이 아니므로 가정 문구
    * 체계(`touched`)에 들어가지 않는다.
    */
-  it("cash·annualIncome·areaBands는 touched에 기록되지 않는다", () => {
+  it("cash·annualIncome은 touched에 기록되지 않는다", () => {
     const { result } = renderHook(() => useProfileForm());
     act(() => {
       result.current.setField("cash", 1);
       result.current.setField("annualIncome", 1);
-      result.current.setField("areaBands", ["소형"]);
     });
     expect(result.current.state.touched).toEqual([]);
   });
@@ -661,13 +510,6 @@ describe("useProfileForm — setField가 touched를 기록한다", () => {
     act(() => result.current.setField("isRegulatedArea", false));
     act(() => result.current.setField("isRegulatedArea", true));
     expect(result.current.state.touched).toEqual(["regulatedArea"]);
-  });
-
-  it("평형대 선택이 저장된다", () => {
-    const { result } = renderHook(() => useProfileForm());
-    act(() => result.current.setField("areaBands", ["중소형", "중대형"]));
-    const saved = JSON.parse(window.localStorage.getItem(STORAGE_KEY)!);
-    expect(saved.areaBands).toEqual(["중소형", "중대형"]);
   });
 });
 
@@ -701,11 +543,11 @@ describe("useProfileForm — resetField가 항목을 가정 상태로 되돌린�
     const { result } = renderHook(() => useProfileForm());
     act(() => {
       result.current.setField("cash", 300_000_000);
-      result.current.setField("areaBands", ["소형"]);
+      result.current.setField("annualIncome", 80_000_000);
       result.current.setField("isRegulatedArea", false);
     });
     act(() => result.current.resetField("regulatedArea"));
     expect(result.current.state.cash).toBe(300_000_000);
-    expect(result.current.state.areaBands).toEqual(["소형"]);
+    expect(result.current.state.annualIncome).toBe(80_000_000);
   });
 });

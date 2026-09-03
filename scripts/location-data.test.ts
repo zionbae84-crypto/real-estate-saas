@@ -1,4 +1,5 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import rawLocation from "../data/location.json";
 import rawLocationRules from "../rules/location-2026-08.json";
@@ -45,9 +46,16 @@ interface Placed {
 
 const STATIONS = rawLocation.subwayStations;
 const SCHOOLS = rawLocation.elementarySchools;
+// 지도 위 참고 표시 전용(위 elementarySchools와 달리 입지 화면 엔진이
+// 들여오지 않는다 — scripts/pipeline/location.ts의 LocationFile.middleSchools
+// 문서 참고).
+const MIDDLE_SCHOOLS = rawLocation.middleSchools;
+const HIGH_SCHOOLS = rawLocation.highSchools;
 const PLACES: ReadonlyArray<readonly [string, readonly Placed[]]> = [
   ["지하철역", STATIONS],
   ["초등학교", SCHOOLS],
+  ["중학교", MIDDLE_SCHOOLS],
+  ["고등학교", HIGH_SCHOOLS],
 ];
 
 /** 상자에서 이 점까지의 최단 거리(m). 상자 안이면 0 */
@@ -65,6 +73,8 @@ describe("전제 — 실제 데이터와 원본을 읽었다", () => {
     // 비어 있으면 아래 검사들이 전부 공허하게 통과한다.
     expect(STATIONS.length).toBeGreaterThan(100);
     expect(SCHOOLS.length).toBeGreaterThan(100);
+    expect(MIDDLE_SCHOOLS.length).toBeGreaterThan(50);
+    expect(HIGH_SCHOOLS.length).toBeGreaterThan(50);
   });
 
   it("원본 두 벌이 저장소에 있다", () => {
@@ -73,7 +83,7 @@ describe("전제 — 실제 데이터와 원본을 읽었다", () => {
   });
 
   it("스키마 버전이 data/README.md가 말하는 값이다", () => {
-    expect(rawLocation.schemaVersion).toBe(1);
+    expect(rawLocation.schemaVersion).toBe(3);
   });
 });
 
@@ -162,6 +172,78 @@ describe("초등학교만 실렸다", () => {
     const poisoned = [...SCHOOLS.map((s) => s.id), middle?.["학교ID"] ?? ""];
     const levels = poisoned.map((id) => byId.get(id)?.["학교급구분"]);
     expect(levels.filter((level) => level !== "초등학교")).toHaveLength(1);
+  });
+});
+
+/**
+ * `middleSchools`·`highSchools`는 지도 참고 표시 전용이다(위 PLACES 선언
+ * 참고) — 반경 집계·배정학교 판정에 쓰이지 않으므로 위 "초등학교만
+ * 실렸다"만큼 무겁게 검사하지 않는다. 핵심은 하나: **학교급이 서로 새지
+ * 않는다**(중학교 배열에 초·고등학교가, 고등학교 배열에 초·중학교가 섞이지
+ * 않는다).
+ */
+describe("중·고등학교도 실렸다 — 지도 참고 표시 전용, 학교급이 서로 새지 않는다", () => {
+  const byId = new Map(SCHOOL_SOURCE.map((row) => [row["학교ID"] ?? "", row]));
+
+  it.each([
+    ["중학교", MIDDLE_SCHOOLS] as const,
+    ["고등학교", HIGH_SCHOOLS] as const,
+  ])("실린 %s는 원본에서 전부 그 학교급이다 — 다른 급 0건", (level, places) => {
+    const levels = places.map((s) => byId.get(s.id)?.["학교급구분"] ?? "원본에 없음");
+    expect(levels.filter((l) => l !== level)).toEqual([]);
+  });
+
+  it("초등학교·중학교·고등학교 세 배열이 id를 공유하지 않는다", () => {
+    const elementaryIds = new Set(SCHOOLS.map((s) => s.id));
+    const middleIds = new Set(MIDDLE_SCHOOLS.map((s) => s.id));
+    const highIds = new Set(HIGH_SCHOOLS.map((s) => s.id));
+    const overlap = [...elementaryIds].filter(
+      (id) => middleIds.has(id) || highIds.has(id),
+    );
+    expect(overlap).toEqual([]);
+    expect([...middleIds].filter((id) => highIds.has(id))).toEqual([]);
+  });
+
+  it.each([
+    ["중학교", MIDDLE_SCHOOLS] as const,
+    ["고등학교", HIGH_SCHOOLS] as const,
+  ])("%s 중 운영 중이 아닌 곳은 실리지 않았다", (_level, places) => {
+    const notOperating = places
+      .filter((s) => byId.get(s.id)?.["운영상태"] !== "운영")
+      .map((s) => s.name);
+    expect(notOperating).toEqual([]);
+  });
+
+  /**
+   * `middleSchools`·`highSchools`는 지도 참고 표시 전용이다 — 반경 안
+   * 개수를 세고 "학구도가 아니다"를 판정하는 입지 화면 엔진
+   * (`src/lib/location/`)에 넘기면 그 판정이 "학군처럼 읽히기 시작한다"는
+   * 원칙이 깨진다(`data/README.md`의 "location.json" 절 참고).
+   *
+   * TypeScript 구조적 타입만으로는 이 경계를 막지 못한다 — `MapSchool`과
+   * `ElementarySchool`은 모양이 같아 서로 대입된다(`src/data/location.ts`의
+   * `MapSchool` 문서 참고). 그래서 소스 텍스트를 직접 훑어, 그 엔진 모듈이
+   * 이 두 이름을 아예 언급하지 않는지를 확인한다 —
+   * `src/no-network.test.ts`와 같은 태도의 구조적 가드다.
+   *
+   * **`src/`가 아니라 `scripts/`에 있는 이유**: fs로 소스를 읽어야 하는데
+   * `src/no-network.test.ts`가 `src/` 안에서 `node:` 임포트를 전수로
+   * 막는다.
+   */
+  it("입지 화면 엔진(src/lib/location/)은 지도 참고 표시용 학교를 들여오지 않는다", () => {
+    const dir = "src/lib/location";
+    const files = readdirSync(dir).filter((name) => name.endsWith(".ts"));
+    expect(files.length).toBeGreaterThan(0); // 스캔 대상이 실제로 있다는 전제
+
+    const leaked = files.filter((name) => {
+      const text = readFileSync(join(dir, name), "utf8");
+      return (
+        /middleSchools|highSchools|MIDDLE_SCHOOLS|HIGH_SCHOOLS|MapSchool/.test(
+          text,
+        )
+      );
+    });
+    expect(leaked).toEqual([]);
   });
 });
 
@@ -354,24 +436,36 @@ describe("산출물이 지금 설정·원본과 어긋나지 않았다", () => {
     expect(unknown).toEqual([]);
   });
 
-  it("실린 학교가 전부 원본에 있는 행이다", () => {
+  it.each([
+    ["초등학교", SCHOOLS] as const,
+    ["중학교", MIDDLE_SCHOOLS] as const,
+    ["고등학교", HIGH_SCHOOLS] as const,
+  ])("실린 %s가 전부 원본에 있는 행이다", (_level, places) => {
     const source = new Map(
       SCHOOL_SOURCE.map((row) => [row["학교ID"] ?? "", row["학교명"] ?? ""]),
     );
-    const unknown = SCHOOLS.filter((s) => source.get(s.id) !== s.name).map(
-      (s) => s.name,
-    );
+    const unknown = places
+      .filter((s) => source.get(s.id) !== s.name)
+      .map((s) => s.name);
     expect(unknown).toEqual([]);
   });
 
   it("설정 상자+버퍼 밖의 것이 하나도 실리지 않았다", () => {
     const stationBox = expandBounds(TARGET, CONFIG.subwayBufferMeters);
+    // 중·고등학교도 초등학교와 같은 버퍼를 쓴다(scripts/pipeline/location.ts의
+    // buildLocationFile 문서 참고).
     const schoolBox = expandBounds(TARGET, CONFIG.elementarySchoolBufferMeters);
     expect(
       STATIONS.filter((s) => !withinBounds(stationBox, s.lat, s.lon)),
     ).toEqual([]);
     expect(
       SCHOOLS.filter((s) => !withinBounds(schoolBox, s.lat, s.lon)),
+    ).toEqual([]);
+    expect(
+      MIDDLE_SCHOOLS.filter((s) => !withinBounds(schoolBox, s.lat, s.lon)),
+    ).toEqual([]);
+    expect(
+      HIGH_SCHOOLS.filter((s) => !withinBounds(schoolBox, s.lat, s.lon)),
     ).toEqual([]);
   });
 });

@@ -1,7 +1,21 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ComplexUnit } from "../data/complexes";
+import {
+  ELEMENTARY_SCHOOLS,
+  ELEMENTARY_SCHOOL_DETAILS,
+  ELEMENTARY_SCHOOL_INFO_YEAR,
+  HIGH_SCHOOLS,
+  MIDDLE_SCHOOLS,
+  type ElementarySchoolDetail,
+  type MapSchool,
+} from "../data/location";
+import { schoolZonesFor } from "../data/school-zones";
+import { locationRules } from "../state/useLocationFacts";
 import type { BurdenTier } from "../lib/complex-list";
+import type { ComplexFilterState } from "../lib/complex-filters";
 import { loadNaverMaps } from "../lib/loadNaverMaps";
+import { regionSchoolBounds, schoolsWithinBounds, type LatLonBounds } from "../lib/school-bounds";
+import { ComplexFilters } from "./ComplexFilters";
 import { formatRange, unitKey } from "./ComplexList";
 
 export interface ComplexMapProps {
@@ -42,6 +56,19 @@ export interface ComplexMapProps {
   /** 마커를 눌렀다. 선택 상태는 App이 한 벌만 들고 있다(목록과 공유) */
   onFocusComplex?: (complexKey: string) => void;
   naverMapClientId: string;
+  /**
+   * 매매가·면적·입주년차 슬라이더 필터(사용자 지시로 지도 위 "필터"
+   * 버튼 팝오버로 옮겼다 — 예전에는 사이드바에 항상 펼쳐져 있었다).
+   * 이 지도는 필터 상태를 스스로 만들지도, 거르지도 않는다 — App.tsx가
+   * 들고 있는 값을 그대로 받아 `ComplexFilters`에 넘기고, 사용자가
+   * 슬라이더를 움직이면 `onFilterChange`로 위로 돌려보낸다. 실제로
+   * 목록·지도에 무엇을 그릴지 거르는 일은 App.tsx의 `rangeFilteredUnits`가
+   * 한다 — 여기서 한 번 더 거르면 목록과 지도가 서로 다른 계산으로
+   * 같은 질문에 답하게 된다(이 저장소가 여섯 번 겪은 버그 형태).
+   */
+  filterBounds: ComplexFilterState;
+  filterValue: ComplexFilterState;
+  onFilterChange: (value: ComplexFilterState) => void;
 }
 
 /**
@@ -138,6 +165,20 @@ function representativeUnit(units: readonly ComplexUnit[]): ComplexUnit {
  * 마커가 점으로 접히므로 상한 없이도 지도가 읽힌다.
  */
 export type MarkerDetail = "full" | "name" | "dot";
+
+/**
+ * 일반지도/위성지도. 위성은 네이버 SDK의 `HYBRID`(위성 사진 + 도로·지명)를
+ * 쓴다 — `SATELLITE`(사진만)는 도로·건물 이름이 없어 어느 단지인지 가늠할
+ * 기준이 사라진다. 이 앱이 보여주려는 것은 "이 동네가 실제로 어떻게
+ * 생겼는가"이지 순수 항공사진이 아니다.
+ */
+export type MapDisplayMode = "normal" | "satellite";
+
+function naverMapTypeId(naverGlobal: typeof naver, mapType: MapDisplayMode): naver.maps.MapTypeId {
+  return mapType === "satellite"
+    ? naverGlobal.maps.MapTypeId.HYBRID
+    : naverGlobal.maps.MapTypeId.NORMAL;
+}
 
 /**
  * 줌 → 마커 상세도. 경계는 네이버지도 줌 레벨 기준이다(6~21).
@@ -329,6 +370,141 @@ export function burdenTiers(
   );
 }
 
+/**
+ * 지도 위 학교 참고 표시(사용자 지시: "학교 : 초등/중등/고등 학교 표시").
+ *
+ * **부담 마커·범례와 완전히 다른 레이어다.** 이 레이어는 어느 단지가
+ * 예산에 맞는지·대출이 필요한지와 아무 관계가 없다 — 지하철역을 지도에
+ * 얹는 것과 같은 성격의 "여기 학교가 있다"는 사실 표시일 뿐이다. 반경 안
+ * 개수를 세거나 "학구도가 아니다"를 판정하는 것은 입지 화면
+ * (`LocationFacts.tsx`, `src/lib/location/`)의 몫이고, 이 레이어는 그
+ * 판정에 관여하지 않는다 — 그래서 `src/data/location.ts`의
+ * `ELEMENTARY_SCHOOLS`(입지 화면과 공유)·`MIDDLE_SCHOOLS`·`HIGH_SCHOOLS`
+ * (지도 전용)를 좌표만 읽어 점으로 찍는다.
+ *
+ * 기본은 **셋 다 꺼짐**이다 — 부담 마커 위에 최대 600여 개 점이 늘
+ * 깔려 있으면 지도가 학교 지도로 읽힌다. 사용자가 켜야 보인다.
+ */
+export type SchoolLevel = "elementary" | "middle" | "high";
+
+export const SCHOOL_LEVELS: readonly SchoolLevel[] = ["elementary", "middle", "high"];
+
+const SCHOOL_LEVEL_LABEL: Record<SchoolLevel, string> = {
+  elementary: "초등학교",
+  middle: "중학교",
+  high: "고등학교",
+};
+
+/**
+ * `bounds`(지금 지도가 그린 단지들의 바운딩박스 — `regionSchoolBounds`)
+ * 안에 드는 학교만 돌려준다(사용자 지시: "해당지역의 학교만 표시되게
+ * 해줘" — `src/lib/school-bounds.ts` 머리 주석 참고, 이 정적 학교
+ * 데이터는 여러 구를 걸치는 하나의 배열이라 거르지 않으면 이웃 구
+ * 학교까지 함께 뜬다).
+ */
+function schoolsForLevel(
+  level: SchoolLevel,
+  bounds: LatLonBounds | null,
+): readonly MapSchool[] {
+  const all = ((): readonly MapSchool[] => {
+    switch (level) {
+      case "elementary":
+        return ELEMENTARY_SCHOOLS ?? [];
+      case "middle":
+        return MIDDLE_SCHOOLS ?? [];
+      case "high":
+        return HIGH_SCHOOLS ?? [];
+    }
+  })();
+  return schoolsWithinBounds(all, bounds);
+}
+
+/**
+ * 학교 마커 배지 크기(px). 사용자 지시로 첨부 이미지(학사모 아이콘 +
+ * 그 아래 초성 글자, 둥근 사각 배지)를 본떴다 — 아이콘 한 줄, 글자
+ * 한 줄이라 정사각형이 아니라 세로가 더 긴 배지다. 그래도 이전(건물
+ * 아이콘, 44px 정사각) 한 변보다는 작다.
+ *
+ * **가운데가 좌표를 가리킨다** — 부담 마커의 `dot`과 같은 중심 앵커다.
+ */
+/**
+ * 통학구역 경계 색. 초등학교 마커(주황)와 같은 색이라 "이 경계는 방금 누른
+ * 그 학교의 것"임이 색으로 이어진다 — 부담 마커의 파랑·주황과는 쓰임이
+ * 달라(저쪽은 대출 유무) 채움을 아주 옅게 깔아 겹쳐 읽히지 않게 한다.
+ */
+const SCHOOL_ZONE_COLOR = "#f0923f";
+
+const SCHOOL_MARKER_WIDTH = 30;
+const SCHOOL_MARKER_HEIGHT = 40;
+const SCHOOL_MARKER_ANCHOR = { x: SCHOOL_MARKER_WIDTH / 2, y: SCHOOL_MARKER_HEIGHT / 2 };
+
+/**
+ * 학사모(졸업모) 모양 — 사용자 지시로 첨부한 참고 이미지를 본떴다:
+ * 마름모꼴 챙 + 그 아래 둥근 머리띠 + 오른쪽으로 늘어진 술(태슬).
+ * viewBox 0 0 24 24, 색은 흰색 고정 — 배경색(학교급별, 아래
+ * `complex-map-school--${level}`)만 CSS가 정한다.
+ */
+const SCHOOL_ICON_SVG =
+  '<svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">' +
+  '<path d="M12 4 L23 9 L12 14 L1 9 Z" fill="#ffffff" />' +
+  '<path d="M6.5 10.3 V14.5 C6.5 16.4 9 18 12 18 C15 18 17.5 16.4 17.5 14.5 V10.3 L12 12.6 Z" fill="#ffffff" />' +
+  '<line x1="22" y1="9.3" x2="22" y2="14" stroke="#ffffff" stroke-width="1.3" stroke-linecap="round" />' +
+  '<circle cx="22" cy="15" r="1.2" fill="#ffffff" />' +
+  "</svg>";
+
+/**
+ * `YYYY-MM-DD` → `YYYY년 M월 D일`. 원본이 준 모양 그대로는 화면에서 읽기
+ * 나빠서 사람이 읽는 말로만 바꾼다 — 값 자체는 건드리지 않는다. 원본이
+ * 이 모양이 아니면(빈 값 등) **그대로 돌려준다**: 못 읽는 값을 그럴듯한
+ * 날짜로 지어내지 않는다.
+ */
+/** `{total, male, female}` → `800명 (남 385명, 여 415명)` */
+export function formatHeadcount(count: {
+  total: number;
+  male: number;
+  female: number;
+}): string {
+  return `${count.total}명 (남 ${count.male}명, 여 ${count.female}명)`;
+}
+
+export function formatFoundedOn(value: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value.trim());
+  if (m === null) return value;
+  return `${m[1]}년 ${Number(m[2])}월 ${Number(m[3])}일`;
+}
+
+/**
+ * 아이콘 아래 초성 한 글자 — 사용자 지시: "초등>초, 중등>중, 고등>고
+ * 라는 글자도 아이콘에 넣어줘"(첨부 이미지의 "초등"/"중등"/"고등" 알약
+ * 라벨을 본뜨되, 마커가 작아 두 글자는 못 담아 한 글자로 줄였다).
+ */
+const SCHOOL_LEVEL_INITIAL: Record<SchoolLevel, string> = {
+  elementary: "초",
+  middle: "중",
+  high: "고",
+};
+
+/**
+ * 학교급별 학교 마커. **색과 글자로 학교급을 가른다**(사용자 지시:
+ * "초/중/고 학교의 색상을 다르게해주고" + 위 초성 라벨) — 배경색은
+ * `complex-map-school--${level}` 수정자 클래스로 styles.css가 정하고
+ * (첨부 이미지의 주황/파랑/빨강을 그대로 따랐다), 부담 마커(파랑=대출
+ * 없이, 주황=대출 필요)의 파랑과는 톤을 다르게 잡아 겹치지 않게 했다.
+ *
+ * `title`은 데스크톱 마우스 오버에서만 뜨는 덧말이다. 이 레이어의 정보
+ * (그 지점에 어느 학교인가)는 이미 색+아이콘+초성 글자로 전달되므로,
+ * 이름을 못 보는 터치 사용자에게도 약속을 어기지 않는다(markerLabel의
+ * title 관련 주석과 대조 — 거기서는 이름이 유일한 정보였다).
+ */
+function schoolMarkerLabel(level: SchoolLevel, name: string): string {
+  return (
+    `<div class="complex-map-school complex-map-school--${level}" title="${escapeHtml(name)}">` +
+    SCHOOL_ICON_SVG +
+    `<span class="complex-map-school-label">${SCHOOL_LEVEL_INITIAL[level]}</span>` +
+    `</div>`
+  );
+}
+
 /*
  * 예전에는 여기 `MARKER_LIMIT = 30`(한 번에 그리는 마커 수의 상한)이
  * 있었다. **사용자 지시로 없앴다** — "지도 데이터는 해당지역의 데이터를
@@ -362,6 +538,9 @@ export function ComplexMap({
   focusedComplexKey = null,
   onFocusComplex,
   naverMapClientId,
+  filterBounds,
+  filterValue,
+  onFilterChange,
 }: ComplexMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   /**
@@ -381,6 +560,18 @@ export function ComplexMap({
    */
   const onFocusRef = useRef(onFocusComplex);
   const focusedRef = useRef(focusedComplexKey);
+  /**
+   * 일반지도/위성지도. **컴포넌트 내부 상태다** — 목록·상세와 달리 다른
+   * 화면 조각과 공유할 이유가 없다(사용자 지시: "지도 : 지금과 같은
+   * 일반지도, 위성지도를 필터로").
+   *
+   * `mapTypeRef`로도 들고 있는 이유는 `focusedRef`와 같다: 그리기
+   * effect가 `units`·`coordinates`가 바뀌어 지도를 다시 만들 때도(예:
+   * 지역 재조회) 방금 고른 지도 유형이 일반으로 되돌아가지 않게, 새
+   * 지도를 만들 때 이 ref를 읽어 그대로 이어 쓴다.
+   */
+  const [mapType, setMapType] = useState<MapDisplayMode>("normal");
+  const mapTypeRef = useRef(mapType);
   const [loadFailed, setLoadFailed] = useState(false);
   /**
    * SDK는 정상인데 **그릴 좌표가 하나도 없는** 상태.
@@ -398,6 +589,114 @@ export function ComplexMap({
    * 없이 빈 600px 상자만 남으면 사용자에겐 고장과 구분되지 않는다.
    */
   const [noneLocated, setNoneLocated] = useState(false);
+  /**
+   * `mapRef.current`가 실제로 채워졌는가. **ref는 리렌더를 일으키지
+   * 않으므로**, 아래 학교 마커 effect가 "지도가 막 생겼다"는 순간을
+   * 알아채려면 이 state가 따로 필요하다(그리기 effect가 지도를 만들
+   * 때만 `true`로 켠다).
+   */
+  const [mapReady, setMapReady] = useState(false);
+  /** 지금 켜진 학교급들. 기본은 빈 집합(위 학교 레이어 문서의 "기본은 셋 다 꺼짐" 참고) */
+  const [visibleSchoolLevels, setVisibleSchoolLevels] = useState<ReadonlySet<SchoolLevel>>(
+    () => new Set(),
+  );
+  /**
+   * 마커를 눌러 기본정보를 펼친 초등학교. **초등학교에만 있다** —
+   * 중·고등학교 마커는 지금도 누를 수 없다(기본정보를 싣지 않았고,
+   * 학교급을 늘리면 화면이 "학군"처럼 읽히기 시작한다는 이유는
+   * `scripts/pipeline/location.ts`의 `buildElementarySchools` 주석과 같다).
+   */
+  const [openSchool, setOpenSchool] = useState<ElementarySchoolDetail | null>(null);
+  /**
+   * 펼친 학교의 통학구역. 도면은 정적으로 실려 있어(`src/data/school-zones.ts`)
+   * 기다릴 것이 없다 — 학교를 고르는 순간 바로 정해진다. **빈 배열은
+   * "통학구역이 없다"**(사립·국립)는 뜻이고, 그건 모르는 것이 아니라 확인된
+   * 사실이다.
+   */
+  const openSchoolZones = useMemo(
+    () => (openSchool === null ? [] : schoolZonesFor(openSchool.id)),
+    [openSchool],
+  );
+  /**
+   * 지도 우상단 세 버튼(지도·필터·학교) 중 지금 펼쳐진 팝오버 하나.
+   * **버튼마다 자기 상태를 따로 안 든다** — 세 팝오버가 동시에 뜰 수
+   * 없어야 좁은 지도 위에서 서로 겹치지 않으므로, "지금 열린 것 하나"
+   * 라는 사실 자체를 값으로 표현한다(어느 것도 안 열렸으면 `null`).
+   */
+  const [openControl, setOpenControl] = useState<"type" | "filter" | "school" | null>(
+    null,
+  );
+  const controlsRef = useRef<HTMLDivElement>(null);
+  const typeTriggerRef = useRef<HTMLButtonElement>(null);
+  const filterTriggerRef = useRef<HTMLButtonElement>(null);
+  const schoolTriggerRef = useRef<HTMLButtonElement>(null);
+
+  /**
+   * 지금 열린 팝오버의 화면 위치(`position: fixed`용) —
+   * `ComplexDetail.tsx`의 "부대비용"/"한도 결정 내역" 팝업과 같은
+   * 요령이다(사용자 지시: "부대비용/대출 컴포넌트처럼 아이콘 좌측에
+   * 연결된 팝업이 생기게 해줘"). 그 팝업은 아이콘 **오른쪽**에 여는데
+   * 거긴 사이드바 안이라 오른쪽에 공간이 있어서다 — 여기 세 버튼은
+   * 지도 **오른쪽 가장자리**에 있어 그대로 따라 하면 팝업이 화면 밖으로
+   * 밀린다. 그래서 좌우를 뒤집어 아이콘 **왼쪽**에 연다(`right`로
+   * 앉혀, 패널 폭을 몰라도 된다 — `left = rect.left - 8 - 패널폭`처럼
+   * 폭을 알아야 하는 계산을 피한다).
+   */
+  const [controlPopupPos, setControlPopupPos] = useState({ top: 0, right: 0 });
+
+  function measureControlPopupPos(trigger: HTMLElement | null) {
+    const rect = trigger?.getBoundingClientRect();
+    if (rect === undefined) return;
+    setControlPopupPos({ top: rect.top, right: window.innerWidth - rect.left + 8 });
+  }
+
+  function toggleControl(
+    key: "type" | "filter" | "school",
+    trigger: HTMLButtonElement,
+  ) {
+    const willOpen = openControl !== key;
+    setOpenControl(willOpen ? key : null);
+    if (willOpen) measureControlPopupPos(trigger);
+  }
+
+  /*
+   * 팝오버 바깥을 누르거나 Esc를 누르면 닫는다. `openControl`이 `null`인
+   * 동안은 리스너를 아예 달지 않는다 — 세 버튼 중 아무것도 안 열린
+   * 평소 상태에서 문서 전체의 클릭을 매번 엿듣지 않는다.
+   *
+   * 열려 있는 동안은 스크롤·리사이즈에도 다시 잰다 — `position: fixed`
+   * 팝업은 트리거를 스스로 따라가지 않는다(`ComplexDetail.tsx`의 같은
+   * 자리 주석과 같은 이유).
+   */
+  useEffect(() => {
+    if (openControl === null) return;
+    const handlePointerDown = (event: PointerEvent) => {
+      if (controlsRef.current?.contains(event.target as Node)) return;
+      setOpenControl(null);
+    };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenControl(null);
+    };
+    const handleScrollOrResize = () => {
+      const trigger =
+        openControl === "type"
+          ? typeTriggerRef.current
+          : openControl === "filter"
+            ? filterTriggerRef.current
+            : schoolTriggerRef.current;
+      measureControlPopupPos(trigger);
+    };
+    document.addEventListener("pointerdown", handlePointerDown);
+    document.addEventListener("keydown", handleKeyDown);
+    window.addEventListener("scroll", handleScrollOrResize, true);
+    window.addEventListener("resize", handleScrollOrResize);
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown);
+      document.removeEventListener("keydown", handleKeyDown);
+      window.removeEventListener("scroll", handleScrollOrResize, true);
+      window.removeEventListener("resize", handleScrollOrResize);
+    };
+  }, [openControl]);
 
   /**
    * 고른 단지의 마커에 강조 클래스를 붙이고 나머지에서 뗀다.
@@ -442,11 +741,28 @@ export function ComplexMap({
     map.panTo(new naverGlobal.maps.LatLng(coord.lat, coord.lon));
   }, [focusedComplexKey, coordinates, applyFocus]);
 
+  /*
+   * 지도 유형 버튼을 눌렀다 — **이미 있는 지도의 타입만 바꾼다**(위
+   * "고른 단지" effect와 같은 이유로 지도를 다시 만들지 않는다).
+   *
+   * 지도가 아직 안 떴으면 여기서 할 일이 없다 — 아래 그리기 effect가
+   * 지도를 만들 때 `mapTypeRef.current`를 그대로 읽어 초기 유형으로
+   * 쓴다.
+   */
+  useEffect(() => {
+    mapTypeRef.current = mapType;
+    const map = mapRef.current;
+    const naverGlobal = naverRef.current;
+    if (map === null || naverGlobal === null) return;
+    map.setMapTypeId(naverMapTypeId(naverGlobal, mapType));
+  }, [mapType]);
+
   useEffect(() => {
     let cancelled = false;
     const cleanupFns: Array<() => void> = [];
     setLoadFailed(false);
     setNoneLocated(false);
+    setMapReady(false);
 
     loadNaverMaps(naverMapClientId)
       .then((naverGlobal) => {
@@ -477,6 +793,10 @@ export function ComplexMap({
         const map = new naverGlobal.maps.Map(containerRef.current, {
           center: new naverGlobal.maps.LatLng(center.lat, center.lon),
           zoom: 14,
+          // 방금 고른 지도 유형을 이어 쓴다(위 mapTypeRef 주석) — 지역을
+          // 다시 조회해 이 effect가 재실행돼도 위성이 일반으로 되돌아가지
+          // 않는다.
+          mapTypeId: naverMapTypeId(naverGlobal, mapTypeRef.current),
         });
         /*
          * 단지가 둘 이상이면 그 전부가 들어오도록 줌을 맞춘다. 고정
@@ -504,8 +824,10 @@ export function ComplexMap({
         // 재렌더로 이 effect가 다시 돌면(예: units/coordinates가 바뀌면) 같은
         // DOM 컨테이너에 새 Map을 또 만들기 전에, 이전 Map을 확실히 치운다.
         mapRef.current = map;
+        setMapReady(true);
         cleanupFns.push(() => {
           mapRef.current = null;
+          setMapReady(false);
           map.destroy();
         });
 
@@ -634,6 +956,121 @@ export function ComplexMap({
     };
   }, [units, coordinates, burdenByUnit, naverMapClientId, applyFocus]);
 
+  /*
+   * 학교 마커. 부담 마커와 완전히 별개인 effect다 — 위 그리기 effect와
+   * 똑같이 `units`·`burdenByUnit`에는 걸리지 않는다(예산이 바뀔 때마다
+   * 학교 마커까지 지웠다 다시 그리지 않는다). 다만 **`coordinates`에는
+   * 건다** — 이 값은 (`units`와 달리) 예산이 아니라 지역이 바뀔 때만
+   * 바뀌는 그 지역 전체의 지오코딩 결과이고(`ComplexMapProps.coordinates`
+   * 문서 참고), "해당지역의 학교만" 거르는 바운딩박스(`regionSchoolBounds`)가
+   * 바로 이 값에서 나오므로 지역이 바뀌면 학교도 다시 걸러야 한다.
+   *
+   * `mapRef`/`naverRef`는 값이 아니라 ref라 여기서 다시 읽어야 한다 —
+   * `mapReady`가 그 값이 실제로 채워진 순간을 알려주는 신호다.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    const naverGlobal = naverRef.current;
+    if (map === null || naverGlobal === null) return;
+
+    const bounds = regionSchoolBounds(coordinates);
+    const markers: naver.maps.Marker[] = [];
+    const listeners: naver.maps.MapEventListener[] = [];
+    for (const level of visibleSchoolLevels) {
+      for (const school of schoolsForLevel(level, bounds)) {
+        const marker = new naverGlobal.maps.Marker({
+          position: new naverGlobal.maps.LatLng(
+            school.coordinate.lat,
+            school.coordinate.lon,
+          ),
+          map,
+          icon: {
+            content: schoolMarkerLabel(level, school.name),
+            anchor: new naverGlobal.maps.Point(
+              SCHOOL_MARKER_ANCHOR.x,
+              SCHOOL_MARKER_ANCHOR.y,
+            ),
+          },
+        });
+        markers.push(marker);
+        /*
+         * **초등학교 마커만 누를 수 있다.** 기본정보를 실은 학교급이
+         * 초등학교 하나뿐이라서다(위 `openSchool` 주석 참고). 기본정보가
+         * 없는 학교(id를 못 찾는 경우)에는 리스너를 아예 걸지 않는다 —
+         * 눌리는데 아무 일도 안 일어나는 컨트롤을 만들지 않는다.
+         */
+        if (level !== "elementary") continue;
+        const detail = ELEMENTARY_SCHOOL_DETAILS.get(school.id);
+        if (detail === undefined) continue;
+        listeners.push(
+          naverGlobal.maps.Event.addListener(marker, "click", () => {
+            setOpenSchool(detail);
+          }),
+        );
+      }
+    }
+
+    return () => {
+      for (const l of listeners) naverGlobal.maps.Event.removeListener(l);
+      /*
+       * 마커가 사라지는 순간(학교급을 껐거나 지역이 바뀌었다) 펼쳐 둔
+       * 기본정보도 닫는다 — 안 닫으면 지도에 없는 학교의 정보가 화면에
+       * 남는다.
+       */
+      setOpenSchool(null);
+      for (const m of markers) m.setMap(null);
+    };
+  }, [mapReady, visibleSchoolLevels, coordinates]);
+
+  /*
+   * 펼친 학교의 통학구역을 불러와 지도에 그린다.
+   *
+   * 도면은 509KB짜리 별도 청크라 **여기서 처음 내려받는다**(`loadSchoolZones`
+   * 문서 참고) — 지도만 보는 사람은 받지 않는다. 그래서 패널이 먼저 뜨고
+   * 경계가 조금 뒤에 그려질 수 있다.
+   *
+   * **경계는 링 하나당 폴리곤 하나로 그린다.** 한 학구가 링을 여럿 가질 수
+   * 있는데(우리 지역 328개 중 28개), 그 링들을 한 폴리곤의 `paths`로 넘기면
+   * 네이버 SDK가 두 번째 링부터를 구멍으로 다룬다 — 떨어져 있는 두 구역이
+   * 대부분이라 그렇게 그리면 오히려 틀린 그림이 된다.
+   */
+  useEffect(() => {
+    const map = mapRef.current;
+    const naverGlobal = naverRef.current;
+    if (map === null || naverGlobal === null) return;
+    if (openSchoolZones.length === 0) return;
+
+    const drawn: naver.maps.Polygon[] = [];
+    for (const zone of openSchoolZones) {
+      for (const ring of zone.rings) {
+        drawn.push(
+          new naverGlobal.maps.Polygon({
+            map,
+            paths: [ring.map(([lon, lat]) => new naverGlobal.maps.LatLng(lat, lon))],
+            fillColor: SCHOOL_ZONE_COLOR,
+            fillOpacity: 0.12,
+            strokeColor: SCHOOL_ZONE_COLOR,
+            strokeOpacity: 0.9,
+            strokeWeight: 2,
+          }),
+        );
+      }
+    }
+    return () => {
+      for (const polygon of drawn) polygon.setMap(null);
+    };
+  }, [openSchoolZones, mapReady]);
+
+  /* 학교 기본정보도 팝오버와 같은 방법으로 Esc에 닫는다. */
+  useEffect(() => {
+    if (openSchool === null) return;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setOpenSchool(null);
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [openSchool]);
+
   return (
     <>
     {/*
@@ -692,6 +1129,249 @@ export function ComplexMap({
           </li>
         ))}
       </ul>
+    )}
+    {/*
+      초등학교 기본정보(사용자 지시로 마커를 누르면 뜬다). 지도 좌상단에
+      고정한다 — 좌하단 범례·우상단 컨트롤과 자리가 겹치지 않는다.
+      **마커 옆에 붙이지 않는 이유**는 마커가 화면 가장자리에 있을 때
+      패널이 잘리기 때문이다(그 자리 계산을 하려면 좌표→화면 투영이
+      필요한데, 그 값은 줌·이동 때마다 다시 재야 한다).
+
+      **여기서 말하는 것은 "이 학교가 어떤 학교인가"뿐이다** — 어느 단지가
+      이 학교로 배정되는지는 말하지 않는다. 배정은 거리가 아니라 학구도로
+      정해지고, 우리에겐 그 학구도 데이터가 없다. 그래서 아래 고지는 새로
+      쓰지 않고 룰셋의 문구(`schoolZoneNote`)를 그대로 가져다 쓴다 — 입지
+      화면이 이미 같은 말을 하고 있고, 두 화면이 다른 말을 하기 시작하면
+      그때부터 어느 쪽이 맞는지 알 수 없어진다.
+    */}
+    {openSchool !== null && (
+      <section
+        className="complex-map-school-info"
+        aria-label={`${openSchool.name} 기본정보`}
+      >
+        <div className="complex-map-school-info-head">
+          <p className="complex-map-school-info-title">
+            <span className="complex-map-school-info-badge">
+              {openSchool.foundationType}
+            </span>
+            {openSchool.name}
+          </p>
+          <button
+            type="button"
+            className="complex-map-school-info-close"
+            aria-label="학교 정보 닫기"
+            onClick={() => setOpenSchool(null)}
+          >
+            ✕
+          </button>
+        </div>
+        <dl className="complex-map-school-info-facts">
+          {/* 주소가 빈 문자열이면 그 줄을 통째로 내지 않는다 — 모르는 것을 빈칸으로 보여주지 않는다. */}
+          {openSchool.address !== "" && (
+            <>
+              <dt>주소</dt>
+              <dd>{openSchool.address}</dd>
+            </>
+          )}
+          {/*
+            학생 수·교원 수·전화번호는 **공시에서 온 값이라 오늘 기준이
+            아니다** — 그래서 아래 각주가 공시 연도를 함께 말한다. 모르는
+            값(`null`)은 줄 자체를 내지 않는다.
+          */}
+          {openSchool.teachers !== null && (
+            <>
+              <dt>교원 수</dt>
+              <dd>{formatHeadcount(openSchool.teachers)}</dd>
+            </>
+          )}
+          {openSchool.students !== null && (
+            <>
+              <dt>학생 수</dt>
+              <dd>{formatHeadcount(openSchool.students)}</dd>
+            </>
+          )}
+          {openSchool.phone !== null && (
+            <>
+              <dt>전화</dt>
+              <dd>{openSchool.phone}</dd>
+            </>
+          )}
+          <dt>설립</dt>
+          <dd>
+            {openSchool.foundationForm === null
+              ? formatFoundedOn(openSchool.foundedOn)
+              : `${openSchool.foundationType}(${openSchool.foundationForm}) ${formatFoundedOn(openSchool.foundedOn)}`}
+          </dd>
+          <dt>교육청</dt>
+          <dd>{openSchool.officeOfEducation}</dd>
+          <dt>교육지원청</dt>
+          <dd>{openSchool.districtOfficeOfEducation}</dd>
+          {/*
+            통학구역 줄. **"없다"와 "모른다"를 다른 말로 낸다** —
+            빈 배열은 통학구역이 실제로 없는 학교(사립·국립)이고,
+            `null`은 도면을 아직 못 불러온 상태다.
+          */}
+          <dt>통학구역</dt>
+          <dd>
+            {openSchoolZones.length === 0
+              ? "이 학교는 통학구역이 없어요"
+              : openSchoolZones.some((z) => z.shared)
+                ? "지도에 표시했어요 (공동통학구역 포함)"
+                : "지도에 표시했어요"}
+          </dd>
+        </dl>
+        {/*
+          **공시 연도를 반드시 함께 낸다.** 학생 수·교원 수·전화번호는
+          해마다 한 번 공시되는 값이라 오늘 기준이 아니다 — 연도를 빼면
+          화면의 다른 숫자(실거래가 같은 최신 값)와 같은 시점처럼 읽힌다.
+        */}
+        {ELEMENTARY_SCHOOL_INFO_YEAR !== null &&
+          (openSchool.students !== null ||
+            openSchool.teachers !== null ||
+            openSchool.phone !== null) && (
+            <p className="complex-map-school-info-note">
+              교원 수·학생 수·전화는 {ELEMENTARY_SCHOOL_INFO_YEAR}년 학교알리미
+              공시 기준이에요.
+            </p>
+          )}
+        <p className="complex-map-school-info-note">
+          {locationRules.disclosure.schoolZoneNote}
+        </p>
+      </section>
+    )}
+    {/*
+      지도 우상단 컨트롤 셋 — 지도 유형·필터·학교(사용자 지시로 셋을
+      "버튼을 누르면 팝오버가 뜨는" 같은 모양으로 통일했다. 예전에는
+      지도 유형이 토글 버튼 하나, 학교가 늘 펼쳐진 체크박스 셋, 필터는
+      사이드바에 따로 있었다).
+
+      **범례(좌하단)와 달리 눌려야 하는 컨트롤**이라
+      `scripts/map-overlay-guard.test.ts`의 "클릭을 통과시키는 오버레이"
+      규칙에서 `.complex-map-controls`를 명시적으로 뺐다(그 파일 머리
+      주석 참고) — pointer-events는 기본값(auto) 그대로 둔다.
+
+      `controlsRef`로 바깥 클릭·Esc를 감지해 팝오버를 닫는다(위
+      `openControl` effect 참고) — 셋을 한 상자로 묶어야 그 감지가
+      "이 셋 중 어디를 눌렀나"를 한 번에 판정할 수 있다.
+    */}
+    {!loadFailed && !noneLocated && (
+      <div className="complex-map-controls" ref={controlsRef}>
+        <div className="complex-map-control">
+          <button
+            type="button"
+            ref={typeTriggerRef}
+            className="complex-map-control-trigger"
+            aria-expanded={openControl === "type"}
+            onClick={(e) => toggleControl("type", e.currentTarget)}
+          >
+            지도
+          </button>
+          {openControl === "type" && (
+            <div
+              className="complex-map-control-panel complex-map-type-panel"
+              style={{ top: controlPopupPos.top, right: controlPopupPos.right }}
+              role="radiogroup"
+              aria-label="지도 유형"
+            >
+              {(
+                [
+                  ["normal", "일반지도"],
+                  ["satellite", "위성지도"],
+                ] as const
+              ).map(([type, label]) => (
+                <button
+                  key={type}
+                  type="button"
+                  role="radio"
+                  aria-checked={mapType === type}
+                  className={
+                    mapType === type
+                      ? "complex-map-segment complex-map-segment--active"
+                      : "complex-map-segment"
+                  }
+                  onClick={() => setMapType(type)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/*
+          매매가·면적·입주년차 필터(사용자 지시로 사이드바에서 이
+          자리로 옮겼다 — `ComplexMapProps`의 `filterBounds` 문서 참고).
+          `ComplexFilters`를 그대로 재사용한다 — 슬라이더 셋을 이 지도가
+          다시 만들지 않는다.
+        */}
+        <div className="complex-map-control">
+          <button
+            type="button"
+            ref={filterTriggerRef}
+            className="complex-map-control-trigger"
+            aria-expanded={openControl === "filter"}
+            onClick={(e) => toggleControl("filter", e.currentTarget)}
+          >
+            필터
+          </button>
+          {openControl === "filter" && (
+            <div
+              className="complex-map-control-panel complex-map-filter-panel"
+              style={{ top: controlPopupPos.top, right: controlPopupPos.right }}
+            >
+              <ComplexFilters
+                bounds={filterBounds}
+                value={filterValue}
+                onChange={onFilterChange}
+              />
+            </div>
+          )}
+        </div>
+
+        {/*
+          학교급 토글(사용자 지시: "학교 : 초등/중등/고등 학교 표시").
+          네이티브 `<input type="checkbox">`를 라벨로 감싼다(SEED
+          체크박스를 재구현하지 않는다는 전역 제약, 키보드·스크린리더는
+          브라우저가 담당). `<fieldset>`/`<legend>`인 이유도 같다 —
+          체크박스 셋이 "학교 표시"라는 하나의 질문에 대한 답이다.
+        */}
+        <div className="complex-map-control">
+          <button
+            type="button"
+            ref={schoolTriggerRef}
+            className="complex-map-control-trigger"
+            aria-expanded={openControl === "school"}
+            onClick={(e) => toggleControl("school", e.currentTarget)}
+          >
+            학교
+          </button>
+          {openControl === "school" && (
+            <fieldset
+              className="complex-map-control-panel complex-map-school-panel"
+              style={{ top: controlPopupPos.top, right: controlPopupPos.right }}
+            >
+              <legend>학교 표시</legend>
+              {SCHOOL_LEVELS.map((level) => (
+                <label key={level}>
+                  <input
+                    type="checkbox"
+                    checked={visibleSchoolLevels.has(level)}
+                    onChange={() =>
+                      setVisibleSchoolLevels((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(level)) next.delete(level);
+                        else next.add(level);
+                        return next;
+                      })
+                    }
+                  />
+                  {SCHOOL_LEVEL_LABEL[level]}
+                </label>
+              ))}
+            </fieldset>
+          )}
+        </div>
+      </div>
     )}
     </div>
     {/*

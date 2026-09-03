@@ -6,6 +6,76 @@ import type {
 } from "../lib/location";
 
 /**
+ * 지도 위 참고 표시 하나(중·고등학교). **입지 화면의 `ElementarySchool`과
+ * 모양은 같지만 일부러 이름을 나눈 타입이다.**
+ *
+ * ⚠ TypeScript는 구조적 타입이라 이 타입만으로 `elementarySchool` 자리에
+ * 흘러드는 것을 막지는 못한다(모양이 같으면 서로 대입된다) — 진짜 경계는
+ * "`src/lib/location/`이 이 값을 읽는 코드가 없다"는 사실 자체이고,
+ * `location.test.ts`의 "지도 참고 표시가 입지 화면 엔진에 새지 않는다"가
+ * 그 소스 텍스트를 직접 확인한다. 이름을 나눈 것은 그 경계를 읽는 사람이
+ * 코드에서 바로 알아보게 하려는 것뿐이다.
+ */
+export interface MapSchool {
+  id: string;
+  name: string;
+  coordinate: Coordinate;
+}
+
+/**
+ * 초등학교 하나의 기본정보(지도에서 마커를 눌렀을 때 띄우는 것).
+ *
+ * **좌표가 없다** — 일부러다. 좌표는 위 `ELEMENTARY_SCHOOLS`가 들고, 이
+ * 타입은 "그 학교가 어떤 학교인가"만 말한다. 둘을 한 타입으로 합치면 입지
+ * 화면 엔진(`src/lib/location/`)이 쓰는 `ElementarySchool`이 이 필드들까지
+ * 끌고 들어가게 되는데, 그 엔진은 이 정보를 읽을 이유가 없다(반경 안
+ * 개수를 셀 뿐이다).
+ *
+ * 값은 전부 「전국초중등학교위치표준데이터」가 준 그대로다 — 우리가
+ * 만들거나 추정한 값이 없다(`data/README.md`의 `elementarySchools[]` 절).
+ */
+export interface ElementarySchoolDetail {
+  id: string;
+  name: string;
+  /** 설립형태 — 공립·국립·사립 중 하나 */
+  foundationType: string;
+  /** 설립일자(YYYY-MM-DD) */
+  foundedOn: string;
+  /** 소재지 주소(도로명 우선, 없으면 지번). **빈 문자열이면 모른다는 뜻이다** */
+  address: string;
+  /** 시도교육청명(예: 서울특별시교육청) */
+  officeOfEducation: string;
+  /** 교육지원청명(예: 서울특별시동부교육지원청) */
+  districtOfficeOfEducation: string;
+  /**
+   * 아래 넷은 **학교알리미 공시**에서 온다(위 다섯 필드와 다른 원본이다).
+   * 공시는 해마다 한 번이라 오늘 기준이 아니고, 그래서 화면이
+   * {@link ELEMENTARY_SCHOOL_INFO_YEAR}를 함께 낸다.
+   *
+   * **`null`은 "모른다"**이고, 화면은 그 줄을 아예 내지 않는다 — 전화번호는
+   * 실제로 285곳 중 50곳이 공시에 없다. `0`으로 채우면 "교원이 0명"이라는
+   * 틀린 사실이 된다.
+   */
+  phone: string | null;
+  /** 설립유형 — 단설·병설·부설·부속 중 하나 */
+  foundationForm: string | null;
+  /** 학생 수(계·남·여). 계는 남 + 여와 맞는 것만 실려 있다 */
+  students: SchoolHeadcount | null;
+  /**
+   * 교원 수(계·남·여). 공시의 "직위별 교원 현황" 총계이고, 기간제교사·강사를
+   * 포함하고 원어민강사는 뺀 수다(휴직 교원은 남·여 안에 들어 있다).
+   */
+  teachers: SchoolHeadcount | null;
+}
+
+/** 사람 수 한 벌(계·남·여). `total`은 언제나 `male + female`이다 */
+export interface SchoolHeadcount {
+  total: number;
+  male: number;
+  female: number;
+}
+
+/**
  * 입지 사실을 재는 데 쓰는 좌표들.
  *
  * 학교·역은 **실제 값이 실려 있고**, 단지 좌표는 **아직 비어 있다.**
@@ -103,6 +173,82 @@ export const SUBWAY_STATIONS: readonly SubwayStation[] | null = listOrNull(
  */
 export const ELEMENTARY_SCHOOLS: readonly ElementarySchool[] | null = listOrNull(
   rawLocation.elementarySchools.map((row) => ({
+    id: row.id,
+    name: row.name,
+    coordinate: toCoordinate(row),
+  })),
+);
+
+/**
+ * 학교ID → 그 초등학교의 기본정보. 지도에서 마커를 눌렀을 때만 쓴다.
+ *
+ * **`ELEMENTARY_SCHOOLS`와 일부러 나눠 둔 두 번째 통로다** — 위 배열은 입지
+ * 화면 엔진이 좌표를 세는 데 쓰고(그 엔진은 기본정보를 읽지 않는다), 이
+ * Map은 지도 패널이 "이 학교가 어떤 학교인가"를 띄우는 데만 쓴다.
+ *
+ * `null`을 쓰지 않는 이유: 찾는 학교가 없으면 `get`이 `undefined`를 주고,
+ * 그 자체가 "그 학교 기본정보는 모른다"를 뜻한다 — 화면은 그때 패널을
+ * 띄우지 않는다. 배열들의 `null`("아직 못 실었다")과 구분할 일이 없다.
+ */
+export const ELEMENTARY_SCHOOL_DETAILS: ReadonlyMap<string, ElementarySchoolDetail> =
+  new Map(
+    rawLocation.elementarySchools.map((row) => {
+      // 공시에서 온 값들은 **키가 아예 없을 수 있다**(굽는 단계가 모르는
+      // 값의 키를 만들지 않는다) — 여기서 `null`("모른다")로 좁힌다.
+      const r = row as typeof row & {
+        phone?: string;
+        foundationForm?: string;
+        students?: SchoolHeadcount;
+        teachers?: SchoolHeadcount;
+      };
+      return [
+        row.id,
+        {
+          id: row.id,
+          name: row.name,
+          foundationType: row.foundationType,
+          foundedOn: row.foundedOn,
+          address: row.address,
+          officeOfEducation: row.officeOfEducation,
+          districtOfficeOfEducation: row.districtOfficeOfEducation,
+          phone: r.phone ?? null,
+          foundationForm: r.foundationForm ?? null,
+          students: r.students ?? null,
+          teachers: r.teachers ?? null,
+        },
+      ];
+    }),
+  );
+
+/**
+ * 위 `phone`·`students`·`teachers`가 **몇 년 공시인가.** 공시는 해마다 한
+ * 번이라 그 값들이 오늘 기준이 아니고, 화면은 이 연도를 함께 내야 정직하다.
+ * 공시 원본을 아직 안 받았으면 `null`이다.
+ */
+export const ELEMENTARY_SCHOOL_INFO_YEAR: string | null =
+  (rawLocation as { elementarySchoolInfoYear?: string }).elementarySchoolInfoYear ??
+  null;
+
+/**
+ * 중·고등학교 목록. **지도 위 참고 표시 전용**(`ComplexMap.tsx`) — 지하철역
+ * 마커와 같은 성격의 "여기 있다"는 사실 표시일 뿐이다.
+ *
+ * ⚠ **`src/lib/location/`(반경 안 개수를 세고 "학구도가 아니다"를 판정하는
+ * 입지 화면 엔진)에 절대 넘기지 않는다.** 위 `ELEMENTARY_SCHOOLS`만 그
+ * 판정에 쓰인다 — 학교급을 늘려 그 판정에 넣으면 화면이 "학군"처럼
+ * 읽히기 시작한다(`data/README.md`의 "location.json" 절 참고).
+ */
+export const MIDDLE_SCHOOLS: readonly MapSchool[] | null = listOrNull(
+  rawLocation.middleSchools.map((row) => ({
+    id: row.id,
+    name: row.name,
+    coordinate: toCoordinate(row),
+  })),
+);
+
+/** 위 `MIDDLE_SCHOOLS`와 같은 이유·같은 제약. */
+export const HIGH_SCHOOLS: readonly MapSchool[] | null = listOrNull(
+  rawLocation.highSchools.map((row) => ({
     id: row.id,
     name: row.name,
     coordinate: toCoordinate(row),

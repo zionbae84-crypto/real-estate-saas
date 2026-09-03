@@ -20,7 +20,12 @@ import {
   AGGREGATION_WINDOW_LABEL,
   type ComplexUnit,
 } from "./data/complexes";
-import { matchesAreaBands } from "./lib/area-band";
+import {
+  complexFilterBounds,
+  filterByComplexFilters,
+  wouldHelpToResetAxis,
+  type ComplexFilterState,
+} from "./lib/complex-filters";
 import { buildComplexList, burdenTierOf } from "./lib/complex-list";
 import { regionNameByCode } from "./data/regions";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
@@ -105,6 +110,20 @@ export function App() {
   const [currentRegionCode, setCurrentRegionCode] = useState<string | null>(null);
   /** 조회 결과 안에서 행정동으로 더 좁힌 값. null이면 그 지역 전체다 */
   const [selectedDong, setSelectedDong] = useState<string | null>(null);
+  /**
+   * 매매가·면적·입주년차 슬라이더 필터(사용자 지시: "필터 : 면적/
+   * 입주년차/세대수/가격을 조정하여 필터로"). `null`이면 "아직 이 지역
+   * 데이터로 초기화하지 않았다"는 뜻이다 — 지역을 조회할 때마다 아래
+   * effect가 그 지역의 실제 최소·최대(`complexFilterBounds`)로 채운다.
+   *
+   * **지역이 바뀌면 반드시 다시 채워야 한다.** 이전 지역의 좁은 범위
+   * (예: 강남 매매가 상한)를 그대로 들고 새 지역(예: 노원)으로 가면,
+   * 그 지역 대부분의 매물이 조용히 걸러진다 — 사용자는 이유를 알 수
+   * 없다.
+   */
+  const [complexFilters, setComplexFilters] = useState<ComplexFilterState | null>(
+    null,
+  );
   // 상세(상환 시뮬레이션)를 연 평형. null이면 목록 화면이다.
   const [selectedUnit, setSelectedUnit] = useState<ComplexUnit | null>(null);
   /**
@@ -254,6 +273,42 @@ export function App() {
   ]);
 
   /**
+   * 입주년차를 재는 기준 시각. **한 번만 잰다** — 렌더마다 `new Date()`를
+   * 새로 부르면 슬라이더의 경계(`complexFilterBounds`)와 실제 거르는 값
+   * (`filterByComplexFilters`)이 자정을 넘는 순간 1년 어긋날 수 있고,
+   * 그 어긋남은 재현하기 어려운 버그가 된다. `useProfileForm`이 값을
+   * 마운트 시점에 한 번만 읽는 것과 같은 태도다.
+   */
+  const now = useMemo(() => new Date(), []);
+
+  /**
+   * 지금 지역 데이터의 실제 최소·최대(면적·가격·입주년차 슬라이더가
+   * 낼 수 있는 전체 범위). `complexFilters`(사용자가 지금 맞춘 값)와
+   * 다른 값이다 — 이 값은 "슬라이더를 끝까지 밀면 어디까지 가는가"를
+   * 정하고, 아래 렌더가 "이 축을 전체로 풀면 도움이 되는가"를 물을
+   * 때도 이 값을 쓴다(`wouldHelpToResetAxis`).
+   */
+  const complexFilterBoundsValue = useMemo(
+    () => complexFilterBounds(regionComplexes.units, now),
+    [regionComplexes.units, now],
+  );
+
+  /**
+   * 지역을 새로 조회할 때마다 매매가·면적·입주년차 슬라이더를 그 지역
+   * 데이터의 실제 최소·최대로 되돌린다.
+   *
+   * **`regionComplexes.units`가 바뀔 때만 돈다 — `selectedDong`이
+   * 바뀔 때는 돌지 않는다.** 행정동으로 좁히는 것은 이 슬라이더들이
+   * 정하는 축과 다르다(매매가·면적·입주년차는 지역 전체 기준이지 동
+   * 기준이 아니다) — 동을 바꿀 때마다 슬라이더 범위가 흔들리면
+   * 사용자가 방금 맞춘 값이 사라진다.
+   */
+  useEffect(() => {
+    if (regionComplexes.status !== "success") return;
+    setComplexFilters(complexFilterBoundsValue);
+  }, [regionComplexes.status, complexFilterBoundsValue]);
+
+  /**
    * **고른 단지(평형)에 매달린 상태를 한 번에 비우는 유일한 자리다.**
    *
    * **함수 하나로 모은 이유**(C1 수정): 예전에는 상세를 닫는 핸들러마다
@@ -357,53 +412,48 @@ export function App() {
     currentRegionCode === null ? null : regionNameByCode(currentRegionCode);
 
   /**
-   * 사용자가 고른 평형대(화면 1의 네 번째 질문)만 남긴 조회 결과.
+   * 매매가·면적·입주년차 슬라이더(사용자 지시)만 남긴 조회 결과.
    *
-   * **거르는 축이 하나 늘었고, 그래서 0건의 원인도 하나 늘었다.**
-   * "이 지역엔 거래가 없어요"·"그 평형대엔 매물이 없어요"·"예산으로는
-   * 못 사요"는 서로 다른 말이고, 섞으면 사용자에게 틀린 해법을 준다
-   * (넓혀야 할 것이 지역인지 평형대인지 예산인지가 달라진다). 이
-   * 저장소가 여섯 번 반복한 실패의 정확한 형태라, 아래 렌더에서 세
-   * 원인을 각자 자기 문구로 가른다.
+   * **거르는 축이 셋이고, 그래서 0건의 원인도 셋 더 있다.** "이 지역엔
+   * 거래가 없어요"·"이 조건에는 매물이 없어요"·"예산으로는 못 사요"는
+   * 서로 다른 말이고, 섞으면 사용자에게 틀린 해법을 준다(넓혀야 할 것이
+   * 지역인지 필터인지 예산인지가 달라진다). 이 저장소가 여섯 번 반복한
+   * 실패의 정확한 형태라, 아래 렌더에서 원인을 각자 자기 문구로 가른다
+   * (`wouldHelpToResetAxis`가 셋 중 어느 축을 넓히면 도움이 되는지
+   * 축별로 답한다).
    *
-   * 면적 판정은 `areaBucket`(반올림한 표시용 값)이 아니라
-   * `maxExclusiveAreaSqm`(그 버킷에 실제로 들어간 거래들의 최대 전용면적)
-   * 으로 한다 — 목록·상세·부대비용이 전부 그 값으로 85㎡ 경계를
-   * 가르므로, 여기서만 반올림값을 쓰면 "중소형을 골랐는데 농특세가 붙는
-   * 집이 목록에 있다"가 된다.
+   * `complexFilters === null`은 지역을 막 조회해 아직 그 지역 범위로
+   * 초기화되기 전인 한 프레임뿐이다(위 초기화 effect가 곧바로 채운다)
+   * — 그 찰나에는 거르지 않고 원본을 그대로 낸다.
    */
-  const areaFilteredUnits = useMemo(
+  const rangeFilteredUnits = useMemo(
     () =>
-      regionComplexes.units.filter((u) =>
-        matchesAreaBands(
-          u.maxExclusiveAreaSqm,
-          state.areaBands,
-          rules.acquisitionTax.ruralTaxAreaThresholdSqm,
-        ),
-      ),
-    [regionComplexes.units, state.areaBands],
+      complexFilters === null
+        ? regionComplexes.units
+        : filterByComplexFilters(regionComplexes.units, complexFilters, now),
+    [regionComplexes.units, complexFilters, now],
   );
 
   /**
    * 조회 결과에 실제로 있는 행정동만. 없는 동은 고를 수 있으면 안 된다.
    *
-   * **평형대로 거른 뒤의 목록에서 뽑는다** — 거르기 전에서 뽑으면, 고른
-   * 평형대에는 한 건도 없는 동이 선택지에 남아 고르는 순간 빈 목록이
+   * **필터로 거른 뒤의 목록에서 뽑는다** — 거르기 전에서 뽑으면, 고른
+   * 필터 범위에는 한 건도 없는 동이 선택지에 남아 고르는 순간 빈 목록이
    * 된다. 그때 화면은 "이 동엔 조건에 맞는 단지가 없어요"라고 말하는데,
    * 사용자가 방금 고른 것은 동이라 원인을 동으로 읽게 된다 — 진짜
-   * 원인(평형대)을 가리는 오귀속이다.
+   * 원인(필터)을 가리는 오귀속이다.
    */
   const dongOptions = useMemo(
-    () => [...new Set(areaFilteredUnits.map((u) => u.legalDongName))].sort(),
-    [areaFilteredUnits],
+    () => [...new Set(rangeFilteredUnits.map((u) => u.legalDongName))].sort(),
+    [rangeFilteredUnits],
   );
 
   const dongFilteredUnits = useMemo(
     () =>
       selectedDong === null
-        ? areaFilteredUnits
-        : areaFilteredUnits.filter((u) => u.legalDongName === selectedDong),
-    [areaFilteredUnits, selectedDong],
+        ? rangeFilteredUnits
+        : rangeFilteredUnits.filter((u) => u.legalDongName === selectedDong),
+    [rangeFilteredUnits, selectedDong],
   );
 
   /**
@@ -442,10 +492,11 @@ export function App() {
    * 원인이 동인가"를 가르는 데에만 쓴다. 동을 좁혀 0건이 됐을 때, 동을
    * 풀면 뭔가 나오는지를 이 목록으로 확인한다.
    *
-   * **평형대 필터는 여기서도 걸린 채다**(`areaFilteredUnits`에서 만든다).
-   * 푸는 것은 동 하나뿐이라야 이 대조가 "동 때문인가"만 답한다 — 평형대까지
-   * 함께 풀면 평형대 때문에 빈 경우에도 "다른 동을 선택해 보세요"라고
-   * 말하게 되고, 그건 넓혀야 할 축을 틀리게 짚는 오귀속이다.
+   * **슬라이더 필터는 여기서도 걸린 채다**(`rangeFilteredUnits`에서
+   * 만든다). 푸는 것은 동 하나뿐이라야 이 대조가 "동 때문인가"만
+   * 답한다 — 필터까지 함께 풀면 필터 때문에 빈 경우에도 "다른 동을
+   * 선택해 보세요"라고 말하게 되고, 그건 넓혀야 할 축을 틀리게 짚는
+   * 오귀속이다.
    *
    * `buildComplexList`는 순수 함수라 두 번 불러도 결과가 같고, 둘 다
    * 메모이즈돼 있어 비용도 미미하다.
@@ -456,12 +507,12 @@ export function App() {
       regionComplexes.status !== "success"
         ? null
         : buildComplexList({
-            units: areaFilteredUnits,
+            units: rangeFilteredUnits,
             profile,
             rules,
             regionCodes: [],
           }),
-    [profile, purchaseType, regionComplexes.status, areaFilteredUnits],
+    [profile, purchaseType, regionComplexes.status, rangeFilteredUnits],
   );
 
   /**
@@ -710,9 +761,9 @@ export function App() {
    * 값을 확정한 적 없는데 가정값이라고 오인시키게 된다.
    *
    * ⚠ **상세를 열지 않았을 때는 숫자를 넘기지 않는다.** 그때 헤드라인은
-   * 면적 값이 아니라 "고른 평형대에 85㎡ 초과가 섞였는가"라는 전제 하나로
-   * 계산되므로(`assumedExclusiveAreaSqm`) 넘길 대표값 자체가 없다 —
-   * `PrintSummary`가 `state.areaBands`에서 그 전제를 다시 읽어 적는다.
+   * 언제나 룰셋의 `ruralTaxAreaThresholdSqm`(85㎡) 이하로 가정하므로
+   * (`useProfileForm`의 `toProfile`) 넘길 대표값 자체가 없다 —
+   * `PrintSummary`가 그 임계값을 룰셋에서 직접 다시 읽어 적는다.
    *
    * 갈래가 셋에서 둘로 줄었다 — 전용면적을 직접 입력하는 칸이 화면 1에서
    * 사라졌으므로 "직접 입력"에 이르는 경로가 없다.
@@ -863,11 +914,6 @@ export function App() {
           않는다 — 이 저장소가 여섯 번 반복한, 빠져나올 수 없는 빈
           화면(커밋 `c90babf`)과 같은 모양이 된다.
 
-          평형대를 하나도 안 고른 것도 같은 축으로 막는다 — 빈 선택을
-          조용히 "전체"로 읽지 않는다는 원칙(아래 `state.areaBands.length
-          === 0` 분기와 `lib/area-band.ts`의 `matchesAreaBands`)이 조회
-          자체에도 적용돼야, 평형대 없이 조회해 결과 화면이 아무 매물도
-          없이 뜨는 것을 막는다.
         */}
         <ProfileForm
           state={state}
@@ -875,11 +921,7 @@ export function App() {
           regionSlot={
             <RegionSelect
               onSelect={handleRegionSelect}
-              disabled={
-                affordability === null ||
-                residentialProfile === null ||
-                state.areaBands.length === 0
-              }
+              disabled={affordability === null || residentialProfile === null}
             />
           }
         />
@@ -916,17 +958,6 @@ export function App() {
           */
           <p className="prompt">
             현금·연 소득·주택 수를 알려주면 살 수 있는 가격을 계산해요.
-          </p>
-        ) : state.areaBands.length === 0 ? (
-          /*
-            평형대를 하나도 고르지 않았다. 예산은 이미 계산됐지만 보여줄
-            매물을 고를 기준이 없다 — 빈 선택을 조용히 "전체"로 바꿔
-            읽지 않는다(`lib/area-band.ts`의 `matchesAreaBands`). 그렇게
-            읽으면 화면이 사용자가 고른 적 없는 조건으로 결과를 그리면서
-            그 사실을 말하지 않게 된다.
-          */
-          <p className="prompt">
-            찾는 평형대를 하나 이상 골라 주세요.
           </p>
         ) : (
           <>
@@ -1380,6 +1411,19 @@ export function App() {
                             naverMapClientId={
                               import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
                             }
+                            /*
+                              매매가·면적·입주년차 슬라이더(사용자 지시,
+                              "필터" 버튼 팝업 안). 값의 출처·경계는
+                              여기서 정하지 않는다 — `complexFilterBoundsValue`는
+                              그 지역 데이터에서 매번 다시 재는 경계,
+                              `complexFilters`는 사용자가 지금 맞춘 값이다.
+                              `complexFilters`가 `null`인 한 프레임(지역을
+                              막 조회해 아직 그 지역 범위로 초기화되기 전)에는
+                              `complexFilterBoundsValue`를 그대로 값으로 쓴다.
+                            */
+                            filterBounds={complexFilterBoundsValue}
+                            filterValue={complexFilters ?? complexFilterBoundsValue}
+                            onFilterChange={setComplexFilters}
                           />
                           {/*
                             지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
@@ -1605,31 +1649,16 @@ export function App() {
                     )}
 
                   {/*
-                    ⚠ **"그 평형대엔 매물이 없어요"는 "그 지역엔 거래가
-                    없어요"와도, "예산으로는 못 사요"와도 다른 말이다.**
-                    셋을 섞으면 넓혀야 할 축을 틀리게 짚어 준다 — 지역인지,
-                    평형대인지, 예산인지가 각각 다른 해법이다. 이 저장소가
-                    여섯 번 반복한 실패의 정확한 형태라 여기서 직접 가른다:
-                    위 `.region-empty`가 지역 축을, 이 줄이 평형대 축을,
-                    아래 `.dong-empty`와 `ComplexList`의 문구가 각각 동 축과
-                    예산 축을 맡는다.
-
-                    조건이 `units.length > 0`을 함께 보는 이유는 그것이
-                    "지역에는 거래가 있었다"는 사실을 이미 확인해 주기
-                    때문이다 — 그 확인 없이 이 문구를 내면 거래가 아예 없는
-                    지역에서도 평형대를 탓하게 된다.
+                    필터 슬라이더는 **그 지역에 거래가 있으면 언제나
+                    보인다** — 아래 `rangeFilteredUnits.length === 0`
+                    분기와 달리 슬라이더 자체는 결과가 0건이어도 사라지지
+                    않는다. 사라지면 사용자가 슬라이더를 넓혀 0건에서
+                    빠져나올 방법이 없다(슬라이더가 곧 그 탈출구다) — 옛
+                    평형대 칩이 화면 1에 살아 입력 화면으로 돌아가야만
+                    바꿀 수 있었던 것과 다른 자리다.
                   */}
                   {regionComplexes.status === "success" &&
-                    regionComplexes.units.length > 0 &&
-                    areaFilteredUnits.length === 0 && (
-                      <p className="area-band-empty">
-                        고른 평형대에 해당하는 매물이 이 지역엔 없어요.
-                        평형대를 넓혀 보세요.
-                      </p>
-                    )}
-
-                  {regionComplexes.status === "success" &&
-                    areaFilteredUnits.length > 0 && (
+                    regionComplexes.units.length > 0 && (
                       <>
                           {/*
                             매물 유형·행정동 좁히기를 한 그룹으로 묶는다.
@@ -1698,7 +1727,44 @@ export function App() {
                               </div>
                             )}
                           </div>
-                          {dongFilteredEmpty ? (
+                          {rangeFilteredUnits.length === 0 ? (
+                            /*
+                              ⚠ **필터 범위 밖이라 0건인 것은 "예산으로
+                              못 산다"·"이 동엔 없다"와 다른 원인이다.**
+                              세 슬라이더 중 어느 것을 넓히면 결과가
+                              생기는지를 `wouldHelpToResetAxis`로 축마다
+                              직접 확인해, 도움이 되는 축만 짚어 말한다 —
+                              지역·평형대·예산을 가를 때와 같은 이유다(이
+                              저장소가 여섯 번 반복한 실패).
+                            */
+                            <p className="complex-range-empty">
+                              {(() => {
+                                const filters = complexFilters ?? complexFilterBoundsValue;
+                                const axes: Array<{
+                                  key: "price" | "area" | "builtYearAge";
+                                  label: string;
+                                }> = [
+                                  { key: "price", label: "매매가" },
+                                  { key: "area", label: "면적" },
+                                  { key: "builtYearAge", label: "입주년차" },
+                                ];
+                                const helpful = axes
+                                  .filter((axis) =>
+                                    wouldHelpToResetAxis(
+                                      regionComplexes.units,
+                                      filters,
+                                      complexFilterBoundsValue,
+                                      axis.key,
+                                      now,
+                                    ),
+                                  )
+                                  .map((axis) => axis.label);
+                                return helpful.length > 0
+                                  ? `${helpful.join("·")} 범위에 해당하는 매물이 이 지역엔 없어요. ${helpful.join("·")} 범위를 넓혀 보세요.`
+                                  : "지금 필터 조건에 해당하는 매물이 이 지역엔 없어요. 필터 범위를 넓혀 보세요.";
+                              })()}
+                            </p>
+                          ) : dongFilteredEmpty ? (
                             <p className="dong-empty">
                               이 동엔 조건에 맞는 단지가 없어요. 다른 동을
                               선택하거나 전체로 넓혀 보세요.

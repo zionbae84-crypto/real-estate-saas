@@ -6,10 +6,6 @@ import { formatWon } from "./format/won";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { calcAffordablePrice, type BuyerProfile } from "./lib/finance";
 import { rules } from "./state/useAffordability";
-import {
-  assumedExclusiveAreaSqm,
-  DEFAULT_FORM_STATE,
-} from "./state/useProfileForm";
 import { purchaseRules } from "./state/usePurchaseCheck";
 import { PURCHASE_TYPE_STORAGE_KEY } from "./state/usePurchaseType";
 
@@ -50,10 +46,10 @@ async function fillProfile() {
  * 폼의 기본값 그대로인 프로필.
  *
  * `useProfileForm.DEFAULT_FORM_STATE`가 정한 것과 같아야 한다 — 규제지역
- * true, 생애최초 false, 전용면적은 **고른 평형대에서 유도한다**(기본값은
- * 전체 선택이라 85㎡ 초과가 섞여 있고, 그래서 농특세가 붙는 쪽으로
- * 계산된다). 숫자를 손으로 적지 않고 같은 함수에서 받아 온다 — 손으로
- * 적으면 그 값이 폼과 어긋나는 날 이 테스트가 어긋난 쪽을 정답으로
+ * true, 생애최초 false. 전용면적은 항상 룰셋의
+ * `ruralTaxAreaThresholdSqm`이다(사용자 지시로 평형대 질문이 사라졌다 —
+ * `useProfileForm`의 `toProfile` 참고). 룰셋에서 직접 받아 온다 — 손으로
+ * 적으면 그 값이 룰셋과 어긋나는 날 이 테스트가 어긋난 쪽을 정답으로
  * 잠근다.
  */
 const PROFILE: BuyerProfile = {
@@ -64,7 +60,7 @@ const PROFILE: BuyerProfile = {
   existingDebtAnnualPayment: 0,
   isFirstTimeBuyer: false,
   isRegulatedArea: true,
-  exclusiveAreaSqm: assumedExclusiveAreaSqm(DEFAULT_FORM_STATE.areaBands),
+  exclusiveAreaSqm: rules.acquisitionTax.ruralTaxAreaThresholdSqm,
 };
 
 describe("구매 유형을 고르는 자리가 없다", () => {

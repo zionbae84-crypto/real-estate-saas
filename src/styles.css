@@ -139,98 +139,10 @@ body {
 }
 
 /*
- * 평형대 질문(화면 1의 네 번째 질문). 네이티브 체크박스 넷을 라벨로
- * 감싼 칩이다 — SEED 체크박스를 재구현하지 않으면서 키보드 조작·포커스
- * 순서·스크린 리더 노출을 브라우저에 맡긴다(AreaBandSelect.tsx 참고).
- *
- * 색으로 뜻을 전달하는 것이 하나도 없다 — 무엇을 골랐는지는 체크박스
- * 자체와 글자가 말한다. 흑백으로 인쇄되거나 색이 보이지 않아도 뜻이
- * 그대로 남는다.
- *
- * 인쇄에서는 .profile-form 전체가 지워지므로 이 질문도 함께 사라진다 —
- * 대신 고른 답이 PrintSummary에 "찾는 평형대" 한 줄로 남는다.
+ * 예전에는 여기 평형대 질문(화면 1의 네 번째 질문) 칩 CSS가 있었다.
+ * 사용자 지시로 그 질문 자체가 사라졌다 — 면적은 이제 결과 화면의
+ * 슬라이더 필터(`.range-slider`, `ComplexFilters.tsx`)가 맡는다.
  */
-.area-band-select {
-  border: 1px solid var(--border);
-  border-radius: 0.375rem;
-  padding: 0.5rem 1rem 0.75rem;
-  margin: 0;
-}
-
-.area-band-select legend {
-  font-weight: 600;
-  padding: 0 0.25rem;
-}
-
-/*
- * 3열 고정 — 구간이 셋이므로 **한 줄에 셋**이다.
- *
- * 예전에는 네 구간을 2×2로 뒀다(`auto-fit`이 폭에 따라 3+1로 갈리는
- * 것을 막으려고 고정한 값이었다). 구간이 셋이 된 지금 2열을 그대로 두면
- * 2+1이 되어 같은 병이 다시 난다 — 세 구간이 한 축의 눈금인데 둘과
- * 하나로 갈려 보이면 그 축이 읽히지 않는다. 한 줄에 셋이면 좁은 쪽에서
- * 넓은 쪽으로 가는 눈금이 그대로 보인다.
- *
- * 열 수는 구간 수를 따라간다. `AREA_BANDS`가 다시 움직이면 이 값도
- * 함께 움직여야 하고, `AreaBandSelect.test.tsx`의 "칩 열 수는 구간
- * 수와 같다"가 그 둘이 어긋나면 깨진다.
- */
-.area-band-options {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 0.5rem;
-  margin-top: 0.5rem;
-}
-
-/*
- * 좁은 화면에서는 한 열로 세운다.
- *
- * 실측(브라우저 `getBoundingClientRect`, 뷰포트 375px에서 3열을 강제해
- * 재 봤다): 칩 폭 103.7px, 그중 글자 자리 60.7px, 범위 라벨이 필요한
- * 폭 54px — 잘리지는 않지만 "60㎡ 이하"가 **두 줄로 접혀** 칩 높이가
- * 64.4px에서 85.2px로 뛴다. 한 열이면 칩 폭 327px에 라벨이 한 줄로
- * 들어간다. 세로로 셋이어도 좁은 쪽에서 넓은 쪽으로 가는 눈금은 그대로
- * 남는다 — 2+1로 갈리는 것과 달리 축이 깨지지 않는다.
- */
-@media (max-width: 480px) {
-  .area-band-options {
-    grid-template-columns: minmax(0, 1fr);
-  }
-}
-
-/*
- * .field label이 block·bold라 칩 라벨까지 그 모양이 된다. 이 자리에서는
- * 체크박스와 글자가 한 줄로 붙어야 하므로 되돌린다.
- */
-.area-band-select .area-band-option {
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-weight: 400;
-  cursor: pointer;
-}
-
-/*
- * DESIGN.md의 Stat Block 규율 — 라벨 작게 위, 값 크게 아래, 왼쪽 정렬.
- * 여기서 라벨은 범위(`~60㎡`)이고 값은 구간 이름(`소형`)이다. DOM
- * 순서는 이름 → 범위(접근성 이름이 "소형 ~60㎡"로 읽힌다)이고, 눈에
- * 보이는 순서만 여기서 뒤집는다.
- */
-.area-band-text {
-  display: flex;
-  flex-direction: column-reverse;
-  align-items: flex-start;
-}
-
-.area-band-name {
-  font-weight: 600;
-}
-
-.area-band-range {
-  /* .hint·.field-note와 같은 13px. caption류 크기를 하나로 유지한다 */
-  font-size: 0.8125rem;
-  color: var(--seed-color-fg-neutral-muted);
-}
 
 .hint {
   color: var(--seed-color-fg-neutral-muted);
@@ -818,7 +730,7 @@ body {
 /*
  * 매물 유형·행정동 좁히기는 "조회 조건"이지 이 목록의 핵심 값이
  * 아니다 — 아래 단지 목록(이름·가격)보다 눈에 덜 띄어야 위계가 선다.
- * 라벨은 `.hint`·`.area-band-range`와 같은 캡션 크기(13px)로,
+ * 라벨은 `.hint`·`.range-slider-value`와 같은 캡션 크기(13px)로,
  * select 상자는 패딩·글자 크기를 한 단 줄인다. `.field select`(전역
  * 1rem/0.5rem)보다 이 규칙이 아래에 있어 특정도가 같아도 이긴다.
  */
@@ -845,16 +757,130 @@ body {
 }
 
 /*
+ * 면적·가격·입주년차 범위 슬라이더 셋(RangeSlider.tsx, ComplexFilters.tsx).
+ * `.housing-type-select`·`.dong-narrow`와 같은 "조회 조건" 위계라 라벨을
+ * 같은 캡션 크기로 맞춘다.
+ */
+.range-slider {
+  margin-bottom: 0.875rem;
+}
+
+/*
+ * 제목(왼쪽)·범위 문구(오른쪽) 한 줄(사용자 지시 참고 사진 1).
+ * `.range-slider-label`이 `<p>`인 채로 남아 있어(위 RangeSlider.tsx
+ * 주석 — SEED `label` prop을 안 쓰는 접근성 이유) 이 줄이 그 둘을
+ * 양끝으로 벌려 준다.
+ */
+.range-slider-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.125rem;
+}
+
+.range-slider-label {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--result-ink);
+}
+
+.range-slider-value {
+  margin: 0;
+  font-size: 0.8125rem;
+  color: var(--result-gray);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 건드리지 않은 필터("전체")는 강조색으로 — 숫자보다 먼저 눈에 띈다. */
+.range-slider-value--all {
+  color: var(--result-signal-ink);
+  font-weight: 600;
+}
+
+/*
+ * SEED 슬라이더 색·크기를 이 화면 톤으로 덮는다(사용자 지시: "색상은
+ * 연하게, 좌우 동그라미도 연하고 작게"). 클래스 이름은 SEED가 실제로
+ * 내는 것 그대로다(`node_modules/@seed-design/css/recipes/slider.css`
+ * 확인 — RangeSlider.tsx 머리 주석 참고). SEED 컴포넌트 자체를
+ * 재구현하지 않고 `.range-slider` 스코프 안에서만 색을 덮는다.
+ */
+/*
+ * 채운 구간(`__range`)이 빈 트랙(`__track`)보다 또렷해야 "어디까지
+ * 골랐는지"가 한눈에 읽힌다 — `--result-signal-wash`(#e8f4fe)는
+ * `--result-rule`(#dbe7f3)보다 오히려 더 밝아 트랙과 채움이 뒤집혀
+ * 보였다(리뷰에서 실측으로 잡았다). 그래서 채움에는 그 둘 사이 톤을
+ * 새로 하나 쓴다 — `--result-signal`(#3ba6f1, 진함)과
+ * `--result-rule`(#dbe7f3, 트랙) 중간의 옅은 파랑이다.
+ */
+.range-slider .seed-slider__track {
+  background-color: var(--result-rule);
+}
+
+.range-slider .seed-slider__range {
+  background-color: #a9d3f5;
+}
+
+.range-slider .seed-slider__thumb {
+  width: 14px;
+  height: 14px;
+}
+
+.range-slider .seed-slider__thumb::after {
+  background-color: var(--result-paper);
+  border: 1.5px solid var(--result-signal);
+}
+
+/*
+ * 트랙 위 구간 구분선(사용자 지시: "필터부분은 스크롤 사이에 표시된
+ * 각 구간에 구분선을 표시해줘"). SEED `Slider`의 `ticks` prop이 이미
+ * 내는 `.seed-slider-tick`을 그대로 쓴다(RangeSlider.tsx의 `<Slider
+ * ticks={...}>` 참고, `Range` 다음에 렌더돼 채운 구간 위에도 선이
+ * 보인다) — 기본색(거의 검정)만 이 화면 톤에 맞게 옅게 덮는다.
+ */
+.range-slider .seed-slider-tick {
+  background-color: rgb(18 41 77 / 20%);
+}
+
+/*
+ * 트랙 아래 눈금 축(사용자 지시 참고 사진 2: "0 / 10평 / 20평 / …/
+ * 최대"). 각 눈금은 `left`를 실제 값 위치(%)로 인라인 지정받으므로
+ * (RangeSlider.tsx) 여기서는 겹치지 않게 가운데 정렬만 한다 — 단,
+ * 맨 끝("최대")은 축 밖으로 밀리지 않게 오른쪽 정렬한다.
+ */
+.range-slider-axis {
+  position: relative;
+  height: 1rem;
+  margin-top: 0.25rem;
+}
+
+.range-slider-tick {
+  position: absolute;
+  top: 0;
+  transform: translateX(-50%);
+  font-size: 0.6875rem;
+  color: var(--result-gray);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.range-slider-tick--max {
+  transform: translateX(-100%);
+}
+
+/*
  * 조회 실패·결과 0건 안내. 넷 다 목록 자리를 대신 채우는 문구다.
  * **원인이 각각 다르므로 문구도 각각 다르다**(App.tsx 참고):
  * `.region-empty`는 이 지역에 거래 자체가 없다는 것,
- * `.area-band-empty`는 고른 평형대에 매물이 없다는 것,
+ * `.complex-range-empty`는 매매가·면적·입주년차 필터 범위에 매물이
+ * 없다는 것(도움이 되는 축만 `wouldHelpToResetAxis`로 짚어 말한다),
  * `.dong-empty`는 좁힌 행정동 하나에 결과가 없다는 것이다. 넓혀야 할
- * 축이 각각 지역·평형대·동으로 다르므로 섞으면 틀린 해법을 준다.
+ * 축이 각각 지역·필터·동으로 다르므로 섞으면 틀린 해법을 준다.
  */
 .region-query-error,
 .region-empty,
-.area-band-empty,
+.complex-range-empty,
 .dong-empty {
   margin-top: 1rem;
 }
@@ -3149,6 +3175,338 @@ body {
 }
 
 /*
+ * 지도 컨트롤 셋 — 지도 유형·필터·학교(사용자 지시로 셋을 "버튼을
+ * 누르면 팝오버가 뜨는" 같은 모양으로 통일했다, ComplexMap.tsx 참고).
+ * 우상단 세로줄, 좌하단 범례와 대각선으로 갈라 겹치지 않는다.
+ *
+ * **범례와 달리 `pointer-events`를 막지 않는다** — 셋 다 눌려야 하는
+ * 컨트롤이다(scripts/map-overlay-guard.test.ts가 이 선택자를 클릭
+ * 통과 규칙에서 명시적으로 뺀다).
+ */
+.complex-map-controls {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.complex-map-control-trigger {
+  padding: 0.5rem 0.875rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--result-ink);
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 0.375rem;
+  box-shadow: 0 1px 4px rgb(18 41 77 / 15%);
+  cursor: pointer;
+}
+
+.complex-map-control-trigger:hover {
+  background: var(--result-alt);
+}
+
+/* 눌려서 팝오버가 뜬 트리거는 옅은 강조 바탕으로 지금 열려 있음을 말한다. */
+.complex-map-control-trigger[aria-expanded="true"] {
+  background: var(--result-signal-wash);
+  border-color: var(--result-signal);
+  color: var(--result-signal-ink);
+}
+
+/*
+ * 사용자 지시: "지도/필터/학교를 누르면 좌측 사이드바의 부대비용/대출
+ * 컴포넌트처럼 아이콘 좌측에 연결된 팝업이 생기게 해줘." —
+ * `ComplexDetail.tsx`의 `.detail-binding-popup`과 같은 요령이다.
+ *
+ * 그 팝업은 `position: fixed`를 쓴다 — `absolute`였다면 조상 중
+ * `overflow: hidden`이 걸린 상자(거긴 사이드바의 `overflow-y: auto`,
+ * 여긴 `.complex-map-frame`의 `overflow: hidden`)에 걸려 잘린다.
+ * `top`/`right`는 CSS가 아니라 ComplexMap.tsx의 `controlPopupPos`가
+ * 트리거 위치를 재서 인라인으로 넣는다.
+ *
+ * **좌우가 뒤집혀 있다** — 사이드바 버전은 아이콘 오른쪽에 열고
+ * (`left: rect.right + 8`) 화살표가 팝업 왼쪽 모서리에서 왼쪽을
+ * 가리킨다. 여기 세 버튼은 지도 오른쪽 가장자리에 있어 그대로 하면
+ * 팝업이 화면 밖으로 밀린다 — 그래서 아이콘 **왼쪽**에 열고(`right`로
+ * 앉힌다, 패널 폭을 몰라도 되는 이유는 ComplexMap.tsx의 같은 주석
+ * 참고), 화살표도 반대쪽(팝업 오른쪽 모서리에서 오른쪽=트리거 쪽을
+ * 가리키게)으로 뒤집는다.
+ */
+.complex-map-control-panel {
+  position: fixed;
+  z-index: 3;
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 0.5rem;
+  box-shadow: 0 4px 12px rgb(18 41 77 / 18%);
+}
+
+/*
+ * 연결 화살표. `.detail-binding-popup::before`를 좌우로 뒤집은 것이다
+ * — 12×12px 정사각형을 45도 돌리면 마름모가 되고, 그중 두 변만
+ * 테두리를 주면 그 두 변이 만나는 꼭짓점이 뾰족한 끝으로 보인다.
+ * 원본(아이콘이 팝업 오른쪽에 있다)은 `border-left`+`border-bottom`을
+ * 줘서 왼쪽을 가리켰다 — 그 두 변이 만나는 꼭짓점이 회전 후 정확히
+ * 왼쪽을 향하기 때문이다(계산으로 확인했다). 여기(아이콘이 팝업
+ * 오른쪽에 있다)는 대각선 반대편 꼭짓점을 쓴다 — `border-top`+
+ * `border-right`가 만나는 꼭짓점이 회전 후 정확히 오른쪽을 향한다.
+ */
+.complex-map-control-panel::before {
+  content: "";
+  position: absolute;
+  top: 0.9rem;
+  right: -6px;
+  width: 12px;
+  height: 12px;
+  background: var(--result-paper);
+  border-top: 1px solid var(--result-rule);
+  border-right: 1px solid var(--result-rule);
+  transform: rotate(45deg);
+}
+
+/* 일반지도/위성지도 — 참고 사진처럼 두 칸짜리 세그먼트로 묶는다. */
+.complex-map-type-panel {
+  display: flex;
+  padding: 0.25rem;
+  gap: 0.25rem;
+}
+
+.complex-map-segment {
+  padding: 0.4375rem 0.75rem;
+  font-size: 0.8125rem;
+  color: var(--result-gray);
+  background: transparent;
+  border: none;
+  border-radius: 0.375rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.complex-map-segment:hover {
+  background: var(--result-alt);
+}
+
+.complex-map-segment--active {
+  color: var(--result-signal-ink);
+  background: var(--result-signal-wash);
+  font-weight: 600;
+}
+
+/* 매매가·면적·입주년차 슬라이더(사용자 지시로 사이드바에서 옮겼다). */
+.complex-map-filter-panel {
+  width: 15rem;
+  padding: 0.875rem 1rem;
+}
+
+.complex-map-filter-panel .range-slider:last-child {
+  margin-bottom: 0;
+}
+
+/*
+ * 학교급 체크박스 셋(ComplexMap.tsx, 사용자 지시: "학교 : 초등/중등/고등
+ * 학교 표시").
+ */
+.complex-map-school-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.625rem 0.875rem;
+  border: none;
+  font-size: 0.8125rem;
+  color: var(--result-ink);
+}
+
+.complex-map-school-panel legend {
+  /*
+   * 스크린 리더에게는 "학교 표시"를 읽히되, 화면에서는 이미 옆의 체크박스
+   * 라벨들("초등학교"·"중학교"·"고등학교")이 뜻을 전달하므로 시각적으로는
+   * 감춘다 — 같은 뜻을 두 번 좁은 상자에 욱여넣지 않는다.
+   */
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.complex-map-school-panel label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+/*
+ * 지도 위 학교 참고 표시 마커(ComplexMap.tsx의 schoolMarkerLabel).
+ * **학사모(졸업모) 아이콘 + 초성 글자**(사용자 지시로 첨부한 참고
+ * 이미지를 본떴다 — 둥근 사각 배지 위 흰 학사모, 그 아래 알약 라벨.
+ * ComplexMap.tsx의 `SCHOOL_ICON_SVG`/`SCHOOL_LEVEL_INITIAL`). 아이콘·
+ * 글자가 위아래로 한 줄씩이라 정사각형이 아니라 세로가 긴 배지다 —
+ * 그래도 이전 건물 아이콘(44px 정사각)보다 작다(사용자 지시: "크기는
+ * 기존보다 줄여줘", `SCHOOL_MARKER_WIDTH`/`HEIGHT`). 가운데가 실제
+ * 좌표를 가리킨다(부담 마커의 `dot`과 같은 중심 앵커 —
+ * ComplexMap.tsx의 `SCHOOL_MARKER_ANCHOR` 참고).
+ */
+.complex-map-school {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 30px;
+  height: 40px;
+  box-sizing: border-box;
+  padding: 4px 0;
+  border-radius: 8px;
+  border: 1.5px solid var(--result-paper);
+  box-shadow: 0 1px 4px rgb(18 41 77 / 25%);
+}
+
+/*
+ * 초등학교 기본정보 패널(ComplexMap.tsx, 사용자 지시로 마커를 누르면
+ * 뜬다). 지도 좌상단 — 좌하단 범례(`.complex-map-legend`)·우상단 컨트롤
+ * (`.complex-map-controls`)과 자리가 겹치지 않는다.
+ *
+ * **범례와 달리 `pointer-events`를 막지 않는다** — 닫기 버튼이 눌려야
+ * 한다(scripts/map-overlay-guard.test.ts가 `.complex-map-school` 접두사로
+ * 이 선택자를 클릭 통과 규칙에서 뺀다).
+ */
+.complex-map-school-info {
+  position: absolute;
+  left: 1rem;
+  top: 1rem;
+  z-index: 3;
+  width: 15rem;
+  max-width: calc(100% - 2rem);
+  padding: 0.75rem 0.875rem;
+  background: var(--result-paper);
+  border: 1px solid var(--result-rule);
+  border-radius: 0.625rem;
+  box-shadow: 0 6px 20px rgb(18 41 77 / 18%);
+  color: var(--result-ink);
+}
+
+.complex-map-school-info-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.complex-map-school-info-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+/* 설립형태(공립·국립·사립) 배지 — 첨부 이미지의 "공립" 꼬리표를 본떴다. */
+.complex-map-school-info-badge {
+  display: inline-block;
+  margin-right: 0.375rem;
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 0.25rem;
+  background: var(--result-alt);
+  color: var(--result-signal-ink);
+  font-size: 0.6875rem;
+  font-weight: 700;
+  vertical-align: 0.0625rem;
+}
+
+.complex-map-school-info-close {
+  flex: none;
+  padding: 0 0.125rem;
+  border: none;
+  background: none;
+  color: var(--result-gray);
+  font-size: 0.875rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.complex-map-school-info-close:hover {
+  color: var(--result-ink);
+}
+
+/*
+ * 항목 이름(왼쪽)·값(오른쪽) 두 칸. `dt`는 폭을 고정해 값의 시작이
+ * 줄마다 어긋나지 않게 한다.
+ */
+.complex-map-school-info-facts {
+  display: grid;
+  grid-template-columns: 4.5rem 1fr;
+  gap: 0.3125rem 0.5rem;
+  margin: 0.625rem 0 0;
+  font-size: 0.8125rem;
+}
+
+.complex-map-school-info-facts dt {
+  color: var(--result-gray);
+}
+
+.complex-map-school-info-facts dd {
+  margin: 0;
+  word-break: keep-all;
+}
+
+/*
+ * 배정 고지(룰셋의 `schoolZoneNote` 그대로). 값들과 같은 크기로 두지
+ * 않는다 — 이건 이 학교의 사실이 아니라 "이 화면을 배정 결과로 읽지
+ * 말라"는 말이라, 사실 목록과 섞이면 안 된다.
+ */
+.complex-map-school-info-note {
+  margin: 0.625rem 0 0;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--result-rule);
+  font-size: 0.6875rem;
+  line-height: 1.5;
+  color: var(--result-gray);
+  word-break: keep-all;
+}
+
+/* 아이콘 아래 초성 한 글자를 담는 흰 알약(참고 이미지의 "초등"/"중등"/"고등" 라벨을 본떴다). */
+.complex-map-school-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 999px;
+  background: var(--result-paper);
+  color: var(--result-ink);
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+/*
+ * 학교급별 배경색(사용자 지시: "초/중/고 학교의 색상을 다르게해주고",
+ * 색 자체도 첨부 이미지의 주황/파랑/빨강을 그대로 따랐다). 부담 마커
+ * (파랑=대출 없이, 주황=대출 필요)의 파랑과 헷갈리지 않도록 톤을
+ * 다르게 잡았다(부담 마커는 밝은 하늘색 `--result-signal`, 여기는
+ * 더 진한 인디고 파랑).
+ */
+.complex-map-school--elementary {
+  background: #f0923f;
+}
+
+.complex-map-school--middle {
+  background: #4a7fd6;
+}
+
+.complex-map-school--high {
+  background: #c0433a;
+}
+
+/*
  * 목록에서 고른(또는 방금 누른) 단지의 마커.
  *
  * ⚠ **채움색을 바꾸지 않는다.** 채움이 곧 분류다(파랑=대출 없이,
@@ -4395,18 +4753,16 @@ body.body-scroll-locked {
  * 새 규칙을 추가해야 한다. 지금은 하드코딩한 rgba로만 남긴다.
  */
 /*
- * 폭은 "어느 평형대요?" 카드(`.area-band-select`)에 맞춘다(사용자 지시).
- * 넷 다 각자 콘텐츠에 맞춰 `fit-content`였을 때는 카드마다 폭이 달라
- * 줄이 안 맞았다 — `.area-band-select`의 실측 렌더 폭(칩 3열 + 힌트
- * 줄바꿈 기준, 1280px 뷰포트에서 422.5px ≈ 26.4rem)을 고정값으로 넷에
- * 공용으로 건다. `.area-band-select`의 문구(칩 이름·힌트)가 크게
- * 바뀌면 이 값도 다시 재야 한다 — 브라우저 실측값이라 계산으로
- * 유도된 값이 아니다.
+ * 폭은 원래 "어느 평형대요?" 카드(`.area-band-select`, 사용자 지시로
+ * 이제 없다 — 평형대 질문 자체가 사라졌다)의 실측 렌더 폭(칩 3열 +
+ * 힌트 줄바꿈 기준, 1280px 뷰포트에서 422.5px ≈ 26.4rem)에 맞춘 값이다.
+ * 나머지 카드가 각자 콘텐츠에 맞춰 `fit-content`였을 때는 카드마다
+ * 폭이 달라 줄이 안 맞았다 — 그 실측값을 고정값으로 남은 카드들에
+ * 공용으로 건다. 브라우저 실측값이라 계산으로 유도된 값이 아니다.
  */
 .entry-screen .profile-form > .money-input,
 .entry-screen .profile-form > .household-select,
 .entry-screen .profile-form > .first-time-buyer-select,
-.entry-screen .profile-form > .area-band-select,
 .entry-screen .profile-form > .region-select {
   position: relative;
   width: min(26.5rem, 100%);
@@ -4457,7 +4813,6 @@ body.body-scroll-locked {
  * 양방향으로 잠근다.
  */
 .entry-screen .seed-field-label__root,
-.entry-screen .area-band-select legend,
 .entry-screen .household-select legend,
 .entry-screen .first-time-buyer-select legend,
 .entry-screen .region-select legend {
@@ -4668,104 +5023,10 @@ body.body-scroll-locked {
 }
 
 /*
- * 평형대 — 프로토타입의 `.band`. **상자가 아니라 밑줄 토글이다.**
- *
- * 배치(3열)는 위 `.area-band-options` 기본 규칙이 그대로 정한다 —
- * 여기서 덮지 않는다. 그 열 수는 구간 수에 잠겨 있고
- * (`scripts/area-band-chips.test.ts`), 이 화면이 칩이 그려지는 유일한
- * 자리라 여기서 배치를 덮으면 그 가드가 아무것도 지키지 않게 된다.
- * 간격만 프로토타입의 값으로 벌린다.
- */
-.entry-screen .area-band-options {
-  /*
-   * 가로 간격만 프로토타입의 값(26px)으로 벌린다. 세로는 좁게 둔다 —
-   * 좁은 화면에서는 이 칸이 한 열로 서므로(`@media (max-width: 480px)`
-   * 의 기본 규칙) 가로 간격이 그대로 세로로 쌓이면 칩 셋이 한 눈금이
-   * 아니라 따로 선 항목 셋으로 읽힌다.
-   */
-  column-gap: 1.625rem;
-  row-gap: 0.75rem;
-  margin-top: 0.25rem;
-}
-
-.entry-screen .area-band-select {
-  border: none;
-  padding: 0;
-}
-
-/*
- * 칩 자체. 명시도를 `.area-band-select`까지 적어 (0,3,0)으로 올린다 —
- * 위 라벨 규칙(`.entry-screen .field label`)도 (0,2,1)로 이 `<label>`에
- * 닿으므로, 같은 자리에서 소스 순서에 기대지 않고 확실히 이겨야 한다.
- */
-.entry-screen .area-band-select .area-band-option {
-  position: relative;
-  display: block;
-  padding: 4px 0 8px;
-  border: none;
-  border-bottom: 1.5px solid transparent;
-  color: var(--haze-lift);
-  font-size: 0.875rem;
-  font-weight: 500;
-  letter-spacing: normal;
-  transition:
-    color var(--seed-duration-d3) var(--seed-timing-function-easing),
-    border-color var(--seed-duration-d3) var(--seed-timing-function-easing);
-}
-
-/*
- * 네이티브 체크박스는 **지우지 않고 시각적으로만 감춘다** — 키보드
- * 조작·포커스 순서·스크린 리더의 선택 상태 안내를 브라우저가 그대로
- * 담당한다(AreaBandSelect.tsx의 설계 그대로다). 눈에 보이는 상태는
- * 아래 밑줄이 말한다: 색이 아니라 **모양**이라 색이 보이지 않아도 뜻이
+ * 무주택/생애최초 — "상자가 아니라 밑줄 토글"(프로토타입의 `.band`
+ * 모양)이다. 예전에는 평형대 칩(`.area-band-option`)이 먼저 이 모양을
+ * 썼지만, 사용자 지시로 그 질문 자체가 사라졌다 — 지금은 이 둘만
  * 남는다.
- */
-.entry-screen .area-band-select .area-band-option input[type="checkbox"] {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  margin: 0;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.entry-screen .area-band-select .area-band-option:has(input:checked) {
-  color: var(--paper);
-  border-bottom-color: var(--brass-lift);
-}
-
-.entry-screen .area-band-name {
-  font-size: 0.875rem;
-  font-weight: 500;
-}
-
-/* 고르지 않은 칩의 범위 라벨. 어두운 면의 보조 색이다. */
-.entry-screen .area-band-range {
-  color: var(--haze);
-  font-size: 0.6875rem;
-  letter-spacing: 0.06em;
-}
-
-.entry-screen .area-band-select .area-band-option:has(input:checked) .area-band-range {
-  color: var(--paper-dim);
-}
-
-/*
- * 체크박스는 네이티브 그대로 두고 포커스 표시만 이 화면의 규칙
- * (황동 아웃라인)에 맞춘다 — `:focus-visible`이 input에 걸리므로 칩
- * 전체를 감싸 어디에 포커스가 있는지 한눈에 보이게 한다.
- */
-.entry-screen .area-band-option:has(input:focus-visible) {
-  outline: 2px solid var(--brass-lift);
-  outline-offset: 3px;
-}
-
-/*
- * 무주택/생애최초 — `.area-band-option`과 같은 "밑줄 토글" 모양을
- * 그대로 옮긴다(위 블록 참고). `.area-band-select`를 재사용하지 않고
- * 새 클래스를 두는 이유는 뜻이 다른 질문이라서다 — 시각만 맞추고
- * `scripts/area-band-chips.test.ts`(평형대 칩 개수를 잠그는 가드)가
- * 다른 fieldset을 세지 않게 한다.
  *
  * 리뷰 수정(사용자 지시): 생애최초 질문이 체크박스 하나에서 무주택과
  * 똑같은 "라디오 둘" 모양으로 바뀌면서 `.first-time-buyer-select`도
@@ -4786,8 +5047,7 @@ body.body-scroll-locked {
 }
 
 /*
- * 명시도를 부모 fieldset까지 적어 (0,3,0)으로 올린다 —
- * `.area-band-option`과 같은 이유(그 규칙 주석 참고)다: 위 카드 제목
+ * 명시도를 부모 fieldset까지 적어 (0,3,0)으로 올린다 — 위 카드 제목
  * 규칙은 `legend`만 겨누므로 더 이상 이 `<label>`과 부딪히지 않지만,
  * 이 라디오 줄에는 그 대신 지켜야 할 자기 규칙(밑줄 토글)이 있으니
  * 소스 순서에 기대지 않고 명시도로 확실히 이기게 둔다.
@@ -4860,8 +5120,8 @@ body.body-scroll-locked {
 
 /*
  * "광역단체"·"자치구" — 사용자 지시로 값(select)보다 훨씬 작은 라벨로
- * 낮춘다. `AreaBandSelect.tsx`가 이미 쓰는 "라벨 작게 위, 값 크게 아래"
- * Stat Block 규율(DESIGN.md)과 같은 위계다.
+ * 낮춘다. "라벨 작게 위, 값 크게 아래" Stat Block 규율(DESIGN.md)과
+ * 같은 위계다.
  */
 .entry-screen .region-select .field label {
   font-size: 0.75rem;

@@ -94,12 +94,12 @@ const VENDOR_CSS = readFileSync(
  * - **오류 상태**: `#cash`에 숫자로 읽을 수 없는 값을 넣어
  *   `MoneyInput`의 `errorMessage` 슬롯을 띄운다.
  *
- * 예전에는 조건부 필드(규제지역 체크박스·부채 입력·전용면적 입력)와
- * 선택 상태(체크된 체크박스의 체크마크 아이콘)를 띄우려고 `ProfileForm`을
- * 따로 한 번 더 렌더했다. 화면 1이 네 질문으로 줄면서 그 입력란들이 전부
- * 사라졌고, **SEED 체크박스도 화면 1에서 함께 사라졌다**(평형대 칩은
- * 네이티브 `<input type="checkbox">`다 — `AreaBandSelect.tsx`). 조건부로
- * 더 그릴 것이 없으므로 App 한 번의 렌더가 곧 모집합이다.
+ * 예전에는 조건부 필드(규제지역 체크박스·부채 입력·전용면적 입력·평형대
+ * 칩)와 선택 상태(체크된 체크박스의 체크마크 아이콘)를 띄우려고
+ * `ProfileForm`을 따로 한 번 더 렌더했다. 화면 1이 다섯 질문으로 줄면서
+ * (사용자 지시로 평형대 질문도 사라졌다) 그 입력란들이 전부 사라졌고,
+ * **SEED 체크박스도 화면 1에서 함께 사라졌다.** 조건부로 더 그릴 것이
+ * 없으므로 App 한 번의 렌더가 곧 모집합이다.
  */
 const RENDERED_SEED_CLASSES: ReadonlySet<string> = (() => {
   const classes = new Set<string>();
@@ -141,10 +141,10 @@ const RENDERED_SEED_CLASSES: ReadonlySet<string> = (() => {
  */
 const BROWSER_OBSERVED_CLASSES = [
   // 체크박스 셋(`seed-checkbox__root`·`seed-checkbox__label`·
-  // `seed-checkmark__root`)은 빠졌다. 화면 1이 네 질문으로 줄면서
-  // 생애최초·규제지역 체크박스가 사라졌고, 새로 생긴 평형대 칩은
-  // SEED가 아니라 네이티브 `<input type="checkbox">`다
-  // (`AreaBandSelect.tsx`) — 이 화면에 SEED 체크박스가 더 이상 없다.
+  // `seed-checkmark__root`)은 빠졌다. 화면 1이 다섯 질문으로 줄면서
+  // 생애최초·규제지역 체크박스가 사라졌고, 그 뒤 잠깐 있던 평형대 칩도
+  // (SEED가 아니라 네이티브 `<input type="checkbox">`였다) 사용자
+  // 지시로 사라졌다 — 이 화면에 SEED 체크박스가 더 이상 없다.
   "seed-field__root",
   "seed-field__header",
   "seed-field__footer",

@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   assertNonEmpty,
   buildElementarySchools,
+  buildHighSchools,
   buildLocationFile,
+  buildMiddleSchools,
   buildSubwayStations,
   expandBounds,
   loadLocationConfig,
@@ -33,6 +35,12 @@ function schoolRow(
     운영상태: "운영",
     위도: "37.5",
     경도: "127.1",
+    설립일자: "1984-05-23",
+    설립형태: "공립",
+    소재지지번주소: "서울특별시 강남구 대치동 1",
+    소재지도로명주소: "서울특별시 강남구 테헤란로 1",
+    시도교육청명: "서울특별시교육청",
+    교육지원청명: "서울특별시강남서초교육지원청",
     ...over,
   };
 }
@@ -147,6 +155,93 @@ describe("초등학교만 거른다", () => {
       BOX,
     );
     expect(out.map((s) => s.id)).toEqual(["A", "B"]);
+  });
+});
+
+/**
+ * 지도 참고 표시 전용(`ComplexMap.tsx`) — 위 초등학교와 같은 필터링
+ * 로직(`schoolsAtLevel`)을 공유하므로 "학교급만 다르게 거른다"만 확인한다.
+ * 나머지 규칙(운영 중인 것만·상자 안만·정렬)은 위에서 이미 확인했다.
+ */
+describe("중·고등학교도 같은 규칙으로 거른다 — 지도 참고 표시 전용", () => {
+  it("buildMiddleSchools는 중학교만 남긴다", () => {
+    const out = buildMiddleSchools(
+      [
+        schoolRow({ 학교ID: "초1" }),
+        schoolRow({ 학교ID: "중1", 학교급구분: "중학교" }),
+        schoolRow({ 학교ID: "고1", 학교급구분: "고등학교" }),
+      ],
+      BOX,
+    );
+    expect(out.map((s) => s.id)).toEqual(["중1"]);
+  });
+
+  it("buildHighSchools는 고등학교만 남긴다", () => {
+    const out = buildHighSchools(
+      [
+        schoolRow({ 학교ID: "초1" }),
+        schoolRow({ 학교ID: "중1", 학교급구분: "중학교" }),
+        schoolRow({ 학교ID: "고1", 학교급구분: "고등학교" }),
+      ],
+      BOX,
+    );
+    expect(out.map((s) => s.id)).toEqual(["고1"]);
+  });
+
+  /**
+   * 기본정보(설립·주소·교육청)를 실은 학교급은 초등학교 하나뿐이다 —
+   * 학교급을 늘려 기본정보까지 붙이면 화면이 "학군"처럼 읽히기 시작한다
+   * (`buildElementarySchools`의 주석 참고).
+   */
+  it("중·고등학교에는 기본정보를 붙이지 않는다 — 좌표 네 필드뿐이다", () => {
+    const middle = buildMiddleSchools(
+      [schoolRow({ 학교ID: "중1", 학교급구분: "중학교" })],
+      BOX,
+    );
+    const high = buildHighSchools(
+      [schoolRow({ 학교ID: "고1", 학교급구분: "고등학교" })],
+      BOX,
+    );
+    expect(Object.keys(middle[0]!).sort()).toEqual(["id", "lat", "lon", "name"]);
+    expect(Object.keys(high[0]!).sort()).toEqual(["id", "lat", "lon", "name"]);
+  });
+});
+
+/**
+ * 사용자 지시로 지도에서 초등학교 마커를 누르면 기본정보를 띄우게 되며
+ * 실었다. **값은 원본이 준 그대로**여야 한다 — 이 단계가 만들거나
+ * 추정하는 값이 하나도 없는지 확인한다.
+ */
+describe("초등학교 기본정보", () => {
+  it("설립·교육청을 원본 그대로 싣는다", () => {
+    const [school] = buildElementarySchools([schoolRow()], BOX);
+    expect(school).toMatchObject({
+      foundationType: "공립",
+      foundedOn: "1984-05-23",
+      officeOfEducation: "서울특별시교육청",
+      districtOfficeOfEducation: "서울특별시강남서초교육지원청",
+    });
+  });
+
+  it("주소는 도로명을 쓴다", () => {
+    const [school] = buildElementarySchools([schoolRow()], BOX);
+    expect(school?.address).toBe("서울특별시 강남구 테헤란로 1");
+  });
+
+  it("도로명주소가 비면 지번주소로 물러난다 — 원본에 실제로 그런 학교가 있다", () => {
+    const [school] = buildElementarySchools(
+      [schoolRow({ 소재지도로명주소: "" })],
+      BOX,
+    );
+    expect(school?.address).toBe("서울특별시 강남구 대치동 1");
+  });
+
+  it("둘 다 비면 빈 문자열이다 — 없는 주소를 지어내지 않는다", () => {
+    const [school] = buildElementarySchools(
+      [schoolRow({ 소재지도로명주소: "", 소재지지번주소: "" })],
+      BOX,
+    );
+    expect(school?.address).toBe("");
   });
 });
 
