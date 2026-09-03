@@ -1202,6 +1202,103 @@ export function App() {
                     </div>
                   )}
                   {/*
+                    무주택·생애최초도 상단바에서 그 자리에서 바꾼다(사용자
+                    지시: "위 상단에 생애최초/무주택도 같이 표시해주고,
+                    토글로 선택을 바꿀수 있게도 만들어줘"). 이 트리는
+                    `state.ownedHomeCount !== null`일 때만 그려진다(위
+                    `residentialProfile`·`affordability` 가드 참고 —
+                    `toProfile`은 주택 수가 없으면 null을 낸다) — 그래서
+                    "아직 안 골랐다" 상태를 여기서 또 다룰 필요가 없다.
+
+                    두 값 다 항상 둘 중 하나이므로(입력 화면의 라디오와
+                    같다) `role="radiogroup"`의 `role="radio"` 버튼 둘로
+                    낸다 — 지도 위 "지도 유형" 팝오버의 세그먼트 토글
+                    (`ComplexMap.tsx`)과 같은 모양이다.
+
+                    ⚠ **버튼 글자는 입력 화면과 일부러 다르게 쓴다.** 두
+                    화면은 언제나 함께 마운트돼 있어서(phase는 감추기만
+                    한다) `ProfileForm.tsx`의 라디오와 글자가 같으면
+                    `getByRole("radio", { name: "무주택이에요" })`류
+                    질의가 두 화면에 걸쳐 두 개를 찾아 애매해진다 —
+                    처음엔 문구를 맞췄다가 바로 그 실패로 잡혔다
+                    (`RegionQuickSelect`가 같은 이유로 "광역단체"·
+                    "자치구"가 아니라 "시·도 바꾸기"·"시·군·구 바꾸기"를
+                    쓰는 것과 같다). `role="radiogroup"`의 `aria-label`
+                    (아래 "무주택 여부"·"생애최초 구입")이 각 버튼의
+                    맥락을 이미 말해 주므로, 버튼 자체는 짧게 줄여도
+                    뜻이 흐려지지 않는다.
+                  */}
+                  <div className="result-topbar-item result-topbar-item--field">
+                    <span className="result-topbar-item-label">무주택 여부</span>
+                    <div
+                      className="result-topbar-toggle"
+                      role="radiogroup"
+                      aria-label="무주택 여부"
+                    >
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={state.ownedHomeCount === 0}
+                        className={
+                          state.ownedHomeCount === 0
+                            ? "result-topbar-toggle-option result-topbar-toggle-option--active"
+                            : "result-topbar-toggle-option"
+                        }
+                        onClick={() => setField("ownedHomeCount", 0)}
+                      >
+                        무주택
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={(state.ownedHomeCount ?? 0) > 0}
+                        className={
+                          (state.ownedHomeCount ?? 0) > 0
+                            ? "result-topbar-toggle-option result-topbar-toggle-option--active"
+                            : "result-topbar-toggle-option"
+                        }
+                        onClick={() => setField("ownedHomeCount", 1)}
+                      >
+                        유주택
+                      </button>
+                    </div>
+                  </div>
+                  <div className="result-topbar-item result-topbar-item--field">
+                    <span className="result-topbar-item-label">생애최초 구입</span>
+                    <div
+                      className="result-topbar-toggle"
+                      role="radiogroup"
+                      aria-label="생애최초 구입"
+                    >
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={state.isFirstTimeBuyer}
+                        className={
+                          state.isFirstTimeBuyer
+                            ? "result-topbar-toggle-option result-topbar-toggle-option--active"
+                            : "result-topbar-toggle-option"
+                        }
+                        onClick={() => setField("isFirstTimeBuyer", true)}
+                      >
+                        해당
+                      </button>
+                      <button
+                        type="button"
+                        role="radio"
+                        aria-checked={!state.isFirstTimeBuyer}
+                        className={
+                          !state.isFirstTimeBuyer
+                            ? "result-topbar-toggle-option result-topbar-toggle-option--active"
+                            : "result-topbar-toggle-option"
+                        }
+                        onClick={() => setField("isFirstTimeBuyer", false)}
+                      >
+                        비해당
+                      </button>
+                    </div>
+                  </div>
+                  {/*
                     상단바에서 지역을 바꾸면 조회가 이 화면 **위에서**
                     일어난다 — 그런데 로딩·실패 안내는 여태 입력 화면
                     안에만 있었다(그쪽은 첫 조회를 여는 자리다). 그대로
@@ -1254,12 +1351,13 @@ export function App() {
                     지역을 조회하지 않았을 때(phase가 여전히 "입력")는 이미
                     `EntryScreen`이 화면을 덮고 있어 이 버튼이 뜻이 없다.
 
-                    현금·소득·지역은 상단바에서 바로 바뀌지만(위
-                    `RegionQuickSelect`·`MoneyInput` 참고), 무주택·생애최초·
-                    평형대·구매유형은 아직 화면 1에서만 바꿀 수 있다 — 그래서
-                    이 버튼은 남는다. 아이콘만으로 두면 눌러야 뜻을 알게 되므로
-                    접근 가능한 이름은 `aria-label`로 그대로 "조건 다시
-                    넣기"를 준다(글자를 지운 것은 사용자 지시).
+                    현금·소득·지역·무주택·생애최초는 상단바에서 바로
+                    바뀌지만(위 `RegionQuickSelect`·`MoneyInput`·
+                    `result-topbar-toggle` 참고), **구매유형**(실거주/투자)은
+                    아직 화면 1에서만 바꿀 수 있다 — 그래서 이 버튼은 남는다.
+                    아이콘만으로 두면 눌러야 뜻을 알게 되므로 접근 가능한
+                    이름은 `aria-label`로 그대로 "조건 다시 넣기"를 준다
+                    (글자를 지운 것은 사용자 지시).
                   */}
                   {phase === "결과" && (
                     <button

@@ -2288,6 +2288,69 @@ describe("전체화면 결과 셸", () => {
         screen.getByRole("button", { name: "실거래가 다시 불러오기" }),
       ).toBeInTheDocument();
     });
+
+    /**
+     * 사용자 지시: "위 상단에 생애최초/무주택도 같이 표시해주고, 토글로
+     * 선택을 바꿀수 있게도 만들어줘." `fillProfile`이 입력 화면에서
+     * "무주택이에요"를 고르므로, 상단바 토글도 처음부터 "무주택"이
+     * 골라져 있어야 한다.
+     *
+     * 계산이 실제로 다시 도는지는 여기서 값(실구매 가능 가격 등)으로
+     * 확인하지 않는다 — 이 프로필(현금 15억·소득 1억5천)에서는 정책대출
+     * 가격 상한을 이미 넘어서 무주택이든 유주택이든 결과가 같을 수 있고,
+     * 그 값은 프로필마다 달라져 여기서 못 박기엔 부서지기 쉽다. `state`가
+     * 실제로 `useAffordability`에 그대로 흘러간다는 것은
+     * `useProfileForm.test.ts`·`useAffordability.test.ts`가 이미 본다 —
+     * 여기서는 **토글 자체가 그 값을 바꾸는지**만 본다.
+     */
+    it("무주택→유주택으로 상단바에서 바로 바꿀 수 있다", async () => {
+      await renderResults();
+
+      expect(screen.getByRole("radio", { name: "무주택" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+      expect(screen.getByRole("radio", { name: "유주택" })).toHaveAttribute(
+        "aria-checked",
+        "false",
+      );
+
+      await userEvent.click(screen.getByRole("radio", { name: "유주택" }));
+
+      expect(screen.getByRole("radio", { name: "유주택" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+      expect(screen.getByRole("radio", { name: "무주택" })).toHaveAttribute(
+        "aria-checked",
+        "false",
+      );
+    });
+
+    /**
+     * 생애최초 여부는 기본값이 `false`(비해당)다(useProfileForm.ts의
+     * `DEFAULT_FORM_STATE` 참고) — `fillProfile`이 이 값을 건드리지
+     * 않으므로 상단바도 "비해당"으로 시작해야 한다.
+     */
+    it("생애최초 여부를 상단바에서 바로 바꿀 수 있다", async () => {
+      await renderResults();
+
+      expect(screen.getByRole("radio", { name: "비해당" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+
+      await userEvent.click(screen.getByRole("radio", { name: "해당" }));
+
+      expect(screen.getByRole("radio", { name: "해당" })).toHaveAttribute(
+        "aria-checked",
+        "true",
+      );
+      expect(screen.getByRole("radio", { name: "비해당" })).toHaveAttribute(
+        "aria-checked",
+        "false",
+      );
+    });
   });
 
   it("셸이 서 있는 동안 문서 스크롤이 잠기고, 셸이 사라지면 풀린다", async () => {
