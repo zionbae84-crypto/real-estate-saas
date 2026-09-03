@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { ComplexUnit } from "../data/complexes";
 import {
   ELEMENTARY_SCHOOLS,
@@ -9,11 +9,12 @@ import {
   type ElementarySchoolDetail,
   type MapSchool,
 } from "../data/location";
-import { schoolZonesFor } from "../data/school-zones";
+import { hasSchoolZoneData, type SchoolZone } from "../data/school-zones";
 import { locationRules } from "../state/useLocationFacts";
 import type { BurdenTier } from "../lib/complex-list";
 import type { ComplexFilterState } from "../lib/complex-filters";
 import { loadNaverMaps } from "../lib/loadNaverMaps";
+import { loadSchoolZones } from "../lib/loadSchoolZones";
 import { regionSchoolBounds, schoolsWithinBounds, type LatLonBounds } from "../lib/school-bounds";
 import { ComplexFilters } from "./ComplexFilters";
 import { formatRange, unitKey } from "./ComplexList";
@@ -608,15 +609,45 @@ export function ComplexMap({
    */
   const [openSchool, setOpenSchool] = useState<ElementarySchoolDetail | null>(null);
   /**
-   * 펼친 학교의 통학구역. 도면은 정적으로 실려 있어(`src/data/school-zones.ts`)
-   * 기다릴 것이 없다 — 학교를 고르는 순간 바로 정해진다. **빈 배열은
-   * "통학구역이 없다"**(사립·국립)는 뜻이고, 그건 모르는 것이 아니라 확인된
-   * 사실이다.
+   * 펼친 학교의 통학구역. **`null`은 "아직 못 받았다"**, **빈 배열은
+   * "통학구역이 없다"**(사립·국립로, 확인된 사실이다)는 뜻이다 — 도면 자체는
+   * 정적으로 안 실려 있어(`src/data/school-zones.ts`) 학교를 펼치는 순간
+   * `loadSchoolZones`가 그 학교분 청크 하나만 내려받는다. `hasSchoolZoneData`로
+   * "애초에 통학구역이 없는 학교"는 내려받기 없이 바로 빈 배열로 정해진다.
+   *
+   * **`"failed"`는 빈 배열과 다르다.** 내려받기 자체가 실패한 것(네트워크
+   * 끊김 등)은 "이 학교는 통학구역이 없다"는 확인된 사실이 아니라 "확인 못
+   * 했다"는 뜻이다 — 이 저장소가 곳곳에서(전화번호·`hasSchoolZoneData` 등)
+   * 지키는 "모른다 vs 없다" 원칙과 같은 이유로 여기서도 둘을 섞지 않는다.
    */
-  const openSchoolZones = useMemo(
-    () => (openSchool === null ? [] : schoolZonesFor(openSchool.id)),
-    [openSchool],
+  const [openSchoolZones, setOpenSchoolZones] = useState<SchoolZone[] | null | "failed">(
+    null,
   );
+
+  useEffect(() => {
+    if (openSchool === null) {
+      setOpenSchoolZones(null);
+      return;
+    }
+    if (!hasSchoolZoneData(openSchool.id)) {
+      setOpenSchoolZones([]);
+      return;
+    }
+    let cancelled = false;
+    setOpenSchoolZones(null);
+    loadSchoolZones(openSchool.id)
+      .then((zones) => {
+        if (!cancelled) setOpenSchoolZones(zones);
+      })
+      .catch(() => {
+        // 통학구역 없이도 학교 기본정보 패널 자체는 뜬다 — 지도가 죽을
+        // 정도의 실패가 아니다. 그래도 "없다"고 거짓으로 말하지는 않는다.
+        if (!cancelled) setOpenSchoolZones("failed");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [openSchool]);
   /**
    * 지도 우상단 세 버튼(지도·필터·학교) 중 지금 펼쳐진 팝오버 하나.
    * **버튼마다 자기 상태를 따로 안 든다** — 세 팝오버가 동시에 뜰 수
@@ -1025,9 +1056,10 @@ export function ComplexMap({
   /*
    * 펼친 학교의 통학구역을 불러와 지도에 그린다.
    *
-   * 도면은 509KB짜리 별도 청크라 **여기서 처음 내려받는다**(`loadSchoolZones`
+   * 도면은 학교별 청크라 **위 effect가 여기서 처음 내려받는다**(`loadSchoolZones`
    * 문서 참고) — 지도만 보는 사람은 받지 않는다. 그래서 패널이 먼저 뜨고
-   * 경계가 조금 뒤에 그려질 수 있다.
+   * 경계가 조금 뒤에 그려질 수 있다(`openSchoolZones`가 아직 `null`인
+   * 동안은 이 effect도 기다린다).
    *
    * **경계는 링 하나당 폴리곤 하나로 그린다.** 한 학구가 링을 여럿 가질 수
    * 있는데(우리 지역 328개 중 28개), 그 링들을 한 폴리곤의 `paths`로 넘기면
@@ -1038,7 +1070,8 @@ export function ComplexMap({
     const map = mapRef.current;
     const naverGlobal = naverRef.current;
     if (map === null || naverGlobal === null) return;
-    if (openSchoolZones.length === 0) return;
+    if (openSchoolZones === null || openSchoolZones === "failed" || openSchoolZones.length === 0)
+      return;
 
     const drawn: naver.maps.Polygon[] = [];
     for (const zone of openSchoolZones) {
@@ -1209,15 +1242,20 @@ export function ComplexMap({
           {/*
             통학구역 줄. **"없다"와 "모른다"를 다른 말로 낸다** —
             빈 배열은 통학구역이 실제로 없는 학교(사립·국립)이고,
-            `null`은 도면을 아직 못 불러온 상태다.
+            `null`은 도면을 아직 못 불러온 상태, `"failed"`는 불러오길
+            시도했지만 실패한 상태다(둘 다 "없다"가 아니다).
           */}
           <dt>통학구역</dt>
           <dd>
-            {openSchoolZones.length === 0
-              ? "이 학교는 통학구역이 없어요"
-              : openSchoolZones.some((z) => z.shared)
-                ? "지도에 표시했어요 (공동통학구역 포함)"
-                : "지도에 표시했어요"}
+            {openSchoolZones === null
+              ? "불러오는 중…"
+              : openSchoolZones === "failed"
+                ? "통학구역을 확인하지 못했어요"
+                : openSchoolZones.length === 0
+                  ? "이 학교는 통학구역이 없어요"
+                  : openSchoolZones.some((z) => z.shared)
+                    ? "지도에 표시했어요 (공동통학구역 포함)"
+                    : "지도에 표시했어요"}
           </dd>
         </dl>
         {/*

@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as loadNaverMapsModule from "../lib/loadNaverMaps";
+import * as loadSchoolZonesModule from "../lib/loadSchoolZones";
+import { readSchoolZoneChunk as zonesForTest } from "../../scripts/testUtils/schoolZoneFixtures";
 import {
   ComplexMap,
   MARKER_ANCHOR,
@@ -21,7 +23,16 @@ import {
 import { locationRules } from "../state/useLocationFacts";
 import type { ComplexFilterState } from "../lib/complex-filters";
 import { regionSchoolBounds, schoolsWithinBounds } from "../lib/school-bounds";
-import { schoolZonesFor } from "../data/school-zones";
+
+/**
+ * `loadSchoolZones`는 실제로는 학교ID 하나로 `public/school-zones/`의
+ * 청크를 하나 내려받는데, 이 테스트는 실제 브라우저 서버 없이 jsdom에서
+ * 돈다. 그래서 아래 `beforeEach`가 `loadSchoolZones`를 모킹해
+ * `zonesForTest`(파이프라인이 구워 둔 **같은 파일**을 직접 읽는
+ * `scripts/testUtils/schoolZoneFixtures.ts`)로 대신한다 — 흉내 낸 가짜
+ * 데이터가 아니라 배포되는 것과 동일한 원본이라, 아래 테스트가 "이 학교는
+ * 통학구역이 있다/없다"를 실제 데이터로 못 박을 수 있다.
+ */
 
 /**
  * 이 파일의 테스트 대부분은 필터 팝오버와 무관하다 — 필터 자체의 동작은
@@ -335,6 +346,9 @@ describe("ComplexMap", () => {
       const { naverGlobal } = fakeNaverMaps();
       return naverGlobal as unknown as typeof naver;
     });
+    vi.spyOn(loadSchoolZonesModule, "loadSchoolZones").mockImplementation(async (schoolId) =>
+      zonesForTest(schoolId),
+    );
   });
 
   afterEach(() => {
@@ -1093,8 +1107,9 @@ describe("ComplexMap", () => {
 
   /**
    * "해당지역의 학교만 표시되게 해줘"의 핵심 — 바운딩박스 밖 학교는
-   * 진짜로 빠진다. `TEST_SCHOOL_COORDINATE`에서 아주 멀리 떨어진
-   * 좌표(부산 근처)를 단지 좌표로 주면, 그 지역 초등학교는 하나도
+   * 진짜로 빠진다. **학교 데이터가 전국(제주~고성)이라, 국내 어느 좌표를
+   * 써도 그 근처 학교가 걸린다** — 그래서 대한민국 영토 자체를 벗어난
+   * 좌표(적도 부근 공해)를 단지 좌표로 준다. 그 지역 초등학교는 하나도
    * 걸리지 않아야 한다.
    */
   it("바운딩박스 밖 지역이면 학교급을 켜도 학교가 하나도 안 뜬다", async () => {
@@ -1106,7 +1121,7 @@ describe("ComplexMap", () => {
     render(
       <ComplexMap
         units={[unit({ complexKey: "a" })]}
-        coordinates={new Map([["a", { lat: 35.1, lon: 129.0 }]])}
+        coordinates={new Map([["a", { lat: 0, lon: 0 }]])}
         burdenByUnit={new Map()}
         naverMapClientId="test-id"
         filterBounds={TEST_FILTER_BOUNDS}
@@ -1225,18 +1240,22 @@ describe("ComplexMap", () => {
         ELEMENTARY_SCHOOLS ?? [],
         TEST_SCHOOL_BOUNDS,
       )[0]!;
-      const zones = schoolZonesFor(expected.id);
+      const zones = zonesForTest(expected.id);
       // 픽스처가 뜻을 잃지 않게 못 박는다 — 이 학교는 통학구역이 있어야 한다.
       expect(zones.length).toBeGreaterThan(0);
 
       act(() => schoolMarker!.listeners.click!());
 
-      // 링 하나당 폴리곤 하나(그쪽 주석 참고).
-      const rings = zones.reduce((n, z) => n + z.rings.length, 0);
-      expect(polygons.filter((p) => !p.removed)).toHaveLength(rings);
       const panel = await screen.findByRole("region", {
         name: `${expected.name} 기본정보`,
       });
+      // 도형은 (모킹된) 네트워크 호출로 뒤늦게 온다 — 패널이 뜬 뒤에도 잠깐 비었다가
+      // 채워질 수 있으므로 `waitFor`로 기다린다.
+      // 링 하나당 폴리곤 하나(그쪽 주석 참고).
+      const rings = zones.reduce((n, z) => n + z.rings.length, 0);
+      await vi.waitFor(() =>
+        expect(polygons.filter((p) => !p.removed)).toHaveLength(rings),
+      );
       expect(panel.textContent).toContain("지도에 표시했어요");
     });
 
@@ -1244,7 +1263,9 @@ describe("ComplexMap", () => {
       const { schoolMarker, polygons } = await openFirstSchool("초등학교");
       act(() => schoolMarker!.listeners.click!());
       await screen.findByRole("button", { name: "학교 정보 닫기" });
-      expect(polygons.filter((p) => !p.removed).length).toBeGreaterThan(0);
+      await vi.waitFor(() =>
+        expect(polygons.filter((p) => !p.removed).length).toBeGreaterThan(0),
+      );
 
       fireEvent.click(screen.getByRole("button", { name: "학교 정보 닫기" }));
 
@@ -1252,19 +1273,49 @@ describe("ComplexMap", () => {
     });
 
     /**
-     * 사립·국립 초등학교는 추첨·선발로 뽑으므로 **통학구역이 아예 없다.**
-     * 우리 지역 285곳 중 13곳이 그렇고 실제로 전부 사립 12곳·국립 1곳이다 —
-     * 그때 "없다"를 말해야지, 빈칸으로 두거나 "모른다"로 뭉개면 안 된다.
+     * 내려받기 실패(네트워크 끊김 등)를 "없다"로 뭉개면, 실제로는 통학구역이
+     * 있는 학교인데도 화면이 없다고 거짓 사실을 말하게 된다 — 이 저장소가
+     * 곳곳에서 지키는 "모른다 vs 없다" 원칙을 여기서도 지키는지 확인한다.
      */
-    it("통학구역이 없는 학교(사립·국립)는 없다고 말하고 아무것도 그리지 않는다", () => {
+    it("통학구역 내려받기가 실패하면 '없다'가 아니라 '확인 못 했다'고 말한다", async () => {
+      vi.spyOn(loadSchoolZonesModule, "loadSchoolZones").mockRejectedValue(
+        new Error("network error"),
+      );
+      const { schoolMarker } = await openFirstSchool("초등학교");
+      const expected = schoolsWithinBounds(
+        ELEMENTARY_SCHOOLS ?? [],
+        TEST_SCHOOL_BOUNDS,
+      )[0]!;
+      // 픽스처가 뜻을 잃지 않게 못 박는다 — 이 학교는 통학구역이 있어야
+      // 내려받기가 실제로 시도된다(없는 학교는 애초에 안 부른다).
+      expect(zonesForTest(expected.id).length).toBeGreaterThan(0);
+
+      act(() => schoolMarker!.listeners.click!());
+
+      const panel = await screen.findByRole("region", {
+        name: `${expected.name} 기본정보`,
+      });
+      await vi.waitFor(() =>
+        expect(panel.textContent).toContain("통학구역을 확인하지 못했어요"),
+      );
+      expect(panel.textContent).not.toContain("통학구역이 없어요");
+    });
+
+    /**
+     * 사립·국립 초등학교 **대부분**은 추첨·선발로 뽑으므로 통학구역이
+     * 없다. 전국 규모에서는 좌표계 오차·분교장 등으로 학구를 못 찾은 채
+     * "통학구역 없음"이 되는 공립교가 아주 소수 있다(실측 7곳/6,205곳,
+     * 0.11% — `src/data/school-zones.test.ts`의 같은 검사 참고). 그래서
+     * "구역 없음 = 사립·국립"을 절대 규칙으로 못 박지 않고, 그 방향의
+     * 데이터 성격 검증은 그 전용 테스트에 맡긴다 — 여기서는 이 화면이
+     * "구역이 없으면 없다고 말하고 아무것도 안 그린다"는 **UI 계약**만
+     * 확인한다(픽스처가 하나라도 있어야 뜻이 있으므로 존재만 못 박는다).
+     */
+    it("통학구역이 없는 학교는 있다(픽스처 전제)", () => {
       const withoutZone = (ELEMENTARY_SCHOOLS ?? []).filter(
-        (s) => schoolZonesFor(s.id).length === 0,
+        (s) => zonesForTest(s.id).length === 0,
       );
       expect(withoutZone.length).toBeGreaterThan(0);
-      for (const school of withoutZone) {
-        const detail = ELEMENTARY_SCHOOL_DETAILS.get(school.id)!;
-        expect(["사립", "국립"]).toContain(detail.foundationType);
-      }
     });
 
     /**

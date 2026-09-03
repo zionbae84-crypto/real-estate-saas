@@ -105,9 +105,37 @@ function roughMeters(a: { lat: number; lon: number }, b: { lat: number; lon: num
  */
 function regionOf(address: string): { sido: string; sgg: string } | null {
   const m = /^(\S+?[시도])\s+(\S+?시)\s+(\S+?구)\s/.exec(address);
-  if (m !== null) return { sido: m[1]!, sgg: `${m[2]!}${m[3]!}` };
+  if (m !== null) return { sido: normalizeSido(m[1]!), sgg: `${m[2]!}${m[3]!}` };
   const plain = /^(\S+?[시도])\s+(\S+?[구군시])\s/.exec(address);
-  return plain === null ? null : { sido: plain[1]!, sgg: plain[2]! };
+  return plain === null ? null : { sido: normalizeSido(plain[1]!), sgg: plain[2]! };
+}
+
+/**
+ * 학교 원본(한국교육시설안전원)의 주소가 아직 옛 시도명을 쓰는데, 법정동
+ * 코드 원본(`legal-dong-codes.csv`)은 새 행정구역 개편을 반영해 그 시도명
+ * 자체가 사라진 경우를 여기서 맞춰 준다.
+ *
+ * **"전라남도"·"광주광역시" → "전남광주통합특별시"만 안전하게 옮긴다.**
+ * 실측으로 확인했다 — 옛 전라남도 22개 시·군, 옛 광주광역시 5개 구 이름이
+ * `legal-dong-codes.csv`의 "전남광주통합특별시" 아래 **글자 하나 안 바뀌고
+ * 그대로** 들어 있다(광양시·여수시·광산구·동구 등). 즉 시도 이름만
+ * 바뀌었을 뿐 시군구 경계·이름은 그대로인, 이름만의 개편이다.
+ *
+ * **인천은 옮기지 않는다.** 옛 인천 동구·서구·중구가 실측으로 새 목록에
+ * 없다(대신 제물포구·영종구·서해구·검단구가 있다) — 이건 이름만 바뀐 게
+ * 아니라 옛 구 하나가 여러 새 구로 실제 경계째 쪼개진 개편이다. 어느 학교가
+ * 새 구 중 어디로 갔는지는 이 CSV(경계 도형이 없다)만으로는 알 수 없어서,
+ * 그럴듯하게 아무 데나 짝지으면 학생 수·전화번호가 **엉뚱한 학교의 값으로
+ * 조용히 채워진다** — 그래서 그 셋은 그냥 "못 이음"으로 남긴다(원본이
+ * 갱신되거나 인천 개편의 정확한 경계를 확인하기 전까지는).
+ */
+const SIDO_ALIASES: Record<string, string> = {
+  전라남도: "전남광주통합특별시",
+  광주광역시: "전남광주통합특별시",
+};
+
+function normalizeSido(sido: string): string {
+  return SIDO_ALIASES[sido] ?? sido;
 }
 
 function loadSggCodes(): Map<string, string> {

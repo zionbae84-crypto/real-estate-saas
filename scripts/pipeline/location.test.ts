@@ -302,6 +302,7 @@ describe("지하철역은 노선별 행 그대로 싣는다", () => {
 describe("산출물 전체", () => {
   const config: LocationConfig = {
     targetBounds: BOX,
+    schoolTargetBounds: BOX,
     subwayBufferMeters: 4000,
     elementarySchoolBufferMeters: 1500,
   };
@@ -341,8 +342,27 @@ describe("설정 파일 읽기", () => {
   it("실제 설정 파일을 읽는다", () => {
     const config = loadLocationConfig();
     expect(config.targetBounds.minLat).toBeLessThan(config.targetBounds.maxLat);
+    expect(config.schoolTargetBounds.minLat).toBeLessThan(config.schoolTargetBounds.maxLat);
     expect(config.subwayBufferMeters).toBeGreaterThan(0);
     expect(config.elementarySchoolBufferMeters).toBeGreaterThan(0);
+  });
+
+  /**
+   * 학교는 전국(schoolTargetBounds), 역은 서울(targetBounds)만 — 사용자
+   * 지시로 "학교 위치를 전국으로 커버해줘"가 오며 둘을 갈랐다. 실제
+   * 설정 파일이 그 관계(학교 상자가 역 상자를 완전히 포함한다)를
+   * 지키는지 확인한다 — 안 지키면 역 상자 밖의 학교가 학교 상자에서는
+   * 실제로 실리는데도 화면이 그 지역엔 학교가 없다고 조용히 말할 수
+   * 있는 것은 아니지만(둘은 서로 다른 목적이라 포함 관계가 필수는
+   * 아니다), 적어도 역 상자가 학교 상자보다 넓어지는 역전은 설정 실수일
+   * 가능성이 높다.
+   */
+  it("학교 상자가 역 상자보다 좁지 않다 — 전국을 서울보다 좁게 넣는 실수를 잡는다", () => {
+    const config = loadLocationConfig();
+    expect(config.schoolTargetBounds.minLat).toBeLessThanOrEqual(config.targetBounds.minLat);
+    expect(config.schoolTargetBounds.maxLat).toBeGreaterThanOrEqual(config.targetBounds.maxLat);
+    expect(config.schoolTargetBounds.minLon).toBeLessThanOrEqual(config.targetBounds.minLon);
+    expect(config.schoolTargetBounds.maxLon).toBeGreaterThanOrEqual(config.targetBounds.maxLon);
   });
 
   it("없는 파일이면 던진다", () => {

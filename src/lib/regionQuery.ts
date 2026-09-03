@@ -31,9 +31,10 @@ interface ApiErrorBody {
 }
 
 /**
- * 지역 실거래가를 백엔드에서 조회한다. 이 앱에서 `fetch`를 쓰는 유일한
- * 파일이다(`src/no-network.test.ts` 참고). regionCode·dong만 인자로
- * 받고, 재무 정보(현금·소득·기존부채 등)는 어디에도 등장하지 않는다.
+ * 지역 실거래가를 백엔드에서 조회한다. 이 앱에서 `fetch`를 쓰는 두 파일 중
+ * 하나다(다른 하나는 `src/lib/loadSchoolZones.ts` — `src/no-network.test.ts`
+ * 참고). regionCode·dong만 인자로 받고, 재무 정보(현금·소득·기존부채 등)는
+ * 어디에도 등장하지 않는다.
  *
  * 실패하면 던진다 — 빈 배열을 반환하지 않는다. 호출자(`useRegionComplexes`)가
  * "조회 실패"와 "결과 0건"을 구분해야 하는데, 여기서 실패를 삼키면 그
@@ -104,8 +105,9 @@ function narrowPartialFailureCount(value: unknown): number {
 
 /**
  * 지역의 단지 좌표를 조회한다. `fetchRegionComplexes`와 같은 파일에 두는
- * 이유는 이 파일이 `src/`에서 `fetch`를 쓸 수 있는 유일한 곳이기
- * 때문이다 — 새 엔드포인트라고 새 예외 파일을 또 만들지 않는다.
+ * 이유는 둘 다 같은 백엔드 API(`/api/*`)를 상대경로로 부르는 같은 성격의
+ * 호출이기 때문이다 — 새 API 엔드포인트라고 새 예외 파일을 또 만들지
+ * 않는다. `loadSchoolZones.ts`가 별도 파일인 이유는 그쪽 문서 참고.
  */
 export async function fetchComplexCoordinates(
   regionCode: string,

@@ -29,7 +29,10 @@ import {
 
 const CONFIG = loadLocationConfig();
 const RULES = parseLocationRules(rawLocationRules);
+/** 역만 쓰는 상자(서울 25개 구) — 학교는 아래 SCHOOL_TARGET을 따로 쓴다. */
 const TARGET = CONFIG.targetBounds;
+/** 학교(초·중·고)가 쓰는 상자 — 사용자 지시로 전국이다. */
+const SCHOOL_TARGET = CONFIG.schoolTargetBounds;
 
 const SCHOOL_SOURCE = readTable(readFileSync(SCHOOLS_SOURCE_PATH, "utf8"));
 const STATION_SOURCE = readTable(readFileSync(SUBWAY_SOURCE_PATH, "utf8"));
@@ -306,6 +309,7 @@ describe("거르는 범위는 코드가 아니라 설정에서 온다", () => {
 
   it("설정 파일이 그 값을 실제로 갖고 있다", () => {
     expect(TARGET.minLat).toBeGreaterThan(0);
+    expect(SCHOOL_TARGET.minLat).toBeGreaterThan(0);
     expect(CONFIG.subwayBufferMeters).toBeGreaterThan(0);
     expect(CONFIG.elementarySchoolBufferMeters).toBeGreaterThan(0);
   });
@@ -327,14 +331,32 @@ describe("구 경계 밖의 역·학교도 실려 있다", () => {
   const stationRing = STATIONS.filter(
     (s) => !withinBounds(TARGET, s.lat, s.lon),
   );
-  const schoolRing = SCHOOLS.filter((s) => !withinBounds(TARGET, s.lat, s.lon));
 
   it("우리 단지가 있을 상자 **밖**의 역이 실제로 실려 있다", () => {
     expect(stationRing.length).toBeGreaterThan(0);
   });
 
-  it("상자 밖의 초등학교도 실려 있다", () => {
-    expect(schoolRing.length).toBeGreaterThan(0);
+  /**
+   * 학교 상자(SCHOOL_TARGET)는 **전국 학교 좌표의 실측 범위 그대로**
+   * 만들었다(scripts/pipeline/location-config.json의 주석 참고) — 그래서
+   * 원본의 어떤 학교도 이 상자 밖에 있을 수 없고, 버퍼가 "상자 밖에서
+   * 더 끌어온" 학교는 0곳이 정상이다(옛 서울 3구 상자 때는 이 값이
+   * >0이었다 — 그때는 상자가 실제 데이터보다 좁았다). 버퍼가 여전히
+   * 지키는 진짜 약속은 이 테스트가 아니라 바로 아래 "반경 안에 들 수
+   * 있는 원본 초등학교가 하나도 빠지지 않았다"다.
+   */
+  it("학교 상자 밖의 원본 학교는 없다 — 상자가 전국 실측 범위 그대로라서다", () => {
+    const schoolRing = SCHOOL_SOURCE.filter((row) => {
+      if (row["운영상태"] !== "운영") return false;
+      const lat = Number(row["위도"]);
+      const lon = Number(row["경도"]);
+      return (
+        Number.isFinite(lat) &&
+        Number.isFinite(lon) &&
+        !withinBounds(SCHOOL_TARGET, lat, lon)
+      );
+    });
+    expect(schoolRing).toEqual([]);
   });
 
   it("학교 버퍼가 룰셋의 반경보다 크다", () => {
@@ -353,7 +375,7 @@ describe("구 경계 밖의 역·학교도 실려 있다", () => {
       const lat = Number(row["위도"]);
       const lon = Number(row["경도"]);
       if (!Number.isFinite(lat) || !Number.isFinite(lon)) return false;
-      if (metersToBounds(TARGET, lat, lon) > RULES.elementarySchool.radiusMeters) {
+      if (metersToBounds(SCHOOL_TARGET, lat, lon) > RULES.elementarySchool.radiusMeters) {
         return false;
       }
       return !emitted.has(row["학교ID"] ?? "");
@@ -454,7 +476,7 @@ describe("산출물이 지금 설정·원본과 어긋나지 않았다", () => {
     const stationBox = expandBounds(TARGET, CONFIG.subwayBufferMeters);
     // 중·고등학교도 초등학교와 같은 버퍼를 쓴다(scripts/pipeline/location.ts의
     // buildLocationFile 문서 참고).
-    const schoolBox = expandBounds(TARGET, CONFIG.elementarySchoolBufferMeters);
+    const schoolBox = expandBounds(SCHOOL_TARGET, CONFIG.elementarySchoolBufferMeters);
     expect(
       STATIONS.filter((s) => !withinBounds(stationBox, s.lat, s.lon)),
     ).toEqual([]);

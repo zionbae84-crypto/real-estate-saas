@@ -132,6 +132,8 @@ function sourceFiles(dir: string): string[] {
     if (entry === "regionQuery.test.ts") return [];
     if (entry === "loadNaverMaps.ts") return []; // 네이버지도 스크립트 삽입 — 이 태스크의 새 예외
     if (entry === "loadNaverMaps.test.ts") return [];
+    if (entry === "loadSchoolZones.ts") return []; // 학교별 통학구역 청크 fetch
+    if (entry === "loadSchoolZones.test.ts") return [];
     return [path];
   });
 }
@@ -438,5 +440,91 @@ describe("loadNaverMaps 예외", () => {
   it("loadNaverMaps.test.ts만 그 테스트 예외이고, 정확히 하나만 존재한다", () => {
     const matches = findByNameSuffix("src", "loadNaverMaps.test.ts");
     expect(matches).toEqual(["src/lib/loadNaverMaps.test.ts"]);
+  });
+});
+
+describe("loadSchoolZones 예외", () => {
+  const LOAD_SCHOOL_ZONES_PATH = "src/lib/loadSchoolZones.ts";
+
+  it("loadSchoolZones.ts는 정확히 하나만 존재하고, 그 안에 재무 필드 이름이 없다", () => {
+    const content = readFileSync(LOAD_SCHOOL_ZONES_PATH, "utf8");
+    const FORBIDDEN_FIELD_NAMES = [
+      "cash", "annualIncome", "existingDebtAnnualPayment",
+      "ownedHomeCount", "isFirstTimeBuyer", "isRegulatedArea",
+    ];
+    for (const field of FORBIDDEN_FIELD_NAMES) {
+      expect(content, `${field}가 loadSchoolZones.ts에 등장하면 안 된다`).not.toContain(field);
+    }
+  });
+
+  /**
+   * `regionQuery.ts`의 검사와 같은 모양이지만, 엔드포인트가 고정된 몇
+   * 개가 아니라 **학교ID로 갈라지는 경로**(`/school-zones/<학교ID>.json`)라
+   * `ALLOWED_ENDPOINTS`처럼 정확한 집합과 비교할 수 없다 — 대신 그
+   * 접두어로 시작하는지만 본다. 상대경로 요구·프로토콜 상대 URL 금지는
+   * 그대로다.
+   */
+  const ALLOWED_PREFIX = "/school-zones/";
+
+  it("loadSchoolZones.ts의 fetch는 전부 상대경로이고, /school-zones/로 시작한다", () => {
+    const content = readFileSync(LOAD_SCHOOL_ZONES_PATH, "utf8");
+    const literals = fetchCallLiterals(content);
+
+    expect(literals.length).toBeGreaterThan(0);
+
+    for (const literal of literals) {
+      expect(literal.startsWith("/"), `fetch(${literal}…)가 상대경로가 아니다`).toBe(true);
+      expect(literal.startsWith("//"), `fetch(${literal}…)가 프로토콜 상대 URL이다`).toBe(false);
+      expect(
+        literal.startsWith(ALLOWED_PREFIX),
+        `fetch(${literal}…)가 ${ALLOWED_PREFIX}로 시작하지 않는다`,
+      ).toBe(true);
+    }
+  });
+
+  it("loadSchoolZones.ts에는 절대 URL·프로토콜 상대 URL 리터럴이 하나도 없다", () => {
+    const content = readFileSync(LOAD_SCHOOL_ZONES_PATH, "utf8");
+    expect(urlOriginsIn(content).map(({ raw }) => raw)).toEqual([]);
+  });
+
+  it("정규식이 놓친 스킴 리터럴도 남아있으면 안 된다", () => {
+    const content = readFileSync(LOAD_SCHOOL_ZONES_PATH, "utf8");
+    expect(content, "스킴 리터럴이 남아 있다").not.toMatch(/https?:\/\//);
+  });
+
+  describe("가드 핀 고정 — regionQuery.ts와 같은 우회 재현", () => {
+    const BYPASSES = [
+      'const res = await fetch("//evil.example.com/x");',
+      'const res = await fetch("https://evil.example.com/x");',
+      'const res = await fetch(untrustedUrl);',
+      'const res = await fetch("/api/secret-exfil");',
+    ];
+
+    it.each(BYPASSES)("이제는 잡아낸다: %s", (snippet) => {
+      const literals = fetchCallLiterals(snippet);
+      expect(literals.length).toBeGreaterThan(0);
+      const ok = literals.every(
+        (l) => l.startsWith("/") && !l.startsWith("//") && l.startsWith(ALLOWED_PREFIX),
+      );
+      expect(ok).toBe(false);
+    });
+
+    it("정당한 학교ID 청크 호출은 통과시킨다", () => {
+      const literals = fetchCallLiterals(
+        'await fetch(`/school-zones/${encodeURIComponent(schoolId)}.json`);',
+      );
+      expect(literals.length).toBe(1);
+      expect(literals[0]!.startsWith(ALLOWED_PREFIX)).toBe(true);
+    });
+  });
+
+  it("loadSchoolZones.ts만 이 fetch 예외이고, 정확히 하나만 존재한다", () => {
+    const matches = findByNameSuffix("src", "loadSchoolZones.ts");
+    expect(matches).toEqual(["src/lib/loadSchoolZones.ts"]);
+  });
+
+  it("loadSchoolZones.test.ts만 그 테스트 예외이고, 정확히 하나만 존재한다", () => {
+    const matches = findByNameSuffix("src", "loadSchoolZones.test.ts");
+    expect(matches).toEqual(["src/lib/loadSchoolZones.test.ts"]);
   });
 });

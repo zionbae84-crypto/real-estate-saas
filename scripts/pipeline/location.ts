@@ -36,11 +36,22 @@ export interface Bounds {
 }
 
 export interface LocationConfig {
-  /** 우리 단지가 있을 수 있는 범위 */
+  /** 우리 단지가 있을 수 있는 범위. 역만 이 상자를 쓴다 — 아래 `schoolTargetBounds` 참고 */
   targetBounds: Bounds;
   /** targetBounds 밖으로 이만큼까지의 역도 싣는다 */
   subwayBufferMeters: number;
-  /** targetBounds 밖으로 이만큼까지의 초등학교도 싣는다 */
+  /**
+   * 학교(초·중·고)가 있을 수 있는 범위. **`targetBounds`와 일부러 다른
+   * 상자다** — 사용자 지시로 학교는 전국을 덮게 됐지만, 역은 그럴 수
+   * 없다. 지하철이 아예 없는 지역(제주·울릉도 등)에서는 "상자 안 어느
+   * 점에서든 가장 가까운 역이 실려 있어야 한다"는 역 쪽 검사(아래
+   * `buildSubwayStations` 문서 참고)가 성립할 버퍼 자체가 없다 — 실제
+   * 가장 가까운 역이 수십~수백 km 밖일 수 있어서다. 그래서 두 상자를
+   * 하나로 합치지 않았다: 역은 지금처럼 좁게 두고, 학교만 전국으로
+   * 넓힌다.
+   */
+  schoolTargetBounds: Bounds;
+  /** schoolTargetBounds 밖으로 이만큼까지의 학교(초·중·고)도 싣는다 */
   elementarySchoolBufferMeters: number;
 }
 
@@ -66,12 +77,11 @@ export const LOCATION_OUTPUT_PATH = join(DATA_DIR, "location.json");
  * 함께 흔들린다. `loadRegions()`가 수집 대상 시군구를 설정에서 읽는 것과
  * 같은 태도다.
  */
-export function loadLocationConfig(path: string = LOCATION_CONFIG_PATH): LocationConfig {
-  const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
-
-  const bounds = raw["targetBounds"];
+/** `raw[key]`를 {@link Bounds}로 읽는다. `targetBounds`·`schoolTargetBounds`가 같은 모양을 공유하므로 한 번만 적는다. */
+function parseBoundsField(raw: Record<string, unknown>, key: string): Bounds {
+  const bounds = raw[key];
   if (typeof bounds !== "object" || bounds === null) {
-    throw new Error("location-config.json: targetBounds가 없습니다");
+    throw new Error(`location-config.json: ${key}가 없습니다`);
   }
   const b = bounds as Record<string, unknown>;
   const corners = ["minLat", "maxLat", "minLon", "maxLon"] as const;
@@ -84,13 +94,21 @@ export function loadLocationConfig(path: string = LOCATION_CONFIG_PATH): Locatio
   for (const corner of corners) {
     const value = b[corner];
     if (typeof value !== "number" || !Number.isFinite(value)) {
-      throw new Error(`location-config.json: targetBounds.${corner}가 숫자가 아닙니다`);
+      throw new Error(`location-config.json: ${key}.${corner}가 숫자가 아닙니다`);
     }
     values[corner] = value;
   }
   if (values.minLat >= values.maxLat || values.minLon >= values.maxLon) {
-    throw new Error("location-config.json: targetBounds의 min이 max보다 작아야 합니다");
+    throw new Error(`location-config.json: ${key}의 min이 max보다 작아야 합니다`);
   }
+  return values;
+}
+
+export function loadLocationConfig(path: string = LOCATION_CONFIG_PATH): LocationConfig {
+  const raw = JSON.parse(readFileSync(path, "utf8")) as Record<string, unknown>;
+
+  const targetBounds = parseBoundsField(raw, "targetBounds");
+  const schoolTargetBounds = parseBoundsField(raw, "schoolTargetBounds");
 
   const buffers = ["subwayBufferMeters", "elementarySchoolBufferMeters"] as const;
   const meters: Record<(typeof buffers)[number], number> = {
@@ -105,7 +123,7 @@ export function loadLocationConfig(path: string = LOCATION_CONFIG_PATH): Locatio
     meters[key] = value;
   }
 
-  return { targetBounds: values, ...meters };
+  return { targetBounds, schoolTargetBounds, ...meters };
 }
 
 /* ─────────────────────────── 상자 계산 ─────────────────────────── */
@@ -611,7 +629,7 @@ export function buildLocationFile(
   infoRows: Array<Record<string, string>> = [],
 ): LocationFile {
   const schoolBounds = expandBounds(
-    config.targetBounds,
+    config.schoolTargetBounds,
     config.elementarySchoolBufferMeters,
   );
   return {
@@ -646,9 +664,9 @@ export function assertNonEmpty(file: LocationFile): void {
     throw new Error(
       `거른 결과가 비었습니다(역 ${file.subwayStations.length}곳 / 초등학교 ` +
         `${file.elementarySchools.length}곳 / 중학교 ${file.middleSchools.length}곳 / ` +
-        `고등학교 ${file.highSchools.length}곳). location-config.json의 targetBounds가 ` +
-        "우리 단지가 있는 지역을 가리키는지, data/sources/의 원본이 비어 있지 않은지 " +
-        "확인하세요.",
+        `고등학교 ${file.highSchools.length}곳). location-config.json의 targetBounds· ` +
+        "schoolTargetBounds가 우리 단지가 있는 지역을 가리키는지, data/sources/의 " +
+        "원본이 비어 있지 않은지 확인하세요.",
     );
   }
 }
