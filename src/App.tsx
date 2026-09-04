@@ -1227,8 +1227,20 @@ export function App() {
                     (아래 "무주택 여부"·"생애최초 구입")이 각 버튼의
                     맥락을 이미 말해 주므로, 버튼 자체는 짧게 줄여도
                     뜻이 흐려지지 않는다.
+
+                    `title`은 입력 화면(`ProfileForm.tsx`)의 같은 필드
+                    도움말을 **그대로** 옮긴 것이다(사용자 지시: "마우스를
+                    올리면 간략하게 어떤 차이를 반영하는지 설명하는 내용을
+                    볼 수 있도록") — 새로 문구를 짓지 않는 이유는 두 화면이
+                    같은 필드를 다른 말로 설명하기 시작하면 어느 쪽이
+                    맞는지 알 수 없어지기 때문이다(위 "버튼 글자" 문단과
+                    같은 원칙, 이번엔 반대 방향 — 라디오 이름은 일부러
+                    다르게, 뜻풀이는 일부러 같게).
                   */}
-                  <div className="result-topbar-item result-topbar-item--field">
+                  <div
+                    className="result-topbar-item result-topbar-item--field"
+                    title="이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요."
+                  >
                     <span className="result-topbar-item-label">무주택 여부</span>
                     <div
                       className="result-topbar-toggle"
@@ -1263,7 +1275,10 @@ export function App() {
                       </button>
                     </div>
                   </div>
-                  <div className="result-topbar-item result-topbar-item--field">
+                  <div
+                    className="result-topbar-item result-topbar-item--field"
+                    title="생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요."
+                  >
                     <span className="result-topbar-item-label">생애최초 구입</span>
                     <div
                       className="result-topbar-toggle"

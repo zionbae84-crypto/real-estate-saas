@@ -51,4 +51,23 @@ describe("RegulationBadge", () => {
     ).not.toBeNull();
     expect(assumed.querySelector(".regulation-badge--assumed")).not.toBeNull();
   });
+
+  /**
+   * 사용자 지시: "규제지역에 마우스를 올리면 간략하게 어떤 차이를
+   * 반영하는지 설명하는 내용을 볼 수 있도록". 세 상태 모두 같은 문구를
+   * 얻는지 확인한다 — "이 배지가 무슨 뜻인가"는 값이 바뀌어도 같다.
+   */
+  it("세 상태 모두 title로 짧은 설명을 낸다", () => {
+    const cases = [
+      { determined: true, isRegulatedArea: true },
+      { determined: true, isRegulatedArea: false },
+      { determined: false, isRegulatedArea: true },
+    ];
+    for (const props of cases) {
+      const { container, unmount } = render(<RegulationBadge {...props} />);
+      const badge = container.querySelector(".regulation-badge");
+      expect(badge).toHaveAttribute("title", "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.");
+      unmount();
+    }
+  });
 });

@@ -22,7 +22,18 @@
  * 아이콘만으로 뜻을 전달하지 않는다 — 글자 라벨이 항상 함께 있고,
  * 아이콘은 `aria-hidden`이라 스크린리더는 라벨만 읽는다(같은 이유로
  * `ChevronIcon`도 `aria-hidden`이다).
+ *
+ * **`title`로 짧은 설명을 단다**(사용자 지시: "규제지역에 마우스를
+ * 올리면 간략하게 어떤 차이를 반영하는지 설명하는 내용을 볼 수
+ * 있도록"). 세 상태 모두 같은 문구다 — "이 배지가 무슨 뜻인가"를
+ * 설명하는 자리지 "지금 상태가 어떤가"를 다시 말하는 자리가 아니라서,
+ * 값이 규제든 비규제든 가정이든 갈릴 이유가 없다. LTV 40%/70%(일반
+ * 기준, `rules/2026-08.json`의 `ltv`)를 여기 숫자로 박지 않는 이유는
+ * 생애최초는 규제·비규제 상관없이 70%로 같아(예외가 있는 규칙을
+ * "간략하게" 압축하면 그 예외가 사라진 채 전달된다) 정직하게 줄이면
+ * "낮아질 수 있다"는 조건문 이상으로는 못 줄인다.
  */
+const REGULATION_BADGE_TITLE = "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.";
 export interface RegulationBadgeProps {
   /** 지역 조회가 이 판정을 확정했는가(`state.touched`) */
   determined: boolean;
@@ -36,7 +47,7 @@ export function RegulationBadge({
 }: RegulationBadgeProps) {
   if (determined && isRegulatedArea) {
     return (
-      <span className="regulation-badge regulation-badge--regulated">
+      <span className="regulation-badge regulation-badge--regulated" title={REGULATION_BADGE_TITLE}>
         <LockIcon />
         규제지역
       </span>
@@ -44,7 +55,7 @@ export function RegulationBadge({
   }
   if (determined) {
     return (
-      <span className="regulation-badge regulation-badge--unregulated">
+      <span className="regulation-badge regulation-badge--unregulated" title={REGULATION_BADGE_TITLE}>
         <UnlockIcon />
         비규제지역
       </span>
@@ -56,7 +67,7 @@ export function RegulationBadge({
   // 가리키는 방향을 그대로 라벨에 반영해, 나중에 기본값이 바뀌어도
   // 이 배지가 따로 고장 나지 않는다.
   return (
-    <span className="regulation-badge regulation-badge--assumed">
+    <span className="regulation-badge regulation-badge--assumed" title={REGULATION_BADGE_TITLE}>
       <QuestionIcon />
       {isRegulatedArea ? "규제지역" : "비규제지역"}
       <span className="regulation-badge-qualifier">(가정)</span>
