@@ -199,6 +199,42 @@ describe("RangeSlider", () => {
         niceAxisTicks(0, 200).length,
       );
     });
+
+    /**
+     * 사용자 지시(매매가는 "10억단위로"): `tickUnit`을 주면 그보다 잘게
+     * 끊기지 않는다. 억 단위로 흉내내려고 formatTick을 `v/10 → "N0"`
+     * 문자열로 준다(1_000_000_000 같은 실제 원 단위는 가독성이 떨어져
+     * 단위 자체를 10으로 흉내낸다 — `niceAxisStep`의 unit 계산은
+     * 스케일과 무관하다).
+     */
+    it("tickUnit을 주면 그 배수로만 눈금이 찍힌다", () => {
+      renderSlider({
+        min: 0,
+        max: 45,
+        value: { min: 0, max: 45 },
+        formatTick: (v) => `${v}`,
+        tickUnit: 10,
+      });
+      // niceAxisStep(45, 5, 10) 없이 그냥 뒀다면 5 간격(0,5,10,...)이
+      // 나왔을 값이지만, tickUnit=10이라 10의 배수만 남는다.
+      expect(screen.getByText("10")).toBeInTheDocument();
+      expect(screen.getByText("20")).toBeInTheDocument();
+      expect(screen.getByText("30")).toBeInTheDocument();
+      expect(screen.queryByText("5")).not.toBeInTheDocument();
+      expect(screen.queryByText("15")).not.toBeInTheDocument();
+    });
+
+    it("tickUnit을 안 주면 기존 동작 그대로다", () => {
+      renderSlider({
+        min: 0,
+        max: 42,
+        value: { min: 0, max: 42 },
+        formatTick: (v) => `${v}`,
+      });
+      expect(screen.getByText("10")).toBeInTheDocument();
+      expect(screen.getByText("20")).toBeInTheDocument();
+      expect(screen.getByText("30")).toBeInTheDocument();
+    });
   });
 });
 
@@ -213,6 +249,24 @@ describe("niceAxisStep", () => {
   it("범위가 0 이하면 1을 낸다 — 나눗셈 오류를 피한다", () => {
     expect(niceAxisStep(0)).toBe(1);
     expect(niceAxisStep(-5)).toBe(1);
+  });
+
+  describe("unit(최소 눈금 단위)", () => {
+    it("unit을 주면 그 배수 중에서만 1·2·5·10 계열로 고른다", () => {
+      // span=1.5e9(15억), 목표 4~5등분(3e8/구간)이면 원래 5억 간격이 될
+      // 값이지만, unit=1e9(10억)을 주면 그보다 잘게 못 끊어 10억을 낸다.
+      expect(niceAxisStep(1_500_000_000, 5, 1_000_000_000)).toBe(1_000_000_000);
+      // span이 커지면 unit의 배수(1·2·5·10배) 중에서 계속 고른다.
+      expect(niceAxisStep(9_000_000_000, 5, 1_000_000_000)).toBe(2_000_000_000);
+    });
+
+    it("unit을 주지 않으면 기존 계산과 똑같다", () => {
+      expect(niceAxisStep(40, 5, undefined)).toBe(niceAxisStep(40));
+    });
+
+    it("범위가 0 이하면 unit을 그대로 낸다", () => {
+      expect(niceAxisStep(0, 5, 10)).toBe(10);
+    });
   });
 });
 

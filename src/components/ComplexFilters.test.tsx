@@ -21,7 +21,9 @@ describe("ComplexFilters", () => {
   it("매매가·면적·입주년차 세 슬라이더를 낸다", () => {
     render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
     expect(screen.getByText("매매가")).toBeInTheDocument();
-    expect(screen.getByText("면적")).toBeInTheDocument();
+    // "(전용)": 사용자 지시 — 이 앱의 면적은 전용면적이라 평 표기만으로는
+    // 공급면적과 헷갈릴 수 있어 기준을 라벨에 바로 적는다.
+    expect(screen.getByText("면적 (전용)")).toBeInTheDocument();
     expect(screen.getByText("입주년차")).toBeInTheDocument();
     expect(screen.getAllByRole("slider")).toHaveLength(6); // 축 3개 × 손잡이 2개
   });
@@ -55,7 +57,7 @@ describe("ComplexFilters", () => {
   it("한 축(면적)을 움직이면 나머지 두 축(가격·입주년차)은 그대로 넘긴다", () => {
     const onChange = vi.fn();
     render(<ComplexFilters bounds={BOUNDS} value={NARROWED} onChange={onChange} />);
-    const areaMin = screen.getByRole("slider", { name: "면적 최소" });
+    const areaMin = screen.getByRole("slider", { name: "면적 (전용) 최소" });
     fireEvent.keyDown(areaMin, { key: "Home" });
 
     expect(onChange).toHaveBeenCalledTimes(1);
@@ -71,11 +73,21 @@ describe("ComplexFilters", () => {
     expect(next.area.max).toBeCloseTo(NARROWED.area.max, 5);
   });
 
-  it("가격 눈금은 '억' 단위 축약 표기다", () => {
+  it("가격 눈금은 10억 단위로만 찍힌다 — 사용자 지시대로 5억처럼 잘게 끊기지 않는다", () => {
     render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
-    // 5억~20억 범위, niceAxisStep은 5억 간격을 고른다 — 10억·15억이
-    // 눈금으로 찍힌다.
+    // BOUNDS 가격은 5억~20억. tickUnit=10억이라 5억·15억 같은 중간값은
+    // 나오지 않는다 — 20억은 max 자체라 "최대"가 그 자리를 대신한다.
     expect(screen.getByText("10억")).toBeInTheDocument();
-    expect(screen.getByText("15억")).toBeInTheDocument();
+    expect(screen.queryByText("5억")).not.toBeInTheDocument();
+    expect(screen.queryByText("15억")).not.toBeInTheDocument();
+  });
+
+  it("면적 눈금은 10평 단위로만 찍힌다", () => {
+    render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
+    // BOUNDS 면적은 20~120㎡ ≈ 6~37평(바깥쪽 반올림). tickUnit=10평이라
+    // 10의 배수만 눈금으로 찍힌다.
+    expect(screen.getByText("10평")).toBeInTheDocument();
+    expect(screen.getByText("20평")).toBeInTheDocument();
+    expect(screen.getByText("30평")).toBeInTheDocument();
   });
 });

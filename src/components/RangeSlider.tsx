@@ -40,6 +40,15 @@ export interface RangeSliderProps {
    * `formatValue`를 그대로 쓴다.
    */
   formatTick?: (value: number) => string;
+  /**
+   * 눈금 간격의 최소 단위(사용자 지시: 매매가는 "10억단위로", 면적은
+   * "10평단위로"). 주지 않으면(기본값) `niceAxisStep`이 1·2·5·10 계열
+   * 중 아무 배수나 고른다 — 매매가라면 "5억"처럼 이 단위보다 잘게
+   * 끊길 수 있다. 이 값을 주면 그보다 작은 간격은 절대 고르지 않는다
+   * (예: `1_000_000_000`을 주면 5억·15억 같은 중간값은 나오지 않고
+   * 10억·20억·50억처럼 항상 10억의 배수만 나온다).
+   */
+  tickUnit?: number;
 }
 
 /**
@@ -50,8 +59,23 @@ export interface RangeSliderProps {
  * 수로 끊기지 않게 한다. 흔한 축 눈금 알고리즘(D3 `ticks`와 같은
  * 발상)이고, 이 저장소가 새로 지어낸 규칙이 아니다.
  */
-export function niceAxisStep(span: number, targetCount = 5): number {
-  if (!Number.isFinite(span) || span <= 0) return 1;
+/**
+ * `unit`을 주면 그보다 작은 간격은 절대 고르지 않는다 — `rough`를 `unit`
+ * 배수로 먼저 세고(그 값이 1 미만이면 1로 올려, "간격 0"을 막는다) 그
+ * 위에서 같은 1·2·5·10 반올림을 적용한 뒤 다시 `unit`을 곱해 되돌린다.
+ * `unit`을 안 주면(기본값) 기존 계산 그대로다 — 기존 호출부(면적 기본
+ * 눈금·입주년차)의 결과를 조금도 바꾸지 않는다.
+ */
+export function niceAxisStep(span: number, targetCount = 5, unit?: number): number {
+  if (!Number.isFinite(span) || span <= 0) return unit ?? 1;
+  if (unit !== undefined) {
+    const roughInUnits = Math.max(span / targetCount / unit, 1);
+    const magnitude = 10 ** Math.floor(Math.log10(roughInUnits));
+    const normalized = roughInUnits / magnitude;
+    const niceNormalized =
+      normalized <= 1 ? 1 : normalized <= 2 ? 2 : normalized <= 5 ? 5 : 10;
+    return niceNormalized * magnitude * unit;
+  }
   const rough = span / targetCount;
   const magnitude = 10 ** Math.floor(Math.log10(rough));
   const normalized = rough / magnitude;
@@ -65,9 +89,9 @@ export function niceAxisStep(span: number, targetCount = 5): number {
  * 실제 데이터 최댓값은 대개 "뜻 없는 수"라 그 자리는 이 배열이 아니라
  * 호출부가 별도로 "최대"라는 말로 표시한다(`RangeSlider`의 렌더 참고).
  */
-export function niceAxisTicks(min: number, max: number, targetCount = 5): number[] {
+export function niceAxisTicks(min: number, max: number, targetCount = 5, unit?: number): number[] {
   if (!Number.isFinite(min) || !Number.isFinite(max) || max <= min) return [];
-  const step = niceAxisStep(max - min, targetCount);
+  const step = niceAxisStep(max - min, targetCount, unit);
   const first = Math.ceil(min / step) * step;
   const ticks: number[] = [];
   for (let v = first; v < max; v += step) {
@@ -93,8 +117,8 @@ export function niceAxisTicks(min: number, max: number, targetCount = 5): number
  */
 const MAX_LABEL_COLLISION_RATIO = 0.2;
 
-export function axisLabelTicks(min: number, max: number, targetCount = 5): number[] {
-  const ticks = niceAxisTicks(min, max, targetCount);
+export function axisLabelTicks(min: number, max: number, targetCount = 5, unit?: number): number[] {
+  const ticks = niceAxisTicks(min, max, targetCount, unit);
   if (ticks.length === 0) return ticks;
   const span = max - min;
   const last = ticks[ticks.length - 1]!;
@@ -111,10 +135,11 @@ export function RangeSlider({
   onChange,
   formatValue,
   formatTick = formatValue,
+  tickUnit,
 }: RangeSliderProps) {
   const isFullRange = value.min === min && value.max === max;
-  const ticks = niceAxisTicks(min, max);
-  const labelTicks = axisLabelTicks(min, max);
+  const ticks = niceAxisTicks(min, max, 5, tickUnit);
+  const labelTicks = axisLabelTicks(min, max, 5, tickUnit);
   const span = max - min;
 
   return (

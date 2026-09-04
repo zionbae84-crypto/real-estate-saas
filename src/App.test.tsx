@@ -402,7 +402,7 @@ describe("App - 매매가·면적·입주년차 슬라이더 필터", () => {
     // keyDown 전에 반드시 그 손잡이로 focus를 먼저 보낸다
     // (RangeSlider.test.tsx의 같은 주석 참고).
     fireEvent.click(await screen.findByRole("button", { name: "필터" }));
-    const areaMax = screen.getByRole("slider", { name: "면적 최대" });
+    const areaMax = screen.getByRole("slider", { name: "면적 (전용) 최대" });
     fireEvent.focus(areaMax);
     fireEvent.keyDown(areaMax, { key: "ArrowLeft" });
 
@@ -432,10 +432,10 @@ describe("App - 매매가·면적·입주년차 슬라이더 필터", () => {
     // focus를 먼저 보낸다(위 "면적 슬라이더로 좁히면" 테스트와 같은
     // 이유). 슬라이더는 "필터" 버튼 팝오버 안에 있다.
     fireEvent.click(await screen.findByRole("button", { name: "필터" }));
-    const areaMin = screen.getByRole("slider", { name: "면적 최소" });
+    const areaMin = screen.getByRole("slider", { name: "면적 (전용) 최소" });
     fireEvent.focus(areaMin);
     fireEvent.keyDown(areaMin, { key: "PageUp" });
-    const areaMax = screen.getByRole("slider", { name: "면적 최대" });
+    const areaMax = screen.getByRole("slider", { name: "면적 (전용) 최대" });
     fireEvent.focus(areaMax);
     fireEvent.keyDown(areaMax, { key: "PageDown" });
 

@@ -73,6 +73,11 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
 
   return (
     <div className="complex-range-filters">
+      {/*
+        사용자 지시: 매매가 눈금은 "10억단위로" — 5억·15억처럼 10억보다
+        잘게 끊기지 않게 최소 눈금 단위를 10억(1,000,000,000원)으로
+        못박는다(RangeSlider.tsx의 `tickUnit` 참고).
+      */}
       <RangeSlider
         label="매매가"
         min={bounds.price.min}
@@ -81,6 +86,7 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         value={value.price}
         formatValue={formatWon}
         formatTick={formatPriceTick}
+        tickUnit={1_000_000_000}
         onChange={(price) => onChange({ ...value, price })}
       />
       {/*
@@ -89,14 +95,20 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         `onChange`에 넘긴다(`src/format/area.ts`의 경고 주석 참고).
         `min`/`max`(=경계)도 함께 평으로 바꿔야 `RangeSlider`가 "전체"
         여부를 그 경계와 비교해 스스로 판단할 수 있다.
+
+        라벨은 "면적 (전용)" — 이 앱의 면적은 전부 국토부 실거래가의
+        전용면적(`excluUseAr`)이지 분양 안내에 흔한 공급면적이 아니다.
+        사용자가 "평" 하나만 보고 어느 기준인지 헷갈리지 않도록(사용자
+        지시) 라벨에 바로 적는다 — 눈금은 "10평단위로"(tickUnit=10).
       */}
       <RangeSlider
-        label="면적"
+        label="면적 (전용)"
         min={areaBoundsPyeong.min}
         max={areaBoundsPyeong.max}
         step={1}
         value={areaValuePyeong}
         formatValue={(v) => `${Math.round(v)}평`}
+        tickUnit={10}
         onChange={(areaPyeong) =>
           onChange({
             ...value,

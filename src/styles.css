@@ -837,10 +837,17 @@ body {
  * 각 구간에 구분선을 표시해줘"). SEED `Slider`의 `ticks` prop이 이미
  * 내는 `.seed-slider-tick`을 그대로 쓴다(RangeSlider.tsx의 `<Slider
  * ticks={...}>` 참고, `Range` 다음에 렌더돼 채운 구간 위에도 선이
- * 보인다) — 기본색(거의 검정)만 이 화면 톤에 맞게 옅게 덮는다.
+ * 보인다).
+ *
+ * 처음엔 20% 불투명도로 옅게 덮었는데, 트랙(`--result-rule`)·채움
+ * (`#a9d3f5`) 둘 다 밝은 톤이라 선이 거의 안 보인다는 지적을 받았다
+ * (사용자 지시: "구분표시가 거의 보이지가 않는데, 명확하게 보일수
+ * 있도록"). 기본 폭(1px)에 낮은 불투명도를 같이 쓰면 밝은 바탕에서
+ * 사라지므로, 폭을 넓히고 불투명도도 함께 올려 확실히 읽히게 한다.
  */
 .range-slider .seed-slider-tick {
-  background-color: rgb(18 41 77 / 20%);
+  width: 2px;
+  background-color: rgb(18 41 77 / 55%);
 }
 
 /*
