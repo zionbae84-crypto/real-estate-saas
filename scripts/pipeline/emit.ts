@@ -16,9 +16,14 @@ import { DATA_DIR } from "./config";
  * 파이프라인 **내부**(예: 이상 신호 리포트가 필요해지면)에서는 여전히
  * `ComplexUnit`을 그대로 쓸 수 있다 — 이 타입은 오직 emit()이 파일에 쓸
  * 때만 거치는 마지막 관문이다.
+ *
+ * `pnu`도 여기서 뺀다 — 위 셋과 이유가 다르다(화면이 못 쓰는 값이
+ * 아니라, 화면이 쓸 일이 아예 없는 내부 조인 키다). 세대수 조회 결과인
+ * `householdCount`만 내보낸다.
  */
 export type EmittedComplexUnit = Omit<
   ComplexUnit,
+  | "pnu"
   | "medianPrice"
   | "changeRate3m"
   | "changeRate3mRecentCount"
@@ -33,6 +38,7 @@ export type EmittedComplexUnit = Omit<
 /** ComplexUnit에서 화면에 낼 수 없는 필드를 뺀다. emit()이 파일을 쓰기 직전에만 부른다. */
 export function toEmittedUnit(unit: ComplexUnit): EmittedComplexUnit {
   const {
+    pnu: _pnu,
     medianPrice: _medianPrice,
     changeRate3m: _changeRate3m,
     changeRate3mRecentCount: _changeRate3mRecentCount,
@@ -143,6 +149,7 @@ export function buildSchemaDoc(): string {
 | tradeCount | number | 최근 6개월 거래 건수 | 없음 |
 | trades | array | 위 가격 범위·건수를 만든 **바로 그 거래들**(같은 최근 6개월 창). 거래일 내림차순이고 \`trades.length === tradeCount\`가 언제나 참이다. 각 항목은 \`{ price, contractDate, floor }\`. **집계값이 아니라 국토부가 공개한 사실 그대로다** — medianPrice를 뺀 규칙("가격은 항상 범위로만 말한다")이 막는 것은 우리가 대표값을 골라 단정하는 것이지, 실제로 체결된 계약을 그대로 보여주는 것이 아니다 | \`floor\`가 \`null\`이면 그 거래의 층을 믿을 수 없다는 뜻(1층 미만이거나 정수가 아닌 값). **0층·1층으로 채우지 않는다** |
 | address | string \\| null | 이 단지의 지번주소("서울특별시 강남구 대치동 316"). 창은 최근 6개월이 아니라 그 단지의 **모든** 거래 — 건물 주소는 시간과 무관한 성질이라서다. 지오코딩이 쓰는 문자열과 **같은 함수**(\`buildAddressString\`)로 만든다 — 지도가 찍은 자리와 화면이 적은 주소가 갈리지 않게 하려고 | 어느 거래로도 주소를 만들 수 없었다는 뜻(지번·본번이 전부 없거나 모르는 지역코드). **지어내지 않는다** |
+| householdCount | number \\| null | 이 단지의 총 세대수. 한국부동산원 "공동주택 단지 식별정보" API를 단지의 PNU(필지고유번호)로 조회한 값 — 단지명 문자열 매칭이 아니다(실측으로 이름 매칭은 24%만 맞았지만 PNU 매칭은 100% 맞았다). \`fetchLiveComplexes\`(live.ts)가 집계 이후에 채운다 — 오프라인 배치 파이프라인은 아직 채우지 않는다(항상 \`null\`) | PNU를 못 만들었거나, 조회가 실패했거나, 그 PNU가 이 API에 등록돼 있지 않다는 뜻. 세 경우를 구분하지 않는다 — 세대수는 핵심 필터가 아니라 부가 정보라서다 |
 | minPrice / maxPrice | number | 원 단위 정수. 최근 6개월 창 안의 최저·최고가 | 없음 |
 | minFloor / maxFloor | number \\| null | 위 가격 범위를 만든 **바로 그 거래들**(같은 최근 6개월 창) 중 층을 믿을 수 있는 거래의 최저층·최고층. **가격을 보정하라고 있는 값이 아니다** — 층별 가격 모델을 만들거나 "이 층이면 얼마쯤"을 계산하면 감정평가 영역이고, medianPrice를 산출물에서 뺀 것과 같은 이유로 하면 안 된다. 용도는 하나뿐이다: 사용자가 자기가 보는 매물의 층과 스스로 견주게 하는 것 | 믿을 수 있는 층이 그 창에 하나도 없었다는 뜻. **0층·1층으로 채우지 않는다** |
 | unknownFloorCount | number | 그 창의 거래 중 층을 믿을 수 없었던 건수(1층 미만이거나 정수가 아닌 값 — 지하 표기 등). 모르는 층을 채우지 않는다 대신 몇 건이 그랬는지를 남긴다. 0이면 그 창의 모든 거래가 층 범위에 들어 있다 | 없음 |
@@ -166,6 +173,11 @@ export function buildSchemaDoc(): string {
 **주소 객체(\`roadNm\`·\`roadNmCd\`·\`bonbun\`·\`bubun\`·\`jibun\`·\`umdCd\`)는 그대로
 담지 않는다** — 대신 단지 단위 문자열 하나로 합쳐 \`address\` 필드에 넣는다
 (위 표 참고).
+
+\`pnu\`(필지고유번호)도 담지 않는다 — 단, 위 둘과 이유가 다르다. 화면
+표시가 금지된 값이 아니라, 세대수 조회(한국부동산원 API)의 내부 조인
+키일 뿐이라 화면이 쓸 일이 아예 없다. 그 조회의 **결과**인
+\`householdCount\`만 내보낸다(위 표 참고).
 
 예전에는 주소를 아예 담지 않았고, 그 이유는 금지된 값이라서가 아니라
 **아직 쓸 화면이 없어서**였다. 사용자 지시로 단지 상세 화면이 주소를

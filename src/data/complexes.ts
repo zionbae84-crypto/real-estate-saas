@@ -104,6 +104,18 @@ export interface ComplexUnit {
    * 아니다).
    */
   address: string | null;
+  /**
+   * 이 단지의 총 세대수. 한국부동산원 "공동주택 단지 식별정보" API를
+   * 단지의 PNU(필지고유번호)로 조회한 값이다 — 단지명 문자열 매칭이
+   * 아니다(실측으로 이름 매칭은 24%만 맞았지만 PNU 매칭은 100% 맞았다).
+   *
+   * `null`이면 **모른다**는 뜻이다. PNU를 못 만들었거나, 조회가
+   * 실패했거나, 그 PNU가 이 API에 등록돼 있지 않다는 세 경우를 구분하지
+   * 않는다 — 세대수는 이 앱의 핵심 필터(매매가·면적·입주년차)가 아니라
+   * 부가 정보라서다. `landLeasehold`와 같은 원칙으로, 화면은 `null`을
+   * "세대수 없음"이 아니라 "확인 안 됨"으로 그려야 한다.
+   */
+  householdCount: number | null;
   tradeCount: number;
   minPrice: number;
   maxPrice: number;
@@ -182,11 +194,12 @@ export function narrowLandLeasehold(value: string | null): "Y" | "N" | null {
 }
 
 /**
- * ⚠ **이 번들은 `address`·`trades`가 생기기 전에 만들어졌다.**
+ * ⚠ **이 번들은 `address`·`trades`·`householdCount`가 생기기 전에
+ * 만들어졌다.**
  *
  * 화면이 실제로 쓰는 것은 라이브 API(`/api/complexes` → `fetchRegionComplexes`)
- * 이고, 이 상수는 지금 테스트에서만 쓰인다. 그래서 두 필드를 **없는 그대로**
- * 채운다 — `address`는 `null`(주소를 모른다), `trades`는 빈 배열이다.
+ * 이고, 이 상수는 지금 테스트에서만 쓰인다. 그래서 세 필드를 **없는 그대로**
+ * 채운다 — `address`·`householdCount`는 `null`(모른다), `trades`는 빈 배열이다.
  *
  * 빈 배열을 "거래가 없다"로 읽으면 안 된다. `tradeCount`는 여전히 0보다
  * 크고, 그 둘이 어긋난 상태가 곧 **"거래 내역을 받지 못했다"**는 신호다 —
@@ -197,6 +210,7 @@ export const COMPLEX_UNITS: readonly ComplexUnit[] = rawComplexes.map((u) => ({
   ...u,
   landLeasehold: narrowLandLeasehold(u.landLeasehold),
   address: null,
+  householdCount: null,
   trades: [],
 }));
 

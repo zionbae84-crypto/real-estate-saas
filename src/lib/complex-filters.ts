@@ -2,9 +2,10 @@ import type { ComplexUnit } from "../data/complexes";
 
 /**
  * 목록·지도 화면의 슬라이더 필터(사용자 지시: "필터 : 면적/입주년차/세대수/
- * 가격을 조정하여 필터로"). 세대수는 조인할 데이터가 아직 없어 뺐고
- * (별도 과제 — API 점검 결과 참고), 이 파일은 **면적·가격·입주년차** 셋을
- * 다룬다.
+ * 가격을 조정하여 필터로"). 세대수는 한때 조인할 데이터가 없어 뺐지만,
+ * 한국부동산원 "공동주택 단지 식별정보" API를 PNU로 조회하는 경로가
+ * 생기면서(`scripts/pipeline/householdCount.ts`) 이 파일도 **면적·가격·
+ * 입주년차·세대수** 네 축을 다룬다.
  *
  * ⚠ **이 필터는 `BuyerProfile.exclusiveAreaSqm`(헤드라인 계산이 가정하는
  * 면적)과 다른 축이다.** 화면 1의 평형대 질문이 사라진 뒤(사용자 지시),
@@ -36,11 +37,24 @@ export interface ComplexFilterState {
   price: NumericRange;
   area: NumericRange;
   builtYearAge: NumericRange;
+  householdCount: NumericRange;
 }
 
 /** 값이 이 범위 안(양 끝 포함)인가 */
 function withinRange(value: number, range: NumericRange): boolean {
   return value >= range.min && value <= range.max;
+}
+
+/**
+ * 값이 이 범위 안이거나, **모르는 값**(`null`)이면 통과다.
+ *
+ * 세대수 필터에만 쓴다 — 매매가·면적·입주년차와 달리 세대수는 모르는
+ * 단지가 있을 수 있는데(`ComplexUnit.householdCount` 참고), 모른다는
+ * 사실 때문에 매물이 조용히 걸러지면 안 된다는 이 저장소의 원칙
+ * (`landLeasehold`·`minFloor`/`maxFloor`와 같다)을 그대로 따른다.
+ */
+function withinRangeOrUnknown(value: number | null, range: NumericRange): boolean {
+  return value === null || withinRange(value, range);
 }
 
 /**
@@ -100,7 +114,20 @@ export function builtYearAgeBounds(
   return { min: Math.max(0, Math.min(...ages)), max: Math.max(...ages) };
 }
 
-/** 세 축을 한 번에 계산한다. App.tsx가 지역을 새로 조회할 때마다 부른다. */
+/**
+ * 세대수 범위. 세대수를 확인한 단지만으로 계산한다 — 확인 못 한
+ * 단지(`householdCount === null`)까지 0으로 섞으면 최솟값이 0으로
+ * 떨어져 슬라이더가 뜻 없는 범위를 갖는다. **하나도 확인 못 했으면**
+ * (그 지역 세대수 조회가 전부 실패했거나 등록된 단지가 하나도 없을
+ * 때) 다른 세 축과 마찬가지로 빈 경계를 낸다.
+ */
+export function householdCountBounds(units: readonly ComplexUnit[]): NumericRange {
+  const known = units.map((u) => u.householdCount).filter((c): c is number => c !== null);
+  if (known.length === 0) return EMPTY_BOUNDS;
+  return { min: Math.min(...known), max: Math.max(...known) };
+}
+
+/** 네 축을 한 번에 계산한다. App.tsx가 지역을 새로 조회할 때마다 부른다. */
 export function complexFilterBounds(
   units: readonly ComplexUnit[],
   now: Date,
@@ -109,10 +136,16 @@ export function complexFilterBounds(
     price: priceBounds(units),
     area: areaBounds(units),
     builtYearAge: builtYearAgeBounds(units, now),
+    householdCount: householdCountBounds(units),
   };
 }
 
-/** 세 축을 모두 적용해 거른다. 순서는 뜻에 영향이 없다 — 세 술어의 교집합이다. */
+/**
+ * 네 축을 모두 적용해 거른다. 순서는 뜻에 영향이 없다 — 네 술어의
+ * 교집합이다. 세대수만 모르는 값을 관대하게 통과시킨다
+ * ({@link withinRangeOrUnknown}) — 나머지 세 축은 이 앱의 모든 단지가
+ * 값을 갖고 있어 그 구분이 필요 없다.
+ */
 export function filterByComplexFilters(
   units: readonly ComplexUnit[],
   filters: ComplexFilterState,
@@ -123,7 +156,8 @@ export function filterByComplexFilters(
     (u) =>
       withinRange(u.maxPrice, filters.price) &&
       withinRange(u.maxExclusiveAreaSqm, filters.area) &&
-      withinRange(year - u.builtYear, filters.builtYearAge),
+      withinRange(year - u.builtYear, filters.builtYearAge) &&
+      withinRangeOrUnknown(u.householdCount, filters.householdCount),
   );
 }
 
@@ -141,7 +175,7 @@ export function wouldHelpToResetAxis(
   units: readonly ComplexUnit[],
   filters: ComplexFilterState,
   bounds: ComplexFilterState,
-  axis: "price" | "area" | "builtYearAge",
+  axis: "price" | "area" | "builtYearAge" | "householdCount",
   now: Date,
 ): boolean {
   const relaxed: ComplexFilterState = { ...filters, [axis]: bounds[axis] };

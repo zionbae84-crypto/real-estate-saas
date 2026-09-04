@@ -5,6 +5,7 @@ import {
   builtYearAgeBounds,
   complexFilterBounds,
   filterByComplexFilters,
+  householdCountBounds,
   priceBounds,
   wouldHelpToResetAxis,
   type ComplexFilterState,
@@ -27,6 +28,7 @@ function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
     maxFloor: 15,
     unknownFloorCount: 0,
     address: null,
+    householdCount: null,
     trades: [],
     lowConfidence: false,
     ...over,
@@ -79,13 +81,35 @@ describe("builtYearAgeBounds", () => {
   });
 });
 
+describe("householdCountBounds", () => {
+  it("세대수를 확인한 단지만으로 최소·최대를 낸다", () => {
+    const units = [unit({ householdCount: 499 }), unit({ householdCount: 117 })];
+    expect(householdCountBounds(units)).toEqual({ min: 117, max: 499 });
+  });
+
+  it("세대수를 모르는(null) 단지는 0으로 섞지 않는다", () => {
+    const units = [unit({ householdCount: 499 }), unit({ householdCount: null })];
+    expect(householdCountBounds(units)).toEqual({ min: 499, max: 499 });
+  });
+
+  it("전부 모르면 0,0이다", () => {
+    const units = [unit({ householdCount: null }), unit({ householdCount: null })];
+    expect(householdCountBounds(units)).toEqual({ min: 0, max: 0 });
+  });
+
+  it("빈 목록이면 0,0이다", () => {
+    expect(householdCountBounds([])).toEqual({ min: 0, max: 0 });
+  });
+});
+
 describe("complexFilterBounds", () => {
-  it("세 축을 한 번에 계산한다", () => {
-    const units = [unit()];
+  it("네 축을 한 번에 계산한다", () => {
+    const units = [unit({ householdCount: 300 })];
     const bounds = complexFilterBounds(units, NOW);
     expect(bounds.price).toEqual(priceBounds(units));
     expect(bounds.area).toEqual(areaBounds(units));
     expect(bounds.builtYearAge).toEqual(builtYearAgeBounds(units, NOW));
+    expect(bounds.householdCount).toEqual(householdCountBounds(units));
   });
 });
 
@@ -144,6 +168,7 @@ describe("filterByComplexFilters", () => {
       price: { min: 0, max: 1_000_000_000 },
       area: { min: 0, max: 70 },
       builtYearAge: bounds.builtYearAge,
+      householdCount: bounds.householdCount,
     };
     expect(filterByComplexFilters(units, filters, NOW).map((u) => u.complexKey)).toEqual(["a"]);
   });
@@ -154,6 +179,26 @@ describe("filterByComplexFilters", () => {
       price: { min: 500_000_000, max: 500_000_000 },
     };
     expect(filterByComplexFilters(units, filters, NOW).map((u) => u.complexKey)).toEqual(["a"]);
+  });
+
+  /**
+   * 세대수만 다른 세 축과 다르게 군다 — 모르는(null) 단지는 세대수
+   * 범위를 아무리 좁혀도 걸러지지 않는다. 모른다는 사실 때문에 매물이
+   * 조용히 사라지면 안 된다는 이 저장소의 원칙(landLeasehold와 같다)이다.
+   */
+  it("세대수를 좁혀도 세대수를 모르는(null) 단지는 걸러지지 않는다", () => {
+    const withUnknown = [
+      unit({ complexKey: "known", maxPrice: 500_000_000, maxExclusiveAreaSqm: 59, builtYear: 2020, householdCount: 300 }),
+      unit({ complexKey: "unknown", maxPrice: 500_000_000, maxExclusiveAreaSqm: 59, builtYear: 2020, householdCount: null }),
+    ];
+    const narrowBounds = complexFilterBounds(withUnknown, NOW);
+    const filters: ComplexFilterState = {
+      ...narrowBounds,
+      householdCount: { min: 1000, max: 2000 }, // "known" 단지(300세대)도 이 범위 밖이다
+    };
+    expect(filterByComplexFilters(withUnknown, filters, NOW).map((u) => u.complexKey)).toEqual([
+      "unknown",
+    ]);
   });
 });
 
@@ -187,6 +232,7 @@ describe("wouldHelpToResetAxis", () => {
       price: { min: 0, max: 100 },
       area: { min: 0, max: 1 },
       builtYearAge: bounds.builtYearAge,
+      householdCount: bounds.householdCount,
     };
     // 가격·면적 둘 다 아무도 못 낄 만큼 좁다 — 어느 한쪽만 풀어도
     // 나머지 하나가 여전히 막는다.

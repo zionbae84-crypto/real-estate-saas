@@ -1978,7 +1978,7 @@ export function App() {
                             /*
                               ⚠ **필터 범위 밖이라 0건인 것은 "예산으로
                               못 산다"·"이 동엔 없다"와 다른 원인이다.**
-                              세 슬라이더 중 어느 것을 넓히면 결과가
+                              네 슬라이더 중 어느 것을 넓히면 결과가
                               생기는지를 `wouldHelpToResetAxis`로 축마다
                               직접 확인해, 도움이 되는 축만 짚어 말한다 —
                               지역·평형대·예산을 가를 때와 같은 이유다(이
@@ -1988,12 +1988,13 @@ export function App() {
                               {(() => {
                                 const filters = complexFilters ?? complexFilterBoundsValue;
                                 const axes: Array<{
-                                  key: "price" | "area" | "builtYearAge";
+                                  key: "price" | "area" | "builtYearAge" | "householdCount";
                                   label: string;
                                 }> = [
                                   { key: "price", label: "매매가" },
                                   { key: "area", label: "면적" },
                                   { key: "builtYearAge", label: "입주년차" },
+                                  { key: "householdCount", label: "세대수" },
                                 ];
                                 const helpful = axes
                                   .filter((axis) =>

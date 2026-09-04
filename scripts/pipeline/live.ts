@@ -9,6 +9,7 @@ import {
 } from "./fetch";
 import { normalizeAll } from "./normalize";
 import { aggregate } from "./aggregate";
+import { noopHouseholdCountLookup, type HouseholdCountLookup } from "./householdCount";
 import { toEmittedUnit, type EmittedComplexUnit } from "./emit";
 import type { ReportConfig } from "./types";
 
@@ -40,6 +41,13 @@ export interface LiveComplexesResult {
  * 한 달이라도 `fetchAllPages`가 던지면 이 함수도 그대로 던진다 — 절반만
  * 모은 데이터를 성공으로 응답하지 않기 위해서다. 호출자(API 핸들러)가
  * 이걸 실패 상태코드로 옮긴다.
+ *
+ * 집계 이후 `lookupHouseholdCounts`로 세대수를 채운다(한국부동산원
+ * "공동주택 단지 식별정보" API, 각 단지의 PNU로 조회). **이 조회는
+ * 실패해도 이 함수를 던지지 않는다** — 위 문단의 "한 달 실패 → 전체
+ * 던짐"과 대비된다. 가격·면적·입주년차는 이 앱의 핵심이지만 세대수는
+ * 부가 정보라, 세대수 조회 하나가 실패했다고 목록 전체를 502로
+ * 죽일 이유가 없다.
  */
 export async function fetchLiveComplexes(
   regionCode: string,
@@ -49,6 +57,7 @@ export async function fetchLiveComplexes(
   config: ReportConfig,
   wait: Waiter = defaultWait,
   cache: RawTradeCache = noopRawTradeCache,
+  lookupHouseholdCounts: HouseholdCountLookup = noopHouseholdCountLookup,
 ): Promise<LiveComplexesResult> {
   const targets = buildTargets(now, MONTHS_BACK, [regionCode]);
   const pages = await Promise.all(
@@ -58,7 +67,24 @@ export async function fetchLiveComplexes(
   const normalized = normalizeAll(trades);
   const units = aggregate(normalized, now, config);
   const filtered = dong === null ? units : units.filter((u) => u.legalDongName === dong);
-  return { units: filtered.map(toEmittedUnit), dataAsOf: latestContractMonth(normalized) };
+
+  // 세대수는 부가 정보라, 이 조회 전체를 502로 죽이지 않는다 — 주입받은
+  // lookupHouseholdCounts 자체가 PNU 하나하나의 실패를 이미 삼키지만
+  // (householdCount.ts), 함수 자체가 예상 밖의 이유로 던져도 여기서 한 번
+  // 더 막아 목록 조회(가격·면적·입주년차)는 절대 영향받지 않게 한다.
+  const pnus = filtered.map((u) => u.pnu).filter((p): p is string => p !== null);
+  let householdCounts: Map<string, number>;
+  try {
+    householdCounts = await lookupHouseholdCounts(pnus);
+  } catch {
+    householdCounts = new Map();
+  }
+  const enriched = filtered.map((u) => ({
+    ...u,
+    householdCount: u.pnu !== null ? (householdCounts.get(u.pnu) ?? null) : null,
+  }));
+
+  return { units: enriched.map(toEmittedUnit), dataAsOf: latestContractMonth(normalized) };
 }
 
 /**

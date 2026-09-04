@@ -23,6 +23,8 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     maxFloor: 18,
     unknownFloorCount: 0,
     address: null,
+    pnu: null,
+    householdCount: null,
     trades: [],
     changeRate3m: 0.02,
     changeRate3mRecentCount: 3,
@@ -254,9 +256,12 @@ describe("emit — complexes.json에는 화면에 낼 수 없는 필드를 담�
     "changeRate12mRecentCount",
     "changeRate12mPriorCount",
     "changeRate12mLowConfidence",
+    // pnu는 위 필드들과 이유가 다르다(화면 금지가 아니라 내부 조인 키) —
+    // 그래도 산출물에 안 나가는 건 같으니 이 목록으로 함께 지킨다.
+    "pnu",
   ];
 
-  it("complexes.json에 medianPrice·changeRate류 필드가 하나도 없다", () => {
+  it("complexes.json에 medianPrice·changeRate류·pnu 필드가 하나도 없다", () => {
     emit([unit()], new Date("2026-08-22T00:00:00Z"), "2026-08", "2026-03", root);
     const written = JSON.parse(
       readFileSync(join(root, "complexes.json"), "utf8"),
@@ -266,6 +271,14 @@ describe("emit — complexes.json에는 화면에 낼 수 없는 필드를 담�
     for (const banned of BANNED_FIELDS) {
       expect(keys).not.toContain(banned);
     }
+  });
+
+  it("complexes.json에는 householdCount(세대수 조회 결과)가 여전히 담긴다", () => {
+    emit([unit({ householdCount: 499 })], new Date("2026-08-22T00:00:00Z"), "2026-08", "2026-03", root);
+    const written = JSON.parse(
+      readFileSync(join(root, "complexes.json"), "utf8"),
+    ) as Record<string, unknown>[];
+    expect(written[0]?.householdCount).toBe(499);
   });
 
   it("complexes.json에는 여전히 maxExclusiveAreaSqm과 areaBucket이 함께 담긴다", () => {

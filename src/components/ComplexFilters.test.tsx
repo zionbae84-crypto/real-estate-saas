@@ -8,6 +8,7 @@ const BOUNDS: ComplexFilterState = {
   price: { min: 500_000_000, max: 2_000_000_000 },
   area: { min: 20, max: 120 },
   builtYearAge: { min: 0, max: 30 },
+  householdCount: { min: 100, max: 800 },
 };
 
 /**
@@ -21,22 +22,24 @@ const NARROWED: ComplexFilterState = {
   price: { min: 600_000_000, max: 1_500_000_000 },
   area: { min: 40, max: 70 },
   builtYearAge: { min: 5, max: 20 },
+  householdCount: { min: 200, max: 600 },
 };
 
 describe("ComplexFilters", () => {
-  it("매매가·면적·입주년차 세 슬라이더를 낸다", () => {
+  it("매매가·면적·입주년차·세대수 네 슬라이더를 낸다", () => {
     render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
     expect(screen.getByText("매매가")).toBeInTheDocument();
     // "(전용)": 사용자 지시 — 이 앱의 면적은 전용면적이라 평 표기만으로는
     // 공급면적과 헷갈릴 수 있어 기준을 라벨에 바로 적는다.
     expect(screen.getByText("면적 (전용)")).toBeInTheDocument();
     expect(screen.getByText("입주년차")).toBeInTheDocument();
-    expect(screen.getAllByRole("slider")).toHaveLength(6); // 축 3개 × 손잡이 2개
+    expect(screen.getByText("세대수")).toBeInTheDocument();
+    expect(screen.getAllByRole("slider")).toHaveLength(8); // 축 4개 × 손잡이 2개
   });
 
-  it("건드리지 않았으면(값이 경계 그대로) 세 축 모두 '전체'다", () => {
+  it("건드리지 않았으면(값이 경계 그대로) 네 축 모두 '전체'다", () => {
     render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
-    expect(screen.getAllByText("전체")).toHaveLength(3);
+    expect(screen.getAllByText("전체")).toHaveLength(4);
   });
 
   it("가격은 원 표기로 낸다", () => {
@@ -127,6 +130,44 @@ describe("ComplexFilters", () => {
    * 상태를 확인한다). 오른쪽 끝 글자는 두 축 다 다른 축과 같은 기본값
    * "최대"다(사용자 지시로 "40억 초과"·"30평 초과" 문구는 걷어냈다).
    */
+  describe("세대수", () => {
+    it("세대수 최댓값이 0보다 크면 슬라이더를 낸다", () => {
+      render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
+      expect(screen.getByText("세대수")).toBeInTheDocument();
+      expect(screen.getByRole("slider", { name: "세대수 최소" })).toBeInTheDocument();
+    });
+
+    /**
+     * 그 지역 세대수를 하나도 확인 못 했으면(예: 세대수 조회가 전부
+     * 실패했거나 등록된 단지가 없다) 손잡이를 움직일 자리가 없는
+     * 슬라이더를 보여주는 대신 축 자체를 안 그린다.
+     */
+    it("세대수를 하나도 확인 못 했으면(bounds가 0,0) 슬라이더를 아예 안 낸다", () => {
+      const noHouseholdData: ComplexFilterState = { ...BOUNDS, householdCount: { min: 0, max: 0 } };
+      render(<ComplexFilters bounds={noHouseholdData} value={noHouseholdData} onChange={vi.fn()} />);
+      expect(screen.queryByText("세대수")).not.toBeInTheDocument();
+    });
+
+    it("세대수 표기는 '~세대'다", () => {
+      render(<ComplexFilters bounds={BOUNDS} value={NARROWED} onChange={vi.fn()} />);
+      expect(screen.getByText("200세대 ~ 600세대")).toBeInTheDocument();
+    });
+
+    it("세대수만 움직이면 나머지 세 축은 그대로 넘긴다", () => {
+      const onChange = vi.fn();
+      render(<ComplexFilters bounds={BOUNDS} value={NARROWED} onChange={onChange} />);
+      const householdMin = screen.getByRole("slider", { name: "세대수 최소" });
+      fireEvent.keyDown(householdMin, { key: "Home" });
+
+      expect(onChange).toHaveBeenCalledTimes(1);
+      const next = onChange.mock.calls[0]![0] as ComplexFilterState;
+      expect(next.price).toEqual(NARROWED.price);
+      expect(next.area).toEqual(NARROWED.area);
+      expect(next.builtYearAge).toEqual(NARROWED.builtYearAge);
+      expect(next.householdCount).toEqual({ min: BOUNDS.householdCount.min, max: NARROWED.householdCount.max });
+    });
+  });
+
   describe("상한", () => {
     it("면적 실제 최댓값이 상한(40평)을 넘으면 슬라이더 오른쪽 끝이 40평에서 멎는다", () => {
       const highAreaBounds: ComplexFilterState = {

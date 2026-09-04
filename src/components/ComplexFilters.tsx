@@ -80,9 +80,8 @@ export interface ComplexFiltersProps {
 }
 
 /**
- * 사용자 지시("필터 : 면적/입주년차/세대수/가격을 조정하여 필터로",
- * 세대수는 조인할 데이터가 없어 별도 과제로 뺐다)의 면적·가격·입주년차
- * 세 슬라이더.
+ * 사용자 지시("필터 : 면적/입주년차/세대수/가격을 조정하여 필터로")의
+ * 면적·가격·입주년차·세대수 네 슬라이더.
  *
  * **매물 유형·행정동 좁히기와 같은 자리(`App.tsx`의 `.complex-filters`)에
  * 선다** — 셋 다 "조회 조건" 축이지 이 목록의 핵심 값이 아니다.
@@ -209,6 +208,26 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         tickUnit={10}
         onChange={(builtYearAge) => onChange({ ...value, builtYearAge })}
       />
+      {/*
+        세대수는 다른 세 축과 달리 **모르는 단지가 있을 수 있다**
+        (`complex-filters.ts`의 `householdCountBounds`·
+        `withinRangeOrUnknown` 참고 — 모르는 단지는 이 필터로 절대
+        걸러지지 않는다). `bounds.householdCount.max`가 0이면 이 지역
+        전체가 세대수를 하나도 확인 못 했다는 뜻이라, 손잡이를 움직일
+        자리가 없는 슬라이더를 보여주는 대신 축 자체를 안 그린다.
+      */}
+      {bounds.householdCount.max > 0 && (
+        <RangeSlider
+          label="세대수"
+          min={bounds.householdCount.min}
+          max={bounds.householdCount.max}
+          step={1}
+          value={value.householdCount}
+          formatValue={(v) => `${Math.round(v)}세대`}
+          tickUnit={100}
+          onChange={(householdCount) => onChange({ ...value, householdCount })}
+        />
+      )}
     </div>
   );
 }

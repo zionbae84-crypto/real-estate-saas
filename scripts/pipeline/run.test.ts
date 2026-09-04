@@ -234,6 +234,8 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     maxFloor: 18,
     unknownFloorCount: 0,
     address: null,
+    pnu: null,
+    householdCount: null,
     trades: [],
     changeRate3m: 0.02,
     changeRate3mRecentCount: 3,

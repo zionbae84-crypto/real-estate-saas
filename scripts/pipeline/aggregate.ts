@@ -1,4 +1,5 @@
 import { buildAddressString } from "./address";
+import { computePnu } from "./pnu";
 import type { NormalizedTrade } from "./normalize";
 import type { LandLeasehold, ReportConfig } from "./types";
 
@@ -93,6 +94,28 @@ export interface ComplexUnit {
    * 자리와 화면이 적은 주소가 갈리지 않게 한다.
    */
   address: string | null;
+  /**
+   * 이 단지의 PNU(필지고유번호, {@link computePnu}). 만들 수 없으면 `null`.
+   *
+   * 세대수 조회(한국부동산원 공동주택 단지 식별정보 API)의 조인 키로만
+   * 쓰는 내부 값이다 — `address`와 같은 갈래(시간과 무관한 그 단지의
+   * 성질, group 전체에서 만들 수 있는 첫 거래의 것을 쓴다)지만, 이
+   * 값 자체는 화면이 쓸 일이 없어 `emit.ts`의 `toEmittedUnit`이 빼고
+   * `householdCount`(그 PNU로 실제 조회한 세대수)만 내보낸다.
+   */
+  pnu: string | null;
+  /**
+   * 이 단지의 총 세대수. `aggregate()`는 이 값을 **언제나 `null`로 둔다** —
+   * 이 함수는 순수 함수라 외부 API를 부르지 않는다. 실제 값은
+   * `live.ts`의 `fetchLiveComplexes`가 집계 이후에 `pnu`로 채운다.
+   *
+   * ⚠ 오프라인 배치 파이프라인(`run.ts`)은 아직 채우지 않는다 — 지금
+   * 화면이 실제로 쓰는 것은 라이브 API뿐이고(`src/data/complexes.ts`의
+   * 번들 데이터는 vestigial, `address`·`trades`와 같은 사정이다), 배치
+   * 산출물에 세대수를 채우는 것은 그 산출물을 다시 쓸 일이 생기면
+   * 처리할 별도 과제다.
+   */
+  householdCount: number | null;
   /** 최근 6개월 거래의 중위값(원) */
   medianPrice: number;
   tradeCount: number;
@@ -252,6 +275,18 @@ export function firstAddress(trades: NormalizedTrade[]): string | null {
   for (const trade of trades) {
     const address = buildAddressString(trade);
     if (address !== null) return address;
+  }
+  return null;
+}
+
+/**
+ * 이 단지의 PNU. 만들 수 있는 첫 거래의 것을 쓴다 — {@link firstAddress}와
+ * 같은 이유·같은 창(group 전체)이다.
+ */
+export function firstPnu(trades: NormalizedTrade[]): string | null {
+  for (const trade of trades) {
+    const pnu = computePnu(trade.regionCode, trade.address.umdCd, trade.address.bonbun, trade.address.bubun);
+    if (pnu !== null) return pnu;
   }
   return null;
 }
@@ -454,6 +489,8 @@ export function aggregate(
       landLeasehold: mergeLandLeasehold(group.map((t) => t.landLeasehold)),
       // 주소도 같은 갈래다(건물의 성질). 만들 수 있는 첫 거래의 것을 쓴다.
       address: firstAddress(group),
+      pnu: firstPnu(group),
+      householdCount: null,
       medianPrice: median(recentPrices),
       tradeCount: recent.length,
       trades: toTradeRecords(recent),

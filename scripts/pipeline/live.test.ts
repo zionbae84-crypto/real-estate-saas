@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { fetchLiveComplexes } from "./live";
 import { normalizeAll } from "./normalize";
 import { aggregate } from "./aggregate";
@@ -202,6 +202,100 @@ describe("fetchLiveComplexes", () => {
     await expect(
       fetchLiveComplexes("11680", null, new Date("2026-01-15"), "dummy-key", CONFIG, async () => {}),
     ).rejects.toThrow();
+  });
+});
+
+describe("fetchLiveComplexes — 세대수(householdCount)", () => {
+  it("lookupHouseholdCounts가 준 값을 pnu로 매칭해 채운다", async () => {
+    globalThis.fetch = (async (url: string | URL) => {
+      const ymd = new URL(url).searchParams.get("DEAL_YMD") ?? "";
+      // pnu를 만들려면 주소가 필요하다 — 기본 tradeItem()에는 없다.
+      const items = ymd === "202601" ? [tradeItem({ bonbun: "902", jibun: "902", umdCd: "10100" })] : [];
+      return new Response(responseBody(items), { status: 200 });
+    }) as typeof fetch;
+
+    const { units } = await fetchLiveComplexes(
+      "11680",
+      null,
+      new Date("2026-01-15"),
+      "dummy-key",
+      CONFIG,
+      async () => {},
+      undefined,
+      async (pnus) => {
+        const map = new Map<string, number>();
+        // 실제 pnu가 뭐든 그대로 되돌려 주는 대신, 조회에 들어온 pnu
+        // 각각에 499를 매핑해 "매칭이 실제로 pnu로 일어나는지"를 확인한다.
+        for (const pnu of pnus) map.set(pnu, 499);
+        return map;
+      },
+    );
+
+    expect(units[0]?.householdCount).toBe(499);
+  });
+
+  it("lookupHouseholdCounts를 안 주면(기본값) householdCount는 언제나 null이다", async () => {
+    globalThis.fetch = (async () =>
+      new Response(responseBody([tradeItem()]), { status: 200 })) as typeof fetch;
+
+    const { units } = await fetchLiveComplexes(
+      "11680",
+      null,
+      new Date("2026-01-15"),
+      "dummy-key",
+      CONFIG,
+      async () => {},
+    );
+
+    expect(units[0]?.householdCount).toBeNull();
+  });
+
+  it("lookupHouseholdCounts가 던져도 목록 조회 자체는 성공한다 — 세대수는 부가 정보다", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        responseBody([tradeItem({ bonbun: "902", jibun: "902", umdCd: "10100" })]),
+        { status: 200 },
+      )) as typeof fetch;
+
+    const { units } = await fetchLiveComplexes(
+      "11680",
+      null,
+      new Date("2026-01-15"),
+      "dummy-key",
+      CONFIG,
+      async () => {},
+      undefined,
+      async () => {
+        throw new Error("household count API down");
+      },
+    );
+
+    expect(units).toHaveLength(1);
+    expect(units[0]?.householdCount).toBeNull();
+  });
+
+  it("pnu가 없는(주소를 못 만든) 단지는 조회 대상에서 빠지고 householdCount는 null이다", async () => {
+    globalThis.fetch = (async () =>
+      new Response(
+        responseBody([tradeItem({ jibun: null, bonbun: null, bubun: null, umdCd: null })]),
+        { status: 200 },
+      )) as typeof fetch;
+
+    const lookup = vi.fn(async () => new Map<string, number>());
+    const { units } = await fetchLiveComplexes(
+      "11680",
+      null,
+      new Date("2026-01-15"),
+      "dummy-key",
+      CONFIG,
+      async () => {},
+      undefined,
+      lookup,
+    );
+
+    expect(units[0]?.householdCount).toBeNull();
+    // pnu가 없으니 lookup에 넘어가는 목록도 비어 있다.
+    expect(lookup).toHaveBeenCalledWith([]);
   });
 });
 

@@ -27,6 +27,7 @@ function unit(overrides: Partial<ComplexUnit> = {}): ComplexUnit {
     maxExclusiveAreaSqm: areaBucket,
     landLeasehold: "N",
     address: "서울특별시 강남구 대치동 316",
+    householdCount: null,
     tradeCount: 1,
     trades: [trade()],
     minPrice: 1_200_000_000,

@@ -825,3 +825,46 @@ describe("aggregate — 주소(address)", () => {
   });
 });
 
+describe("aggregate — PNU·세대수(pnu·householdCount)", () => {
+  const NO_ADDRESS = {
+    roadNm: null,
+    roadNmCd: null,
+    bonbun: null,
+    bubun: null,
+    jibun: null,
+    umdCd: null,
+  };
+
+  it("regionCode+umdCd+본번+부번으로 PNU를 만든다", () => {
+    const units = aggregate(normalizeAll([trade()]), AS_OF, config);
+    // trade()의 주소: regionCode 11680, umdCd 10600, bonbun 0316, bubun 0000.
+    expect(units[0]?.pnu).toBe("1168010600103160000");
+  });
+
+  it("본번이 없으면(PNU를 못 만들면) null이다 — 지어내지 않는다", () => {
+    const units = aggregate(
+      normalizeAll([trade({ address: NO_ADDRESS })]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.pnu).toBeNull();
+  });
+
+  it("창이 recent가 아니라 group 전체다 — address와 같은 갈래다", () => {
+    const units = aggregate(
+      normalizeAll([
+        trade({ contractDate: "2026-07-10", address: NO_ADDRESS }),
+        trade({ contractDate: "2025-12-01" }),
+      ]),
+      AS_OF,
+      config,
+    );
+    expect(units[0]?.pnu).toBe("1168010600103160000");
+  });
+
+  it("householdCount는 언제나 null이다 — 순수 함수라 외부 API를 부르지 않는다", () => {
+    const units = aggregate(normalizeAll([trade()]), AS_OF, config);
+    expect(units[0]?.householdCount).toBeNull();
+  });
+});
+

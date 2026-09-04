@@ -46,6 +46,7 @@ const TEST_FILTER_BOUNDS: ComplexFilterState = {
   price: { min: 0, max: 0 },
   area: { min: 0, max: 0 },
   builtYearAge: { min: 0, max: 0 },
+  householdCount: { min: 0, max: 0 },
 };
 
 function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
@@ -65,6 +66,7 @@ function unit(over: Partial<ComplexUnit> = {}): ComplexUnit {
     maxFloor: 15,
     unknownFloorCount: 0,
     address: null,
+    householdCount: null,
     trades: [],
     lowConfidence: false,
     ...over,
