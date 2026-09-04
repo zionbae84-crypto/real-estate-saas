@@ -17,29 +17,23 @@ function formatPriceTick(won: number): string {
 }
 
 /**
- * 매매가 슬라이더의 고정 상한(사용자 지시: "마지막 구간을 40억 초과로
- * 수정해줘"). 그 지역 실제 최고가(강남구 한 채가 218억까지 올라간
- * 경우를 실측했다)까지 슬라이더를 늘리면, 대부분의 매물이 몰린 낮은
- * 구간이 트랙의 극히 일부로 눌려 손잡이를 세밀하게 움직일 수 없다.
- * 그래서 40억을 넘는 값은 전부 "40억 초과" 한 구간으로 뭉친다 — 그
- * 지역 실제 최댓값이 40억 이하면(=이 상한이 뜻이 없으면) 아래
- * `isPriceCapped`가 걸지 않는다.
+ * 매매가 슬라이더의 고정 상한. 그 지역 실제 최고가(강남구 한 채가
+ * 218억까지 올라간 경우를 실측했다)까지 슬라이더를 늘리면, 대부분의
+ * 매물이 몰린 낮은 구간이 트랙의 극히 일부로 눌려 손잡이를 세밀하게
+ * 움직일 수 없다. 그래서 40억을 넘는 값은 전부 오른쪽 끝(아래
+ * `isPriceCapped`가 참일 때만 걸린다 — 그 지역 실제 최댓값이 40억
+ * 이하면 상한이 할 일이 없다)에 뭉친다. 그 끝의 글자는 `RangeSlider`의
+ * 기본값 "최대"를 그대로 쓴다(사용자 지시로 "40억 초과" 문구는 걷어냈다
+ * — 상한 자체는 그대로 살아 있다).
  */
 const PRICE_CAP = 4_000_000_000;
 
-/** 면적 슬라이더의 고정 상한(평). 사용자 지시("마지막 구간을 30평 초과로")로 {@link PRICE_CAP}과 같은 이유로 둔다. */
-const AREA_CAP_PYEONG = 30;
-
 /**
- * 슬라이더에 보여줄 값 하나를 실제 상한과 비교해, 상한 이상이면 고정
- * 문구("40억 초과")를, 아니면 평소 포맷을 낸다. 손잡이가 상한에
- * 붙어 있을 때(=`isCapped`가 참일 때만 값이 상한과 같아질 수 있다,
- * 아래 `priceValueForSlider`/`areaValuePyeongForSlider` 참고) 범위
- * 문구·눈금 오른쪽 끝·드래그 중 말풍선이 전부 같은 문구를 쓴다.
+ * 면적 슬라이더의 고정 상한(평). {@link PRICE_CAP}과 같은 이유(그 지역
+ * 실제 최댓값이 30평보다 훨씬 큰 아웃라이어 하나 때문에 대부분의
+ * 매물이 몰린 낮은 구간이 눌리는 것을 막는다)로 둔다.
  */
-function formatCapped(value: number, cap: number, overLabel: string, plain: (v: number) => string): string {
-  return value >= cap ? overLabel : plain(value);
-}
+const AREA_CAP_PYEONG = 30;
 
 /**
  * ㎡ 경계를 평 정수 경계로. **바깥쪽으로만 반올림한다**(최소는 내림,
@@ -111,7 +105,6 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
     min: value.price.min,
     max: isPriceCapped ? Math.min(value.price.max, PRICE_CAP) : value.price.max,
   };
-  const formatPriceValue = (won: number) => formatCapped(won, PRICE_CAP, "40억 초과", formatWon);
 
   const isAreaCapped = areaBoundsPyeong.max > AREA_CAP_PYEONG && areaBoundsPyeong.min < AREA_CAP_PYEONG;
   const areaSliderMaxPyeong = isAreaCapped ? AREA_CAP_PYEONG : areaBoundsPyeong.max;
@@ -119,18 +112,17 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
     min: areaValuePyeong.min,
     max: isAreaCapped ? Math.min(areaValuePyeong.max, AREA_CAP_PYEONG) : areaValuePyeong.max,
   };
-  const formatAreaValue = (pyeong: number) =>
-    formatCapped(pyeong, AREA_CAP_PYEONG, "30평 초과", (v) => `${Math.round(v)}평`);
 
   return (
     <div className="complex-range-filters">
       {/*
-        사용자 지시: 매매가는 "10억단위로 구분하고 마지막 구간을 40억
-        초과로" — 눈금 최소 단위를 10억으로 못박고(`tickUnit`), 손잡이가
-        `priceSliderMax`(상한이 걸렸으면 40억, 아니면 실제 최댓값)에
-        붙으면 "40억 초과"라고 말한다(`maxLabel`). 손잡이가 상한에 붙은
-        채로 나가는 값은 실제 최댓값으로 되돌린다 — 그래야 "40억
-        초과"가 진짜로 "그 이상은 안 자른다"는 뜻이 된다(아래 onChange).
+        사용자 지시: 매매가는 "10억단위로 구분" — 눈금 최소 단위를
+        10억으로 못박는다(`tickUnit`). 오른쪽 끝은 `priceSliderMax`
+        (상한이 걸렸으면 40억, 아니면 실제 최댓값)이고, 라벨은 다른
+        축과 똑같이 기본값 "최대"를 쓴다. 손잡이가 상한에 붙은 채로
+        나가는 값은 실제 최댓값으로 되돌린다 — 상한은 슬라이더가 세밀한
+        구간에 집중하기 위한 화면상의 장치일 뿐, 40억을 넘는 매물을
+        실제로 걸러내진 않는다(아래 onChange).
       */}
       <RangeSlider
         label="매매가"
@@ -138,10 +130,9 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         max={priceSliderMax}
         step={10_000_000}
         value={priceValueForSlider}
-        formatValue={formatPriceValue}
+        formatValue={formatWon}
         formatTick={formatPriceTick}
         tickUnit={1_000_000_000}
-        maxLabel={isPriceCapped ? "40억 초과" : undefined}
         onChange={(price) =>
           onChange({
             ...value,
@@ -164,8 +155,13 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         사용자가 "평" 하나만 보고 어느 기준인지 헷갈리지 않도록(사용자
         지시) 라벨에 바로 적는다.
 
-        사용자 지시: "전용 5평 단위로 구분해서 마지막 구간을 30평
-        초과로" — 매매가와 같은 상한·되돌리기 패턴을 5평·30평으로 쓴다.
+        사용자 지시: "10평/20평/30평 최대로 구분" — 매매가와 같은
+        상한(30평) 패턴을 쓰되, 오른쪽 끝 글자는 매매가와 달리 상한값을
+        함께 담아 "30평 최대"라고 적는다(매매가의 "40억 초과 → 최대"는
+        숫자 없는 순수 교체였지만, 이번 문구는 "10평/20평/30평"과
+        슬래시 없이 이어 붙은 것으로 보아 숫자를 그대로 두고 말만
+        바꾼 것이다). 손잡이가 상한에 붙은 채로 나가는 값은 실제
+        최댓값으로 되돌린다(아래 onChange).
       */}
       <RangeSlider
         label="면적 (전용)"
@@ -173,9 +169,9 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         max={areaSliderMaxPyeong}
         step={1}
         value={areaValuePyeongForSlider}
-        formatValue={formatAreaValue}
-        tickUnit={5}
-        maxLabel={isAreaCapped ? "30평 초과" : undefined}
+        formatValue={(v) => `${Math.round(v)}평`}
+        tickUnit={10}
+        maxLabel={isAreaCapped ? `${AREA_CAP_PYEONG}평 최대` : undefined}
         onChange={(areaPyeong) =>
           onChange({
             ...value,

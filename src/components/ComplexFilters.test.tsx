@@ -88,54 +88,57 @@ describe("ComplexFilters", () => {
     expect(screen.queryByText("15억")).not.toBeInTheDocument();
   });
 
-  it("면적 눈금은 5평 단위로만 찍힌다", () => {
+  it("면적 눈금은 10평 단위로만 찍힌다", () => {
     render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
     // BOUNDS 면적은 20~120㎡ ≈ 6~37평(바깥쪽 반올림)인데, 30평 상한이
     // 걸려 슬라이더 자체는 6~30평까지만 간다(아래 상한 테스트 참고).
-    // tickUnit=5평이라 5의 배수만 눈금으로 찍힌다.
+    // tickUnit=10평이라 10의 배수만 눈금으로 찍힌다.
     expect(screen.getByText("10평")).toBeInTheDocument();
-    expect(screen.getByText("15평")).toBeInTheDocument();
     expect(screen.getByText("20평")).toBeInTheDocument();
-    expect(screen.getByText("25평")).toBeInTheDocument();
     expect(screen.queryByText("5평")).not.toBeInTheDocument();
+    expect(screen.queryByText("15평")).not.toBeInTheDocument();
   });
 
   /**
-   * 사용자 지시: "매매가는 ... 마지막 구간을 40억 초과로",
-   * "면적은 ... 마지막 구간을 30평 초과로 수정해줘". 그 지역 실제
-   * 최댓값이 상한을 넘을 때만 상한이 걸린다 — BOUNDS(가격 20억, 면적
-   * ≈37평)는 면적만 30평 상한을 넘는다.
+   * 매매가는 40억, 면적(전용)은 30평을 넘으면 슬라이더 오른쪽 끝을
+   * 그 상한에 고정한다(그 지역 실제 최댓값이 상한을 넘을 때만 —
+   * BOUNDS는 가격 20억·면적 ≈37평이라 면적만 넘는다). 오른쪽 끝의
+   * 글자는 두 축이 다르다 — 매매가는 다른 축과 같은 기본값 "최대"
+   * (사용자 지시로 "40억 초과" 문구는 걷어냈다), 면적은 상한값을 함께
+   * 담은 "30평 최대"(사용자 지시: "10평/20평/30평 최대"). 값은 같은
+   * 방식으로 잘리지만 화면에 남기는 말이 다르다.
    */
-  describe("상한(초과 구간)", () => {
-    it("면적 실제 최댓값이 상한(30평)을 넘으면 오른쪽 끝이 '30평 초과'다", () => {
+  describe("상한", () => {
+    it("면적 실제 최댓값이 상한(30평)을 넘으면 슬라이더 오른쪽 끝이 30평에서 멎고, 글자는 '30평 최대'다", () => {
       render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
-      // 손대지 않은 상태(=전체)라 손잡이가 이미 상한에 붙어 있고,
-      // 축 눈금과 드래그 말풍선(SEED valueIndicator) 둘 다 같은 문구를
+      const areaMax = screen.getByRole("slider", { name: "면적 (전용) 최대" });
+      expect(areaMax).toHaveAttribute("aria-valuemax", "30");
+      // 손대지 않은 상태(=전체)라 손잡이가 이미 상한에 붙어 있고, 축
+      // 눈금과 드래그 말풍선(SEED valueIndicator) 둘 다 같은 문구를
       // 낸다 — 그래서 getAllBy로 "적어도 하나"만 확인한다.
-      expect(screen.getAllByText("30평 초과").length).toBeGreaterThan(0);
-      // 상한을 안 넘는 매매가·입주년차는 그대로 "최대"다(둘 다 있다).
-      expect(screen.getAllByText("최대").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("30평 최대").length).toBeGreaterThan(0);
     });
 
-    it("가격 실제 최댓값이 상한(40억)을 넘으면 오른쪽 끝이 '40억 초과'다", () => {
+    it("가격 실제 최댓값이 상한(40억)을 넘으면 슬라이더 오른쪽 끝이 40억에서 멎는다", () => {
       const highBounds: ComplexFilterState = {
         ...BOUNDS,
         price: { min: 500_000_000, max: 21_800_000_000 }, // 5억~218억(강남구 실측 최고가)
       };
       render(<ComplexFilters bounds={highBounds} value={highBounds} onChange={vi.fn()} />);
-      expect(screen.getAllByText("40억 초과").length).toBeGreaterThan(0);
+      const priceMax = screen.getByRole("slider", { name: "매매가 최대" });
+      expect(priceMax).toHaveAttribute("aria-valuemax", "4000000000");
       // 40억을 넘는 중간값(50억·100억 등)은 더 이상 찍히지 않는다 —
-      // 상한 안쪽은 10억 단위(10·20·30억)로만, 그 뒤는 전부 "초과" 한
-      // 구간이다.
+      // 상한 안쪽은 10억 단위(10·20·30억)로만 찍힌다.
       expect(screen.getByText("10억")).toBeInTheDocument();
       expect(screen.getByText("20억")).toBeInTheDocument();
       expect(screen.getByText("30억")).toBeInTheDocument();
       expect(screen.queryByText("50억")).not.toBeInTheDocument();
     });
 
-    it("상한을 안 넘으면(BOUNDS 가격) 여느 때처럼 '최대'다 — '40억 초과'가 뜨지 않는다", () => {
+    it("상한을 안 넘으면(BOUNDS 가격) 슬라이더 오른쪽 끝이 실제 최댓값 그대로다", () => {
       render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
-      expect(screen.queryByText("40억 초과")).not.toBeInTheDocument();
+      const priceMax = screen.getByRole("slider", { name: "매매가 최대" });
+      expect(priceMax).toHaveAttribute("aria-valuemax", String(BOUNDS.price.max));
     });
 
     it("손잡이를 상한 끝까지 밀면 나가는 값은 상한이 아니라 실제 최댓값이다 — '그 이상은 전부 포함'이라는 뜻이 실제로 지켜진다", () => {
