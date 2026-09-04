@@ -12,10 +12,10 @@ const BOUNDS: ComplexFilterState = {
 
 /**
  * BOUNDS보다 좁은 값 — "전체"가 아니라 실제 범위 문구가 보이게 한다.
- * area.max(70㎡ ≈ 21평)는 일부러 30평 상한(`AREA_CAP_PYEONG`) 아래로
+ * area.max(70㎡ ≈ 21평)는 일부러 40평 상한(`AREA_CAP_PYEONG`) 아래로
  * 잡는다 — 그래야 이 값이 "정확한 특정 값"을 보여주는 테스트에서
- * "30평 초과"(상한 이상)로 뭉개지지 않는다(그 동작은 별도
- * `describe("상한(초과 구간)")`에서 따로 확인한다).
+ * 상한에 뭉개지지 않는다(상한 자체는 별도 `describe("상한")`에서
+ * 실제로 걸리는 더 넓은 범위로 따로 확인한다).
  */
 const NARROWED: ComplexFilterState = {
   price: { min: 600_000_000, max: 1_500_000_000 },
@@ -88,35 +88,65 @@ describe("ComplexFilters", () => {
     expect(screen.queryByText("15억")).not.toBeInTheDocument();
   });
 
-  it("면적 눈금은 10평 단위로만 찍힌다", () => {
+  it("면적 눈금은 10평 단위로 10·20·30 세 구간을 각자 낸다", () => {
     render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
-    // BOUNDS 면적은 20~120㎡ ≈ 6~37평(바깥쪽 반올림)인데, 30평 상한이
-    // 걸려 슬라이더 자체는 6~30평까지만 간다(아래 상한 테스트 참고).
-    // tickUnit=10평이라 10의 배수만 눈금으로 찍힌다.
+    // BOUNDS 면적은 20~120㎡ ≈ 6~37평(바깥쪽 반올림) — 40평 상한
+    // 아래라 안 걸리고 실제 최댓값(37평) 그대로 쓰인다(아래 상한
+    // 테스트는 상한이 실제로 걸리는 더 넓은 범위로 따로 확인한다).
+    // tickUnit=10평이라 10의 배수만, 사용자 지시대로 10·20·30이 전부
+    // 제 눈금으로 뜬다(37은 도메인 경계 자체라 눈금이 아니라 "최대"로
+    // 대신 뜬다).
     expect(screen.getByText("10평")).toBeInTheDocument();
     expect(screen.getByText("20평")).toBeInTheDocument();
+    expect(screen.getByText("30평")).toBeInTheDocument();
     expect(screen.queryByText("5평")).not.toBeInTheDocument();
     expect(screen.queryByText("15평")).not.toBeInTheDocument();
   });
 
   /**
-   * 매매가는 40억, 면적(전용)은 30평을 넘으면 슬라이더 오른쪽 끝을
-   * 그 상한에 고정한다(그 지역 실제 최댓값이 상한을 넘을 때만 —
-   * BOUNDS는 가격 20억·면적 ≈37평이라 면적만 넘는다). 오른쪽 끝의
-   * 글자는 두 축이 다르다 — 매매가는 다른 축과 같은 기본값 "최대"
-   * (사용자 지시로 "40억 초과" 문구는 걷어냈다), 면적은 상한값을 함께
-   * 담은 "30평 최대"(사용자 지시: "10평/20평/30평 최대"). 값은 같은
-   * 방식으로 잘리지만 화면에 남기는 말이 다르다.
+   * 사용자 지시: "입주년차 40년 글자 표기". 실제 최댓값이 40에 가까운
+   * 지역(예: 오래된 동네라 최댓값이 40대 후반)에서 "40년"이 "최대"와
+   * 너무 붙어 보여 축 글자에서 빠지는 사례가 있었다
+   * (`RangeSlider.tsx`의 `MAX_LABEL_COLLISION_RATIO` 참고). 그 정도
+   * 여유(실제 최댓값 48, 간격 약 16.7%)는 더 이상 지우지 않는다.
+   */
+  it("입주년차 눈금은 10년 단위이고, 최댓값이 40대라도 40년이 빠지지 않는다", () => {
+    const oldBounds: ComplexFilterState = { ...BOUNDS, builtYearAge: { min: 0, max: 48 } };
+    render(<ComplexFilters bounds={oldBounds} value={oldBounds} onChange={vi.fn()} />);
+    expect(screen.getByText("10년")).toBeInTheDocument();
+    expect(screen.getByText("20년")).toBeInTheDocument();
+    expect(screen.getByText("30년")).toBeInTheDocument();
+    expect(screen.getByText("40년")).toBeInTheDocument();
+  });
+
+  /**
+   * 매매가는 40억, 면적(전용)은 40평을 넘으면 슬라이더 오른쪽 끝을
+   * 그 상한에 고정한다. 두 축 다 실제 최댓값이 상한을 훌쩍 넘는
+   * 별도 fixture(`highBounds`/`highAreaBounds`)로 확인한다 — BOUNDS는
+   * 두 축 다 상한 아래라 상한이 걸리지 않는다(바로 위 테스트가 그
+   * 상태를 확인한다). 오른쪽 끝 글자는 두 축 다 다른 축과 같은 기본값
+   * "최대"다(사용자 지시로 "40억 초과"·"30평 초과" 문구는 걷어냈다).
    */
   describe("상한", () => {
-    it("면적 실제 최댓값이 상한(30평)을 넘으면 슬라이더 오른쪽 끝이 30평에서 멎고, 글자는 '30평 최대'다", () => {
-      render(<ComplexFilters bounds={BOUNDS} value={BOUNDS} onChange={vi.fn()} />);
+    it("면적 실제 최댓값이 상한(40평)을 넘으면 슬라이더 오른쪽 끝이 40평에서 멎는다", () => {
+      const highAreaBounds: ComplexFilterState = {
+        ...BOUNDS,
+        area: { min: 20, max: 300 }, // 6평~91평(바깥쪽 반올림) — 40평 상한을 훌쩍 넘는다
+      };
+      render(<ComplexFilters bounds={highAreaBounds} value={highAreaBounds} onChange={vi.fn()} />);
       const areaMax = screen.getByRole("slider", { name: "면적 (전용) 최대" });
-      expect(areaMax).toHaveAttribute("aria-valuemax", "30");
-      // 손대지 않은 상태(=전체)라 손잡이가 이미 상한에 붙어 있고, 축
-      // 눈금과 드래그 말풍선(SEED valueIndicator) 둘 다 같은 문구를
-      // 낸다 — 그래서 getAllBy로 "적어도 하나"만 확인한다.
-      expect(screen.getAllByText("30평 최대").length).toBeGreaterThan(0);
+      expect(areaMax).toHaveAttribute("aria-valuemax", "40");
+      // 상한 안쪽은 10평 단위(10·20·30평)로만 찍히고, 40평 자체는
+      // 도메인 경계라 축 눈금이 아니라 "최대"가 대신한다. 손잡이가 지금
+      // 40에 있어 드래그 말풍선(SEED valueIndicator, formatValue(40)
+      // ="40평")은 별개로 "40평"을 낸다 — 그건 정상이라 여기서 뺀다
+      // (`.range-slider-tick`으로 축 눈금만 좁힌다).
+      const axisTickTexts = [...document.querySelectorAll(".range-slider-tick")].map((el) => el.textContent);
+      expect(axisTickTexts).toContain("10평");
+      expect(axisTickTexts).toContain("20평");
+      expect(axisTickTexts).toContain("30평");
+      expect(axisTickTexts).not.toContain("40평");
+      expect(screen.getAllByText("최대").length).toBeGreaterThan(0);
     });
 
     it("가격 실제 최댓값이 상한(40억)을 넘으면 슬라이더 오른쪽 끝이 40억에서 멎는다", () => {
@@ -163,14 +193,15 @@ describe("ComplexFilters", () => {
 
     it("면적도 손잡이를 상한 끝까지 밀면 실제 최댓값이 나간다", () => {
       const onChange = vi.fn();
-      // 아직 상한(30평)에 안 붙어 있는 값(20평)에서 시작한다.
-      const startValue: ComplexFilterState = { ...BOUNDS, area: { min: BOUNDS.area.min, max: pyeongToSqm(20) } };
-      render(<ComplexFilters bounds={BOUNDS} value={startValue} onChange={onChange} />);
+      const highAreaBounds: ComplexFilterState = { ...BOUNDS, area: { min: 20, max: 300 } };
+      // 아직 상한(40평)에 안 붙어 있는 값(20평)에서 시작한다.
+      const startValue: ComplexFilterState = { ...highAreaBounds, area: { min: 20, max: pyeongToSqm(20) } };
+      render(<ComplexFilters bounds={highAreaBounds} value={startValue} onChange={onChange} />);
       const areaMax = screen.getByRole("slider", { name: "면적 (전용) 최대" });
       fireEvent.keyDown(areaMax, { key: "End" });
       expect(onChange).toHaveBeenCalledTimes(1);
       const next = onChange.mock.calls[0]![0] as ComplexFilterState;
-      expect(next.area.max).toBe(BOUNDS.area.max);
+      expect(next.area.max).toBe(highAreaBounds.area.max);
     });
   });
 });

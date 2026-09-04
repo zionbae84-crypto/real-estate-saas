@@ -30,10 +30,17 @@ const PRICE_CAP = 4_000_000_000;
 
 /**
  * 면적 슬라이더의 고정 상한(평). {@link PRICE_CAP}과 같은 이유(그 지역
- * 실제 최댓값이 30평보다 훨씬 큰 아웃라이어 하나 때문에 대부분의
- * 매물이 몰린 낮은 구간이 눌리는 것을 막는다)로 둔다.
+ * 실제 최댓값이 훨씬 큰 아웃라이어 하나 때문에 대부분의 매물이 몰린
+ * 낮은 구간이 눌리는 것을 막는다)로 둔다.
+ *
+ * 값 자체(40)는 사용자 지시("10평/20평/30평 각 구간을 만들고 마지막을
+ * 최대로")를 만족하는 가장 작은 값이다 — 10평 간격 눈금은 상한
+ * **자체**는 눈금으로 찍지 않으므로(`niceAxisTicks`의 "max 자체는
+ * 포함하지 않는다" 규칙), 상한을 30으로 두면 30이 "최대"에 먹혀 절대
+ * 제 눈금으로 못 뜬다. 40으로 한 칸 올려야 10·20·30이 전부 살고,
+ * "최대"는 그 뒤(40 또는 그보다 큰 실제 최댓값)에 따로 선다.
  */
-const AREA_CAP_PYEONG = 30;
+const AREA_CAP_PYEONG = 40;
 
 /**
  * ㎡ 경계를 평 정수 경계로. **바깥쪽으로만 반올림한다**(최소는 내림,
@@ -155,12 +162,10 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         사용자가 "평" 하나만 보고 어느 기준인지 헷갈리지 않도록(사용자
         지시) 라벨에 바로 적는다.
 
-        사용자 지시: "10평/20평/30평 최대로 구분" — 매매가와 같은
-        상한(30평) 패턴을 쓰되, 오른쪽 끝 글자는 매매가와 달리 상한값을
-        함께 담아 "30평 최대"라고 적는다(매매가의 "40억 초과 → 최대"는
-        숫자 없는 순수 교체였지만, 이번 문구는 "10평/20평/30평"과
-        슬래시 없이 이어 붙은 것으로 보아 숫자를 그대로 두고 말만
-        바꾼 것이다). 손잡이가 상한에 붙은 채로 나가는 값은 실제
+        사용자 지시: "10평/20평/30평 각 구간을 만들고 마지막을 최대로" —
+        10평 간격 눈금(`tickUnit`)이 10·20·30 세 구간을 각자 따로 낸다.
+        "최대"는 상한(40평, 또는 그보다 큰 실제 최댓값)에서 다른 축과
+        똑같이 뜬다. 손잡이가 상한에 붙은 채로 나가는 값은 실제
         최댓값으로 되돌린다(아래 onChange).
       */}
       <RangeSlider
@@ -171,7 +176,6 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         value={areaValuePyeongForSlider}
         formatValue={(v) => `${Math.round(v)}평`}
         tickUnit={10}
-        maxLabel={isAreaCapped ? `${AREA_CAP_PYEONG}평 최대` : undefined}
         onChange={(areaPyeong) =>
           onChange({
             ...value,
@@ -185,6 +189,15 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
           })
         }
       />
+      {/*
+        사용자 지시: "입주년차 40년 글자 표기" — 실제 지역 최댓값이
+        40년과 가까우면(예: 오래된 동네라 최댓값이 40대 후반) "40년"이
+        "최대"와 너무 붙어 보여 축 글자에서 빠지는 경우가 있었다
+        (`RangeSlider.tsx`의 `MAX_LABEL_COLLISION_RATIO` 참고 — 그
+        임계값을 낮춰 이 정도 여유는 더 이상 빼지 않게 고쳤다). 여기서는
+        다른 두 축과 같은 이유로 눈금 최소 단위를 10년으로 못박아
+        간격을 고정한다.
+      */}
       <RangeSlider
         label="입주년차"
         min={bounds.builtYearAge.min}
@@ -193,6 +206,7 @@ export function ComplexFilters({ bounds, value, onChange }: ComplexFiltersProps)
         value={value.builtYearAge}
         formatValue={(v) => `${v}년차`}
         formatTick={(v) => `${v}년`}
+        tickUnit={10}
         onChange={(builtYearAge) => onChange({ ...value, builtYearAge })}
       />
     </div>

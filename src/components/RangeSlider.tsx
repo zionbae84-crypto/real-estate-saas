@@ -49,12 +49,6 @@ export interface RangeSliderProps {
    * 10억·20억·50억처럼 항상 10억의 배수만 나온다).
    */
   tickUnit?: number;
-  /**
-   * 오른쪽 끝 고정 눈금의 글자. 기본은 "최대". 호출부가 `max`를 실제
-   * 데이터 최댓값이 아니라 고정 상한으로 못박을 때(사용자 지시: 면적은
-   * "30평 최대"), 그 상한값 자체를 글자에 함께 담고 싶으면 직접 준다.
-   */
-  maxLabel?: string;
 }
 
 /**
@@ -109,19 +103,27 @@ export function niceAxisTicks(min: number, max: number, targetCount = 5, unit?: 
 
 /**
  * 축 **글자**용 눈금만 마지막 눈금이 "최대"와 겹칠 만큼 가까우면 뺀다
- * (리뷰: 실제 화면에서 "40평"과 "최대"가 "최0평"처럼 겹쳐 보였다).
+ * (리뷰: 실제 화면에서 "40평"과 "최대"가 "최0평"처럼 겹쳐 보였다 —
+ * 그 간격은 축 길이의 4.76%였다).
  * `niceAxisTicks`가 돌려주는 값 자체(트랙 위 구분선에는 그대로 쓴다,
  * `RangeSlider`의 렌더 참고 — 구분선은 가는 선 하나라 글자처럼 겹쳐
  * 읽히지 않는다)는 건드리지 않고, 글자를 낼 때만 이 함수로 한 번 더
  * 거른다.
  *
  * jsdom은 실제 글자 폭을 재지 못하니(레이아웃을 하지 않는다) 픽셀이
- * 아니라 **축 전체 길이 대비 비율**로 "가깝다"를 정의한다 — 좁은
- * 팝오버(`.complex-map-filter-panel`, 240px)에서 실측했을 때 마지막
- * 눈금과 "최대"가 맞닿기 시작하는 지점보다 넉넉히 보수적으로 20%를
- * 기준으로 잡는다.
+ * 아니라 **축 전체 길이 대비 비율**로 "가깝다"를 정의한다.
+ *
+ * 처음엔 20%로 잡았는데(좁은 팝오버, `.complex-map-filter-panel`
+ * 240px, 실측), 그 값이 위 4.76%짜리 실제 충돌보다 훨씬 넉넉해서
+ * 실제로는 안 겹치는 자리(사용자 지시로 잡은 사례: 입주년차 축에서
+ * 최댓값이 40대 후반인 지역은 "40년"이 "최대"와 16~17%밖에 안
+ * 떨어졌는데도 이 규칙에 걸려 조용히 빠졌다)까지 지워 버렸다. 실제
+ * 충돌 지점(4.76%)에 3배 넘는 여유를 남기면서 저 경우는 더 이상 지우지
+ * 않는 15%로 낮췄다 — 12%까지 내리면 이 파일의 다른 실측 사례(135~550
+ * 축의 "500", 12.05%)까지 걸려 나오기 시작해 그 테스트가 세우려던
+ * 경계(진짜 붙는 자리는 여전히 뺀다)가 무너진다.
  */
-const MAX_LABEL_COLLISION_RATIO = 0.2;
+const MAX_LABEL_COLLISION_RATIO = 0.15;
 
 export function axisLabelTicks(min: number, max: number, targetCount = 5, unit?: number): number[] {
   const ticks = niceAxisTicks(min, max, targetCount, unit);
@@ -142,7 +144,6 @@ export function RangeSlider({
   formatValue,
   formatTick = formatValue,
   tickUnit,
-  maxLabel = "최대",
 }: RangeSliderProps) {
   const isFullRange = value.min === min && value.max === max;
   const ticks = niceAxisTicks(min, max, 5, tickUnit);
@@ -223,7 +224,7 @@ export function RangeSlider({
           </span>
         ))}
         <span className="range-slider-tick range-slider-tick--max" style={{ left: "100%" }}>
-          {maxLabel}
+          최대
         </span>
       </div>
     </div>
