@@ -54,10 +54,13 @@ describe("RegulationBadge", () => {
 
   /**
    * 사용자 지시: "규제지역에 마우스를 올리면 간략하게 어떤 차이를
-   * 반영하는지 설명하는 내용을 볼 수 있도록". 세 상태 모두 같은 문구를
-   * 얻는지 확인한다 — "이 배지가 무슨 뜻인가"는 값이 바뀌어도 같다.
+   * 반영하는지 설명하는 내용을 볼 수 있도록" → "딜레이를 최대한
+   * 빠르게", "흰색바탕(검정글씨)의 카드형식으로". 세 상태 모두 같은
+   * 카드를 얻는지 확인한다 — "이 배지가 무슨 뜻인가"는 값이 바뀌어도
+   * 같다. `title`이 아니라 `.result-topbar-tooltip` 카드로 낸다(그
+   * 속성은 뜨기까지 1~1.5초 걸리고 배경·글자색을 못 바꾼다).
    */
-  it("세 상태 모두 title로 짧은 설명을 낸다", () => {
+  it("세 상태 모두 카드로 짧은 설명을 낸다 — title 속성이 아니다", () => {
     const cases = [
       { determined: true, isRegulatedArea: true },
       { determined: true, isRegulatedArea: false },
@@ -66,8 +69,16 @@ describe("RegulationBadge", () => {
     for (const props of cases) {
       const { container, unmount } = render(<RegulationBadge {...props} />);
       const badge = container.querySelector(".regulation-badge");
-      expect(badge).toHaveAttribute("title", "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.");
+      expect(badge).not.toHaveAttribute("title");
+      expect(badge?.querySelector('[role="tooltip"]')?.textContent).toBe(
+        "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.",
+      );
       unmount();
     }
+  });
+
+  it("배지는 원래 포커스를 안 받는 요소라, 키보드로도 카드를 열 수 있게 tabIndex를 준다", () => {
+    render(<RegulationBadge determined isRegulatedArea />);
+    expect(document.querySelector(".regulation-badge")).toHaveAttribute("tabIndex", "0");
   });
 });

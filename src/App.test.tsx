@@ -2354,26 +2354,29 @@ describe("전체화면 결과 셸", () => {
 
     /**
      * 사용자 지시: "무주택, 생애최초구입, 규제지역에 마우스를 올리면
-     * 간략하게 어떤차이를 반영하는지 설명하는 내용을 볼수있도록". 입력
-     * 화면(`ProfileForm.tsx`)의 같은 필드 도움말을 그대로 옮겼는지
+     * 간략하게 어떤차이를 반영하는지 설명하는 내용을 볼수있도록" →
+     * "딜레이를 최대한 빠르게", "흰색바탕(검정글씨)의 카드형식으로".
+     * 입력 화면(`ProfileForm.tsx`)의 같은 필드 도움말을 그대로 옮겼는지
      * 확인한다 — 두 화면이 같은 필드를 다른 말로 설명하면 안 된다.
+     * `title` 속성이 아니라 카드(`.result-topbar-tooltip`)로 낸다 —
+     * 그 속성은 뜨기까지 1~1.5초 걸리고 배경·글자색을 못 바꾼다.
      */
-    it("무주택·생애최초 토글에 마우스를 올리면 입력 화면과 같은 설명이 뜬다", async () => {
+    it("무주택·생애최초 토글에 마우스를 올리면 입력 화면과 같은 설명이 카드로 뜬다", async () => {
       await renderResults();
 
       const ownedHomeItem = screen
         .getByRole("radiogroup", { name: "무주택 여부" })
         .closest(".result-topbar-item");
-      expect(ownedHomeItem).toHaveAttribute(
-        "title",
+      expect(ownedHomeItem).not.toHaveAttribute("title");
+      expect(ownedHomeItem?.querySelector('[role="tooltip"]')?.textContent).toBe(
         "이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요.",
       );
 
       const firstTimeBuyerItem = screen
         .getByRole("radiogroup", { name: "생애최초 구입" })
         .closest(".result-topbar-item");
-      expect(firstTimeBuyerItem).toHaveAttribute(
-        "title",
+      expect(firstTimeBuyerItem).not.toHaveAttribute("title");
+      expect(firstTimeBuyerItem?.querySelector('[role="tooltip"]')?.textContent).toBe(
         "생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요.",
       );
     });

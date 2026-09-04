@@ -1228,7 +1228,7 @@ export function App() {
                     맥락을 이미 말해 주므로, 버튼 자체는 짧게 줄여도
                     뜻이 흐려지지 않는다.
 
-                    `title`은 입력 화면(`ProfileForm.tsx`)의 같은 필드
+                    설명 문구는 입력 화면(`ProfileForm.tsx`)의 같은 필드
                     도움말을 **그대로** 옮긴 것이다(사용자 지시: "마우스를
                     올리면 간략하게 어떤 차이를 반영하는지 설명하는 내용을
                     볼 수 있도록") — 새로 문구를 짓지 않는 이유는 두 화면이
@@ -1236,11 +1236,16 @@ export function App() {
                     맞는지 알 수 없어지기 때문이다(위 "버튼 글자" 문단과
                     같은 원칙, 이번엔 반대 방향 — 라디오 이름은 일부러
                     다르게, 뜻풀이는 일부러 같게).
+
+                    `title` 속성이 아니라 CSS로 직접 띄우는 카드다(사용자
+                    지시: "딜레이를 최대한 빠르게", "흰색바탕(검정글씨)의
+                    카드형식으로") — 네이티브 `title` 툴팁은 뜨기까지
+                    1~1.5초 걸리고 배경·글자색을 못 바꾼다. 모양은
+                    `.result-topbar-tooltip`(styles.css)이 진다. 라디오
+                    버튼에 포커스가 가면(키보드 tab) `:focus-within`으로도
+                    뜬다 — 마우스가 없어도 같은 설명을 볼 수 있다.
                   */}
-                  <div
-                    className="result-topbar-item result-topbar-item--field"
-                    title="이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요."
-                  >
+                  <div className="result-topbar-item result-topbar-item--field">
                     <span className="result-topbar-item-label">무주택 여부</span>
                     <div
                       className="result-topbar-toggle"
@@ -1274,11 +1279,11 @@ export function App() {
                         유주택
                       </button>
                     </div>
+                    <span className="result-topbar-tooltip" role="tooltip">
+                      이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요.
+                    </span>
                   </div>
-                  <div
-                    className="result-topbar-item result-topbar-item--field"
-                    title="생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요."
-                  >
+                  <div className="result-topbar-item result-topbar-item--field">
                     <span className="result-topbar-item-label">생애최초 구입</span>
                     <div
                       className="result-topbar-toggle"
@@ -1312,6 +1317,9 @@ export function App() {
                         비해당
                       </button>
                     </div>
+                    <span className="result-topbar-tooltip" role="tooltip">
+                      생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요.
+                    </span>
                   </div>
                   {/*
                     상단바에서 지역을 바꾸면 조회가 이 화면 **위에서**

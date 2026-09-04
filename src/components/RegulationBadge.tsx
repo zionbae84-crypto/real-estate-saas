@@ -23,17 +23,33 @@
  * 아이콘은 `aria-hidden`이라 스크린리더는 라벨만 읽는다(같은 이유로
  * `ChevronIcon`도 `aria-hidden`이다).
  *
- * **`title`로 짧은 설명을 단다**(사용자 지시: "규제지역에 마우스를
- * 올리면 간략하게 어떤 차이를 반영하는지 설명하는 내용을 볼 수
- * 있도록"). 세 상태 모두 같은 문구다 — "이 배지가 무슨 뜻인가"를
- * 설명하는 자리지 "지금 상태가 어떤가"를 다시 말하는 자리가 아니라서,
- * 값이 규제든 비규제든 가정이든 갈릴 이유가 없다. LTV 40%/70%(일반
- * 기준, `rules/2026-08.json`의 `ltv`)를 여기 숫자로 박지 않는 이유는
+ * **짧은 설명 카드를 hover·focus로 단다**(사용자 지시: "규제지역에
+ * 마우스를 올리면 간략하게 어떤 차이를 반영하는지 설명하는 내용을 볼
+ * 수 있도록" → "딜레이를 최대한 빠르게", "흰색바탕(검정글씨)의
+ * 카드형식으로"). `title` 속성이 아니라 `.result-topbar-tooltip`
+ * (styles.css, `App.tsx`의 무주택·생애최초 토글과 같은 컴포넌트)을
+ * 쓴다 — 네이티브 `title` 툴팁은 뜨기까지 1~1.5초 걸리고 배경·글자색을
+ * 못 바꾼다. 이 배지는 원래 포커스를 받지 않는 순수 표시용 요소라
+ * `tabIndex={0}`을 줘야 키보드로도 카드를 열 수 있다.
+ *
+ * 세 상태 모두 같은 문구다 — "이 배지가 무슨 뜻인가"를 설명하는
+ * 자리지 "지금 상태가 어떤가"를 다시 말하는 자리가 아니라서, 값이
+ * 규제든 비규제든 가정이든 갈릴 이유가 없다. LTV 40%/70%(일반 기준,
+ * `rules/2026-08.json`의 `ltv`)를 여기 숫자로 박지 않는 이유는
  * 생애최초는 규제·비규제 상관없이 70%로 같아(예외가 있는 규칙을
  * "간략하게" 압축하면 그 예외가 사라진 채 전달된다) 정직하게 줄이면
  * "낮아질 수 있다"는 조건문 이상으로는 못 줄인다.
  */
-const REGULATION_BADGE_TITLE = "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.";
+const REGULATION_BADGE_EXPLANATION = "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.";
+
+/** 세 분기가 반복해서 넣는 설명 카드 — 한 군데서만 고치면 되게 뽑아 둔다. */
+function RegulationBadgeTooltip() {
+  return (
+    <span className="result-topbar-tooltip" role="tooltip">
+      {REGULATION_BADGE_EXPLANATION}
+    </span>
+  );
+}
 export interface RegulationBadgeProps {
   /** 지역 조회가 이 판정을 확정했는가(`state.touched`) */
   determined: boolean;
@@ -47,17 +63,19 @@ export function RegulationBadge({
 }: RegulationBadgeProps) {
   if (determined && isRegulatedArea) {
     return (
-      <span className="regulation-badge regulation-badge--regulated" title={REGULATION_BADGE_TITLE}>
+      <span className="regulation-badge regulation-badge--regulated" tabIndex={0}>
         <LockIcon />
         규제지역
+        <RegulationBadgeTooltip />
       </span>
     );
   }
   if (determined) {
     return (
-      <span className="regulation-badge regulation-badge--unregulated" title={REGULATION_BADGE_TITLE}>
+      <span className="regulation-badge regulation-badge--unregulated" tabIndex={0}>
         <UnlockIcon />
         비규제지역
+        <RegulationBadgeTooltip />
       </span>
     );
   }
@@ -67,10 +85,11 @@ export function RegulationBadge({
   // 가리키는 방향을 그대로 라벨에 반영해, 나중에 기본값이 바뀌어도
   // 이 배지가 따로 고장 나지 않는다.
   return (
-    <span className="regulation-badge regulation-badge--assumed" title={REGULATION_BADGE_TITLE}>
+    <span className="regulation-badge regulation-badge--assumed" tabIndex={0}>
       <QuestionIcon />
       {isRegulatedArea ? "규제지역" : "비규제지역"}
       <span className="regulation-badge-qualifier">(가정)</span>
+      <RegulationBadgeTooltip />
     </span>
   );
 }
