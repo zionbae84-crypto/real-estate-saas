@@ -49,6 +49,14 @@ export interface RangeSliderProps {
    * 10억·20억·50억처럼 항상 10억의 배수만 나온다).
    */
   tickUnit?: number;
+  /**
+   * 오른쪽 끝 고정 눈금의 글자. 기본은 "최대"(=이 축의 실제 데이터
+   * 최댓값이라는 뜻). 사용자 지시(매매가 "마지막 구간을 40억 초과로",
+   * 면적 "마지막 구간을 30평 초과로")로 호출부가 `max`를 실제 데이터
+   * 최댓값이 아니라 고정된 상한으로 못박을 때, "최대"라는 말로는 그
+   * 뜻(그 이상은 전부 이 구간에 뭉친다)을 담을 수 없어 직접 준다.
+   */
+  maxLabel?: string;
 }
 
 /**
@@ -136,6 +144,7 @@ export function RangeSlider({
   formatValue,
   formatTick = formatValue,
   tickUnit,
+  maxLabel = "최대",
 }: RangeSliderProps) {
   const isFullRange = value.min === min && value.max === max;
   const ticks = niceAxisTicks(min, max, 5, tickUnit);
@@ -216,7 +225,7 @@ export function RangeSlider({
           </span>
         ))}
         <span className="range-slider-tick range-slider-tick--max" style={{ left: "100%" }}>
-          최대
+          {maxLabel}
         </span>
       </div>
     </div>
