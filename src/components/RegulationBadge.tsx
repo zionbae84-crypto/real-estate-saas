@@ -40,13 +40,22 @@ import { HoverTooltipCard, useHoverTooltip } from "./HoverTooltip";
  *
  * 세 상태 모두 같은 문구다 — "이 배지가 무슨 뜻인가"를 설명하는
  * 자리지 "지금 상태가 어떤가"를 다시 말하는 자리가 아니라서, 값이
- * 규제든 비규제든 가정이든 갈릴 이유가 없다. LTV 40%/70%(일반 기준,
- * `rules/2026-08.json`의 `ltv`)를 여기 숫자로 박지 않는 이유는
- * 생애최초는 규제·비규제 상관없이 70%로 같아(예외가 있는 규칙을
- * "간략하게" 압축하면 그 예외가 사라진 채 전달된다) 정직하게 줄이면
- * "낮아질 수 있다"는 조건문 이상으로는 못 줄인다.
+ * 규제든 비규제든 가정이든 갈릴 이유가 없다.
+ *
+ * **두 줄이다**(사용자 지시: "규제지역일때 ltv가 어떻게 달라지고,
+ * 대출한도 달라질수 있는점 언급해줘" — "내용이 다르면 2줄로 정리해줘").
+ * 이제 숫자를 박아 둔다 — `rules/2026-08.json`의 `ltv.regulated.default`
+ * (0.4)·`ltv.unregulated.default`(0.7). 생애최초는 규제·비규제 상관없이
+ * 0.7로 같으므로(`ltvRateFor`, `src/lib/finance/loan-limit.ts`) 그
+ * 예외를 첫 줄에 괄호로 남긴다 — 안 남기면 생애최초 구매자에게는 이
+ * 문구가 틀린 말이 된다. 둘째 줄은 "그래서 무엇이 달라지는가"(대출
+ * 한도)를 잇는다 — LTV 자체는 비율일 뿐이라 이 배지만 보고는 "대출
+ * 한도가 바뀐다"는 결론까지 가지 않는다.
  */
-const REGULATION_BADGE_EXPLANATION = "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.";
+const REGULATION_BADGE_EXPLANATION_LINES = [
+  "규제지역이면 LTV(담보인정비율)가 40%로 낮아져요(생애최초는 70%).",
+  "LTV가 낮아지면 대출 한도도 함께 줄어들 수 있어요.",
+] as const;
 
 export interface RegulationBadgeProps {
   /** 지역 조회가 이 판정을 확정했는가(`state.touched`) */
@@ -74,7 +83,7 @@ export function RegulationBadge({
       <span className="regulation-badge regulation-badge--regulated" {...hoverProps}>
         <LockIcon />
         규제지역
-        <HoverTooltipCard pos={tooltip.pos} text={REGULATION_BADGE_EXPLANATION} />
+        <HoverTooltipCard pos={tooltip.pos} lines={REGULATION_BADGE_EXPLANATION_LINES} />
       </span>
     );
   }
@@ -83,7 +92,7 @@ export function RegulationBadge({
       <span className="regulation-badge regulation-badge--unregulated" {...hoverProps}>
         <UnlockIcon />
         비규제지역
-        <HoverTooltipCard pos={tooltip.pos} text={REGULATION_BADGE_EXPLANATION} />
+        <HoverTooltipCard pos={tooltip.pos} lines={REGULATION_BADGE_EXPLANATION_LINES} />
       </span>
     );
   }
@@ -97,7 +106,7 @@ export function RegulationBadge({
       <QuestionIcon />
       {isRegulatedArea ? "규제지역" : "비규제지역"}
       <span className="regulation-badge-qualifier">(가정)</span>
-      <HoverTooltipCard pos={tooltip.pos} text={REGULATION_BADGE_EXPLANATION} />
+      <HoverTooltipCard pos={tooltip.pos} lines={REGULATION_BADGE_EXPLANATION_LINES} />
     </span>
   );
 }

@@ -37,6 +37,26 @@ import { MoneyInput } from "./MoneyInput";
  * 판정**한다(`App.tsx`의 useEffect, `api/_data/regulated-regions.json`).
  * 그래서 그 문구는 "가정했어요"와 "판정했어요"로 갈린다.
  */
+/**
+ * 무주택·생애최초 도움말을 **여기서만** 적는다 — 상단바 설명 카드
+ * (`App.tsx`의 `HoverTooltipCard`)가 그대로 가져다 쓴다. 두 화면이 같은
+ * 필드를 다른 말로 설명하지 않기 위해서다(`App.tsx`의 같은 원칙 참고).
+ *
+ * 배열인 이유: 화면 1의 `<p className="hint">`는 이어 붙인 한 문단으로
+ * 자연스럽게 줄바꿈되지만, 상단바 카드는 좁고 `white-space: nowrap`이라
+ * 줄을 직접 나눠 줘야 한다(사용자 지시: "내용이 다르면 2줄로 정리해줘").
+ * 무주택은 LTV(담보인정비율)와 무관해 한 줄, 생애최초는 규제지역에서
+ * LTV가 40%→70%로 바뀐다는 사실이 더해져 두 줄이다 — 그 사실의 근거는
+ * `src/lib/finance/loan-limit.ts`의 `ltvRateFor`.
+ */
+export const OWNED_HOME_HINT_LINES = [
+  "이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요.",
+] as const;
+export const FIRST_TIME_BUYER_HINT_LINES = [
+  "생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요.",
+  "규제지역에서는 대출 한도(LTV)도 40%에서 70%로 늘어나요.",
+] as const;
+
 export interface ProfileFormProps {
   state: ProfileFormState;
   setField: <K extends keyof ProfileFormState>(
@@ -110,9 +130,7 @@ export function ProfileForm({ state, setField, regionSlot }: ProfileFormProps) {
             집이 있어요
           </label>
         </div>
-        <p className="hint">
-          이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요.
-        </p>
+        <p className="hint">{OWNED_HOME_HINT_LINES.join(" ")}</p>
       </fieldset>
 
       {/*
@@ -147,9 +165,7 @@ export function ProfileForm({ state, setField, regionSlot }: ProfileFormProps) {
             아니에요
           </label>
         </div>
-        <p className="hint">
-          생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요.
-        </p>
+        <p className="hint">{FIRST_TIME_BUYER_HINT_LINES.join(" ")}</p>
       </fieldset>
     </form>
   );

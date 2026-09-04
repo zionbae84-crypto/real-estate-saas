@@ -2362,6 +2362,12 @@ describe("전체화면 결과 셸", () => {
      * 그 속성은 뜨기까지 1~1.5초 걸리고 배경·글자색을 못 바꾼다. 카드는
      * 마우스를 올리기 전에는 DOM에 아예 없다(조건부 렌더링) — 그래서
      * 여기서 `fireEvent.mouseEnter`로 직접 올려 본다.
+     *
+     * 생애최초 쪽은 두 줄이다(사용자 지시: "생애최초 구입시 ltv 한도가
+     * 바뀌는것도 추가해줘" — "내용이 다르면 2줄로 정리해줘") — 그 둘째
+     * 줄이 `ProfileForm.tsx`의 `<p className="hint">`와 같은 상수
+     * (`FIRST_TIME_BUYER_HINT_LINES`)에서 온다. 무주택은 LTV와 무관해
+     * 한 줄 그대로다.
      */
     it("무주택·생애최초 토글에 마우스를 올리면 입력 화면과 같은 설명이 카드로 뜬다", async () => {
       await renderResults();
@@ -2374,9 +2380,11 @@ describe("전체화면 결과 셸", () => {
 
       fireEvent.mouseEnter(ownedHomeItem!);
 
-      expect(ownedHomeItem?.querySelector('[role="tooltip"]')?.textContent).toBe(
-        "이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요.",
-      );
+      expect(
+        [...ownedHomeItem!.querySelectorAll(".result-topbar-tooltip-line")].map(
+          (el) => el.textContent,
+        ),
+      ).toEqual(["이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요."]);
 
       const firstTimeBuyerItem = screen
         .getByRole("radiogroup", { name: "생애최초 구입" })
@@ -2385,9 +2393,14 @@ describe("전체화면 결과 셸", () => {
 
       fireEvent.mouseEnter(firstTimeBuyerItem!);
 
-      expect(firstTimeBuyerItem?.querySelector('[role="tooltip"]')?.textContent).toBe(
+      expect(
+        [...firstTimeBuyerItem!.querySelectorAll(".result-topbar-tooltip-line")].map(
+          (el) => el.textContent,
+        ),
+      ).toEqual([
         "생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요.",
-      );
+        "규제지역에서는 대출 한도(LTV)도 40%에서 70%로 늘어나요.",
+      ]);
     });
   });
 

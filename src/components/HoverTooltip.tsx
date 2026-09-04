@@ -38,18 +38,31 @@ export function useHoverTooltip<T extends HTMLElement>() {
  * `useHoverTooltip`이 잰 위치에 실제로 뜨는 카드. `pos`가 `null`이면
  * 아무것도 렌더링하지 않는다 — 화면에 없어야 하는 시간에도 DOM에
  * 남아 있다가 CSS로만 숨는 방식(예전 `:hover` 전용 접근)을 쓰지 않는다.
+ *
+ * **`lines`는 항상 배열이다.** 한 줄짜리도 `["..."]`로 넘긴다 — 사용자
+ * 지시("내용이 다르면 2줄로 정리해줘")로 규제지역·생애최초 카드가
+ * 서로 다른 두 문장(LTV가 어떻게 바뀌는가 / 그래서 무엇이 달라지는가)을
+ * 담게 되면서, 한 줄과 두 줄을 같은 타입으로 받게 했다 — `text: string`
+ * 하나였다면 두 줄을 붙이려는 자리마다 줄바꿈 문자를 손으로 넣었을
+ * 것이다. `white-space: nowrap`은 카드에 상속돼 각 줄 안에서는 그대로
+ * 안 꺾이고, 줄 사이는 `.result-topbar-tooltip-line`이 `display: block`
+ * 이라 쌓인다.
  */
 export function HoverTooltipCard({
   pos,
-  text,
+  lines,
 }: {
   pos: { top: number; left: number } | null;
-  text: string;
+  lines: readonly string[];
 }) {
   if (pos === null) return null;
   return (
     <span className="result-topbar-tooltip" role="tooltip" style={{ top: pos.top, left: pos.left }}>
-      {text}
+      {lines.map((line, i) => (
+        <span key={i} className="result-topbar-tooltip-line">
+          {line}
+        </span>
+      ))}
     </span>
   );
 }

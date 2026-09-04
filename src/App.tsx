@@ -10,7 +10,11 @@ import { HomeIcon } from "./components/HomeIcon";
 import { HoverTooltipCard, useHoverTooltip } from "./components/HoverTooltip";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaBasis } from "./components/PrintSummary";
-import { ProfileForm } from "./components/ProfileForm";
+import {
+  FIRST_TIME_BUYER_HINT_LINES,
+  OWNED_HOME_HINT_LINES,
+  ProfileForm,
+} from "./components/ProfileForm";
 import { MoneyInput } from "./components/MoneyInput";
 import { RegionQuickSelect } from "./components/RegionQuickSelect";
 import { RegulationBadge } from "./components/RegulationBadge";
@@ -1243,7 +1247,19 @@ export function App() {
                     같은 필드를 다른 말로 설명하기 시작하면 어느 쪽이
                     맞는지 알 수 없어지기 때문이다(위 "버튼 글자" 문단과
                     같은 원칙, 이번엔 반대 방향 — 라디오 이름은 일부러
-                    다르게, 뜻풀이는 일부러 같게).
+                    다르게, 뜻풀이는 일부러 같게). 지금은 그 약속이
+                    관례가 아니라 구조다 — `ProfileForm.tsx`가 내보내는
+                    `OWNED_HOME_HINT_LINES`·`FIRST_TIME_BUYER_HINT_LINES`
+                    상수 하나를 이 카드와 화면 1의 `<p className="hint">`가
+                    같이 쓴다.
+
+                    생애최초 쪽은 두 줄이다(사용자 지시: "생애최초
+                    구입시 ltv 한도가 바뀌는것도 추가해줘" — "내용이
+                    다르면 2줄로 정리해줘") — 취득세·정책대출 우대에
+                    이어, 규제지역에서 LTV가 40%→70%로 바뀐다는 사실을
+                    더했다(`ltvRateFor`, `src/lib/finance/loan-limit.ts`).
+                    무주택 쪽은 LTV와 무관해(그 함수가 보는 축은
+                    규제지역·생애최초 둘뿐이다) 한 줄 그대로 둔다.
 
                     `title` 속성이 아니라 `useHoverTooltip`
                     (`components/HoverTooltip.tsx`)이 띄우는 카드다(사용자
@@ -1298,10 +1314,7 @@ export function App() {
                         유주택
                       </button>
                     </div>
-                    <HoverTooltipCard
-                      pos={ownedHomeTooltip.pos}
-                      text="이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요."
-                    />
+                    <HoverTooltipCard pos={ownedHomeTooltip.pos} lines={OWNED_HOME_HINT_LINES} />
                   </div>
                   <div
                     ref={firstTimeBuyerTooltip.ref}
@@ -1346,7 +1359,7 @@ export function App() {
                     </div>
                     <HoverTooltipCard
                       pos={firstTimeBuyerTooltip.pos}
-                      text="생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요."
+                      lines={FIRST_TIME_BUYER_HINT_LINES}
                     />
                   </div>
                   {/*

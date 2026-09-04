@@ -55,12 +55,14 @@ describe("RegulationBadge", () => {
   /**
    * 사용자 지시: "규제지역에 마우스를 올리면 간략하게 어떤 차이를
    * 반영하는지 설명하는 내용을 볼 수 있도록" → "딜레이를 최대한
-   * 빠르게", "흰색바탕(검정글씨)의 카드형식으로". 세 상태 모두 같은
-   * 카드를 얻는지 확인한다 — "이 배지가 무슨 뜻인가"는 값이 바뀌어도
-   * 같다. `title`이 아니라 `.result-topbar-tooltip` 카드로 낸다(그
-   * 속성은 뜨기까지 1~1.5초 걸리고 배경·글자색을 못 바꾼다).
+   * 빠르게", "흰색바탕(검정글씨)의 카드형식으로" → "규제지역일때 ltv가
+   * 어떻게 달라지고, 대출한도 달라질수 있는점 언급해줘"(내용이 달라져
+   * 두 줄). 세 상태 모두 같은 카드를 얻는지 확인한다 — "이 배지가 무슨
+   * 뜻인가"는 값이 바뀌어도 같다. `title`이 아니라
+   * `.result-topbar-tooltip` 카드로 낸다(그 속성은 뜨기까지 1~1.5초
+   * 걸리고 배경·글자색을 못 바꾼다).
    */
-  it("세 상태 모두 마우스를 올리면 카드로 짧은 설명을 낸다 — title 속성이 아니다", () => {
+  it("세 상태 모두 마우스를 올리면 카드로 LTV·대출 한도 설명 두 줄을 낸다 — title 속성이 아니다", () => {
     const cases = [
       { determined: true, isRegulatedArea: true },
       { determined: true, isRegulatedArea: false },
@@ -76,9 +78,12 @@ describe("RegulationBadge", () => {
 
       fireEvent.mouseEnter(badge!);
 
-      expect(badge?.querySelector('[role="tooltip"]')?.textContent).toBe(
-        "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.",
-      );
+      expect(
+        [...badge!.querySelectorAll(".result-topbar-tooltip-line")].map((el) => el.textContent),
+      ).toEqual([
+        "규제지역이면 LTV(담보인정비율)가 40%로 낮아져요(생애최초는 70%).",
+        "LTV가 낮아지면 대출 한도도 함께 줄어들 수 있어요.",
+      ]);
       unmount();
     }
   });
