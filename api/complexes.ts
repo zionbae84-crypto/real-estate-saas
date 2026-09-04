@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { defaultWait } from "../scripts/pipeline/fetch";
 import { fetchLiveComplexes } from "../scripts/pipeline/live";
 import reportConfig from "../scripts/pipeline/report-config.json";
 import regulatedRegions from "./_data/regulated-regions.json";
+import { createUpstashTradeCache } from "./_lib/tradeCache";
 import { handleComplexesRequest } from "./_lib/handleComplexes";
 import type { ReportConfig } from "../scripts/pipeline/types";
 
@@ -15,10 +17,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const tradeCache = createUpstashTradeCache();
+
   const result = await handleComplexesRequest(
     { regionCode, dong },
     {
-      fetchLive: (rc, d) => fetchLiveComplexes(rc, d, new Date(), key, reportConfig as ReportConfig),
+      fetchLive: (rc, d) =>
+        fetchLiveComplexes(rc, d, new Date(), key, reportConfig as ReportConfig, defaultWait, tradeCache),
       key,
       regions: regulatedRegions,
     },

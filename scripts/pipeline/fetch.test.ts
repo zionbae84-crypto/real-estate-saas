@@ -6,10 +6,14 @@ import {
   CACHE_SCHEMA_VERSION,
   MAX_PAGES,
   buildTargets,
+  fetchAllPagesCached,
   fetchOne,
+  noopRawTradeCache,
   redactKey,
   runFetch,
   shouldSkip,
+  type PageAccumulator,
+  type RawTradeCache,
 } from "./fetch";
 
 describe("buildTargets", () => {
@@ -929,6 +933,96 @@ describe("fetchAllPages (export 확인)", () => {
   it("MONTHS_BACK은 12다", async () => {
     const { MONTHS_BACK } = await import("./fetch");
     expect(MONTHS_BACK).toBe(12);
+  });
+});
+
+describe("fetchAllPagesCached", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function fakeCache(): RawTradeCache & { store: Map<string, PageAccumulator> } {
+    const store = new Map<string, PageAccumulator>();
+    return {
+      store,
+      async get(regionCode, yearMonth) {
+        return store.get(`${regionCode}:${yearMonth}`) ?? null;
+      },
+      async set(regionCode, yearMonth, value) {
+        store.set(`${regionCode}:${yearMonth}`, value);
+      },
+    };
+  }
+
+  function emptyResponse() {
+    return JSON.stringify({
+      response: { header: { resultCode: "000" }, body: { totalCount: 0, items: "" } },
+    });
+  }
+
+  it("캐시 미스면 fetchAllPages를 부르고 결과를 캐시에 남긴다", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response(emptyResponse(), { status: 200 });
+    }) as typeof fetch;
+
+    const cache = fakeCache();
+    const result = await fetchAllPagesCached("11680", "202601", "dummy-key", async () => {}, cache);
+
+    expect(calls).toBe(1);
+    expect(result.trades).toEqual([]);
+    expect(cache.store.get("11680:202601")).toEqual(result);
+  });
+
+  it("캐시 히트면 fetchAllPages를 다시 부르지 않는다", async () => {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response(emptyResponse(), { status: 200 });
+    }) as typeof fetch;
+
+    const cache = fakeCache();
+    await fetchAllPagesCached("11680", "202601", "dummy-key", async () => {}, cache);
+    await fetchAllPagesCached("11680", "202601", "dummy-key", async () => {}, cache);
+
+    expect(calls).toBe(1);
+  });
+
+  it("캐시 조회가 실패해도 미스로 취급해 계속 동작한다", async () => {
+    globalThis.fetch = (async () =>
+      new Response(emptyResponse(), { status: 200 })) as typeof fetch;
+
+    const cache: RawTradeCache = {
+      async get() {
+        throw new Error("redis down");
+      },
+      async set() {},
+    };
+
+    const result = await fetchAllPagesCached("11680", "202601", "dummy-key", async () => {}, cache);
+    expect(result.trades).toEqual([]);
+  });
+
+  it("캐시 저장이 실패해도 이미 받은 결과는 그대로 돌려준다", async () => {
+    globalThis.fetch = (async () =>
+      new Response(emptyResponse(), { status: 200 })) as typeof fetch;
+
+    const cache: RawTradeCache = {
+      async get() {
+        return null;
+      },
+      async set() {
+        throw new Error("redis down");
+      },
+    };
+
+    const result = await fetchAllPagesCached("11680", "202601", "dummy-key", async () => {}, cache);
+    expect(result.trades).toEqual([]);
+  });
+
+  it("noopRawTradeCache는 매번 미스다", async () => {
+    expect(await noopRawTradeCache.get("11680", "202601")).toBeNull();
   });
 });
 

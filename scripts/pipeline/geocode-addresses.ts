@@ -1,6 +1,14 @@
 // scripts/pipeline/geocode-addresses.ts
 import { buildAddressString } from "./address";
-import { buildTargets, defaultWait, fetchAllPages, MONTHS_BACK, type Waiter } from "./fetch";
+import {
+  buildTargets,
+  defaultWait,
+  fetchAllPagesCached,
+  MONTHS_BACK,
+  noopRawTradeCache,
+  type RawTradeCache,
+  type Waiter,
+} from "./fetch";
 import { normalizeAll } from "./normalize";
 
 /**
@@ -33,10 +41,11 @@ export async function fetchComplexAddresses(
   now: Date,
   key: string,
   wait: Waiter = defaultWait,
+  cache: RawTradeCache = noopRawTradeCache,
 ): Promise<Map<string, string>> {
   const targets = buildTargets(now, MONTHS_BACK, [regionCode]);
   const pages = await Promise.all(
-    targets.map((t) => fetchAllPages(t.regionCode, t.yearMonth, key, wait)),
+    targets.map((t) => fetchAllPagesCached(t.regionCode, t.yearMonth, key, wait, cache)),
   );
   const trades = pages.flatMap((p) => p.trades);
   const scoped = dong === null ? trades : trades.filter((t) => t.legalDongName === dong);

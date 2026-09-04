@@ -293,6 +293,62 @@ export async function fetchAllPages(
 }
 
 /**
+ * `fetchAllPagesCached`가 기대하는 캐시의 최소 표면. 실제(Redis 기반)
+ * 구현은 `api/_lib/tradeCache.ts`에 있다 — 이 모듈(파이프라인 계층)은
+ * Vercel 서버리스 전용 의존성(Upstash)을 몰라야 하므로 인터페이스만
+ * 여기 둔다(제너레이터가 아니라 이 파일이 정의를 갖는 이유는
+ * `fetchAllPagesCached`가 이 타입으로 매개변수를 받기 때문이다).
+ */
+export interface RawTradeCache {
+  get(regionCode: string, yearMonth: string): Promise<PageAccumulator | null>;
+  set(regionCode: string, yearMonth: string, value: PageAccumulator): Promise<void>;
+}
+
+/** 아무것도 기억하지 않는 캐시. 기존 호출자(테스트, 배치 파이프라인)의 기본값이다. */
+export const noopRawTradeCache: RawTradeCache = {
+  async get() {
+    return null;
+  },
+  async set() {},
+};
+
+/**
+ * `fetchAllPages`를 캐시로 감싼다.
+ *
+ * `fetchLiveComplexes`(live.ts)와 `fetchComplexAddresses`(geocode-addresses.ts)는
+ * 같은 지역의 같은 12개월치를 각자 독립적으로 국토부에 다시 묻는다 —
+ * `/api/complexes`와 `/api/geocode`가 지역 하나를 조회할 때마다 실제로는
+ * 24번(12개월 × 2)의 국토부 호출이 나간다는 뜻이다. 이 래퍼가 그 중복을
+ * 없앤다: 캐시 조회/저장이 실패해도(Redis가 죽어 있어도) 결과는 항상
+ * `fetchAllPages`를 직접 부른 것과 같다 — 잃는 것은 속도뿐이다.
+ */
+export async function fetchAllPagesCached(
+  regionCode: string,
+  yearMonth: string,
+  key: string,
+  wait: Waiter,
+  cache: RawTradeCache,
+): Promise<PageAccumulator> {
+  let cached: PageAccumulator | null;
+  try {
+    cached = await cache.get(regionCode, yearMonth);
+  } catch {
+    // 캐시 조회 실패는 미스와 동일하게 취급한다(geocodeCache의
+    // resolveCoordinate와 같은 원칙) — 기능은 계속 동작하고 속도 이점만 잃는다.
+    cached = null;
+  }
+  if (cached !== null) return cached;
+
+  const fresh = await fetchAllPages(regionCode, yearMonth, key, wait);
+  try {
+    await cache.set(regionCode, yearMonth, fresh);
+  } catch {
+    // 저장 실패로 이미 받은 데이터를 버리지 않는다 — 다음 요청이 다시 받을 뿐이다.
+  }
+  return fresh;
+}
+
+/**
  * 임시 파일에 쓴 뒤 rename한다 — 쓰다가 끊겨도 반쪽 파일이 남지 않는다.
  * rename 자체가 실패하면(예: 대상 경로가 디렉터리) 임시 파일을 지우고
  * 원래 에러를 그대로 던진다 — 정리가 실패해도 원래 에러를 삼키지 않는다.

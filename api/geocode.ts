@@ -1,7 +1,9 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import { defaultWait } from "../scripts/pipeline/fetch";
 import { fetchComplexAddresses } from "../scripts/pipeline/geocode-addresses";
 import { geocodeAddress } from "./_lib/naverGeocode";
 import { createUpstashGeocodeCache } from "./_lib/geocodeCache";
+import { createUpstashTradeCache } from "./_lib/tradeCache";
 import { handleGeocodeRequest } from "./_lib/handleGeocode";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -18,11 +20,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const cache = createUpstashGeocodeCache();
+  const tradeCache = createUpstashTradeCache();
 
   const result = await handleGeocodeRequest(
     { regionCode, dong },
     {
-      fetchAddresses: (rc, d) => fetchComplexAddresses(rc, d, new Date(), dataKey),
+      fetchAddresses: (rc, d) => fetchComplexAddresses(rc, d, new Date(), dataKey, defaultWait, tradeCache),
       cache,
       geocode: (address) => geocodeAddress(address, clientId, clientSecret),
       // 502 경로에서 실제로 새어나갈 수 있는 키는 국토부 키다 —

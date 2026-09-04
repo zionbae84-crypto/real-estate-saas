@@ -1,4 +1,12 @@
-import { buildTargets, defaultWait, fetchAllPages, MONTHS_BACK, type Waiter } from "./fetch";
+import {
+  buildTargets,
+  defaultWait,
+  fetchAllPagesCached,
+  MONTHS_BACK,
+  noopRawTradeCache,
+  type RawTradeCache,
+  type Waiter,
+} from "./fetch";
 import { normalizeAll } from "./normalize";
 import { aggregate } from "./aggregate";
 import { toEmittedUnit, type EmittedComplexUnit } from "./emit";
@@ -40,10 +48,11 @@ export async function fetchLiveComplexes(
   key: string,
   config: ReportConfig,
   wait: Waiter = defaultWait,
+  cache: RawTradeCache = noopRawTradeCache,
 ): Promise<LiveComplexesResult> {
   const targets = buildTargets(now, MONTHS_BACK, [regionCode]);
   const pages = await Promise.all(
-    targets.map((t) => fetchAllPages(t.regionCode, t.yearMonth, key, wait)),
+    targets.map((t) => fetchAllPagesCached(t.regionCode, t.yearMonth, key, wait, cache)),
   );
   const trades = pages.flatMap((p) => p.trades);
   const normalized = normalizeAll(trades);
