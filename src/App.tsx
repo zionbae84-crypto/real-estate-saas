@@ -670,6 +670,84 @@ export function App() {
   }, [regionComplexes.status, currentRegionCode, hasMappedUnits, complexCoordinates.query]);
 
   /**
+   * 지도에 마지막으로 성공해서 그렸던 화면 — **지역을 바꾸는 동안에도
+   * 지도를 그대로 둔다**(사용자 지시: "지도가 없어진 상태에서 호출이
+   * 되는데... 렌더링 되는 동안에는 맵을 그대로 둔 상태에서 호출되도록").
+   *
+   * **왜 `regionComplexes.units` 자체를 재사용하지 못하나.** 그 훅은
+   * `status`가 "loading"으로 바뀌어도 `units`를 곧바로 비우지 않는다
+   * (다음 지역 응답이 올 때만 덮어쓴다) — 그런데 `complexList`(위
+   * 정의)가 `regionComplexes.status !== "success"`이면 무조건 `null`을
+   * 내므로, 그 아래 `mappedUnits`·`burdenByUnit`도 로딩이 시작되는
+   * 그 렌더에서 곧장 빈 값이 된다. "성공했을 때만 목록을 만든다"는
+   * `complexList`의 원칙(그 정의부 주석 참고 — "아직 묻지 않았다"와
+   * "이 지역엔 없다"를 가르는 장치)을 건드리지 않으면서 지도만 이전
+   * 그림을 들고 있으려면, 화면이 실제로 그린 마지막 성공 결과를
+   * **따로** 붙잡아 둬야 한다.
+   *
+   * 언제 갱신하는가: 두 조회(`regionComplexes`·`complexCoordinates`)가
+   * **같은 지역**에 대해 모두 성공하고, 그릴 단지가 있을 때뿐이다 —
+   * "예산에 맞는 단지가 없어요"로 확정된 상태(`hasMappedUnits === false`)는
+   * 여기 담지 않는다. 옛 지도를 계속 보여주면 "그 지역엔 없다"는 확정된
+   * 사실을 사용자가 놓친다 — 그때는 아래 렌더가 이 스냅숏 대신 빈
+   * 상태 문구를 그대로 낸다.
+   */
+  const [mapSnapshot, setMapSnapshot] = useState<{
+    regionCode: string;
+    units: typeof mappedUnits;
+    coordinates: typeof complexCoordinates.coordinates;
+    burdenByUnit: typeof burdenByUnit;
+  } | null>(null);
+
+  useEffect(() => {
+    if (regionComplexes.status !== "success") return;
+    if (complexCoordinates.status !== "success") return;
+    if (currentRegionCode === null || !hasMappedUnits) return;
+    setMapSnapshot({
+      regionCode: currentRegionCode,
+      units: mappedUnits,
+      coordinates: complexCoordinates.coordinates,
+      burdenByUnit,
+    });
+  }, [
+    regionComplexes.status,
+    complexCoordinates.status,
+    currentRegionCode,
+    hasMappedUnits,
+    mappedUnits,
+    complexCoordinates.coordinates,
+    burdenByUnit,
+  ]);
+
+  /**
+   * 지금 이 렌더에서 지도를 그릴 수 있는 데이터가 뭔가.
+   *
+   * 두 조회가 **지금** 다 성공했으면(`liveMapReady`) 실시간 값을 그대로
+   * 쓴다 — 필터(매매가·면적·입주년차 슬라이더)를 움직이면 새 조회 없이
+   * 즉시 반영돼야 하므로, 이 경로는 항상 최신 `mappedUnits`를 봐야 한다.
+   *
+   * 아직 다 안 왔으면(`isRegionSwitchLoading`) 위 스냅숏으로 대신한다 —
+   * 단, **에러는 대신하지 않는다.** 좌표 조회가 실패했는데 옛 지도를
+   * 계속 보여주면 "다시 시도" 버튼이 왜 있는지, 지금 보이는 지도가 새
+   * 지역 것인지 헷갈린다 — 실패는 실패라고 말해야 한다(아래 기존
+   * `complexCoordinates.status === "error"` 분기가 그대로 진다).
+   */
+  const liveMapReady =
+    regionComplexes.status === "success" &&
+    complexCoordinates.status === "success" &&
+    hasMappedUnits;
+  const isRegionSwitchLoading =
+    regionComplexes.status === "loading" ||
+    (regionComplexes.status === "success" &&
+      (complexCoordinates.status === "idle" ||
+        complexCoordinates.status === "loading"));
+  const mapDisplayData = liveMapReady
+    ? { units: mappedUnits, coordinates: complexCoordinates.coordinates, burdenByUnit }
+    : isRegionSwitchLoading
+      ? mapSnapshot
+      : null;
+
+  /**
    * 지도에서 마커를 눌렀다. 목록 쪽 선택을 같은 단지로 맞춘다 — 그 행이
    * 지금 보이는 페이지 밖에 있어도 걱정할 것 없다. `ComplexList`가
    * `focusedComplexKey` prop을 보고 그 단지가 속한 덩어리의 페이지를
@@ -1458,66 +1536,143 @@ export function App() {
                   문구가 뜨는, 같은 사실을 두 가지로 보여주는
                   어긋남이 생긴다.
                 */}
-                {regionComplexes.status === "success" &&
-                  complexList !== null &&
-                  !hasMappedUnits && (
-                    /*
-                      지도에 그릴 단지가 없다. **원인을 여기서
-                      단정하지 않는다** — 원인은 왼쪽(모바일에선
-                      아래) 목록 칸이 이미 자기 문구로 말한다:
-                      동으로 좁혀서면 `.dong-empty`, 예산 때문이면
-                      `ComplexList`의 예산/상환능력 문구. 여기서
-                      "예산이 부족해요"라고 적으면 동 때문에 빈
-                      경우에 틀린 원인을 말하게 되고, 그건 이
-                      화면이 이미 한 번 겪은 오귀속이다.
-
-                      그래서 이 문구는 지도 칸이 아는 사실 하나만
-                      말한다: 그릴 것이 없다. "지도를 표시하지
-                      못했어요"(SDK 실패)·"단지 위치를 불러오지
-                      못했어요"(좌표 조회 실패)와 절대 같은 말을
-                      쓰지 않는다 — 여기는 아무것도 실패하지
-                      않았다.
-                    */
-                    <p className="complex-map-empty">
-                      조건에 맞는 단지가 없어 지도에 표시할 단지가
-                      없어요.
-                    </p>
-                  )}
-                {regionComplexes.status === "success" &&
-                  complexList !== null &&
-                  hasMappedUnits && (
-                    <>
+                {/*
+                  **`mapDisplayData`가 있으면 그것부터 그린다** — 라이브든
+                  (지금 조회가 다 끝났다) 스냅숏이든(지역을 바꾸는 중인데
+                  이전 지역의 마지막 성공 결과가 있다) `<ComplexMap>` 자체는
+                  **하나만** 마운트한다(사용자 지시: "렌더링 되는 동안에는
+                  맵을 그대로 둔 상태에서 호출되도록"). 두 벌을 따로 그리지
+                  않는 이유는 그러면 "지금 뭘 보여주고 있는지"를 두 군데서
+                  각자 판단하게 돼 언젠가 어긋나기 때문이다 — `mapSnapshot`
+                  문서(위 정의부) 참고.
+                */}
+                {mapDisplayData !== null ? (
+                  <>
+                    <div className="complex-map-wrap">
+                      <ComplexMap
+                        /*
+                          목록과 **정확히 같은 집합**을 넘긴다(라이브일
+                          때는 `mappedUnits` 정의의 주석 참고). 스냅숏일
+                          때도 그 스냅숏 자체가 "그 시점의 목록과 같은
+                          집합"을 붙잡아 둔 것이라 원칙은 안 깨진다.
+                        */
+                        units={mapDisplayData.units}
+                        coordinates={mapDisplayData.coordinates}
+                        /*
+                          마커 색·아래쪽 글자가 쓸 부담 수준. 목록과 같은
+                          값이다(`burdenByUnit` 정의의 주석 참고).
+                        */
+                        burdenByUnit={mapDisplayData.burdenByUnit}
+                        /*
+                          선택은 App이 한 벌만 든다 — 목록 행 표시와
+                          이 마커 강조가 같은 값을 본다.
+                        */
+                        focusedComplexKey={focusedComplexKey}
+                        onFocusComplex={handleFocusComplex}
+                        naverMapClientId={
+                          import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
+                        }
+                        /*
+                          매매가·면적·입주년차 슬라이더(사용자 지시,
+                          "필터" 버튼 팝업 안). 값의 출처·경계는
+                          여기서 정하지 않는다 — `complexFilterBoundsValue`는
+                          그 지역 데이터에서 매번 다시 재는 경계,
+                          `complexFilters`는 사용자가 지금 맞춘 값이다.
+                          `complexFilters`가 `null`인 한 프레임(지역을
+                          막 조회해 아직 그 지역 범위로 초기화되기 전)에는
+                          `complexFilterBoundsValue`를 그대로 값으로 쓴다.
+                        */
+                        filterBounds={complexFilterBoundsValue}
+                        filterValue={complexFilters ?? complexFilterBoundsValue}
+                        onFilterChange={setComplexFilters}
+                      />
                       {/*
-                        좌표 조회(complexCoordinates)는 목록 조회와 별개로
-                        도는 상태 기계다 — idle/loading/error/success를
-                        그대로 구분해 보여준다. "조회 실패"와 "조회했더니
-                        단지가 하나도 없더라"를 같은 빈 지도로 보여주면,
-                        이 앱이 가장 경계하는 오류(모르는 것과 확인한
-                        것을 같은 문구로 보여주는 것)를 지도에서도
-                        반복하게 된다.
+                        스냅숏을 보여주는 동안만 뜨는 작은 배지 —
+                        "지금 보고 있는 지도가 아직 이전 지역 것"이라는
+                        단서다. `role`을 안 준다 — 같은 사실을 상단바의
+                        "새 지역을 불러오는 중이에요…"(`role="status"`,
+                        위)가 이미 스크린리더에 알리므로, 여기서 또
+                        읽히면 같은 말을 두 번 듣는다. 이 배지는 그
+                        문구보다 오래 떠 있다(좌표 조회 단계까지
+                        덮는다) — 그래도 사실 자체는 같은 말이라 새로
+                        짓지 않는다.
+                      */}
+                      {!liveMapReady && (
+                        <p className="complex-map-refresh-badge" aria-hidden="true">
+                          새 지역을 불러오는 중…
+                        </p>
+                      )}
+                    </div>
+                    {/*
+                      지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
+                      오류) — 주소가 진짜로 없어서가 아니다
+                      (api/_lib/handleGeocode.ts의 partialFailureCount
+                      참고). 라이브 상태일 때만 낸다 — 스냅숏을 보여주는
+                      동안 내면 "지금 조회"가 아니라 "이전 조회"의
+                      부분실패를 새 지역 이야기처럼 말하게 된다.
 
-                        idle은 이 렌더 경로에선 사실상 스치는 순간뿐이다
-                        — 위 useEffect가 regionComplexes.status가
-                        "success"로 바뀌자마자(바로 이 조건 블록이
-                        그려지는 시점과 같은 렌더) query()를 호출해
-                        "loading"으로 넘어간다. 그래도 그 찰나에 아무것도
-                        안 그리면 화면이 깜빡이므로 로딩과 같은 문구를
-                        보여준다.
-                      */}
-                      {/*
-                        로딩·실패 문구를 `.complex-map-status`로 함께
-                        감싼다 — 인쇄에서는 아래 지도 자신
-                        (`.complex-map`)이 지워지므로, 이 문구들을 종이에
-                        남기면 근거를 잃은 "불러오고 있어요…"나 눌러도
-                        반응 없는 "다시 시도" 버튼만 남는 고아 문구가
-                        된다(src/print/hiddenInPrint.ts 참고).
-                      */}
-                      {(complexCoordinates.status === "idle" ||
-                        complexCoordinates.status === "loading" ||
-                        complexCoordinates.status === "error") && (
+                      리뷰 수정(Minor 4): 위 조건만으로는 ComplexMap이
+                      이미 "주소로는 위치를 찾을 수 없었어요"(noneLocated)를
+                      보여주고 있을 때도 이 줄이 함께 뜰 수 있었다 —
+                      "**일부** 단지의 위치를…"이 안엔 "하나도"라고
+                      말하는 문구와 부딪힌다. `groupWithCoords`로
+                      ComplexMap 내부와 같은 계산(좌표를 아는 단지가
+                      하나라도 있는가)을 여기서도 돌려, 하나도 없을
+                      땐 이 줄을 접는다 — 있을 땐 그대로 뜬다.
+                    */}
+                    {liveMapReady &&
+                      complexCoordinates.hasPartialFailures &&
+                      groupWithCoords(mapDisplayData.units, mapDisplayData.coordinates)
+                        .length > 0 && (
+                        <p className="complex-map-caveat">
+                          일부 단지의 위치를 확인하지 못했어요. 지도에
+                          안 보이는 단지가 있을 수 있어요.
+                        </p>
+                      )}
+                  </>
+                ) : (
+                  <>
+                    {regionComplexes.status === "success" &&
+                      complexList !== null &&
+                      !hasMappedUnits && (
+                        /*
+                          지도에 그릴 단지가 없다. **원인을 여기서
+                          단정하지 않는다** — 원인은 왼쪽(모바일에선
+                          아래) 목록 칸이 이미 자기 문구로 말한다:
+                          동으로 좁혀서면 `.dong-empty`, 예산 때문이면
+                          `ComplexList`의 예산/상환능력 문구. 여기서
+                          "예산이 부족해요"라고 적으면 동 때문에 빈
+                          경우에 틀린 원인을 말하게 되고, 그건 이
+                          화면이 이미 한 번 겪은 오귀속이다.
+
+                          그래서 이 문구는 지도 칸이 아는 사실 하나만
+                          말한다: 그릴 것이 없다. "지도를 표시하지
+                          못했어요"(SDK 실패)·"단지 위치를 불러오지
+                          못했어요"(좌표 조회 실패)와 절대 같은 말을
+                          쓰지 않는다 — 여기는 아무것도 실패하지
+                          않았다.
+                        */
+                        <p className="complex-map-empty">
+                          조건에 맞는 단지가 없어 지도에 표시할 단지가
+                          없어요.
+                        </p>
+                      )}
+                    {regionComplexes.status === "success" &&
+                      complexList !== null &&
+                      hasMappedUnits && (
+                        /*
+                          `mapDisplayData`가 `null`인데 이 세 조건이 모두
+                          참인 경우는 둘이다: (a) `complexCoordinates.status`가
+                          "error"거나, (b) 이번이 **처음 조회**라 좌표는
+                          아직 idle/loading인데 보여줄 스냅숏이 하나도 없다
+                          (`mapSnapshot`이 아직 `null`) — 지역을 바꾸는
+                          중이라면 `isRegionSwitchLoading` 갈래가 스냅숏을
+                          집어 위 `mapDisplayData !== null` 쪽으로 이미
+                          빠졌을 것이다. 로딩·성공(스냅숏이 있는 경우)은
+                          위 갈래가 맡으므로 여기 남는 것은 이 둘뿐이다.
+                        */
                         <div className="complex-map-status">
-                          {(complexCoordinates.status === "idle" ||
-                            complexCoordinates.status === "loading") && (
+                          {complexCoordinates.status !== "error" && (
                             <p>지도를 불러오고 있어요…</p>
                           )}
 
@@ -1546,78 +1701,8 @@ export function App() {
                           )}
                         </div>
                       )}
-
-                      {complexCoordinates.status === "success" && (
-                        <>
-                          <ComplexMap
-                            /*
-                              목록과 **정확히 같은 집합**을 넘긴다
-                              (`mappedUnits` 정의의 주석 참고).
-                              `dongFilteredUnits`(예산 필터 전)를
-                              넘기면 두 창이 다른 단지를 말한다.
-                            */
-                            units={mappedUnits}
-                            coordinates={complexCoordinates.coordinates}
-                            /*
-                              마커 색·아래쪽 글자가 쓸 부담 수준.
-                              목록과 같은 값이다(`burdenByUnit` 정의의
-                              주석 참고).
-                            */
-                            burdenByUnit={burdenByUnit}
-                            /*
-                              선택은 App이 한 벌만 든다 — 목록 행 표시와
-                              이 마커 강조가 같은 값을 본다.
-                            */
-                            focusedComplexKey={focusedComplexKey}
-                            onFocusComplex={handleFocusComplex}
-                            naverMapClientId={
-                              import.meta.env.VITE_NAVER_MAP_CLIENT_ID as string
-                            }
-                            /*
-                              매매가·면적·입주년차 슬라이더(사용자 지시,
-                              "필터" 버튼 팝업 안). 값의 출처·경계는
-                              여기서 정하지 않는다 — `complexFilterBoundsValue`는
-                              그 지역 데이터에서 매번 다시 재는 경계,
-                              `complexFilters`는 사용자가 지금 맞춘 값이다.
-                              `complexFilters`가 `null`인 한 프레임(지역을
-                              막 조회해 아직 그 지역 범위로 초기화되기 전)에는
-                              `complexFilterBoundsValue`를 그대로 값으로 쓴다.
-                            */
-                            filterBounds={complexFilterBoundsValue}
-                            filterValue={complexFilters ?? complexFilterBoundsValue}
-                            onFilterChange={setComplexFilters}
-                          />
-                          {/*
-                            지오코딩이 일부 주소에서 던졌다(429/5xx/네트워크
-                            오류) — 주소가 진짜로 없어서가 아니다
-                            (api/_lib/handleGeocode.ts의 partialFailureCount
-                            참고). 새 로딩/에러/성공 3분기를 또 만들지
-                            않고, 이미 뜬 지도 옆에 한 줄만 덧붙인다 —
-                            성공적으로 찾은 단지는 그대로 지도에 남아
-                            있으니 "지도가 비어 있다"와 다르게 말해야
-                            한다.
-
-                            리뷰 수정(Minor 4): 위 조건만으로는 ComplexMap이
-                            이미 "주소로는 위치를 찾을 수 없었어요"(noneLocated)를
-                            보여주고 있을 때도 이 줄이 함께 뜰 수 있었다 —
-                            "**일부** 단지의 위치를…"이 안엔 "하나도"라고
-                            말하는 문구와 부딪힌다. `groupWithCoords`로
-                            ComplexMap 내부와 같은 계산(좌표를 아는 단지가
-                            하나라도 있는가)을 여기서도 돌려, 하나도 없을
-                            땐 이 줄을 접는다 — 있을 땐 그대로 뜬다.
-                          */}
-                          {complexCoordinates.hasPartialFailures &&
-                            groupWithCoords(mappedUnits, complexCoordinates.coordinates)
-                              .length > 0 && (
-                              <p className="complex-map-caveat">
-                                일부 단지의 위치를 확인하지 못했어요. 지도에
-                                안 보이는 단지가 있을 수 있어요.
-                              </p>
-                            )}
-                        </>
-                      )}
-                    </>
-                  )}
+                  </>
+                )}
                 </>
               }
               panel={

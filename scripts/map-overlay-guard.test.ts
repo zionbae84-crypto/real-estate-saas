@@ -106,18 +106,21 @@ const MAP_OVERLAYS = RULES.filter(
 
 describe("지도 위 오버레이", () => {
   /**
-   * **지금 대상은 마커 색 범례 하나뿐이다.** 목록을 이름으로 못박는다 —
-   * 다음 사람이 새 오버레이를 얹으면 이 목록이 먼저 깨지고, 그때 이
-   * 파일 머리 주석을 읽고 `pointer-events: none`을 걸었는지 확인한
-   * 뒤에야 목록을 늘리게 된다. 대상이 늘어도 줄어도 여기가 먼저 안다.
+   * **지금 대상은 마커 색 범례와 "새 지역을 불러오는 중…" 배지 둘이다**
+   * (`.complex-map-refresh-badge`, App.tsx의 `mapDisplayData` — 지역을
+   * 바꾸는 동안 옛 지도를 그대로 보여주며 그 위에 얹는 상자). 목록을
+   * 이름으로 못박는다 — 다음 사람이 새 오버레이를 얹으면 이 목록이 먼저
+   * 깨지고, 그때 이 파일 머리 주석을 읽고 `pointer-events: none`을
+   * 걸었는지 확인한 뒤에야 목록을 늘리게 된다. 대상이 늘어도 줄어도
+   * 여기가 먼저 안다.
    */
-  it("지금 지도 위 절대 배치 오버레이는 마커 색 범례 하나뿐이다", () => {
+  it("지금 지도 위 절대 배치 오버레이는 마커 색 범례·새 지역 로딩 배지 둘뿐이다", () => {
     expect(
       MAP_OVERLAYS.map((r) => r.selector),
       "지도 액자 위 절대 배치 상자 목록이 달라졌습니다 — 이 파일 머리 " +
         "주석을 읽고, 새 상자에 `pointer-events: none`을 걸었는지 확인한 " +
         "뒤 이 목록을 갱신하세요.",
-    ).toEqual([".complex-map-legend"]);
+    ).toEqual([".complex-map-refresh-badge", ".complex-map-legend"]);
   });
 
   it("전부 클릭을 통과시킨다(pointer-events: none)", () => {

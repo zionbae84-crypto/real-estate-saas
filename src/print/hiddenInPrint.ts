@@ -180,6 +180,14 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 문구다). 마커가 한 색이 되며 범례 자체가 사라져 그 이유는 없어졌지만,
   // 빈 액자를 지우는 이유는 그대로 남는다.
   ".complex-map-frame",
+  // 지역을 바꾸는 동안 옛 지도를 그대로 보여주는 바깥 래퍼(App.tsx의
+  // `mapDisplayData` 참고). 안의 `.complex-map-frame`은 위에서 이미
+  // 지워지므로, 이 래퍼만 남으면 종이에 빈 상자가 남는다.
+  ".complex-map-wrap",
+  // "새 지역을 불러오는 중…" 배지 — 지역을 바꾸는 동안 옛 지도 위에
+  // 뜬다. 종이는 정지된 한 순간이라 "불러오는 중"이라는 말 자체가
+  // 성립하지 않는다 — 바로 위 `.complex-map-status`와 같은 이유다.
+  ".complex-map-refresh-badge",
   // 좌표 조회(idle/loading/error)의 상태 문구를 감싸는 공용 래퍼(App.tsx).
   // 위에서 지도 자신을 이미 지웠으므로, 이 문구들을 인쇄에 남기면 근거를
   // 잃은 "지도를 불러오고 있어요…"나 눌러도 반응 없는 "다시 시도" 버튼만

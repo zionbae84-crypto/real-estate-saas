@@ -2270,6 +2270,56 @@ describe("전체화면 결과 셸", () => {
     });
 
     /**
+     * 사용자 지시: "맵에서 지역을 바꾸면 지도가 없어진 상태에서 호출이
+     * 되는데... 렌더링 되는 동안에는 맵을 그대로 둔 상태에서 호출되도록
+     * 보완해줘." 옛 지도(마커·목록)를 그대로 둔 채 새 지역 조회가
+     * 끝나기를 기다리는지, 그 사이 지도가 통째로 사라지지 않는지를
+     * 확인한다(App.tsx의 `mapDisplayData`/`mapSnapshot` 참고).
+     */
+    it("지역을 바꾸는 동안 지도가 사라지지 않고, 옛 데이터를 보여주다 새 데이터로 자연스럽게 바뀐다", async () => {
+      await renderResults();
+      await screen.findByRole("region", { name: "단지 지도" });
+
+      let release: (() => void) | undefined;
+      const NEW_REGION_UNIT: ComplexUnit = {
+        ...DETAIL_TEST_UNIT,
+        complexKey: "11650|새동|2015|새지역단지",
+        complexName: "새지역단지",
+        areaBucket: 59,
+        maxExclusiveAreaSqm: 59,
+        minPrice: 300_000_000,
+        maxPrice: 300_000_000,
+      };
+      vi.spyOn(regionQuery, "fetchRegionComplexes").mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            release = () =>
+              resolve({
+                units: [NEW_REGION_UNIT],
+                isRegulatedArea: null,
+                dataAsOf: "2026-02",
+              });
+          }),
+      );
+
+      await userEvent.selectOptions(screen.getByLabelText("시·군·구 바꾸기"), "11650");
+
+      // 새 지역 응답이 오기 전이다 — 그래도 지도는 그대로 하나 서 있다
+      // (unmount로 사라지지도, 두 벌로 겹치지도 않는다).
+      expect(screen.getAllByRole("region", { name: "단지 지도" })).toHaveLength(1);
+      // "지금 보고 있는 게 옛 지역"이라는 단서가 함께 뜬다.
+      expect(screen.getByText("새 지역을 불러오는 중…")).toBeInTheDocument();
+
+      release?.();
+
+      // 새 지역 데이터가 자리 잡으면 배지가 걷히고, 지도는 여전히 하나뿐이다.
+      await vi.waitFor(() =>
+        expect(screen.queryByText("새 지역을 불러오는 중…")).not.toBeInTheDocument(),
+      );
+      expect(screen.getAllByRole("region", { name: "단지 지도" })).toHaveLength(1);
+    });
+
+    /**
      * 실패 안내가 **이 화면에도** 있어야 한다. 입력 화면에도 같은 성격의
      * 안내가 있지만 그쪽은 `phase === "결과"` 동안 감춰져 있어, 상단바에서
      * 지역을 바꿨다가 실패하면 아무 일도 안 일어난 것처럼 보였다.
