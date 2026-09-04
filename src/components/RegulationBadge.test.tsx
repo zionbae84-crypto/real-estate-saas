@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { RegulationBadge } from "./RegulationBadge";
 
@@ -60,7 +60,7 @@ describe("RegulationBadge", () => {
    * 같다. `title`이 아니라 `.result-topbar-tooltip` 카드로 낸다(그
    * 속성은 뜨기까지 1~1.5초 걸리고 배경·글자색을 못 바꾼다).
    */
-  it("세 상태 모두 카드로 짧은 설명을 낸다 — title 속성이 아니다", () => {
+  it("세 상태 모두 마우스를 올리면 카드로 짧은 설명을 낸다 — title 속성이 아니다", () => {
     const cases = [
       { determined: true, isRegulatedArea: true },
       { determined: true, isRegulatedArea: false },
@@ -70,6 +70,12 @@ describe("RegulationBadge", () => {
       const { container, unmount } = render(<RegulationBadge {...props} />);
       const badge = container.querySelector(".regulation-badge");
       expect(badge).not.toHaveAttribute("title");
+      // 마우스를 올리기 전에는 카드 자체가 DOM에 없다 — CSS로만 숨긴
+      // 상태가 아니라 조건부 렌더링이다.
+      expect(badge?.querySelector('[role="tooltip"]')).toBeNull();
+
+      fireEvent.mouseEnter(badge!);
+
       expect(badge?.querySelector('[role="tooltip"]')?.textContent).toBe(
         "규제지역이면 대출 한도(LTV)가 낮아질 수 있어요.",
       );

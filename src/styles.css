@@ -2411,7 +2411,6 @@ body {
  * `flex-wrap`이 이 칸을 아랫줄로 접는다.
  */
 .result-topbar-item--field {
-  position: relative;
   white-space: normal;
   max-width: 15rem;
 }
@@ -2576,37 +2575,42 @@ body {
  * 무주택·생애최초·규제지역 위에 뜨는 짧은 설명 카드(사용자 지시:
  * "마우스를 올리면 간략하게... 설명하는 내용을 볼수있도록" → "딜레이를
  * 최대한 빠르게" → "회색바탕 글자라 잘 안 보이니 흰색바탕(검정글씨)의
- * 카드형식으로").
+ * 카드형식으로" → "지도와의 경계때문에 표기가 안되는데, 지도 위
+ * 레이어에 표시되어 가려지지 않도록", "한줄로 표기").
  *
- * **`title` 속성이 아니라 이 CSS 카드를 쓰는 이유가 바로 그 두
- * 피드백이다** — 브라우저 네이티브 `title` 툴팁은 뜨기까지 약 1~1.5초
- * 걸리고(OS가 정하는 값이라 줄일 방법이 없다), 배경·글자색도 OS
- * 테마를 그대로 따라 이 화면 팔레트로 못 바꾼다. 그래서 트리거 쪽에
- * `position: relative`를 주고(`.result-topbar-item--field`·
- * `.regulation-badge`), 이 카드를 자식으로 넣어 `:hover`·`:focus-within`
- * 로 직접 여닫는다.
+ * **`position: fixed`다 — `absolute`가 아니다.** `.result-topbar`가
+ * `overflow-x: auto`를 갖는데(좁은 화면에서 요약 칸이 넘칠 때 가로로만
+ * 흐르게 하려고), CSS 오버플로 규칙상 한 축만 `auto`를 걸어도 나머지
+ * 축이 `visible`에서 `auto`로 함께 바뀐다 — 그래서 `absolute`로 띄우면
+ * 상단바 세로 경계에서 그대로 잘렸다(실측, 사용자 스크린샷). `fixed`는
+ * `transform`·`filter`가 없는 조상의 overflow에 갇히지 않고 곧장 뷰포트
+ * 기준으로 뜬다 — `ComplexDetail.tsx`의 "한도 결정 내역"·"부대비용"
+ * 팝업이 사이드바의 같은 문제(`overflow-y: auto`)를 같은 방법으로
+ * 풀었던 것과 같은 이유다. `top`/`left`는 트리거를
+ * `getBoundingClientRect()`로 잰 값을 `useHoverTooltip`(hooks.ts)이
+ * 인라인 스타일로 넣는다 — 리액트 포털 없이도 되는 이유가 이것이다.
  *
- * **거의 지연 없이 뜬다.** 인위적인 `transition-delay`를 두지 않고
- * SEED에서 가장 짧은 전환(`--seed-duration-d1`, 50ms)만으로 여닫는다
- * — 네이티브 툴팁(약 1~1.5초)보다 20배 이상 빠르다. 다른 숫자를
- * 새로 짓지 않고 이미 이 파일이 쓰는 토큰(`.slider-price` 등)을
- * 그대로 쓴 이유는 `scripts/motion-guard.test.ts`가 리터럴 전환
- * 시간을 막기 때문이다 — reduced-motion 처리도 이 파일 앞머리의
- * 전역 `*, *::before, *::after { transition: none !important; }`
- * 블록이 이미 이 카드까지 덮어서, 따로 또 두지 않는다.
+ * **`title` 속성이 아니라 이 카드를 쓰는 이유는 별개다** — 브라우저
+ * 네이티브 `title` 툴팁은 뜨기까지 약 1~1.5초 걸리고(OS가 정하는
+ * 값이라 줄일 방법이 없다), 배경·글자색도 OS 테마를 그대로 따라 이
+ * 화면 팔레트로 못 바꾼다.
+ *
+ * **지연이 없다.** 리액트가 마운트/언마운트로 여닫으므로(호버·포커스
+ * 즉시 `pos`가 채워진다) CSS 전환 자체가 없다 — 네이티브 툴팁보다
+ * 사실상 즉시 뜬다.
+ *
+ * **한 줄로만 낸다**(사용자 지시) — `white-space: nowrap`. 줄바꿈을
+ * 허용하면 그 자체로는 안전하지만 "간략한 한 줄"이라는 원래 톤이
+ * 흐려진다.
  *
  * 배경·글자는 `--result-paper`(흰색)·`--result-ink`(거의 검정)로,
  * 그림자는 `.budget-panel`과 같은 값(`0 8px 24px rgb(18 41 77 / 12%)`)을
  * 써서 이 화면에 이미 있는 "떠 있는 흰 카드" 느낌과 맞춘다.
  */
 .result-topbar-tooltip {
-  position: absolute;
-  top: calc(100% + 6px);
-  left: 50%;
+  position: fixed;
   transform: translateX(-50%);
   z-index: 20;
-  width: max-content;
-  max-width: 220px;
   padding: 8px 10px;
   border-radius: 0.5rem;
   border: 1px solid var(--result-rule);
@@ -2615,23 +2619,9 @@ body {
   font-size: 0.75rem;
   font-weight: 400;
   line-height: 1.4;
-  text-align: left;
-  white-space: normal;
+  white-space: nowrap;
   box-shadow: 0 8px 24px rgb(18 41 77 / 12%);
-  opacity: 0;
-  visibility: hidden;
   pointer-events: none;
-  transition:
-    opacity var(--seed-duration-d1) var(--seed-timing-function-easing),
-    visibility var(--seed-duration-d1) var(--seed-timing-function-easing);
-}
-
-.result-topbar-item--field:hover .result-topbar-tooltip,
-.result-topbar-item--field:focus-within .result-topbar-tooltip,
-.regulation-badge:hover .result-topbar-tooltip,
-.regulation-badge:focus-within .result-topbar-tooltip {
-  opacity: 1;
-  visibility: visible;
 }
 
 /*
@@ -2669,7 +2659,6 @@ body {
  * 으로도 가른다 — 확정과 가정을 색맹이라도 구분할 수 있게 한다.
  */
 .regulation-badge {
-  position: relative;
   display: inline-flex;
   align-items: center;
   gap: 3px;

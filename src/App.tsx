@@ -7,6 +7,7 @@ import { ComplexMap, groupWithCoords } from "./components/ComplexMap";
 import { EntryScreen } from "./components/EntryScreen";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { HomeIcon } from "./components/HomeIcon";
+import { HoverTooltipCard, useHoverTooltip } from "./components/HoverTooltip";
 import { PriceSlider } from "./components/PriceSlider";
 import { PrintSummary, type AreaBasis } from "./components/PrintSummary";
 import { ProfileForm } from "./components/ProfileForm";
@@ -176,6 +177,13 @@ export function App() {
    * 값을 고치고 돌아온 사람이 방금 있던 자리로 되돌아오게 한다.
    */
   const budgetPanelOpen = budgetPanelRequested && phase === "결과";
+  /**
+   * 상단바 무주택·생애최초 토글 위에 뜨는 설명 카드의 위치.
+   * `useHoverTooltip` 문서(`components/HoverTooltip.tsx`) 참고 — 자리마다
+   * 독립된 상태다(하나로 묶으면 한쪽에서 잰 위치가 다른 쪽에도 남는다).
+   */
+  const ownedHomeTooltip = useHoverTooltip<HTMLDivElement>();
+  const firstTimeBuyerTooltip = useHoverTooltip<HTMLDivElement>();
   /**
    * 패널을 닫을 때 포커스를 되돌릴 자리(상단바의 트리거 버튼).
    * 닫히면 패널은 화면에서 `display: none`이 되므로, 그 안에 남은
@@ -1237,15 +1245,26 @@ export function App() {
                     같은 원칙, 이번엔 반대 방향 — 라디오 이름은 일부러
                     다르게, 뜻풀이는 일부러 같게).
 
-                    `title` 속성이 아니라 CSS로 직접 띄우는 카드다(사용자
+                    `title` 속성이 아니라 `useHoverTooltip`
+                    (`components/HoverTooltip.tsx`)이 띄우는 카드다(사용자
                     지시: "딜레이를 최대한 빠르게", "흰색바탕(검정글씨)의
-                    카드형식으로") — 네이티브 `title` 툴팁은 뜨기까지
-                    1~1.5초 걸리고 배경·글자색을 못 바꾼다. 모양은
-                    `.result-topbar-tooltip`(styles.css)이 진다. 라디오
-                    버튼에 포커스가 가면(키보드 tab) `:focus-within`으로도
-                    뜬다 — 마우스가 없어도 같은 설명을 볼 수 있다.
+                    카드형식으로" → "지도와의 경계때문에... 지도 위
+                    레이어에 표시되어 가려지지 않도록", "한줄로 표기").
+                    네이티브 `title` 툴팁은 뜨기까지 1~1.5초 걸리고
+                    배경·글자색을 못 바꾼다. **`position: fixed`로
+                    뷰포트 기준에 띄운다** — `.result-topbar`가
+                    `overflow-x: auto`라 `position: absolute`로는 상단바
+                    경계에서 잘렸다(실측). `onFocus`/`onBlur`도 같이
+                    걸어서 키보드 tab으로도 같은 카드를 볼 수 있다.
                   */}
-                  <div className="result-topbar-item result-topbar-item--field">
+                  <div
+                    ref={ownedHomeTooltip.ref}
+                    className="result-topbar-item result-topbar-item--field"
+                    onMouseEnter={ownedHomeTooltip.show}
+                    onMouseLeave={ownedHomeTooltip.hide}
+                    onFocus={ownedHomeTooltip.show}
+                    onBlur={ownedHomeTooltip.hide}
+                  >
                     <span className="result-topbar-item-label">무주택 여부</span>
                     <div
                       className="result-topbar-toggle"
@@ -1279,11 +1298,19 @@ export function App() {
                         유주택
                       </button>
                     </div>
-                    <span className="result-topbar-tooltip" role="tooltip">
-                      이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요.
-                    </span>
+                    <HoverTooltipCard
+                      pos={ownedHomeTooltip.pos}
+                      text="이미 집이 있으면 받을 수 있는 정책대출과 취득세 계산이 달라져요."
+                    />
                   </div>
-                  <div className="result-topbar-item result-topbar-item--field">
+                  <div
+                    ref={firstTimeBuyerTooltip.ref}
+                    className="result-topbar-item result-topbar-item--field"
+                    onMouseEnter={firstTimeBuyerTooltip.show}
+                    onMouseLeave={firstTimeBuyerTooltip.hide}
+                    onFocus={firstTimeBuyerTooltip.show}
+                    onBlur={firstTimeBuyerTooltip.hide}
+                  >
                     <span className="result-topbar-item-label">생애최초 구입</span>
                     <div
                       className="result-topbar-toggle"
@@ -1317,9 +1344,10 @@ export function App() {
                         비해당
                       </button>
                     </div>
-                    <span className="result-topbar-tooltip" role="tooltip">
-                      생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요.
-                    </span>
+                    <HoverTooltipCard
+                      pos={firstTimeBuyerTooltip.pos}
+                      text="생애최초로 집을 사면 취득세 감면과 정책대출 우대를 받을 수 있어요."
+                    />
                   </div>
                   {/*
                     상단바에서 지역을 바꾸면 조회가 이 화면 **위에서**
