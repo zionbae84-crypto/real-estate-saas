@@ -1,5 +1,5 @@
 // scripts/pipeline/address.ts
-import { regionNameByCode } from "../../src/data/regions";
+import { regionNameByCode } from "../../src/data/regions.js";
 import type { RawTrade } from "./types";
 
 /**

@@ -1,5 +1,5 @@
 // scripts/pipeline/geocode-addresses.ts
-import { buildAddressString } from "./address";
+import { buildAddressString } from "./address.js";
 import {
   buildTargets,
   defaultWait,
@@ -8,8 +8,8 @@ import {
   noopRawTradeCache,
   type RawTradeCache,
   type Waiter,
-} from "./fetch";
-import { normalizeAll } from "./normalize";
+} from "./fetch.js";
+import { normalizeAll } from "./normalize.js";
 
 /**
  * 주소 조립은 `./address`로 옮겼다 — 집계(`aggregate.ts`)가 단지 상세

@@ -1,13 +1,13 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { defaultWait } from "../scripts/pipeline/fetch";
-import { lookupHouseholdCounts } from "../scripts/pipeline/householdCount";
-import { fetchLiveComplexes } from "../scripts/pipeline/live";
+import { defaultWait } from "../scripts/pipeline/fetch.js";
+import { lookupHouseholdCounts } from "../scripts/pipeline/householdCount.js";
+import { fetchLiveComplexes } from "../scripts/pipeline/live.js";
 import reportConfig from "../scripts/pipeline/report-config.json";
 import regulatedRegions from "./_data/regulated-regions.json";
-import { fetchHouseholdCount } from "./_lib/householdCountApi";
-import { createUpstashHouseholdCountCache } from "./_lib/householdCountCache";
-import { createUpstashTradeCache } from "./_lib/tradeCache";
-import { handleComplexesRequest } from "./_lib/handleComplexes";
+import { fetchHouseholdCount } from "./_lib/householdCountApi.js";
+import { createUpstashHouseholdCountCache } from "./_lib/householdCountCache.js";
+import { createUpstashTradeCache } from "./_lib/tradeCache.js";
+import { handleComplexesRequest } from "./_lib/handleComplexes.js";
 import type { ReportConfig } from "../scripts/pipeline/types";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

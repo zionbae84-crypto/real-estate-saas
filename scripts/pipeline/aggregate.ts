@@ -1,5 +1,5 @@
-import { buildAddressString } from "./address";
-import { computePnu } from "./pnu";
+import { buildAddressString } from "./address.js";
+import { computePnu } from "./pnu.js";
 import type { NormalizedTrade } from "./normalize";
 import type { LandLeasehold, ReportConfig } from "./types";
 

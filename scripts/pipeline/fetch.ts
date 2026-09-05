@@ -1,8 +1,8 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import { DATA_DIR, RAW_DIR, loadRegions } from "./config";
-import { parseResponse } from "./parse-response";
+import { DATA_DIR, RAW_DIR, loadRegions } from "./config.js";
+import { parseResponse } from "./parse-response.js";
 import type { RawTrade } from "./types";
 
 /** report(Task 6)가 "수집 실패"를 알려면 fetch가 남기는 이 로그가 필요하다. */

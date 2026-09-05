@@ -1,4 +1,4 @@
-import { redactKey } from "../../scripts/pipeline/fetch";
+import { redactKey } from "../../scripts/pipeline/fetch.js";
 
 // naveropenapi.apigw.ntruss.com은 예전 "AI NAVER API" 시절 도메인이다.
 // 신규 발급된 Maps Application(콘솔의 Application > Geocoding)은 이

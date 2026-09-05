@@ -1,7 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ComplexUnit } from "./aggregate";
-import { DATA_DIR } from "./config";
+import { DATA_DIR } from "./config.js";
 
 /**
  * 산출물(`data/complexes.json`)에 실제로 나가는 필드만 남긴 모양.

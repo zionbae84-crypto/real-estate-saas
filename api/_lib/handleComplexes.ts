@@ -1,4 +1,4 @@
-import { redactKey } from "../../scripts/pipeline/fetch";
+import { redactKey } from "../../scripts/pipeline/fetch.js";
 import type { LiveComplexesResult } from "../../scripts/pipeline/live";
 
 export interface RegulatedRegions {

@@ -1,4 +1,4 @@
-import { redactKey } from "../../scripts/pipeline/fetch";
+import { redactKey } from "../../scripts/pipeline/fetch.js";
 
 const ENDPOINT = "https://api.odcloud.kr/api/AptIdInfoSvc/v1/getAptInfo";
 

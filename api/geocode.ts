@@ -1,10 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { defaultWait } from "../scripts/pipeline/fetch";
-import { fetchComplexAddresses } from "../scripts/pipeline/geocode-addresses";
-import { geocodeAddress } from "./_lib/naverGeocode";
-import { createUpstashGeocodeCache } from "./_lib/geocodeCache";
-import { createUpstashTradeCache } from "./_lib/tradeCache";
-import { handleGeocodeRequest } from "./_lib/handleGeocode";
+import { defaultWait } from "../scripts/pipeline/fetch.js";
+import { fetchComplexAddresses } from "../scripts/pipeline/geocode-addresses.js";
+import { geocodeAddress } from "./_lib/naverGeocode.js";
+import { createUpstashGeocodeCache } from "./_lib/geocodeCache.js";
+import { createUpstashTradeCache } from "./_lib/tradeCache.js";
+import { handleGeocodeRequest } from "./_lib/handleGeocode.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const regionCode = typeof req.query.regionCode === "string" ? req.query.regionCode : null;

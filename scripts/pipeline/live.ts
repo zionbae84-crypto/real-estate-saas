@@ -6,11 +6,11 @@ import {
   noopRawTradeCache,
   type RawTradeCache,
   type Waiter,
-} from "./fetch";
-import { normalizeAll } from "./normalize";
-import { aggregate } from "./aggregate";
-import { noopHouseholdCountLookup, type HouseholdCountLookup } from "./householdCount";
-import { toEmittedUnit, type EmittedComplexUnit } from "./emit";
+} from "./fetch.js";
+import { normalizeAll } from "./normalize.js";
+import { aggregate } from "./aggregate.js";
+import { noopHouseholdCountLookup, type HouseholdCountLookup } from "./householdCount.js";
+import { toEmittedUnit, type EmittedComplexUnit } from "./emit.js";
 import type { ReportConfig } from "./types";
 
 export interface LiveComplexesResult {
