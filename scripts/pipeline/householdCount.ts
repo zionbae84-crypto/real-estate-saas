@@ -36,7 +36,7 @@ export const noopHouseholdCountLookup: HouseholdCountLookup = async () => new Ma
  * 큰 시군구에서 너무 느리고, 전부 한꺼번에 띄우면 API rate limit에
  * 걸린다)로 상한을 둔 병렬로 간다.
  */
-export const HOUSEHOLD_COUNT_CONCURRENCY = 8;
+export const HOUSEHOLD_COUNT_CONCURRENCY = 16;
 
 /**
  * PNU 목록에서 세대수를 배치로 조회한다. 캐시를 먼저 보고, 없을 때만
