@@ -1,4 +1,4 @@
-import rawRegionCodes from "../../data/legal-dong-codes.json";
+import rawRegionCodes from "../../data/legal-dong-codes.json" with { type: "json" };
 
 export interface RegionCode {
   regionCode: string;
