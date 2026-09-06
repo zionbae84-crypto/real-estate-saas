@@ -1,9 +1,35 @@
-import { useEffect, type ReactNode, type Ref } from "react";
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { lockBodyScroll } from "../print/bodyScrollLock";
 
 export interface ResultShellProps {
   /** 상단바 가운데 요약 항목들(라벨 + 값 쌍). {@link ResultSummaryItem} */
   summary: ReactNode;
+  /**
+   * **좁은 화면(≤640px) 전용 한 줄 요약.** {@link summary}의 값들을
+   * 글자 한 줄로 압축한 것으로, 호출부가 만들어 넘긴다.
+   *
+   * 왜 필요한가: `summary`는 현금·연 소득·지역을 **그 자리에서 고치는**
+   * 입력란들이라(사용자 지시) 줄바꿈되면 세로로 길다. 375×812에서 실측한
+   * 상단바 높이는 366px — 뷰포트의 45%다. 남은 55%를 지도와 목록이
+   * 또 반씩 나눠 쓰니 스크롤 영역 셋이 한 화면에 겹친다.
+   *
+   * 그래서 좁은 화면에서는 이 한 줄만 세워 두고(≈48px), 누르면 원래
+   * `summary`가 시트로 열린다 — 고치는 자리를 없애지 않으면서 세로를
+   * 되찾는다. 넓은 화면에서는 이 줄이 `display: none`이고 `summary`가
+   * 지금까지처럼 상단바에 그대로 선다.
+   *
+   * **여기서 값을 계산하지 않는다** — {@link ResultSummaryItem}과 같은
+   * 이유다. 상단바가 자기 계산을 새로 하면 아래 결과와 다른 숫자를
+   * 말할 수 있다.
+   */
+  compactSummary?: ReactNode;
   /** 상단바 오른쪽 버튼들(인쇄·조건 다시 넣기) */
   actions: ReactNode;
   /** 왼쪽 열 — 목록 ↔ 단지 상세가 전환되는 스크롤 영역 */
@@ -98,8 +124,22 @@ export interface ResultShellProps {
  * 실제 버그다). 그래서 클래스를 직접 만지지 않고 `lockBodyScroll()`이
  * 잠글 이유의 개수를 센다.
  */
+/**
+ * 좁은 화면에서 조건 시트가 가리키는 자리. 압축 요약 버튼의
+ * `aria-controls`와 시트의 `id`가 같은 상수를 쓴다.
+ */
+const CONDITIONS_ID = "result-topbar-conditions";
+
+/**
+ * 좁은 화면에서 시트를 맨 아래로 내렸을 때 남는 높이(px).
+ * `styles.css`의 `.result-sheet-stop--peek`가 쓰는 값과 **같아야 한다** —
+ * 두 값이 어긋나면 첫 스냅 지점이 손잡이를 반쯤 자른다.
+ */
+const SHEET_PEEK_PX = 112;
+
 export function ResultShell({
   summary,
+  compactSummary,
   actions,
   sidebar,
   map,
@@ -107,6 +147,43 @@ export function ResultShell({
   panelOpen = false,
 }: ResultShellProps) {
   useEffect(() => lockBodyScroll(), []);
+
+  /*
+   * 좁은 화면에서 조건 시트(= 원래 상단바 요약)가 펼쳐져 있는가.
+   *
+   * **넓은 화면에서는 아무 뜻이 없다** — 그쪽에서는 압축 요약 버튼도
+   * 시트 스타일도 `@media`로 꺼져 있어서, 이 클래스가 붙든 말든 요약은
+   * 상단바에 그대로 선다. 그래서 이 상태 하나로 두 화면을 다 덮는다:
+   * "모바일인가"를 자바스크립트로 판정하는 자리는 이 파일 어디에도
+   * 없고, 폭 판정은 전부 CSS가 한다.
+   */
+  const [conditionsOpen, setConditionsOpen] = useState(false);
+
+  /*
+   * 목록 시트의 스크롤 상자. 좁은 화면에서만 실제 상자가 되고(넓은
+   * 화면에서는 `display: contents`라 박스가 없다), 스냅 지점 사이를
+   * 오가는 드래그는 전부 네이티브 스크롤이다 — 드래그 핸들러가 없다.
+   */
+  const sheetScrollerRef = useRef<HTMLDivElement | null>(null);
+
+  /*
+   * **첫 화면을 "절반" 스냅에서 시작한다.**
+   *
+   * 스크롤 상자는 `scrollTop = 0`에서 열리는데, 그 자리는 시트가
+   * {@link SHEET_PEEK_PX}만큼만 보이는 "살짝" 상태다 — 지도는 넓지만
+   * 목록이 사실상 안 보인다. 이 앱에서 목록은 곁다리가 아니라 답이라
+   * 기본값으로는 맞지 않는다. CSS로는 스크롤 상자의 초깃값을 정할 수
+   * 없으므로 여기서 한 번 밀어 준다.
+   *
+   * 넓은 화면에서는 이 요소가 `display: contents`라 스크롤 상자가 아니다
+   * — `clientHeight`가 0이라 아래 식이 0이 되고, `scrollTop = 0` 대입은
+   * 아무 일도 하지 않는다. jsdom도 같다(레이아웃이 없어 0이다).
+   */
+  useLayoutEffect(() => {
+    const scroller = sheetScrollerRef.current;
+    if (scroller === null) return;
+    scroller.scrollTop = Math.max(0, scroller.clientHeight / 2 - SHEET_PEEK_PX);
+  }, []);
 
   return (
     <div className="result-shell">
@@ -119,15 +196,93 @@ export function ResultShell({
           `h1`을 하나 더 세우면 같은 문서에 제목이 둘이 된다.
         */}
         <p className="result-topbar-brand">내 예산으로 살 수 있는 집</p>
-        <div className="result-topbar-summary">{summary}</div>
+        {/*
+          좁은 화면 전용 한 줄 요약 겸 시트 트리거({@link compactSummary}
+          문서 참고). 넓은 화면에서는 `display: none`이라 초점도 가지
+          않는다.
+
+          접근 가능한 이름에 **"실구매 가능 가격"이 들어가면 안 된다** —
+          기존 테스트 여럿이 `getByRole("button", { name: /실구매 가능
+          가격/ })`으로 예산 상세 패널의 트리거를 찾는다. 그 문구를 여기
+          쓰면 같은 이름의 버튼이 둘이 되어 그 질의가 깨진다.
+
+          펼침 힌트는 `.fold-more-hint`로 감싼다 — 종이에서는 누를 것이
+          없어 죽은 지시문이 되므로 인쇄에서 지운다. 버튼 자체도
+          `PRINT_HIDDEN_SELECTORS`에 올라 있다(같은 이유).
+        */}
+        {compactSummary !== undefined && (
+          <button
+            type="button"
+            className="result-compact-bar"
+            aria-expanded={conditionsOpen}
+            aria-controls={CONDITIONS_ID}
+            onClick={() => setConditionsOpen((v) => !v)}
+          >
+            <span className="result-compact-bar-value">
+              {compactSummary}
+            </span>
+            <span className="fold-more-hint">
+              {conditionsOpen ? "닫기" : "조건 바꾸기"}
+            </span>
+          </button>
+        )}
+        <div
+          id={CONDITIONS_ID}
+          className={
+            conditionsOpen
+              ? "result-topbar-summary result-topbar-summary--open"
+              : "result-topbar-summary"
+          }
+        >
+          {summary}
+        </div>
         <div className="result-topbar-actions">{actions}</div>
       </header>
 
       <div className="region-results-grid">
         {panel}
-        {/* `panelOpen` prop 문서 참고 — 패널에 완전히 가려지는 동안만 잠근다. */}
-        <div className="region-results-sidebar" inert={panelOpen}>
-          {sidebar}
+        {/*
+          목록 시트의 스크롤 상자.
+
+          **넓은 화면에서는 `display: contents`다** — 상자가 사라지고
+          `.region-results-sidebar`가 예전 그대로 그리드의 첫 칸이 된다.
+          그래서 DOM 순서(패널 → 사이드바 → 지도)도 그대로다. 그 순서가
+          인쇄 순서를 정한다(위 `panel` prop 문서 참고).
+
+          좁은 화면에서만 지도를 덮는 스크롤 상자가 되어, 아래 두 눈금과
+          시트가 `scroll-snap` 지점 셋을 만든다(살짝 / 절반 / 전체).
+          드래그가 곧 네이티브 스크롤이라 포인터 핸들러가 없다. 상자
+          자신은 `pointer-events: none`이고 시트만 `auto`라, 시트 위쪽
+          빈 자리에서는 **지도가 그대로 조작된다** — `.budget-panel`이
+          지키는 것과 같은 원칙이다.
+        */}
+        <div className="result-sheet-scroller" ref={sheetScrollerRef}>
+          {/*
+            스냅 눈금 둘. 넓은 화면에서는 `display: none`이라 그리드 칸을
+            차지하지 않는다(위 `display: contents`와 짝이다). 높이는
+            전부 CSS가 정한다 — 내용이 없는 순수 배치 요소다.
+          */}
+          <div
+            className="result-sheet-stop result-sheet-stop--peek"
+            aria-hidden="true"
+          />
+          <div
+            className="result-sheet-stop result-sheet-stop--half"
+            aria-hidden="true"
+          />
+          {/*
+            `panelOpen` prop 문서 참고 — 패널에 완전히 가려지는 동안만 잠근다.
+
+            잡는 손잡이는 **DOM 노드가 아니라 `::before`**다(styles.css의
+            좁은 화면 블록). 장식이라 문서에 남길 이유가 없고, 노드로
+            두면 사이드바의 첫 자식이 바뀐다 — `App.test.tsx`의 "패널이
+            닫힌 채로도 경고가 사이드바 맨 위에 보인다"가 정확히
+            `firstElementChild`로 그 자리를 잠그고 있다(엔진 경고가 목록
+            뒤로 밀리지 않게 지키는 검사다).
+          */}
+          <div className="region-results-sidebar" inert={panelOpen}>
+            {sidebar}
+          </div>
         </div>
         <div className="region-results-map">{map}</div>
       </div>
