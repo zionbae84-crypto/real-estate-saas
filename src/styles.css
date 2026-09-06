@@ -5732,6 +5732,43 @@ body.body-scroll-locked {
   }
 
   /*
+   * 지도 유형·필터·학교 팝오버를 **전폭 시트**로 바꾼다.
+   *
+   * 이 팝오버는 트리거 **왼쪽**에 붙는다 — `ComplexMap.tsx`의
+   * `measureControlPopupPos`가 `right = 화면폭 − 트리거left + 8`로
+   * 앉히는데, 그건 버튼이 지도 오른쪽 가장자리에 세로로 쌓여 있을 때의
+   * 계산이다. 위에서 버튼을 가로로 눕히면서 트리거가 왼쪽으로 내려왔고,
+   * 375px에서 274px짜리 필터 패널이 **화면 왼쪽으로 26px 넘쳤다**
+   * (실측). 그 계산은 패널 폭을 모르도록 일부러 그렇게 짠 것이라
+   * (그 함수 주석 참고) 폭을 넣어 고치는 대신, 좁은 화면에서는 아예
+   * 양쪽에 붙여 전폭으로 편다.
+   *
+   * ⚠ `right`에 `!important`가 붙는 이유: 그 값은 위 함수가 **인라인
+   * 스타일**로 쓴다. 인라인은 특정도로 못 이긴다. 이 파일에서 `!important`
+   * 를 쓰는 자리는 여기뿐이고, `@media screen` 안이라 인쇄에는 닿지
+   * 않는다.
+   */
+  .complex-map-control-panel {
+    left: 0.5rem;
+    right: 0.5rem !important;
+    width: auto;
+    box-sizing: border-box;
+  }
+
+  .complex-map-filter-panel,
+  .complex-map-school-panel {
+    width: auto;
+  }
+
+  /*
+   * 연결 화살표는 지운다. 전폭이 되면 그 꼭짓점이 트리거가 아니라 화면
+   * 오른쪽 끝을 가리켜, 세 버튼 중 무엇을 눌렀는지 되레 헷갈리게 한다.
+   */
+  .complex-map-control-panel::before {
+    display: none;
+  }
+
+  /*
    * 마커 색 범례. 기본 자리(왼쪽 아래)에서 왼쪽 **위 둘째 줄**로 옮기고
    * 가로 한 줄로 눕힌다 — 세로 두 줄(60px)이면 띠를 넘는다. 첫 줄은
    * 네이버 로고·저작권 표기가 쓰므로 `top`으로 그만큼 비켜 앉는다.
