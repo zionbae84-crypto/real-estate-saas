@@ -5612,7 +5612,8 @@ body.body-scroll-locked {
     top: 100%;
     left: 0;
     right: 0;
-    z-index: 4;
+    /* 목록 시트(110)·예산 상세 패널(120)보다 위 — 위 스크롤 상자 주석 참고 */
+    z-index: 130;
     box-sizing: border-box;
     flex-direction: column;
     align-items: stretch;
@@ -5688,6 +5689,67 @@ body.body-scroll-locked {
   }
 
   /*
+   * 예산 상세 패널을 목록 시트(110) 위로 올린다. **쌓임 순서만 바꾼다** —
+   * 배치·스크롤·숨김은 위 `@media screen` 블록이 그대로 쥐고 있고, 여기에
+   * 그런 선언을 두면 `scripts/printCss.test.ts`가 막는다(그 블록의
+   * 머리주석 참고). `z-index`는 요소를 가두지 않으므로 이 한 줄은
+   * 그 가드의 대상이 아니다.
+   */
+  .budget-panel {
+    z-index: 120;
+  }
+
+  /*
+   * ── 지도 위 살림살이를 위쪽 띠 하나에 몰아넣는다 ─────────────────
+   *
+   * 좁은 화면에서 지도 아래쪽은 목록 시트가 덮는데, 아래에 붙는 것들이
+   * 전부 z-index가 시트보다 높아 **덮이는 대신 시트 위로 떠서** 목록
+   * 글자와 겹쳤다(브라우저 실측). 그래서 시트를 끝까지 올려도 남는
+   * 위쪽 띠로 전부 옮긴다. 그 띠의 높이가 시트의 `scroll-margin-top`
+   * 이고, 아래 세 줄이 그 안에 들어가도록 배치를 맞춘다:
+   *
+   *     ┌──────────────────────────────────────────┐
+   *     │ © NAVER Corp. [로고]      [지도][필터][학교] │  1행
+   *     │ ▪대출 없이 ▪대출 필요                       │  2행
+   *     └──────────────────────────────────────────┘
+   *
+   * 1행 왼쪽은 네이버 로고·저작권 표기(SDK가 그린다 — `ComplexMap.tsx`가
+   * `TOP_LEFT`로 지정), 오른쪽은 지도 유형·필터·학교 버튼이다. 범례는
+   * 로고와 겹치지 않게 2행으로 내린다.
+   */
+
+  /*
+   * 지도 유형·필터·학교 버튼. 넓은 화면에서는 세로로 쌓이는데
+   * (`flex-direction: column`), 그러면 3단 ≈ 110px이라 위쪽 띠에
+   * 들어가지 않는다. 좁은 화면에서는 가로 한 줄(≈34px)로 눕힌다.
+   */
+  .complex-map-controls {
+    top: 0.5rem;
+    right: 0.5rem;
+    flex-direction: row;
+    align-items: flex-start;
+    gap: 0.375rem;
+  }
+
+  /*
+   * 마커 색 범례. 기본 자리(왼쪽 아래)에서 왼쪽 **위 둘째 줄**로 옮기고
+   * 가로 한 줄로 눕힌다 — 세로 두 줄(60px)이면 띠를 넘는다. 첫 줄은
+   * 네이버 로고·저작권 표기가 쓰므로 `top`으로 그만큼 비켜 앉는다.
+   *
+   * `position`은 다시 선언하지 않는다 — 기본 규칙의 `absolute`와
+   * `pointer-events: none`을 그대로 물려받는다
+   * (`scripts/map-overlay-guard.test.ts`가 그 짝을 잠근다).
+   */
+  .complex-map-legend {
+    top: 1.875rem;
+    left: 0.5rem;
+    bottom: auto;
+    grid-auto-flow: column;
+    gap: 0.75rem;
+    padding: 0.3rem 0.6rem;
+  }
+
+  /*
    * ── 목록 바텀시트 ─────────────────────────────────────────────
    *
    * 지도를 덮는 투명한 스크롤 상자. 스냅 지점은 셋이다 — 눈금 둘의
@@ -5696,13 +5758,18 @@ body.body-scroll-locked {
    *   높이 H, 눈금 합 = H − 112 일 때
    *     scrollTop 0            → 시트가 112px 보인다   (살짝)
    *     scrollTop H/2 − 112    → 시트가 H/2 보인다      (절반, 기본)
-   *     scrollTop H − 168      → 시트 위가 56px 아래    (전체)
+   *     scrollTop H − 200      → 시트 위가 88px 아래    (전체)
    *
    * 셋째 값은 시트의 `scroll-snap-align: start` + `scroll-margin-top:
-   * 56px`이 만든다(그 규칙의 주석 참고) — 마진이 없으면 스냅이 시트를
+   * 88px`이 만든다(그 규칙의 주석 참고) — 마진이 없으면 스냅이 시트를
    * 맨 위까지 붙여 지도를 통째로 가린다. 시트의 `min-height`가
-   * `calc(100% - 56px)`인 것도 같은 56px이다: 목록이 짧을 때 최대
+   * `calc(100% - 88px)`인 것도 같은 88px이다: 목록이 짧을 때 최대
    * 스크롤이 정확히 이 스냅 지점과 겹치게 한다.
+   *
+   * **88px인 이유**는 그 띠에 지도 살림살이가 두 줄로 들어가기
+   * 때문이다(위 `.complex-map-controls`·`.complex-map-legend` 주석의
+   * 그림 참고). 처음에는 56px이었는데, 그때는 지도 위에 범례밖에
+   * 없었다 — 리베이스로 지도 유형·필터·학교 버튼이 합류하며 다시 쟀다.
    *
    * 목록이 길면 이 지점을 지나 스크롤이 그대로 이어진다 — 그때는 시트가
    * 화면을 다 덮는 것이 맞다(목록을 읽는 중이다).
@@ -5725,7 +5792,17 @@ body.body-scroll-locked {
     display: block;
     position: absolute;
     inset: 0;
-    z-index: 1; /* 지도 위, 예산 상세 패널(z-index: 2) 아래 */
+    /*
+     * **네이버 SDK가 z-index 100으로 그리는 것들보다 위**여야 한다
+     * (로고·축척 막대). 1로 두면 시트가 지도를 덮는 자리에서 그 둘이
+     * 시트 **위로** 떠 목록 글자와 겹친다 — 실측으로 잡은 결함이다.
+     * 로고는 가리면 안 되므로 `ComplexMap.tsx`가 지도 위쪽으로 옮겼고,
+     * 축척은 시트가 덮어도 되는 것이라 여기서 깨끗이 덮는다.
+     *
+     * 이 층 위에 예산 상세 패널(120)과 조건 시트(130)가 선다 — 셋의
+     * 순서는 아래 두 규칙과 `.result-topbar-summary`가 함께 정한다.
+     */
+    z-index: 110;
     overflow-y: scroll;
     overscroll-behavior: contain;
     scroll-snap-type: y proximity;
@@ -5760,21 +5837,25 @@ body.body-scroll-locked {
   .region-results-sidebar {
     position: relative;
     box-sizing: border-box;
-    min-height: calc(100% - 56px);
+    min-height: calc(100% - 88px);
     overflow: visible;
     scroll-snap-align: start;
     /*
-     * "전체" 스냅에서 지도 한 줄(56px)을 남긴다. 이것이 없으면 스냅이
+     * "전체" 스냅에서 지도 위쪽 띠(88px)를 남긴다. 이것이 없으면 스냅이
      * 시트의 윗변을 스크롤포트 맨 위에 붙여 지도가 통째로 가린다 —
-     * 실측으로 확인한 뒤 넣은 한 줄이다. `min-height`의 56px과 **같은
+     * 실측으로 확인한 뒤 넣은 한 줄이다. `min-height`의 88px과 **같은
      * 값이어야** 목록이 짧을 때(내용이 `min-height`보다 낮을 때) 최대
      * 스크롤과 이 스냅 지점이 정확히 겹친다.
+     *
+     * 88px은 그 띠에 들어가야 하는 것들이 정한 값이다 — 네이버 로고·
+     * 저작권 표기(1행)와 마커 색 범례(2행), 그리고 오른쪽의 지도 유형·
+     * 필터·학교 버튼. 위 스크롤 상자 주석의 그림 참고.
      *
      * 목록이 길면 이 지점을 지나 계속 스크롤된다 — 그때는 시트가 화면을
      * 다 덮는 것이 맞다(목록을 읽는 중이다). 스냅을 `mandatory`가 아니라
      * `proximity`로 둔 이유이기도 하다.
      */
-    scroll-margin-top: 56px;
+    scroll-margin-top: 88px;
     pointer-events: auto;
     padding: 0 12px 28px;
     border-right: none;

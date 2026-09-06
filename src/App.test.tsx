@@ -1315,6 +1315,9 @@ describe("App - 단지 상세(화면 4)", () => {
       vi.spyOn(loadNaverMaps, "loadNaverMaps").mockResolvedValue(
         {
           maps: {
+            // 실제 SDK의 컨트롤 위치 열거형 — ComplexMap이 로고·저작권 표기를
+            // 지도 위쪽으로 옮기며 읽는다. 없으면 지도 옵션을 만들다 던진다.
+            Position: { TOP_LEFT: "TOP_LEFT", TOP_RIGHT: "TOP_RIGHT" },
             Map: class {
               // 지도에도 리스너가 붙는다(zoom_changed) — 이 필드가 없으면
               // Event.addListener가 undefined에 쓰려다 던진다.
@@ -1747,6 +1750,9 @@ describe("App - 지도", () => {
     let mapContainer: HTMLElement | null = null;
     const naverGlobal = {
       maps: {
+        // 실제 SDK의 컨트롤 위치 열거형 — ComplexMap이 로고·저작권 표기를
+        // 지도 위쪽으로 옮기며 읽는다. 없으면 지도 옵션을 만들다 던진다.
+        Position: { TOP_LEFT: "TOP_LEFT", TOP_RIGHT: "TOP_RIGHT" },
         Map: class {
           constructor(el: HTMLElement) {
             mapContainer = el;
@@ -1961,6 +1967,9 @@ describe("전체화면 결과 셸", () => {
     let mapContainer: HTMLElement | null = null;
     const naverGlobal = {
       maps: {
+        // 실제 SDK의 컨트롤 위치 열거형 — ComplexMap이 로고·저작권 표기를
+        // 지도 위쪽으로 옮기며 읽는다. 없으면 지도 옵션을 만들다 던진다.
+        Position: { TOP_LEFT: "TOP_LEFT", TOP_RIGHT: "TOP_RIGHT" },
         Map: class {
           constructor(el: HTMLElement) {
             mapContainer = el;

@@ -942,6 +942,36 @@ export function ComplexMap({
           // 다시 조회해 이 effect가 재실행돼도 위성이 일반으로 되돌아가지
           // 않는다.
           mapTypeId: naverMapTypeId(naverGlobal, mapTypeRef.current),
+          /*
+           * 네이버 로고와 저작권 표기를 지도 **왼쪽 위**로 옮긴다.
+           *
+           * SDK 기본값은 둘 다 왼쪽 **아래**인데, 좁은 화면(≤640px)에서는
+           * 그 자리를 목록 바텀시트가 덮는다. 그런데 SDK가 z-index 100으로
+           * 그리는 탓에 덮이는 대신 시트 **위로** 떠서 목록 글자와 겹쳤다
+           * (브라우저 실측으로 잡았다). 둘은 지도를 쓰는 조건이라 가릴
+           * 수도 없다 — 그래서 시트를 끝까지 올려도 남는 위쪽 띠로 옮긴다
+           * (styles.css의 시트 `scroll-margin-top`).
+           *
+           * **오른쪽이 아니라 왼쪽이다.** 오른쪽 위는 지도 유형·필터·학교
+           * 버튼(`.complex-map-controls`, `right: 1rem; top: 1rem`)이
+           * 쓰고 있다. 오른쪽에 두면 그 버튼들과 겹친다.
+           *
+           * 저작권 표기는 로고와 **다른 컨트롤**(`mapDataControl`)이라 둘 다
+           * 지정해야 한다. 로고만 옮기면 저작권만 왼쪽 아래에 남는다.
+           *
+           * 축척 막대는 옮기지 않는다(왼쪽 아래 그대로). 노출 의무가 있는
+           * 것은 로고와 저작권 표기이고, 축척은 좁은 화면에서 시트가
+           * z-index로 깨끗이 덮는다(styles.css의 `.result-sheet-scroller`).
+           *
+           * 폭으로 가르지 않고 두 화면에 같은 값을 쓴다 — 갈랐다면 이
+           * 파일이 창 크기를 알아야 하고, 그 판정은 지금 전부 CSS에 있다.
+           */
+          logoControlOptions: {
+            position: naverGlobal.maps.Position.TOP_LEFT,
+          },
+          mapDataControlOptions: {
+            position: naverGlobal.maps.Position.TOP_LEFT,
+          },
         });
         /*
          * 단지가 둘 이상이면 그 전부가 들어오도록 줌을 맞춘다. 고정

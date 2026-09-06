@@ -87,7 +87,12 @@ function fakeNaverMaps() {
   const polygons: Array<{ paths: unknown; removed: boolean }> = [];
   const destroyedMaps: unknown[] = [];
   const createdMaps: Array<{
-    options: { center?: { lat: number; lng: number } };
+    options: {
+      center?: { lat: number; lng: number };
+      mapTypeId?: string;
+      logoControlOptions?: { position?: unknown };
+      mapDataControlOptions?: { position?: unknown };
+    };
     setZoom(next: number): void;
   }> = [];
   const fitBoundsCalls: Array<{ bounds: unknown; options?: unknown }> = [];
@@ -103,9 +108,20 @@ function fakeNaverMaps() {
 
   const naverGlobal = {
     maps: {
+      /*
+       * 실제 SDK의 컨트롤 위치 열거형. `ComplexMap`이 네이버 로고와
+       * 저작권 표기를 지도 위쪽으로 옮기며 읽는다(그쪽 주석 참고) —
+       * 없으면 지도 옵션을 만들다 던져 지도가 아예 안 뜬다.
+       */
+      Position: { TOP_LEFT: "TOP_LEFT", TOP_RIGHT: "TOP_RIGHT" },
       Map: class {
         destroyed = false;
-        options: { center?: { lat: number; lng: number } } = {};
+        options: {
+          center?: { lat: number; lng: number };
+          mapTypeId?: string;
+          logoControlOptions?: { position?: unknown };
+          mapDataControlOptions?: { position?: unknown };
+        } = {};
         /**
          * 지금 줌. 실제 SDK와 같이 `getZoom()`으로 읽는다 — 마커 상세도가
          * 이 값으로 갈린다(`markerDetailForZoom`). 테스트는
@@ -115,7 +131,13 @@ function fakeNaverMaps() {
         listeners: Record<string, () => void> = {};
         constructor(
           el: HTMLElement,
-          opts: { center?: { lat: number; lng: number }; zoom?: number; mapTypeId?: string },
+          opts: {
+            center?: { lat: number; lng: number };
+            zoom?: number;
+            mapTypeId?: string;
+            logoControlOptions?: { position?: unknown };
+            mapDataControlOptions?: { position?: unknown };
+          },
         ) {
           mapContainerEl = el;
           this.options = opts;
@@ -540,6 +562,48 @@ describe("ComplexMap", () => {
     for (const detail of ["full", "name", "dot"] as const) {
       expect(MARKER_ANCHOR[detail].y).toBeGreaterThan(0);
     }
+  });
+
+  /**
+   * **네이버 로고와 저작권 표기는 지도 위쪽에 둔다.**
+   *
+   * SDK 기본값은 둘 다 왼쪽 **아래**인데, 좁은 화면(≤640px)에서는 그
+   * 자리를 목록 바텀시트가 덮는다. 그리고 SDK가 z-index 100으로 그리는
+   * 탓에 덮이는 대신 시트 **위로** 떠서 목록 글자와 겹쳤다 — 브라우저
+   * 실측으로 잡은 결함이다. 둘은 지도를 쓰는 조건이라 가릴 수도 없다.
+   *
+   * 위쪽은 시트를 끝까지 올려도 남는 띠라(`styles.css`의 시트
+   * `scroll-margin-top`) 거기로 옮겼다. 이 검사가 없으면 그 두 줄은
+   * "왜 있는지 모르는 옵션"이 되어 조용히 지워진다 — 이 저장소가
+   * 여러 번 겪은 모양이다.
+   *
+   * **왼쪽 위여야 한다.** 오른쪽 위는 지도 유형·필터·학교 버튼
+   * (`.complex-map-controls`)이 쓰고 있어, 오른쪽에 두면 겹친다.
+   *
+   * ⚠ 이 파일의 가짜 SDK에 `Position`이 있어야 위 옵션을 만들 수 있다.
+   * 없으면 지도 생성 자체가 던져 **이 파일의 검사 대부분이 함께**
+   * 무너진다 — 실제로 그렇게 잡혔다.
+   */
+  it("네이버 로고와 저작권 표기를 지도 왼쪽 위에 둔다 — 시트가 덮는 아래쪽도, 버튼이 선 오른쪽도 피한다", async () => {
+    const { naverGlobal, createdMaps, markers } = fakeNaverMaps();
+    vi.spyOn(loadNaverMapsModule, "loadNaverMaps").mockResolvedValue(naverGlobal as unknown as typeof naver);
+
+    render(
+      <ComplexMap
+        units={[unit({ complexKey: "a" })]}
+        coordinates={new Map([["a", { lat: 37.1, lon: 127.1 }]])}
+        burdenByUnit={new Map()}
+        naverMapClientId="test"
+        filterBounds={TEST_FILTER_BOUNDS}
+        filterValue={TEST_FILTER_BOUNDS}
+        onFilterChange={() => {}}
+      />,
+    );
+    await vi.waitFor(() => expect(markers).toHaveLength(1));
+
+    const options = createdMaps[0]!.options;
+    expect(options.logoControlOptions?.position).toBe(naverGlobal.maps.Position.TOP_LEFT);
+    expect(options.mapDataControlOptions?.position).toBe(naverGlobal.maps.Position.TOP_LEFT);
   });
 
   it("단지가 여럿이면 전부 화면에 들어오도록 fitBounds를 부르고, 중심은 평균 좌표다", async () => {
