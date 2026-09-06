@@ -1188,6 +1188,24 @@ body {
 }
 
 /*
+ * 국토부가 응답하지 않아 캐시로 버티는 중이라는 한 문장(ComplexList의
+ * `staleNote`). 같은 신선도 줄 안에 있지만 성격이 다르다 — 위 두 문장은
+ * 늘 참인 배경 설명이고, 이것은 **지금 이 조회에만 해당하는 예외 상태**다.
+ * 그래서 줄을 바꾸고 색·굵기를 올려 눈에 걸리게 한다.
+ *
+ * 색은 `--result-warn-ink`다. 옅은 면 위 **글자**로 주황을 쓰는 자리라
+ * 채움용 `--result-warn`(2.65:1)이 아니라 어두운 변형을 써야 한다
+ * (`.result-shell`의 토큰 정의 주석, `seed-semantic-tokens.test.ts`가
+ * 이 구분을 잠근다). 흰 면 위 5.46:1이다.
+ */
+.complex-stale-note {
+  display: block;
+  margin-top: 0.25rem;
+  font-weight: 600;
+  color: var(--result-warn-ink);
+}
+
+/*
  * 지도 칸에 그릴 단지가 하나도 없을 때의 문구(App.tsx). 실패 문구
  * (`.region-query-error`)와 같은 색을 쓰지 않는다 — 여기서는 아무것도
  * 실패하지 않았다.

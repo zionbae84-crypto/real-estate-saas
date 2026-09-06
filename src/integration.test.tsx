@@ -21,7 +21,7 @@ function mockRegionQuery(
 ) {
   return vi
     .spyOn(regionQuery, "fetchRegionComplexes")
-    .mockResolvedValue({ units: [...units], isRegulatedArea, dataAsOf: null });
+    .mockResolvedValue({ units: [...units], isRegulatedArea, dataAsOf: null, cachedAt: null });
 }
 
 /** 지역 선택 위자드에서 시도·시군구를 고르고 조회를 누른다 */
@@ -398,7 +398,7 @@ describe("예산 계산기 통합", () => {
     spy.mockResolvedValue({
       units: [...cheapestIn("11650", 3)],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
     await backToEntry();
     await selectRegion("서울특별시", "서초구");
@@ -478,7 +478,7 @@ describe("예산 계산기 통합", () => {
     // 대조군: 서초구를 조회하면 그 단지가 실제로 목록에 뜬다 — 위에서
     // 빠진 이유가 예산이 아니라 "그 지역 조회 결과가 아니어서"임을
     // 못박는다.
-    spy.mockResolvedValue({ units: [...서초], isRegulatedArea: true, dataAsOf: null });
+    spy.mockResolvedValue({ units: [...서초], isRegulatedArea: true, dataAsOf: null, cachedAt: null });
     await backToEntry();
     await selectRegion("서울특별시", "서초구");
     await screen.findByText(서초단지);

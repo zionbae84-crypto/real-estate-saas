@@ -1,11 +1,12 @@
 import { describe, expect, it, vi } from "vitest";
 import { handleGeocodeRequest } from "./handleGeocode";
+import { createNoopResponseCache } from "./responseCache";
 
 describe("handleGeocodeRequest", () => {
   it("regionCode가 없으면 400을 반환한다", async () => {
     const result = await handleGeocodeRequest(
       { regionCode: null, dong: null },
-      { fetchAddresses: vi.fn(), cache: { get: vi.fn(), set: vi.fn() }, geocode: vi.fn(), dataKey: "molit-key", key: "id", secret: "s" },
+      { fetchAddresses: vi.fn(), cache: { get: vi.fn(), set: vi.fn() }, geocode: vi.fn(), responseCache: createNoopResponseCache(), dataKey: "molit-key", key: "id", secret: "s" },
     );
     expect(result.status).toBe(400);
   });
@@ -30,7 +31,7 @@ describe("handleGeocodeRequest", () => {
 
     const result = await handleGeocodeRequest(
       { regionCode: "11680", dong: null },
-      { fetchAddresses, cache, geocode, dataKey: "molit-key", key: "id", secret: "s" },
+      { fetchAddresses, cache, geocode, responseCache: createNoopResponseCache(), dataKey: "molit-key", key: "id", secret: "s" },
     );
 
     expect(result.status).toBe(200);
@@ -58,6 +59,7 @@ describe("handleGeocodeRequest", () => {
         fetchAddresses,
         cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn() },
         geocode: vi.fn().mockResolvedValue({ lat: 1, lon: 1 }),
+        responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
         key: "id",
         secret: "s",
@@ -85,6 +87,7 @@ describe("handleGeocodeRequest", () => {
         fetchAddresses,
         cache: { get: vi.fn(), set: vi.fn() },
         geocode: vi.fn(),
+        responseCache: createNoopResponseCache(),
         dataKey: MOLIT_KEY,
         key: "naver-client-id",
         secret: "naver-client-secret",
@@ -109,6 +112,7 @@ describe("handleGeocodeRequest", () => {
         fetchAddresses,
         cache: { get: vi.fn(), set: vi.fn() },
         geocode: vi.fn(),
+        responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
         key: "naver-client-id",
         secret: "naver-client-secret",
@@ -143,6 +147,7 @@ describe("handleGeocodeRequest", () => {
         fetchAddresses,
         cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn(async () => {}) },
         geocode,
+        responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
         key: "id",
         secret: "s",
@@ -177,6 +182,7 @@ describe("handleGeocodeRequest", () => {
         fetchAddresses,
         cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn(async () => {}) },
         geocode,
+        responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
         key: "id",
         secret: "s",
@@ -215,6 +221,7 @@ describe("handleGeocodeRequest", () => {
         fetchAddresses,
         cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn(async () => {}) },
         geocode,
+        responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
         key: "id",
         secret: "s",
@@ -244,7 +251,7 @@ describe("handleGeocodeRequest", () => {
 
     const result = await handleGeocodeRequest(
       { regionCode: "11680", dong: null },
-      { fetchAddresses, cache, geocode, dataKey: "molit-key", key: "id", secret: "s" },
+      { fetchAddresses, cache, geocode, responseCache: createNoopResponseCache(), dataKey: "molit-key", key: "id", secret: "s" },
     );
 
     expect(result.status).toBe(200);
@@ -262,7 +269,7 @@ describe("handleGeocodeRequest", () => {
 
     const result = await handleGeocodeRequest(
       { regionCode: "11680", dong: null },
-      { fetchAddresses, cache, geocode, dataKey: "molit-key", key: "id", secret: "s" },
+      { fetchAddresses, cache, geocode, responseCache: createNoopResponseCache(), dataKey: "molit-key", key: "id", secret: "s" },
     );
 
     expect(result.status).toBe(200);

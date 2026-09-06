@@ -179,6 +179,38 @@ describe("ComplexList", () => {
     expect(screen.getByText(/신고가 한 달쯤 늦어서/)).toBeInTheDocument();
   });
 
+  /*
+   * 국토부가 멈춰 캐시로 버티는 중이면 그 사실을 **반드시** 말한다.
+   * 조용히 내주면 사용자는 며칠 지난 값을 오늘 조회한 값으로 읽는다 —
+   * 근거를 실제보다 튼튼해 보이게 하는 쪽이라 이 앱이 가장 경계하는
+   * 오표기다(`api/_lib/responseCache.ts` 머리주석).
+   */
+  it("낡은 캐시로 버티는 중이면 언제 받은 값인지 함께 말한다", () => {
+    renderList(
+      { withinSafe: [entry(unit())] },
+      { cachedAt: new Date(2026, 8, 5, 13, 0) }, // 2026-09-05
+    );
+    expect(screen.getByText(/국토교통부 서버가 응답하지 않아/)).toBeInTheDocument();
+    expect(screen.getByText(/9월 5일에 받은 값/)).toBeInTheDocument();
+    // 원래 신선도 문장도 그대로 남는다 — 대체가 아니라 덧붙임이다.
+    expect(screen.getByText(/2026-08 계약분까지/)).toBeInTheDocument();
+  });
+
+  it("평소에는 그 문장을 내지 않는다 — 없는 경고를 만들지 않는다", () => {
+    renderList({ withinSafe: [entry(unit())] });
+    expect(screen.queryByText(/국토교통부 서버가 응답하지 않아/)).not.toBeInTheDocument();
+  });
+
+  /*
+   * 거래가 0건이라 `dataAsOf`를 모르는 지역에서도 목록은 낡은 캐시에서
+   * 나온다. `dataAsOf`가 없다고 이 사실까지 함께 삼키면 안 된다.
+   */
+  it("데이터 기준일을 몰라도 낡았다는 사실은 말한다", () => {
+    renderList({ withinSafe: [entry(unit())] }, { dataAsOf: null, cachedAt: new Date(2026, 8, 5) });
+    expect(screen.getByText(/9월 5일에 받은 값/)).toBeInTheDocument();
+    expect(screen.queryByText(/계약분까지/)).not.toBeInTheDocument();
+  });
+
   it("한 덩어리가 길어도 다른 덩어리가 화면에서 밀려나지 않는다", () => {
     // 예전엔 합쳐 세서 안전 덩어리가 길 때 두 번째 헤더가 아예 안 나왔다
     // — "선이 어디에 있는가"라는 이 화면의 요점이 사라졌다. 지금은

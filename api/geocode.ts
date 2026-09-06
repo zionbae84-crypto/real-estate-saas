@@ -3,6 +3,7 @@ import { defaultWait } from "../scripts/pipeline/fetch.js";
 import { fetchComplexAddresses } from "../scripts/pipeline/geocode-addresses.js";
 import { geocodeAddress } from "./_lib/naverGeocode.js";
 import { createUpstashGeocodeCache } from "./_lib/geocodeCache.js";
+import { createUpstashResponseCache } from "./_lib/responseCache.js";
 import { createUpstashTradeCache } from "./_lib/tradeCache.js";
 import { handleGeocodeRequest } from "./_lib/handleGeocode.js";
 
@@ -27,6 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     {
       fetchAddresses: (rc, d) => fetchComplexAddresses(rc, d, new Date(), dataKey, defaultWait, tradeCache),
       cache,
+      responseCache: createUpstashResponseCache(),
       geocode: (address) => geocodeAddress(address, clientId, clientSecret),
       // 502 경로에서 실제로 새어나갈 수 있는 키는 국토부 키다 —
       // fetchComplexAddresses가 키를 쿼리 파라미터에 담아 요청하므로

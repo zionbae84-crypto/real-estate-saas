@@ -2032,6 +2032,7 @@ export function App() {
                                   아예 그리지 않는다.
                                 */
                                 dataAsOf={regionComplexes.dataAsOf}
+                                cachedAt={regionComplexes.cachedAt}
                                 hasRegionFilter={false}
                                 noRepaymentCapacity={
                                   affordability.result.loanLimit.breakdown.DSR === 0

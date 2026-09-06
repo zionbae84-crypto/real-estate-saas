@@ -6,6 +6,7 @@ import reportConfig from "../scripts/pipeline/report-config.json" with { type: "
 import regulatedRegions from "./_data/regulated-regions.json" with { type: "json" };
 import { fetchHouseholdCount } from "./_lib/householdCountApi.js";
 import { createUpstashHouseholdCountCache } from "./_lib/householdCountCache.js";
+import { createUpstashResponseCache } from "./_lib/responseCache.js";
 import { createUpstashTradeCache } from "./_lib/tradeCache.js";
 import { handleComplexesRequest } from "./_lib/handleComplexes.js";
 import type { ReportConfig } from "../scripts/pipeline/types";
@@ -39,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ),
       key,
       regions: regulatedRegions,
+      cache: createUpstashResponseCache(),
     },
   );
 

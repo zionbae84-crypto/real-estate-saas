@@ -1,9 +1,22 @@
 import { redactKey } from "../../scripts/pipeline/fetch.js";
 import type { Coordinate, GeocodeCache } from "./geocodeCache";
+import type { ResponseCache } from "./responseCache";
 
 export interface HandleGeocodeDeps {
   fetchAddresses: (regionCode: string, dong: string | null) => Promise<Map<string, string>>;
   cache: GeocodeCache;
+  /**
+   * 국토부에서 받아 온 **주소 목록**을 들고 있다가, 국토부가 멈췄을 때
+   * 마지막 성공값으로 대신 내주는 캐시({@link ResponseCache}).
+   *
+   * **좌표가 아니라 주소를 담는 이유**: 이 엔드포인트에서 실제로 죽는
+   * 곳은 `fetchAddresses`(국토부) 하나다. 그 뒤의 네이버 지오코딩은
+   * 멀쩡했고(2026-09-06 실측), 게다가 주소→좌표는 위 `cache`가 영구
+   * 보관한다. 그러니 주소 목록만 버텨 주면 지도는 그대로 뜬다.
+   *
+   * `Map`은 JSON을 왕복하지 못하므로 엔트리 배열로 담는다.
+   */
+  responseCache: ResponseCache;
   geocode: (address: string) => Promise<Coordinate | null>;
   /**
    * 국토부(공공데이터포털) API 키. **에러 메시지에서 실제로 새어나갈 수
@@ -142,7 +155,13 @@ export async function handleGeocodeRequest(
 
   let addresses: Map<string, string>;
   try {
-    addresses = await deps.fetchAddresses(regionCode, dong);
+    // 캐시를 거쳐 부른다 — 신선하면 국토부를 아예 안 부르고, 라이브가
+    // 실패하면 마지막 성공값으로 버틴다(`responseCache.ts`).
+    const resolved = await deps.responseCache.resolve<Array<[string, string]>>(
+      `addresses:${regionCode}:${dong ?? ""}`,
+      async () => [...(await deps.fetchAddresses(regionCode, dong))],
+    );
+    addresses = new Map(resolved.value);
   } catch (e) {
     return { status: 502, body: { error: redactAllKeys(e, deps) } };
   }

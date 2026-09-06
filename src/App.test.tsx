@@ -82,7 +82,7 @@ async function selectTestRegion(units: ComplexUnit[] = [DETAIL_TEST_UNIT]) {
   vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
     units,
     isRegulatedArea: null,
-    dataAsOf: null,
+    dataAsOf: null, cachedAt: null,
   });
 
   await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
@@ -244,7 +244,7 @@ describe("App - 지역 조회의 네 상태", () => {
     const spy = vi
       .spyOn(regionQuery, "fetchRegionComplexes")
       .mockRejectedValueOnce(new Error("네트워크 오류"))
-      .mockResolvedValueOnce({ units: [DETAIL_TEST_UNIT], isRegulatedArea: null, dataAsOf: null });
+      .mockResolvedValueOnce({ units: [DETAIL_TEST_UNIT], isRegulatedArea: null, dataAsOf: null, cachedAt: null });
     // 재시도가 성공한 뒤 목록이 뜨면 지도용 좌표 조회가 이어서 돈다 —
     // 테스트가 실 네트워크로 나가지 않게 고정한다. 아래 단언은 목록
     // 조회 실패 문구를 **그대로** 찾으므로, 좌표 조회가 어떻게 끝나든
@@ -281,7 +281,7 @@ describe("App - 지역 조회의 네 상태", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -310,7 +310,7 @@ describe("App - 지역 조회의 네 상태", () => {
         },
       ],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -386,7 +386,7 @@ describe("App - 매매가·면적·입주년차 슬라이더 필터", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [SMALL_UNIT, LARGE_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -419,7 +419,7 @@ describe("App - 매매가·면적·입주년차 슬라이더 필터", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [SMALL_UNIT, LARGE_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -458,7 +458,7 @@ describe("App - 매매가·면적·입주년차 슬라이더 필터", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -531,7 +531,7 @@ describe("App - 행정동으로 좁히기", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -552,7 +552,7 @@ describe("App - 행정동으로 좁히기", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -586,7 +586,7 @@ describe("App - 행정동으로 좁히기", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT],
       isRegulatedArea: null,
-      dataAsOf: "2031-04",
+      dataAsOf: "2031-04", cachedAt: null,
     });
 
     render(<App />);
@@ -606,7 +606,7 @@ describe("App - 행정동으로 좁히기", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -629,7 +629,7 @@ describe("App - 행정동으로 좁히기", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNAFFORDABLE_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -683,7 +683,7 @@ describe("App - 행정동으로 좁히기", () => {
         DONG_B_UNAFFORDABLE_UNIT,
       ],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -726,7 +726,7 @@ describe("App - 행정동으로 좁히기", () => {
         DONG_B_UNAFFORDABLE_UNIT,
       ],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -756,7 +756,7 @@ describe("App - 행정동으로 좁히기", () => {
     const spy = vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);
@@ -782,7 +782,7 @@ describe("App - 행정동으로 좁히기", () => {
     spy.mockResolvedValue({
       units: [DONG_A_UNIT, DONG_B_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
     await userEvent.click(
       screen.getByRole("button", { name: "조건 다시 넣기" }),
@@ -867,7 +867,7 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
       .mockResolvedValue({
         units: [GANGNAM_UNIT],
         isRegulatedArea: null,
-        dataAsOf: null,
+        dataAsOf: null, cachedAt: null,
       });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: [],
@@ -887,7 +887,7 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
     spy.mockResolvedValue({
       units: [SEOCHO_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
     await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
     await queryRegion("서초구");
@@ -912,7 +912,7 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
       .mockResolvedValue({
         units: [GANGNAM_UNIT],
         isRegulatedArea: null,
-        dataAsOf: null,
+        dataAsOf: null, cachedAt: null,
       });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: [],
@@ -934,7 +934,7 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
     spy.mockResolvedValue({
       units: [SEOCHO_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
     await userEvent.click(screen.getByRole("button", { name: "조건 다시 넣기" }));
     await queryRegion("서초구");
@@ -960,7 +960,7 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
       .mockResolvedValue({
         units: [GANGNAM_UNIT],
         isRegulatedArea: null,
-        dataAsOf: null,
+        dataAsOf: null, cachedAt: null,
       });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: [],
@@ -983,7 +983,7 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
     spy.mockResolvedValue({
       units: [SEOCHO_UNIT],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
     await queryRegion("서초구");
     await screen.findByText("서울특별시 서초구");
@@ -1538,7 +1538,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DETAIL_TEST_UNIT],
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: [{ complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 }],
@@ -1557,7 +1557,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DETAIL_TEST_UNIT],
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
 
     let resolveCoords: (
@@ -1595,7 +1595,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DETAIL_TEST_UNIT],
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockRejectedValue(
       new Error("네트워크 오류"),
@@ -1633,7 +1633,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
     const fetchCoords = vi
       .spyOn(regionQuery, "fetchComplexCoordinates")
@@ -1662,7 +1662,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DETAIL_TEST_UNIT],
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: [{ complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 }],
@@ -1682,7 +1682,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DETAIL_TEST_UNIT],
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: [{ complexKey: DETAIL_TEST_UNIT.complexKey, lat: 37.1, lon: 127.1 }],
@@ -1716,7 +1716,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DETAIL_TEST_UNIT],
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: [], // 지오코딩 성공은 했지만 이 단지의 좌표는 못 찾았다.
@@ -1836,7 +1836,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [DETAIL_TEST_UNIT, TOO_EXPENSIVE],
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: [
@@ -1875,7 +1875,7 @@ describe("App - 지도", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [TOO_EXPENSIVE],
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
     const fetchCoords = vi
       .spyOn(regionQuery, "fetchComplexCoordinates")
@@ -2105,7 +2105,7 @@ describe("전체화면 결과 셸", () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units,
       isRegulatedArea: null,
-      dataAsOf: "2026-01",
+      dataAsOf: "2026-01", cachedAt: null,
     });
     vi.spyOn(regionQuery, "fetchComplexCoordinates").mockResolvedValue({
       units: units.map((u, i) => ({
@@ -2309,7 +2309,7 @@ describe("전체화면 결과 셸", () => {
       vi.spyOn(regionQuery, "fetchRegionComplexes").mockImplementation(
         () => new Promise((resolve) => {
           release = () =>
-            resolve({ units: [], isRegulatedArea: null, dataAsOf: "2026-01" });
+            resolve({ units: [], isRegulatedArea: null, dataAsOf: "2026-01", cachedAt: null });
         }),
       );
 
@@ -2349,7 +2349,7 @@ describe("전체화면 결과 셸", () => {
               resolve({
                 units: [NEW_REGION_UNIT],
                 isRegulatedArea: null,
-                dataAsOf: "2026-02",
+                dataAsOf: "2026-02", cachedAt: null,
               });
           }),
       );

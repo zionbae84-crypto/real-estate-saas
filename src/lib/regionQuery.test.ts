@@ -39,7 +39,7 @@ describe("fetchRegionComplexes", () => {
   it("dataAsOf(YYYY-MM)를 함께 읽는다", async () => {
     globalThis.fetch = vi.fn(async () =>
       new Response(
-        JSON.stringify({ units: [], isRegulatedArea: null, dataAsOf: "2026-01" }),
+        JSON.stringify({ units: [], isRegulatedArea: null, dataAsOf: "2026-01", cachedAt: null }),
         { status: 200 },
       ),
     ) as typeof fetch;
@@ -120,6 +120,52 @@ describe("fetchRegionComplexes", () => {
 
     await fetchRegionComplexes("11680", "역삼동");
     expect(requestedUrl).toBe("/api/complexes?regionCode=11680&dong=%EC%97%AD%EC%82%BC%EB%8F%99");
+  });
+});
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 낡은 값 표시 — 서버가 말할 때만 화면이 말한다
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 국토부가 멈추면 서버가 마지막 성공값을 200으로 내면서 `stale`·`cachedAt`
+ * 을 함께 싣는다(`api/_lib/responseCache.ts`). 이 파싱이 어긋나면 둘 중
+ * 하나가 된다 — 낡은 값을 오늘 값처럼 보여주거나(위험), 멀쩡한 조회에
+ * 근거 없는 경고를 다는 것(거짓 경보). 둘 다 막는다.
+ */
+describe("fetchRegionComplexes — 낡은 값 표시", () => {
+  function respond(body: Record<string, unknown>) {
+    globalThis.fetch = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ units: [], isRegulatedArea: null, ...body }), {
+          status: 200,
+        }),
+    ) as unknown as typeof fetch;
+  }
+
+  it("stale과 cachedAt이 함께 오면 Date로 넘긴다", async () => {
+    respond({ dataAsOf: "2026-07", stale: true, cachedAt: "2026-09-05T04:00:00.000Z" });
+    const result = await fetchRegionComplexes("11680", null);
+    expect(result.cachedAt).toEqual(new Date("2026-09-05T04:00:00.000Z"));
+  });
+
+  it("평소 응답(두 필드 없음)에는 null이다 — 없는 경고를 만들지 않는다", async () => {
+    respond({ dataAsOf: "2026-07" });
+    expect((await fetchRegionComplexes("11680", null)).cachedAt).toBeNull();
+  });
+
+  it("stale이 true가 아니면 cachedAt이 있어도 무시한다", async () => {
+    respond({ dataAsOf: "2026-07", stale: false, cachedAt: "2026-09-05T04:00:00.000Z" });
+    expect((await fetchRegionComplexes("11680", null)).cachedAt).toBeNull();
+
+    // 옛 배포판이 다른 뜻으로 쓰던 값이 "낡았다"로 읽히지 않게 한다.
+    respond({ dataAsOf: "2026-07", stale: "true", cachedAt: "2026-09-05T04:00:00.000Z" });
+    expect((await fetchRegionComplexes("11680", null)).cachedAt).toBeNull();
+  });
+
+  it("날짜가 파싱되지 않으면 null이다 — 화면에 'Invalid Date'가 뜨지 않게", async () => {
+    respond({ dataAsOf: "2026-07", stale: true, cachedAt: "어제쯤" });
+    expect((await fetchRegionComplexes("11680", null)).cachedAt).toBeNull();
   });
 });
 

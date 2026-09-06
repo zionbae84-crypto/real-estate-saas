@@ -14,6 +14,15 @@ export interface RegionComplexesResult {
    * 라는 사실 서술로 그린다.
    */
   dataAsOf: string | null;
+  /**
+   * 이 응답이 **국토부가 응답하지 않아 캐시에서 나온 것**이면 그 값을
+   * 받은 시각(ISO 문자열), 아니면 `null`.
+   *
+   * 서버는 낡은 값을 낼 때만 이 필드를 싣는다(`api/_lib/responseCache.ts`).
+   * 화면은 이것으로 신선도 줄에 "○월 ○일에 받은 값"을 덧붙인다 —
+   * 낡은 값을 조용히 내주면 사용자는 오늘 조회한 값으로 읽는다.
+   */
+  cachedAt: Date | null;
 }
 
 interface ApiUnit extends Omit<ComplexUnit, "landLeasehold"> {
@@ -24,6 +33,8 @@ interface ApiResponse {
   units: ApiUnit[];
   isRegulatedArea: boolean | null;
   dataAsOf?: unknown;
+  stale?: unknown;
+  cachedAt?: unknown;
 }
 
 interface ApiErrorBody {
@@ -59,7 +70,22 @@ export async function fetchRegionComplexes(
     units: body.units.map((u) => ({ ...u, landLeasehold: narrowLandLeasehold(u.landLeasehold) })),
     isRegulatedArea: body.isRegulatedArea,
     dataAsOf: narrowDataAsOf(body.dataAsOf),
+    cachedAt: narrowCachedAt(body.stale, body.cachedAt),
   };
+}
+
+/**
+ * 응답이 낡은 캐시에서 나왔다고 **말할 때만** 그 시각을 낸다.
+ *
+ * `stale`이 정확히 `true`가 아니면 `null`이다 — 옛 배포판(두 필드가 아예
+ * 없다)이나 형식이 어긋난 값이 "낡았다"로 읽히면, 화면이 멀쩡한 조회에
+ * 대고 근거 없는 경고를 달게 된다. 날짜도 실제로 파싱되는 것만 통과시킨다:
+ * `Invalid Date`를 그대로 흘리면 화면에 "Invalid Date에 받은 값"이 뜬다.
+ */
+function narrowCachedAt(stale: unknown, cachedAt: unknown): Date | null {
+  if (stale !== true || typeof cachedAt !== "string") return null;
+  const parsed = new Date(cachedAt);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 
 /**

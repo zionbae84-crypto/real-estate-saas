@@ -531,7 +531,7 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [...COMPLEX_UNITS],
       isRegulatedArea: null,
-      dataAsOf: null,
+      dataAsOf: null, cachedAt: null,
     });
 
     render(<App />);

@@ -14,6 +14,11 @@ export interface RegionComplexesState {
    * 화면은 그때 신선도 문구를 아예 쓰지 않는다(`regionQuery.ts` 참고).
    */
   dataAsOf: string | null;
+  /**
+   * 국토부가 응답하지 않아 캐시로 버틴 조회면 그 값을 받은 시각,
+   * 아니면 `null`(`lib/regionQuery.ts`의 `cachedAt` 문서 참고).
+   */
+  cachedAt: Date | null;
   error: string | null;
   query: (regionCode: string) => void;
   retry: () => void;
@@ -43,6 +48,7 @@ export function useRegionComplexes(): RegionComplexesState {
   const [units, setUnits] = useState<ComplexUnit[]>([]);
   const [isRegulatedArea, setIsRegulatedArea] = useState<boolean | null>(null);
   const [dataAsOf, setDataAsOf] = useState<string | null>(null);
+  const [cachedAt, setCachedAt] = useState<Date | null>(null);
   const [error, setError] = useState<string | null>(null);
   const lastRegionCode = useRef<string | null>(null);
 
@@ -57,12 +63,14 @@ export function useRegionComplexes(): RegionComplexesState {
         setUnits(result.units);
         setIsRegulatedArea(result.isRegulatedArea);
         setDataAsOf(result.dataAsOf);
+        setCachedAt(result.cachedAt);
         setStatus("success");
       })
       .catch((e: unknown) => {
         if (lastRegionCode.current !== regionCode) return;
         setUnits([]);
         setDataAsOf(null);
+        setCachedAt(null);
         setError(e instanceof Error ? e.message : "알 수 없는 오류");
         setStatus("error");
       });
@@ -74,5 +82,5 @@ export function useRegionComplexes(): RegionComplexesState {
     if (lastRegionCode.current !== null) run(lastRegionCode.current);
   }, [run]);
 
-  return { status, units, isRegulatedArea, dataAsOf, error, query, retry };
+  return { status, units, isRegulatedArea, dataAsOf, cachedAt, error, query, retry };
 }

@@ -39,6 +39,16 @@ export interface ComplexListProps {
    * 않는 것이 유일하게 정직한 처리다.
    */
   dataAsOf: string | null;
+  /**
+   * 국토부가 응답하지 않아 **캐시에서 나온 목록**이면 그 값을 받은 시각.
+   * 평소(라이브 조회 성공)에는 `null`이고, 그때는 아무것도 덧붙이지
+   * 않는다(`lib/regionQuery.ts`의 `cachedAt` 문서 참고).
+   *
+   * 이 사실을 화면에 내지 않으면 사용자는 며칠 지난 값을 오늘 조회한
+   * 값으로 읽는다 — 근거를 실제보다 튼튼해 보이게 하는 쪽이라 이 앱이
+   * 가장 경계하는 오표기다(`dataAsOf` 주석과 같은 이유).
+   */
+  cachedAt?: Date | null;
   /** 지역 필터가 걸려 있는가 — 0개 안내 문구를 고르는 데 쓴다 */
   hasRegionFilter: boolean;
   /** 상환 능력(DSR) 자체가 0인가 */
@@ -131,6 +141,7 @@ export interface ComplexListProps {
 export function ComplexList({
   result,
   dataAsOf,
+  cachedAt = null,
   hasRegionFilter,
   noRepaymentCapacity,
   pageSize = PAGE_SIZE,
@@ -244,7 +255,7 @@ export function ComplexList({
           hasRegionFilter={hasRegionFilter}
           noRepaymentCapacity={noRepaymentCapacity}
         />
-        <Freshness dataAsOf={dataAsOf} />
+        <Freshness dataAsOf={dataAsOf} cachedAt={cachedAt} />
       </section>
     );
   }
@@ -303,7 +314,7 @@ export function ComplexList({
         focusedComplexKey={focusedComplexKey}
       />
 
-      <Freshness dataAsOf={dataAsOf} />
+      <Freshness dataAsOf={dataAsOf} cachedAt={cachedAt} />
     </section>
   );
 }
@@ -591,13 +602,48 @@ function EmptyMessage({
   );
 }
 
-function Freshness({ dataAsOf }: { dataAsOf: string | null }) {
-  // 모르면 말하지 않는다 — 위 prop 주석 참고.
-  if (dataAsOf === null) return null;
+/**
+ * 낡은 캐시로 버틴 조회임을 알리는 한 문장.
+ *
+ * **별도 배너가 아니라 신선도 줄에 붙인다**(사용자 결정). 이 줄이 이미
+ * "이 목록이 언제 것인지"를 말하는 자리라, 같은 성격의 사실은 여기
+ * 모이는 편이 읽기 쉽다. 대신 굵게 내 눈에 걸리게 한다 —
+ * `.complex-stale-note`.
+ *
+ * 날짜만 적고 시각은 적지 않는다. 이 값의 쓸모는 "얼마나 묵었나"이고,
+ * 그 판단에 분 단위는 필요 없다.
+ */
+function staleNote(cachedAt: Date): string {
+  const when = `${cachedAt.getMonth() + 1}월 ${cachedAt.getDate()}일`;
+  return `지금 국토교통부 서버가 응답하지 않아 ${when}에 받은 값을 보여드려요.`;
+}
+
+function Freshness({
+  dataAsOf,
+  cachedAt,
+}: {
+  dataAsOf: string | null;
+  cachedAt: Date | null;
+}) {
+  /*
+   * 모르면 말하지 않는다 — 위 prop 주석 참고.
+   *
+   * **단 `cachedAt`이 있으면 그것만이라도 말한다.** 낡은 값을 보여주는
+   * 중이라는 사실은 `dataAsOf`를 아는지와 무관하게 알려야 한다 — 거래가
+   * 0건이라 `dataAsOf`가 `null`인 지역에서도 목록은 낡은 캐시에서 나온다.
+   */
+  if (dataAsOf === null && cachedAt === null) return null;
   return (
     <p className="complex-freshness">
-      {dataAsOf} 계약분까지 반영했어요. 실거래 신고가 한 달쯤 늦어서 최근
-      달은 거래가 실제보다 적게 잡혀요.
+      {dataAsOf !== null && (
+        <>
+          {dataAsOf} 계약분까지 반영했어요. 실거래 신고가 한 달쯤 늦어서 최근
+          달은 거래가 실제보다 적게 잡혀요.
+        </>
+      )}
+      {cachedAt !== null && (
+        <span className="complex-stale-note">{staleNote(cachedAt)}</span>
+      )}
     </p>
   );
 }
