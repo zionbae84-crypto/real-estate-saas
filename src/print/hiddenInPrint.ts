@@ -63,12 +63,14 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // 조작할 수 없다. 실제로 무엇으로 좁혔는지는 목록에 뜬 행들의
   // 법정동명이 그대로 말한다.
   ".dong-narrow",
-  // `.housing-type-select`(아래)와 `.dong-narrow`(위)를 함께 감싸는
-  // 그룹이자, 그 아래 단지 목록과 갈라 주는 연한 구분선을 지닌 자리다
-  // (App.tsx·styles.css 참고). 자식 둘은 이미 각자 이 목록에 있어
-  // display:none이 걸리지만, 부모 자체는 지우지 않으면 자식이 사라진
-  // 자리에 내용 없는 구분선(border-bottom)만 종이에 남는다 — 그래서
-  // 부모도 통째로 지운다.
+  // `.dong-narrow`(위)를 감싸는 그룹이자, 그 아래 단지 목록과 갈라 주는
+  // 연한 구분선을 지닌 자리다(App.tsx·styles.css 참고). 자식은 이미 이
+  // 목록에 있어 display:none이 걸리지만, 부모 자체는 지우지 않으면 자식이
+  // 사라진 자리에 내용 없는 구분선(border-bottom)만 종이에 남는다 —
+  // 그래서 부모도 통째로 지운다.
+  //
+  // 예전에는 `.housing-type-select`(매물 유형)도 이 그룹의 자식이었다.
+  // 사용자 지시로 그 select를 없애면서 이 목록에서도 함께 뺐다.
   ".complex-filters",
   // "조건 다시 넣기". 화면 1로 돌아가는 화면 전환 버튼이라 종이에서는
   // 누를 대상이 없다 — 지금까지 이 목록에 없어 죽은 버튼 모양이 종이에
@@ -220,10 +222,6 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // (`.dong-empty` / `ComplexList`의 예산·상환능력 문구)가 말하고,
   // 그쪽은 인쇄에 그대로 남는다.
   ".complex-map-empty",
-  // 매물 유형(아파트/오피스텔) 필터 자리 — 지금은 늘 "아파트"로 고정된
-  // 비활성 select다(App.tsx 참고). 종이 위에서는 조작할 수 없는 장치이고,
-  // 값 자체도 "아파트"뿐이라 지워도 잃는 정보가 없다.
-  ".housing-type-select",
   // 한도 결정 내역 팝업의 말풍선 꼬리(`ComplexDetail.tsx`의
   // `.detail-binding-popup`). 화면에서는 이 삼각형이 팝업을 아이콘과
   // 시각적으로 이어 주지만, 종이에서는 팝업 자체가 흐름에 놓이는

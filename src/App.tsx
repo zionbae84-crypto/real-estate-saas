@@ -1959,34 +1959,25 @@ export function App() {
                     regionComplexes.units.length > 0 && (
                       <>
                           {/*
-                            매물 유형·행정동 좁히기를 한 그룹으로 묶는다.
-                            아래 목록(`ComplexList`)과는 성격이 다른
-                            "조회 조건" 축이라, 이 그룹 전체 아래에 연한
-                            구분선을 한 번만 긋는다(`.complex-filters`) —
-                            두 필드 각각에 선을 그으면 필드 사이에도 선이
-                            생겨 "조건 대 결과"가 아니라 "필드 대 필드"로
-                            읽힌다. 인쇄에서는 이 그룹 전체가 사라진다
-                            (`src/print/hiddenInPrint.ts`의 `.complex-filters`
-                            항목 참고) — 안 그러면 자식(둘 다 인쇄 숨김
-                            대상)만 지워지고 빈 구분선만 종이에 남는다.
+                            조회 조건(지금은 행정동 좁히기 하나)을 묶는
+                            그룹. 아래 목록(`ComplexList`)과는 성격이 다른
+                            축이라, 이 그룹 전체 아래에 연한 구분선을 한 번만
+                            긋는다(`.complex-filters`). 인쇄에서는 이 그룹
+                            전체가 사라진다(`src/print/hiddenInPrint.ts`의
+                            `.complex-filters` 항목 참고) — 안 그러면
+                            자식(인쇄 숨김 대상)만 지워지고 빈 구분선만
+                            종이에 남는다.
+
+                            **예전에는 여기 "매물 유형" select가 있었다.**
+                            늘 "아파트"로 고정된 비활성 placeholder였는데,
+                            사용자 지시로 없앴다("지금 현재 모두 아파트
+                            대상으로 하니 매물유형은 제거해줘. 추후 다른
+                            유형이 추가되면 그때 다시 추가할게"). 고를 것이
+                            하나뿐인 비활성 컨트롤은 자리만 차지하고 "여기서
+                            뭔가 고를 수 있다"는 잘못된 신호를 준다 —
+                            오피스텔 실거래가를 연동할 때 다시 세운다.
                           */}
                           <div className="complex-filters">
-                            {/*
-                              매물 유형(아파트/오피스텔) 필터 자리 — 지금은
-                              비활성 placeholder다. 오피스텔 실거래가 데이터는
-                              아직 연동하지 않았다(국토부 아파트매매 실거래가
-                              API만 쓴다 — 별도 스펙에서 오피스텔 매매 실거래가
-                              API를 새로 연동할 때 이 select를 활성화한다).
-                              `dongOptions`(동 좁히기)와 달리 데이터 유무에
-                              좌우되지 않는 정적 요소라 그 조건 밖, 사이드바
-                              상단에 항상 그린다.
-                            */}
-                            <div className="field housing-type-select">
-                              <label htmlFor="housing-type">매물 유형</label>
-                              <select id="housing-type" value="apartment" disabled>
-                                <option value="apartment">아파트</option>
-                              </select>
-                            </div>
                             {/*
                               `.dong-narrow`는 인쇄에서 지우는 선택자다
                               (`src/print/hiddenInPrint.ts`) — 종이 위에서는

@@ -706,11 +706,11 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
 
   /**
    * 비활성 컨트롤은 WCAG 1.4.3의 명시적 예외다("inactive user interface
-   * component"). 지금 걸리는 것은 둘 — 오피스텔 연동 전까지 고정된
-   * `.housing-type-select select:disabled`와, 필수 입력이 덜 찬 동안의
-   * `.entry-screen button:disabled`다. 예외를 선택자 패턴으로 두는
-   * 이유는, 새 규칙이 이 예외에 올라타려면 `:disabled`를 실제로 달아야
-   * 하기 때문이다.
+   * component"). 지금 걸리는 것은 하나 — 필수 입력이 덜 찬 동안의
+   * `.entry-screen button:disabled`다(예전에는 늘 "아파트"로 고정돼 있던
+   * `.housing-type-select select:disabled`도 있었는데, 사용자 지시로 그
+   * select가 없어졌다). 예외를 선택자 패턴으로 두는 이유는, 새 규칙이 이
+   * 예외에 올라타려면 `:disabled`를 실제로 달아야 하기 때문이다.
    */
   const isDisabledControl = (selector: string) => selector.includes(":disabled");
 
@@ -881,23 +881,37 @@ describe("텍스트 색 사용처 전수 검사 — styles.css의 모든 color �
    * `--seed-color-fg-neutral-subtle`은 이 목록에서 빠졌다 — **없어진 것이
    * 아니라 우리 CSS의 소비처가 바뀐 것이다.**
    *
-   * 예전 소비처는 결과 화면 상단바의 모든 값 라벨(`.result-topbar-item-label`,
+   * 첫 소비처는 결과 화면 상단바의 모든 값 라벨(`.result-topbar-item-label`,
    * 11px)이었다. 화면 2 재스킨이 그 자리를 프로토타입의 `--result-gray`
-   * (#4f6a8c, 흰 면 5.57:1)로 옮기면서, `src/styles.css`에 남은 소비처는
-   * 비활성 컨트롤(`.housing-type-select select:disabled`) 하나뿐이 됐고
-   * 그 자리는 WCAG 1.4.3의 명시적 예외라 위 검사에서 제외된다.
+   * (#4f6a8c, 흰 면 5.57:1)로 옮기면서 남은 소비처는 비활성 컨트롤
+   * (`.housing-type-select select:disabled`) 하나뿐이 됐고, **사용자
+   * 지시로 그 select 자체가 없어지면서 이제 `src/styles.css`에 소비처가
+   * 하나도 없다**("지금 현재 모두 아파트 대상으로 하니 매물유형은
+   * 제거해줘").
    *
    * 토큰 자체는 죽지 않았다 — SEED 벤더 CSS가 `.seed-field__description`과
    * text-input placeholder에 그대로 쓴다(`src/seed-brand.css`의 해당 주석).
-   * 그쪽은 `scripts/seed-vendor-colors.test.ts`가 본다. 그래서 여기서는
-   * **"우리 CSS에서 조용히 사라지지는 않았다"**만 잠근다.
+   * 그쪽은 `scripts/seed-vendor-colors.test.ts`가 본다.
+   *
+   * **그래서 "0개여야 한다"가 아니라 "쓰려면 비활성 컨트롤에만"으로
+   * 잠근다.** 0개를 못박으면 오피스텔 연동 때 그 select가 돌아오는
+   * 정상 변경이 이 검사를 깨뜨린다. 반대로 검사를 지우면, 누군가 이
+   * 토큰을 평범한 글자색으로 되살렸을 때(그 자리는 흰 면 대비가
+   * 모자란다) 아무도 막지 않는다 — 지금 지키려는 것은 그 경계다.
    */
-  it("--seed-color-fg-neutral-subtle은 비활성 컨트롤에만 남아 있다", () => {
+  it("--seed-color-fg-neutral-subtle을 쓴다면 비활성 컨트롤에만 쓴다", () => {
     const consumers = COLOR_RULES.filter(
       (r) => r.color === "var(--seed-color-fg-neutral-subtle)",
     ).map((r) => r.selector);
 
-    expect(consumers.length).toBeGreaterThan(0);
+    // 지금은 0개다(위 주석). 늘어나면 전부 :disabled여야 한다.
     expect(consumers.every((s) => isDisabledControl(s))).toBe(true);
+  });
+
+  // 변이 검사: 위 단언이 "0개라서" 공허하게 통과하는 것이 아니라, 비활성이
+  // 아닌 소비처가 생기면 실제로 걸러 내는지 확인한다.
+  it("비활성이 아닌 자리에서 쓰면 잡아낸다(변이 검사)", () => {
+    const poisoned = [".some-label", ".region-results-sidebar select:disabled"];
+    expect(poisoned.every((s) => isDisabledControl(s))).toBe(false);
   });
 });
