@@ -1520,6 +1520,43 @@ describe("App - 지도", () => {
     vi.restoreAllMocks();
   });
 
+  /*
+   * ══════════════════════════════════════════════════════════════
+   * 목록과 좌표는 **나란히** 뜬다
+   * ══════════════════════════════════════════════════════════════
+   *
+   * 예전에는 좌표가 목록의 성공을 기다렸고, 콜드 조회에서 두 시간이
+   * 그대로 더해졌다 — 실측(대구 수성구): 7.4초 + 10.7초 = 18.1초.
+   * 나란히 걸면 긴 쪽인 10.7초로 끝난다.
+   *
+   * **이 검사가 없으면 되돌아가도 아무도 모른다.** 직렬로 돌려놔도
+   * 화면은 똑같이 동작하고(그저 느릴 뿐이다) 다른 검사는 전부 통과한다.
+   * 그래서 "목록이 아직 응답하지 않은 동안에 좌표 조회가 이미 떠 있다"를
+   * 직접 붙든다.
+   */
+  it("좌표 조회는 목록 조회의 응답을 기다리지 않는다", async () => {
+    // 목록 조회를 손으로 풀어 주기 전까지 붙잡아 둔다.
+    let releaseComplexes!: (value: regionQuery.RegionComplexesResult) => void;
+    vi.spyOn(regionQuery, "fetchRegionComplexes").mockReturnValue(
+      new Promise((resolve) => {
+        releaseComplexes = resolve;
+      }),
+    );
+    const fetchCoords = vi
+      .spyOn(regionQuery, "fetchComplexCoordinates")
+      .mockResolvedValue({ units: [], partialFailureCount: 0 });
+
+    render(<App />);
+    await fillProfile();
+    await chooseRegion();
+
+    // 목록은 아직 응답하지 않았는데 좌표는 이미 떠 있어야 한다.
+    await vi.waitFor(() => expect(fetchCoords).toHaveBeenCalledWith("11680", null));
+
+    // 뒷정리: 붙잡아 둔 목록 조회를 풀어 준다.
+    releaseComplexes({ units: [], isRegulatedArea: null, dataAsOf: null, cachedAt: null });
+  });
+
   async function fillProfile() {
     await userEvent.type(screen.getByLabelText(/얼마 있어요/), "150000");
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
@@ -1629,7 +1666,18 @@ describe("App - 지도", () => {
     await screen.findByRole("region", { name: "단지 지도" });
   });
 
-  it("단지가 0건인 지역에서는 좌표를 묻지도, 지도 자리를 그리지도 않는다", async () => {
+  /*
+   * 좌표 조회는 이제 목록 조회와 **나란히** 뜬다(`handleRegionSelect`) —
+   * 예전에는 "목록이 성공하고 그릴 단지가 있으면 그때"였고, 이 검사도
+   * `fetchCoords`가 아예 안 불리는 것을 못박고 있었다. 그 기다림이
+   * 콜드 조회 시간을 그대로 더하고 있어 걷어냈다(대구 수성구 실측
+   * 18.1초 → 10.7초).
+   *
+   * **여기서 지켜야 하는 것은 호출 횟수가 아니라 화면이다.** 좌표를
+   * 미리 받아 왔더라도, 그릴 것이 없으면 지도 자리도 로딩·실패 문구도
+   * 나오면 안 된다 — 아래 단언들이 그것이고, 그쪽은 그대로 남는다.
+   */
+  it("단지가 0건인 지역에서는 좌표를 미리 받아도 지도 자리를 그리지 않는다", async () => {
     vi.spyOn(regionQuery, "fetchRegionComplexes").mockResolvedValue({
       units: [],
       isRegulatedArea: null,
@@ -1646,8 +1694,8 @@ describe("App - 지도", () => {
     // 지역 조회는 끝났다(0건이라는 사실을 화면이 이미 말한다).
     await screen.findByText(/실거래가 자체가/);
 
-    // 그릴 것이 없다는 걸 이미 아는데 국토부·네이버 호출량을 쓰면 안 된다.
-    expect(fetchCoords).not.toHaveBeenCalled();
+    // 나란히 걸므로 좌표 조회 자체는 떠 있다 — 위 주석 참고.
+    expect(fetchCoords).toHaveBeenCalledWith("11680", null);
     // "데이터가 없어요" 옆에 지도 로딩/실패 안내가 나란히 뜨면 안 된다.
     expect(screen.queryByText("지도를 불러오고 있어요…")).not.toBeInTheDocument();
     expect(
@@ -1864,7 +1912,12 @@ describe("App - 지도", () => {
     expect(screen.queryByRole("button", { name: /비싼단지/ })).not.toBeInTheDocument();
   });
 
-  it("예산에 맞는 단지가 없으면 좌표를 묻지 않고, 실패가 아니라는 것이 드러나는 문구를 보여준다", async () => {
+  /*
+   * 위 검사와 같은 이유로 이름이 바뀌었다 — 좌표는 나란히 받아 오고,
+   * 여기서 잠그는 것은 **그래도 화면이 "실패"나 "로딩"으로 보이지
+   * 않는다**는 것이다. 여기서는 아무것도 실패하지 않았다.
+   */
+  it("예산에 맞는 단지가 없으면 좌표를 받아 왔더라도 실패가 아니라는 것이 드러나는 문구를 보여준다", async () => {
     const TOO_EXPENSIVE: ComplexUnit = {
       ...DETAIL_TEST_UNIT,
       complexKey: "11680|테스트동|2015|비싼단지",
@@ -1887,8 +1940,8 @@ describe("App - 지도", () => {
 
     await screen.findByText("조건에 맞는 단지가 없어 지도에 표시할 단지가 없어요.");
 
-    // 그릴 것이 없다는 걸 이미 아는데 지오코딩 호출량을 쓰면 안 된다.
-    expect(fetchCoords).not.toHaveBeenCalled();
+    // 나란히 걸므로 좌표 조회 자체는 떠 있다 — 위 주석 참고.
+    expect(fetchCoords).toHaveBeenCalledWith("11680", null);
     // 실패·로딩과 절대 같은 문구를 쓰지 않는다 — 여기서는 아무것도 실패하지 않았다.
     expect(screen.queryByText("지도를 불러오고 있어요…")).not.toBeInTheDocument();
     expect(screen.queryByText("단지 위치를 불러오지 못했어요.")).not.toBeInTheDocument();

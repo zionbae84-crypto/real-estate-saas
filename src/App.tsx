@@ -369,7 +369,33 @@ export function App() {
     setFocusedComplexKey(null);
     clearComplexSelection();
     setCurrentRegionCode(regionCode);
+    /*
+     * **목록과 좌표를 나란히 건다.**
+     *
+     * 예전에는 좌표 조회가 목록 조회의 성공을 기다렸다(아래 `mapSnapshot`
+     * 위에 있던 effect). 그래서 콜드 조회에서 두 시간이 그대로 더해졌다 —
+     * 실측(대구 수성구): 목록 7.4초 + 좌표 10.7초 = 18.1초. 나란히 걸면
+     * 둘 중 긴 쪽인 10.7초로 끝난다.
+     *
+     * 렌더 쪽은 손대지 않아도 된다 — `liveMapReady`는 두 조회가 **모두**
+     * 성공해야 참이고, `isRegionSwitchLoading`은 목록이 로딩 중인 경우를
+     * 이미 포함하므로 좌표가 먼저 도착하든 나중에 도착하든 그동안은
+     * 앞 지역 지도(`mapSnapshot`)가 그대로 남는다.
+     *
+     * ── 무엇을 내주었나 ─────────────────────────────────────────
+     *
+     * 예전 effect에는 `hasMappedUnits` 조건이 있었다 — 예산에 맞는 단지가
+     * 0개면 그릴 것이 없으니 지오코딩 호출량을 아예 쓰지 않았다. 나란히
+     * 걸면 그 절약이 사라진다.
+     *
+     * 그래도 바꾼 이유: 주소→좌표 캐시는 **만료가 없고**(`geocodeCache`),
+     * 좌표는 예산과 무관하게 지역 단위로 한 번만 받는다. 그래서 낭비는
+     * "그 지역을 처음 열 때 한 번"으로 끝나고, 그마저도 사용자가 예산을
+     * 올리는 순간 이미 데워진 캐시가 된다. 반면 아낀 7.4초는 조회할
+     * 때마다 돌아온다.
+     */
     regionComplexes.query(regionCode);
+    complexCoordinates.query(regionCode, null);
   }
 
   /**
@@ -644,30 +670,16 @@ export function App() {
   const hasMappedUnits = mappedUnits.length > 0;
 
   /*
-   * 좌표 조회를 건다.
+   * 좌표 조회는 여기서 걸지 않는다 — `handleRegionSelect`가 목록 조회와
+   * **나란히** 건다(그 함수의 주석에 이유를 적었다). 예전에는 이 자리에
+   * "목록이 성공하고 그릴 단지가 있으면 그때 좌표를 건다"는 effect가
+   * 있었고, 그 기다림이 콜드 조회 시간을 그대로 더하고 있었다.
    *
-   * **이 effect는 `hasMappedUnits`(지도에 실제로 그릴 단지가 있는가)
-   * 아래에 있어야 한다** — 의존성 배열은 렌더 중에 평가되므로, 선언보다
-   * 위에 두면 TDZ에 걸린다.
-   *
-   * 조건이 예전의 "이 지역에 단지가 하나라도 있는가"(`hasRegionUnits`)에서
-   * 여기로 옮겨 온 이유: 지도가 이제 예산에 맞는 단지만 그리므로, 지역에
-   * 단지가 많아도 예산에 맞는 것이 0개면 그릴 것이 없다. 그릴 것이 없는
-   * 줄 이미 아는 채로 지오코딩 호출량을 쓰지 않는다.
-   *
-   * 좌표는 여전히 **지역 전체**로 한 번 받아 온다(`query(regionCode, null)`) —
+   * 좌표는 **지역 전체**로 한 번 받는다(`query(regionCode, null)`) —
    * 캐시 단위를 지역으로 두어야 동을 바꾸거나 예산을 조금 움직일 때마다
    * 다시 묻지 않는다. 지도에 무엇을 그릴지는 아래 렌더가 `mappedUnits`로
    * 따로 정한다.
    */
-  useEffect(() => {
-    if (regionComplexes.status !== "success" || currentRegionCode === null) return;
-    if (!hasMappedUnits) return;
-    complexCoordinates.query(currentRegionCode, null);
-    // `complexCoordinates.query`는 useCallback([], ...)이라 참조가 안
-    // 고정돼 있다 — 그래도 의존성에 적어 둔다. 이 effect가 그 사실에
-    // 조용히 기대고 있으면, 훅 쪽이 바뀌는 날 여기서 무한 루프가 난다.
-  }, [regionComplexes.status, currentRegionCode, hasMappedUnits, complexCoordinates.query]);
 
   /**
    * 지도에 마지막으로 성공해서 그렸던 화면 — **지역을 바꾸는 동안에도
