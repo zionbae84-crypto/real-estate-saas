@@ -123,9 +123,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ]);
       await Promise.all([complexes.pending, geocode.pending]);
 
-      // 502(업스트림 실패)는 데우지 못한 것이다 — 성공으로 세지 않는다.
+      /*
+       * 502(업스트림 실패)는 데우지 못한 것이다 — 성공으로 세지 않는다.
+       * **핸들러가 낸 메시지를 그대로 싣는다.** 상태 코드만으로는 국토부가
+       * 한도를 막은 것인지 다른 이유인지 가릴 수 없다. 그 메시지는 이미
+       * 핸들러 안에서 키를 가린 것이다(`redactKey`).
+       */
       if (complexes.status !== 200 || geocode.status !== 200) {
-        throw new Error(`데우지 못했습니다: complexes ${complexes.status}, geocode ${geocode.status}`);
+        const why = (label: string, r: { status: number; body: unknown }) =>
+          r.status === 200
+            ? null
+            : `${label} ${r.status} ${String((r.body as { error?: string })?.error ?? "").slice(0, 120)}`;
+        throw new Error(
+          [why("complexes", complexes), why("geocode", geocode)].filter((x) => x !== null).join(" / "),
+        );
       }
     },
   });

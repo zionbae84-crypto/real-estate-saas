@@ -146,7 +146,9 @@ describe("runWarm", () => {
 
     expect(got.attempted).toBe(10);
     expect(got.warmed).toBe(8);
-    expect(got.failed.sort()).toEqual(["R3", "R7"]);
+    expect(got.failed.map((f) => f.region).sort()).toEqual(["R3", "R7"]);
+    // 이유도 함께 남는다 — 코드만 남기면 왜 실패했는지 다시 추측해야 한다.
+    expect(got.failed.every((f) => f.reason.includes("국토부 500"))).toBe(true);
   });
 
   it("데울 지역이 없으면 아무것도 하지 않는다", async () => {

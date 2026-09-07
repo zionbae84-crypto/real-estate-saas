@@ -32,8 +32,12 @@ export interface RunWarmResult {
   attempted: number;
   /** 그중 성공한 수 */
   warmed: number;
-  /** 실패한 지역 코드 — 한도 초과·업스트림 장애를 눈으로 보려고 남긴다 */
-  failed: string[];
+  /**
+   * 실패한 지역과 **그 이유**. 코드만 남기면 "왜 실패했는지"를 다시
+   * 추측해야 한다 — 실제로 첫 측정에서 28곳이 실패했는데 이유를 몰라
+   * 동시성 탓인지 업스트림 탓인지 가릴 수 없었다.
+   */
+  failed: Array<{ region: string; reason: string }>;
   /** 다음 실행이 이어받을 자리 */
   nextIndex: number;
   elapsedMs: number;
@@ -48,7 +52,7 @@ export async function runWarm(options: RunWarmOptions): Promise<RunWarmResult> {
   let index = Number.isInteger(options.startIndex) ? options.startIndex : 0;
   if (index < 0 || index >= regions.length) index = 0;
 
-  const failed: string[] = [];
+  const failed: Array<{ region: string; reason: string }> = [];
   let attempted = 0;
   let warmed = 0;
 
@@ -65,10 +69,11 @@ export async function runWarm(options: RunWarmOptions): Promise<RunWarmResult> {
         try {
           await warmOne(regionCode);
           return null;
-        } catch {
+        } catch (e) {
           // 한 지역이 실패해도 나머지는 계속 데운다 — 크론이 통째로
           // 무너지면 아무 지역도 안 데워진다.
-          return regionCode;
+          const reason = e instanceof Error ? e.message : String(e);
+          return { region: regionCode, reason: reason.slice(0, 200) };
         }
       }),
     );
