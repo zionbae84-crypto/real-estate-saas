@@ -24,6 +24,13 @@ export const noopHouseholdCountCache: HouseholdCountCache = {
 /** PNU 하나로 세대수를 실제로 조회하는 함수의 모양. 진짜 구현(HTTP 호출)은 `api/_lib/`에 둔다. */
 export type FetchHouseholdCount = (pnu: string) => Promise<number | null>;
 
+/**
+ * 시군구 하나의 세대수를 한 번에 긁어 오는 함수의 모양(PNU → 세대수).
+ * 진짜 구현은 `api/_lib/householdCountApi.ts`의
+ * `fetchHouseholdCountsByRegion`이다.
+ */
+export type FetchHouseholdCountsByRegion = (regionCode: string) => Promise<Map<string, number>>;
+
 /** PNU 목록 전체로 세대수를 배치 조회하는 함수의 모양. `live.ts`가 이 모양을 받는다. */
 export type HouseholdCountLookup = (pnus: readonly string[]) => Promise<Map<string, number>>;
 
@@ -38,6 +45,35 @@ export const noopHouseholdCountLookup: HouseholdCountLookup = async () => new Ma
  */
 export const HOUSEHOLD_COUNT_CONCURRENCY = 16;
 
+/** PNU 앞 5자리가 곧 시군구 코드다(`pnu.ts` 참고). */
+function regionOf(pnu: string): string | null {
+  return pnu.length >= 5 ? pnu.slice(0, 5) : null;
+}
+
+/** 목록을 `concurrency`개씩 끊어 병렬로 돈다. 결과 순서는 입력 순서 그대로다. */
+async function inBatches<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  const out: R[] = [];
+  for (let i = 0; i < items.length; i += concurrency) {
+    out.push(...(await Promise.all(items.slice(i, i + concurrency).map(fn))));
+  }
+  return out;
+}
+
+export interface LookupHouseholdCountsOptions {
+  /** 동시에 띄우는 요청 수. 기본값 {@link HOUSEHOLD_COUNT_CONCURRENCY}. */
+  concurrency?: number;
+  /**
+   * 시군구 일괄 조회. 주면 캐시 미스가 많을 때 단건 조회 대신 이것을 쓴다
+   * (아래 {@link lookupHouseholdCounts} 문서의 "일괄로 가는 조건" 참고).
+   * 안 주면 예전처럼 전부 단건으로 돈다 — 오프라인 배치·기존 테스트가 그렇다.
+   */
+  fetchByRegion?: FetchHouseholdCountsByRegion;
+}
+
 /**
  * PNU 목록에서 세대수를 배치로 조회한다. 캐시를 먼저 보고, 없을 때만
  * 실제 API를 부른다 — `handleGeocode.ts`의 `resolveCoordinate`와 같은
@@ -50,43 +86,127 @@ export const HOUSEHOLD_COUNT_CONCURRENCY = 16;
  * 입주년차)가 아니라 부가 정보라 그 구분을 화면까지 끌고 갈 만한 무게가
  * 없다는 판단이다. 둘 다 결과 Map에 그 PNU가 없는 것으로 나타나고,
  * 호출부는 "모른다"로만 다룬다.
+ *
+ * ── 일괄로 가는 조건 ─────────────────────────────────────────────
+ *
+ * 캐시 미스가 `concurrency`보다 많고 `fetchByRegion`이 있으면, 단건을
+ * 여러 배치로 도는 대신 **시군구별로 한 번씩** 긁어 온다. 실측 근거:
+ *
+ *     단건 16건 동시 → 741ms       (해운대구 242개 = 15배치 ≈ 11초)
+ *     시군구 일괄     → 1,290ms    (2,300건 3페이지, 한 번)
+ *
+ * 그래서 미스가 한 배치 안에 들어오면(≤ concurrency) 단건이 더 싸고,
+ * 그보다 많으면 일괄이 이긴다 — 그 경계를 `concurrency`로 잡았다.
+ *
+ * **일괄이 실패하면 그 시군구는 단건으로 되돌아간다.** 일괄 조회는
+ * 속도 장치일 뿐이라, 없으면 없는 대로 돌아야 한다(`tradeCache`·
+ * `geocodeCache`와 같은 원칙).
+ *
+ * **일괄 표에 없는 PNU는 단건으로 다시 묻지 않는다.** 같은 데이터셋을
+ * 같은 필터로 훑은 결과라 단건으로 물어도 답은 같다(실측: 표본 12건
+ * 12/12 일치). 표가 반쪽일 수 있는 경우 — 페이지 상한에 걸린 경우 —
+ * 는 `fetchHouseholdCountsByRegion`이 아예 던지므로 여기까지 오지 않는다.
  */
 export async function lookupHouseholdCounts(
   pnus: readonly string[],
   cache: HouseholdCountCache,
   fetchOne: FetchHouseholdCount,
-  concurrency: number = HOUSEHOLD_COUNT_CONCURRENCY,
+  options: LookupHouseholdCountsOptions = {},
 ): Promise<Map<string, number>> {
+  const { concurrency = HOUSEHOLD_COUNT_CONCURRENCY, fetchByRegion } = options;
   const uniquePnus = [...new Set(pnus)];
   const result = new Map<string, number>();
 
-  for (let i = 0; i < uniquePnus.length; i += concurrency) {
-    const batch = uniquePnus.slice(i, i + concurrency);
-    const resolved = await Promise.all(batch.map((pnu) => resolveOne(pnu, cache, fetchOne)));
-    for (let j = 0; j < batch.length; j++) {
-      const count = resolved[j];
-      const pnu = batch[j];
-      if (count !== null && count !== undefined && pnu !== undefined) result.set(pnu, count);
+  // ── 1. 캐시부터. 읽기도 배치로 돈다 — 하나씩 기다리면 수백 번의
+  //       왕복이 직렬이 되어, 캐시가 다 찬 지역이 오히려 느려진다.
+  const cached = await inBatches(uniquePnus, concurrency, (pnu) => safeGet(cache, pnu));
+  const misses: string[] = [];
+  uniquePnus.forEach((pnu, i) => {
+    const count = cached[i];
+    if (count !== null && count !== undefined) result.set(pnu, count);
+    else misses.push(pnu);
+  });
+  if (misses.length === 0) return result;
+
+  // ── 2. 미스가 많으면 시군구 일괄로. 실패하거나 조건이 안 맞는 것은
+  //       아래 단건 경로로 넘긴다.
+  const bySingle: string[] = [];
+  if (fetchByRegion !== undefined && misses.length > concurrency) {
+    const byRegion = new Map<string, string[]>();
+    for (const pnu of misses) {
+      const region = regionOf(pnu);
+      // 형식이 어긋난 PNU는 시군구를 못 뽑는다 — 단건으로 보낸다.
+      if (region === null) {
+        bySingle.push(pnu);
+        continue;
+      }
+      const list = byRegion.get(region);
+      if (list === undefined) byRegion.set(region, [pnu]);
+      else list.push(pnu);
     }
+
+    const fresh: Array<[string, number]> = [];
+    for (const [region, regionPnus] of byRegion) {
+      let table: Map<string, number>;
+      try {
+        table = await fetchByRegion(region);
+      } catch {
+        // 일괄이 죽어도 조회 자체는 살아야 한다 — 단건으로 되돌아간다.
+        bySingle.push(...regionPnus);
+        continue;
+      }
+      for (const pnu of regionPnus) {
+        const count = table.get(pnu);
+        // 표에 없으면 "모른다" — 위 문서의 "단건으로 다시 묻지 않는다" 참고.
+        if (count === undefined) continue;
+        result.set(pnu, count);
+        fresh.push([pnu, count]);
+      }
+    }
+    // 캐시 쓰기도 배치로 — 위 읽기와 같은 이유다.
+    await inBatches(fresh, concurrency, ([pnu, count]) => safeSet(cache, pnu, count));
+  } else {
+    bySingle.push(...misses);
+  }
+
+  // ── 3. 남은 것은 단건으로.
+  if (bySingle.length > 0) {
+    const resolved = await inBatches(bySingle, concurrency, (pnu) =>
+      resolveOne(pnu, cache, fetchOne),
+    );
+    bySingle.forEach((pnu, i) => {
+      const count = resolved[i];
+      if (count !== null && count !== undefined) result.set(pnu, count);
+    });
   }
 
   return result;
 }
 
+/** 캐시 조회 실패는 미스와 동일하게 취급한다 — 기능은 계속 동작하고 속도 이점만 잃는다. */
+async function safeGet(cache: HouseholdCountCache, pnu: string): Promise<number | null> {
+  try {
+    return await cache.get(pnu);
+  } catch {
+    return null;
+  }
+}
+
+/** 저장 실패로 이미 구한 값을 버리지 않는다 — 다음 요청이 다시 구할 뿐이다. */
+async function safeSet(cache: HouseholdCountCache, pnu: string, count: number): Promise<void> {
+  try {
+    await cache.set(pnu, count);
+  } catch {
+    /* 무시 — 위 주석 참고 */
+  }
+}
+
+/** 캐시를 이미 확인한 PNU 하나를 단건 API로 구하고, 성공하면 캐시에 남긴다. */
 async function resolveOne(
   pnu: string,
   cache: HouseholdCountCache,
   fetchOne: FetchHouseholdCount,
 ): Promise<number | null> {
-  let cached: number | null;
-  try {
-    cached = await cache.get(pnu);
-  } catch {
-    // 캐시 조회 실패는 미스와 동일하게 취급한다 — 기능은 계속 동작하고 속도 이점만 잃는다.
-    cached = null;
-  }
-  if (cached !== null) return cached;
-
   let count: number | null;
   try {
     count = await fetchOne(pnu);
@@ -95,11 +215,6 @@ async function resolveOne(
     return null;
   }
   if (count === null) return null;
-
-  try {
-    await cache.set(pnu, count);
-  } catch {
-    // 저장 실패로 이미 구한 값을 버리지 않는다 — 다음 요청이 다시 구할 뿐이다.
-  }
+  await safeSet(cache, pnu, count);
   return count;
 }

@@ -4,7 +4,10 @@ import { lookupHouseholdCounts } from "../scripts/pipeline/householdCount.js";
 import { fetchLiveComplexes } from "../scripts/pipeline/live.js";
 import reportConfig from "../scripts/pipeline/report-config.json" with { type: "json" };
 import regulatedRegions from "./_data/regulated-regions.json" with { type: "json" };
-import { fetchHouseholdCount } from "./_lib/householdCountApi.js";
+import {
+  fetchHouseholdCount,
+  fetchHouseholdCountsByRegion,
+} from "./_lib/householdCountApi.js";
 import { createUpstashHouseholdCountCache } from "./_lib/householdCountCache.js";
 import { createUpstashResponseCache } from "./_lib/responseCache.js";
 import { createUpstashTradeCache } from "./_lib/tradeCache.js";
@@ -36,7 +39,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           reportConfig as ReportConfig,
           defaultWait,
           tradeCache,
-          (pnus) => lookupHouseholdCounts(pnus, householdCountCache, (pnu) => fetchHouseholdCount(pnu, key)),
+          /*
+            세대수 조회. 캐시 미스가 많으면 단건 대신 **시군구 일괄**로
+            간다(`householdCount.ts`의 "일괄로 가는 조건") — 해운대구
+            기준 단건 15배치 약 11초가 일괄 한 번 1.3초가 된다.
+            `fetchHouseholdCount`(단건)도 함께 넘긴다: 미스가 적을 때와
+            일괄이 실패했을 때 되돌아갈 길이다.
+          */
+          (pnus) =>
+            lookupHouseholdCounts(pnus, householdCountCache, (pnu) => fetchHouseholdCount(pnu, key), {
+              fetchByRegion: (regionCode) => fetchHouseholdCountsByRegion(regionCode, key),
+            }),
         ),
       key,
       regions: regulatedRegions,
