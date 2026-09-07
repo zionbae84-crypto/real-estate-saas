@@ -5504,7 +5504,8 @@ body.body-scroll-locked {
   display: contents;
 }
 
-.result-sheet-stop {
+.result-sheet-stop,
+.result-sheet-grabber {
   display: none;
 }
 
@@ -6036,84 +6037,96 @@ body.body-scroll-locked {
      * 로고는 가리면 안 되므로 `ComplexMap.tsx`가 지도 위쪽으로 옮겼고,
      * 축척은 시트가 덮어도 되는 것이라 여기서 깨끗이 덮는다.
      *
-     * 이 층 위에 예산 상세 패널(120)과 조건 시트(130)가 선다 — 셋의
-     * 순서는 아래 두 규칙과 `.result-topbar-summary`가 함께 정한다.
+     * 이 층 위에 예산 상세 패널(120)과 조건 시트(130)가 선다.
      */
     z-index: 110;
-    overflow-y: scroll;
-    overscroll-behavior: contain;
-    scroll-snap-type: y proximity;
+    /*
+     * **이 층 자체는 아무 손짓도 받지 않는다.** 시트와 손잡이만 받는다 —
+     * 그래서 시트 위쪽 빈 자리에서는 지도가 그대로 조작된다
+     * (`.budget-panel`이 지키는 것과 같은 원칙).
+     *
+     * ⚠ 예전에는 이 층이 **스크롤 상자**이면서 `pointer-events: none`
+     * 이었다. 그게 결함이었다: 스크롤 사슬에서 실제로 스크롤 가능한
+     * 요소가 이것 하나뿐인데 히트 테스트에서 빠져 있어, 브라우저가
+     * 손가락 아래에서 밀 대상을 찾지 못했다 — 시트도 목록도 터치로는
+     * 전혀 안 움직였다. 이제 이 층은 스크롤하지 않는다.
+     */
     pointer-events: none;
-    scrollbar-width: none;
-  }
-
-  .result-sheet-scroller::-webkit-scrollbar {
-    display: none;
-  }
-
-  .result-sheet-stop {
-    display: block;
-    scroll-snap-align: start;
-    pointer-events: none;
-  }
-
-  /* 위 산수 참고. 둘의 합이 H − 112다. */
-  .result-sheet-stop--peek {
-    height: calc(50% - 112px);
-  }
-
-  .result-sheet-stop--half {
-    height: 50%;
   }
 
   /*
-   * 시트 본체. 넓은 화면에서는 자기 `overflow-y: auto`로 스크롤하지만
-   * 여기서는 **바깥 상자 하나가 전부 스크롤한다** — 상자가 둘이면
-   * 시트를 끌어올리다 목록이 먼저 움직이는 이중 스크롤이 된다.
+   * ── 잡아 끄는 손잡이 ──────────────────────────────────────────
+   *
+   * 시트 윗변에 겹쳐 놓는다. `bottom`이 시트 높이를 그대로 따라가므로
+   * 시트가 커지든 작아지든 늘 그 위에 붙어 있다.
+   *
+   * `touch-action: none`이 핵심이다 — 없으면 손가락을 대는 순간
+   * 브라우저가 자기 스크롤을 시작해 포인터 이벤트를 앗아간다.
+   *
+   * 시트 자신(`.region-results-sidebar`)이 아니라 형제인 이유는
+   * `ResultShell`의 주석 참고(엔진 경고의 자리를 잠근 검사가 있다).
+   */
+  .result-sheet-grabber {
+    display: block;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: calc(var(--sheet-height, 50%) - 26px);
+    height: 34px;
+    pointer-events: auto;
+    touch-action: none;
+    cursor: ns-resize;
+  }
+
+  /* 보이는 막대. 손가락이 닿는 면적(34px)보다 작게 그린다. */
+  .result-sheet-grabber::after {
+    content: "";
+    position: absolute;
+    left: 50%;
+    bottom: 8px;
+    width: 40px;
+    height: 4px;
+    transform: translateX(-50%);
+    border-radius: 999px;
+    background: var(--result-rule);
+  }
+
+  .result-sheet-grabber:focus-visible {
+    outline: 2px solid var(--seed-color-stroke-focus, #0064ff);
+    outline-offset: -2px;
+    border-radius: 8px;
+  }
+
+  /*
+   * ── 시트 본체 ─────────────────────────────────────────────────
+   *
+   * **자기 높이를 갖고 스스로 스크롤한다.** 높이는 손잡이를 끌면
+   * `ResultShell`이 `--sheet-height`에 px로 적어 준다 — 안 끌었으면
+   * 여기 기본값(50%)이다.
+   *
+   * 위쪽은 손잡이(34px)가 덮으므로 그만큼 안쪽 여백을 준다.
+   *
+   * ⚠ 예전에는 바깥 스크롤 상자 하나가 전부 스크롤했다. 그 상자가
+   * `pointer-events: none`이라 터치로는 아무것도 안 움직였다(위
+   * `.result-sheet-scroller` 주석). 이제 스크롤하는 것은 이 요소이고,
+   * 이 요소는 손짓을 받는다.
    */
   .region-results-sidebar {
-    position: relative;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
     box-sizing: border-box;
-    min-height: calc(100% - 88px);
-    overflow: visible;
-    scroll-snap-align: start;
-    /*
-     * "전체" 스냅에서 지도 위쪽 띠(88px)를 남긴다. 이것이 없으면 스냅이
-     * 시트의 윗변을 스크롤포트 맨 위에 붙여 지도가 통째로 가린다 —
-     * 실측으로 확인한 뒤 넣은 한 줄이다. `min-height`의 88px과 **같은
-     * 값이어야** 목록이 짧을 때(내용이 `min-height`보다 낮을 때) 최대
-     * 스크롤과 이 스냅 지점이 정확히 겹친다.
-     *
-     * 88px은 그 띠에 들어가야 하는 것들이 정한 값이다 — 네이버 로고·
-     * 저작권 표기(1행)와 마커 색 범례(2행), 그리고 오른쪽의 지도 유형·
-     * 필터·학교 버튼. 위 스크롤 상자 주석의 그림 참고.
-     *
-     * 목록이 길면 이 지점을 지나 계속 스크롤된다 — 그때는 시트가 화면을
-     * 다 덮는 것이 맞다(목록을 읽는 중이다). 스냅을 `mandatory`가 아니라
-     * `proximity`로 둔 이유이기도 하다.
-     */
-    scroll-margin-top: 88px;
+    height: var(--sheet-height, 50%);
+    overflow-y: auto;
+    /* 시트 끝까지 스크롤한 뒤 손가락을 더 밀어도 뒤 지도가 딸려가지 않는다. */
+    overscroll-behavior: contain;
     pointer-events: auto;
-    padding: 0 12px 28px;
+    padding: 26px 12px 28px;
     border-right: none;
     border-top: 1px solid var(--result-rule);
     border-radius: 18px 18px 0 0;
     box-shadow: 0 -10px 26px rgb(18 41 77 / 16%);
-  }
-
-  /*
-   * 잡는 손잡이. **DOM 노드가 아니라 의사 요소다** — 장식이라 문서에
-   * 남길 이유가 없고, 노드로 두면 사이드바의 첫 자식이 바뀐다
-   * (`App.test.tsx`가 엔진 경고의 자리를 `firstElementChild`로 잠근다).
-   */
-  .region-results-sidebar::before {
-    content: "";
-    display: block;
-    width: 40px;
-    height: 4px;
-    margin: 9px auto 7px;
-    border-radius: 2px;
-    background: var(--result-rule);
   }
 
   /*

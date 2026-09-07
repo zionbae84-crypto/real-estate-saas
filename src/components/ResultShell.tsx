@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useLayoutEffect,
   useRef,
   useState,
   type ReactNode,
@@ -111,12 +110,42 @@ export interface ResultShellProps {
  */
 const CONDITIONS_ID = "result-topbar-conditions";
 
+/** 시트를 맨 아래까지 내렸을 때 남는 높이(px). 손잡이와 제목 한 줄이 보이는 선이다. */
+const SHEET_MIN_PX = 112;
+
 /**
- * 좁은 화면에서 시트를 맨 아래로 내렸을 때 남는 높이(px).
- * `styles.css`의 `.result-sheet-stop--peek`가 쓰는 값과 **같아야 한다** —
- * 두 값이 어긋나면 첫 스냅 지점이 손잡이를 반쯤 자른다.
+ * 시트를 끝까지 올려도 남겨 두는 지도 띠(px).
+ *
+ * 그 띠에 지도 살림살이가 두 줄로 들어간다 — 네이버 로고·저작권(1행)과
+ * 마커 색 범례(2행), 오른쪽의 지도 유형·필터·학교 버튼. `styles.css`의
+ * `.complex-map-controls` 주석 참고.
  */
-const SHEET_PEEK_PX = 112;
+const SHEET_MAP_BAND_PX = 88;
+
+/** 손잡이를 끌 때 한 번에 움직이는 양(px). 키보드로 조절할 때 쓴다. */
+const SHEET_KEY_STEP_PX = 48;
+
+/*
+ * 포인터 캡처는 **거들 뿐이다.** 손가락이 손잡이 밖으로 벗어나도 끌기가
+ * 이어지게 해 주지만, 없다고 끌기가 성립하지 않는 것은 아니다. 그리고
+ * 활성 포인터가 아니면 던지는 환경이 있다(jsdom, 일부 브라우저의 합성
+ * 이벤트) — 그 예외가 끌기를 통째로 무너뜨릴 이유가 없다.
+ */
+function capturePointer(el: Element, pointerId: number): void {
+  try {
+    el.setPointerCapture(pointerId);
+  } catch {
+    /* 무시 — 위 주석 참고 */
+  }
+}
+
+function releasePointer(el: Element, pointerId: number): void {
+  try {
+    if (el.hasPointerCapture(pointerId)) el.releasePointerCapture(pointerId);
+  } catch {
+    /* 무시 — 위 주석 참고 */
+  }
+}
 
 export function ResultShell({
   summary,
@@ -140,30 +169,81 @@ export function ResultShell({
   const [conditionsOpen, setConditionsOpen] = useState(false);
 
   /*
-   * 목록 시트의 스크롤 상자. 좁은 화면에서만 실제 상자가 되고(넓은
-   * 화면에서는 `display: contents`라 박스가 없다), 스냅 지점 사이를
-   * 오가는 드래그는 전부 네이티브 스크롤이다 — 드래그 핸들러가 없다.
+   * ── 목록 시트의 높이 ────────────────────────────────────────────
+   *
+   * `null`이면 CSS 기본값(50%)을 쓴다 — 손잡이를 한 번도 안 끌었으면
+   * 여기가 관여하지 않는다. 넓은 화면에서는 이 값을 읽는 규칙 자체가
+   * 없으므로(그쪽 사이드바는 그리드 칸이다) 붙어 있어도 무해하다.
+   *
+   * **예전에는 이 자리에 `scroll-snap` 스크롤 상자가 있었다.** 상자
+   * 하나가 시트 높이와 목록 스크롤을 모두 맡고, 상자 위쪽 빈 자리는
+   * `pointer-events: none`으로 지도에 넘겼다. 그런데 **스크롤 사슬에서
+   * 실제로 스크롤 가능한 요소가 그 상자 하나뿐인데 그 상자가 히트
+   * 테스트에서 빠져 있었다** — 브라우저는 손가락 아래에서 밀 대상을
+   * 찾지 못했고, 그래서 시트도 목록도 터치로는 전혀 안 움직였다(로컬
+   * 실측으로 확인: JS로 `scrollTop`을 밀면 멀쩡히 맨 아래까지 갔다).
+   *
+   * 그래서 역할을 나눴다 — 시트가 자기 높이를 갖고 스스로 스크롤하고,
+   * 높이는 손잡이를 끌어 바꾼다. 시트 위쪽은 아무것도 덮지 않으므로
+   * 지도가 그대로 조작된다.
    */
+  const [sheetHeight, setSheetHeight] = useState<number | null>(null);
   const sheetScrollerRef = useRef<HTMLDivElement | null>(null);
+  const dragRef = useRef<{ pointerId: number; startY: number; startHeight: number } | null>(null);
+
+  /** 시트가 커질 수 있는 한계. 지도 띠는 남긴다. */
+  function clampSheetHeight(height: number): number {
+    const stage = sheetScrollerRef.current?.clientHeight ?? 0;
+    const max = Math.max(SHEET_MIN_PX, stage - SHEET_MAP_BAND_PX);
+    return Math.min(max, Math.max(SHEET_MIN_PX, height));
+  }
+
+  /** 지금 시트 높이(px). 아직 안 끌었으면 CSS가 그린 실제 높이를 읽는다. */
+  function currentSheetHeight(): number {
+    if (sheetHeight !== null) return sheetHeight;
+    const sheet = sheetScrollerRef.current?.querySelector(".region-results-sidebar");
+    return sheet instanceof HTMLElement ? sheet.getBoundingClientRect().height : SHEET_MIN_PX;
+  }
+
+  function handleGrabberPointerDown(event: React.PointerEvent<HTMLDivElement>) {
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startHeight: currentSheetHeight(),
+    };
+    capturePointer(event.currentTarget, event.pointerId);
+  }
+
+  function handleGrabberPointerMove(event: React.PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current;
+    if (drag === null || drag.pointerId !== event.pointerId) return;
+    // 위로 끌면(clientY가 줄면) 시트가 커진다.
+    setSheetHeight(clampSheetHeight(drag.startHeight + (drag.startY - event.clientY)));
+  }
+
+  function endGrabberDrag(event: React.PointerEvent<HTMLDivElement>) {
+    if (dragRef.current?.pointerId !== event.pointerId) return;
+    dragRef.current = null;
+    releasePointer(event.currentTarget, event.pointerId);
+  }
 
   /*
-   * **첫 화면을 "절반" 스냅에서 시작한다.**
-   *
-   * 스크롤 상자는 `scrollTop = 0`에서 열리는데, 그 자리는 시트가
-   * {@link SHEET_PEEK_PX}만큼만 보이는 "살짝" 상태다 — 지도는 넓지만
-   * 목록이 사실상 안 보인다. 이 앱에서 목록은 곁다리가 아니라 답이라
-   * 기본값으로는 맞지 않는다. CSS로는 스크롤 상자의 초깃값을 정할 수
-   * 없으므로 여기서 한 번 밀어 준다.
-   *
-   * 넓은 화면에서는 이 요소가 `display: contents`라 스크롤 상자가 아니다
-   * — `clientHeight`가 0이라 아래 식이 0이 되고, `scrollTop = 0` 대입은
-   * 아무 일도 하지 않는다. jsdom도 같다(레이아웃이 없어 0이다).
+   * 손가락이 없는 사람도 조절할 수 있어야 한다 — 위/아래 화살표로
+   * 한 칸씩, Home/End로 끝까지.
    */
-  useLayoutEffect(() => {
-    const scroller = sheetScrollerRef.current;
-    if (scroller === null) return;
-    scroller.scrollTop = Math.max(0, scroller.clientHeight / 2 - SHEET_PEEK_PX);
-  }, []);
+  function handleGrabberKeyDown(event: React.KeyboardEvent<HTMLDivElement>) {
+    const stage = sheetScrollerRef.current?.clientHeight ?? 0;
+    const moves: Record<string, number | undefined> = {
+      ArrowUp: currentSheetHeight() + SHEET_KEY_STEP_PX,
+      ArrowDown: currentSheetHeight() - SHEET_KEY_STEP_PX,
+      Home: SHEET_MIN_PX,
+      End: stage,
+    };
+    const next = moves[event.key];
+    if (next === undefined) return;
+    event.preventDefault();
+    setSheetHeight(clampSheetHeight(next));
+  }
 
   return (
     <div className="result-shell">
@@ -230,19 +310,37 @@ export function ResultShell({
           빈 자리에서는 **지도가 그대로 조작된다** — `.budget-panel`이
           지키는 것과 같은 원칙이다.
         */}
-        <div className="result-sheet-scroller" ref={sheetScrollerRef}>
+        <div
+          className="result-sheet-scroller"
+          ref={sheetScrollerRef}
+          style={
+            sheetHeight === null
+              ? undefined
+              : ({ "--sheet-height": `${sheetHeight}px` } as React.CSSProperties)
+          }
+        >
           {/*
-            스냅 눈금 둘. 넓은 화면에서는 `display: none`이라 그리드 칸을
-            차지하지 않는다(위 `display: contents`와 짝이다). 높이는
-            전부 CSS가 정한다 — 내용이 없는 순수 배치 요소다.
+            잡아 끄는 손잡이.
+
+            **사이드바의 자식이 아니라 형제다.** 자식으로 두면 시트의 첫
+            자식이 바뀌는데, `App.test.tsx`가 엔진 경고의 자리를 정확히
+            `firstElementChild`로 잠그고 있다(경고가 목록 뒤로 밀리지
+            않게 지키는 검사다). 형제로 두고 CSS가 시트 높이(`--sheet-height`)
+            만큼 띄워 시트 윗변에 겹쳐 놓는다.
+
+            넓은 화면에서는 `display: none`이라 초점도 받지 않는다.
           */}
           <div
-            className="result-sheet-stop result-sheet-stop--peek"
-            aria-hidden="true"
-          />
-          <div
-            className="result-sheet-stop result-sheet-stop--half"
-            aria-hidden="true"
+            className="result-sheet-grabber"
+            role="separator"
+            aria-orientation="horizontal"
+            aria-label="목록 크기 조절"
+            tabIndex={0}
+            onPointerDown={handleGrabberPointerDown}
+            onPointerMove={handleGrabberPointerMove}
+            onPointerUp={endGrabberDrag}
+            onPointerCancel={endGrabberDrag}
+            onKeyDown={handleGrabberKeyDown}
           />
           {/*
             `panelOpen` prop 문서 참고 — 패널에 완전히 가려지는 동안만 잠근다.
