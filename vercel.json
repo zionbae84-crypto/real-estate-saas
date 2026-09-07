@@ -6,6 +6,19 @@
     },
     "api/geocode.ts": {
       "maxDuration": 60
+    },
+    "api/warm.ts": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/warm",
+      "schedule": "0 18 * * *"
+    },
+    {
+      "path": "/api/warm",
+      "schedule": "0 6 * * *"
+    }
+  ]
 }
