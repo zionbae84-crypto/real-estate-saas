@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { handleGeocodeRequest } from "./handleGeocode";
+import { GEOCODE_CONCURRENCY, handleGeocodeRequest } from "./handleGeocode";
 import { createNoopResponseCache } from "./responseCache";
 
 describe("handleGeocodeRequest", () => {
@@ -122,12 +122,17 @@ describe("handleGeocodeRequest", () => {
     expect(JSON.stringify(result.body)).not.toContain("naver-client-secret");
   });
 
-  it("캐시 미스가 여러 개면 한 건씩이 아니라 동시에 지오코딩한다", async () => {
+  it("캐시 미스가 여러 개면 한 건씩이 아니라 동시에 지오코딩하되, 상한을 지킨다", async () => {
     // 순차로 돌면 캐시가 빈 큰 시군구(단지 수백 개)에서 Vercel 함수의
     // 실행 시간 상한에 걸린다. "동시에 최소 두 건이 떠 있었는가"를
     // 실제로 세어 확인한다 — 호출 횟수만 세면 순차든 병렬이든 같다.
+    //
+    // **주소 수는 상한보다 많아야 한다.** 적으면 전부 한 번에 떠 버려
+    // "상한을 지킨다"는 아래 단언이 공허하게 통과한다 — 상한이 얼마든
+    // 그보다 적은 요청은 늘 상한 안에 들어오기 때문이다.
+    const total = GEOCODE_CONCURRENCY * 2 + 5;
     const addresses = new Map(
-      Array.from({ length: 20 }, (_, i) => [`11680-${i}`, `주소 ${i}`] as const),
+      Array.from({ length: total }, (_, i) => [`11680-${i}`, `주소 ${i}`] as const),
     );
     const fetchAddresses = vi.fn().mockResolvedValue(addresses);
 
@@ -155,11 +160,19 @@ describe("handleGeocodeRequest", () => {
     );
 
     expect(result.status).toBe(200);
-    expect(geocode).toHaveBeenCalledTimes(20);
+    expect(geocode).toHaveBeenCalledTimes(total);
     expect(maxInFlight).toBeGreaterThan(1);
     // 무제한 병렬은 아니다 — 네이버 rate limit에 걸리면 대량 실패가
     // 조용히 "좌표 없는 단지"로 둔갑한다.
-    expect(maxInFlight).toBeLessThanOrEqual(10);
+    //
+    // **상수를 그대로 본다.** 예전에는 여기에 `10`이 적혀 있었는데,
+    // 그러면 같은 숫자가 두 곳에 살아 상수를 옮길 때마다 이 검사도
+    // 손으로 고쳐야 했다(실제로 8 → 32로 올릴 때 이 줄이 먼저
+    // 깨졌다). 이 검사가 지켜야 하는 것은 특정 숫자가 아니라 "상한이
+    // 있고 그것이 지켜진다"는 성질이다.
+    expect(maxInFlight).toBeLessThanOrEqual(GEOCODE_CONCURRENCY);
+    // 위 단언이 공허하지 않았음을 못박는다 — 상한을 실제로 눌러 봤다.
+    expect(total).toBeGreaterThan(GEOCODE_CONCURRENCY);
     // 순서는 주소 Map 순서 그대로여야 한다(병렬이라고 뒤섞이면 안 된다).
     expect((result.body as { units: { complexKey: string }[] }).units.map((u) => u.complexKey)).toEqual(
       [...addresses.keys()],
