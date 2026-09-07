@@ -107,18 +107,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     concurrency: CONCURRENCY,
     warmOne: async (regionCode) => {
       /*
-       * 목록과 좌표를 나란히 건다 — 사용자 화면(`App.tsx`의
-       * `handleRegionSelect`)이 하는 것과 같다.
+       * **목록을 먼저, 좌표를 그다음에.** 사용자 화면(`App.tsx`의
+       * `handleRegionSelect`)은 둘을 나란히 걸지만 여기서는 줄 세운다.
+       *
+       * 둘 다 같은 지역의 같은 12개월치를 국토부에서 받는다. 동시에
+       * 출발하면 둘 다 `tradeCache`(5분)를 못 맞고 **각자 12개월을 따로
+       * 받는다 — 지역당 국토부 요청이 두 배가 된다.** 줄 세우면 뒤엣것이
+       * 앞엣것이 채운 캐시를 그대로 쓴다.
+       *
+       * 화면에서 병렬이 맞는 이유(사람이 기다린다)가 여기서는 성립하지
+       * 않는다. 기다리는 사람이 없고, 대신 국토부의 속도 제한이 있다 —
+       * 실측: 동시성을 8에서 3으로 낮춰도 한 실행에 6~9곳에서 `HTTP 429`로
+       * 막혔다(동시 요청 수가 아니라 총량에 걸린다는 뜻이다).
        *
        * **`pending`까지 기다린다.** 갱신 창 안이면 핸들러는 캐시 값을
        * 즉시 돌려주고 실제 갱신은 `pending`에서 돈다 — 그것을 안
        * 기다리면 데운 척만 하고 캐시는 그대로다.
        */
-      const [complexes, geocode] = await Promise.all([
-        handleComplexesRequest({ regionCode, dong: null }, complexesDeps),
-        handleGeocodeRequest({ regionCode, dong: null }, geocodeDeps),
-      ]);
-      await Promise.all([complexes.pending, geocode.pending]);
+      const complexes = await handleComplexesRequest({ regionCode, dong: null }, complexesDeps);
+      await complexes.pending;
+      const geocode = await handleGeocodeRequest({ regionCode, dong: null }, geocodeDeps);
+      await geocode.pending;
 
       /*
        * 502(업스트림 실패)는 데우지 못한 것이다 — 성공으로 세지 않는다.
