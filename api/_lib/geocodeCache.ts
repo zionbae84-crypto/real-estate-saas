@@ -1,5 +1,5 @@
 import { Redis } from "@upstash/redis";
-import { readMany, writeMany, type RedisLike } from "./redisBatch";
+import { readMany, writeMany, type RedisLike } from "./redisBatch.js";
 
 export interface Coordinate {
   lat: number;

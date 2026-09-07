@@ -1,6 +1,6 @@
 import { Redis } from "@upstash/redis";
 import type { HouseholdCountCache } from "../../scripts/pipeline/householdCount";
-import { readMany, writeMany, type RedisLike } from "./redisBatch";
+import { readMany, writeMany, type RedisLike } from "./redisBatch.js";
 
 export type { RedisLike };
 
