@@ -5773,14 +5773,12 @@ body.body-scroll-locked {
   }
 
   /*
-   * 현금 입력란의 높이를 한 단 줄인다 — SEED TextField의 라벨+입력이
-   * 기본 57px인데, 이 줄이 상단바 높이를 혼자 정한다.
-   */
-  /*
    * 현금·연 소득 입력란이 상단바 높이를 정한다(SEED TextField가 라벨
    * 22px + 입력 36px). 라벨 줄만 한 단 줄인다 — 입력 상자는 손대지
    * 않는다. 36px은 이미 터치 타깃으로 넉넉하지 않은 편이라 여기서 더
-   * 깎으면 누르기 어려워진다.
+   * 깎으면 누르기 어려워진다. 이 규칙은 연 소득에 그대로 남는다 —
+   * 펼쳐지면 자기 줄을 혼자 쓰므로 라벨이 있어야 무엇을 입력하는
+   * 칸인지 알 수 있다.
    */
   .result-topbar-item--field .money-input .seed-field__header {
     margin-bottom: 0;
@@ -5788,6 +5786,59 @@ body.body-scroll-locked {
 
   .result-topbar-item--field .money-input label {
     font-size: 0.625rem;
+    line-height: 1.3;
+  }
+
+  /*
+   * ── 사용가능 현금 예산만 더 줄인다 ────────────────────────────
+   *
+   * 사용자 지시: "사용가능예산의 글자크기와 글상자 크기를 지역선택
+   * 옵션과 같게 줄여주고, 구매가능 실금액과 정렬을 맞춰줘."
+   *
+   * 연 소득과 달리 이 칸은 실구매 가능 가격과 **같은 줄**에 나란히
+   * 선다. 그런데 "사용가능 현금 예산" 라벨이 눈에 보이는 채로 남아
+   * 있으면 입력 상자가 그 라벨 높이(13px)만큼 아래로 밀려, 옆의
+   * 가격 글자보다 한참 낮은 자리에서 시작한다(실측: 라벨·가격 모두
+   * y33에서 시작하는데 상자는 y49에서 시작했다) — 두 값이 한눈에
+   * "짝"으로 안 읽히는 원인이었다.
+   *
+   * 그래서 라벨을 **눈에서만 감춘다**(지역·실구매가 라벨과 같은 클립
+   * 방식) — "9억원"이라는 값 자체가 통화 단위를 담고 있어 굳이 라벨
+   * 없이도 무엇인지 읽힌다. 이렇게 하면 상자가 라벨 없이 바로 행
+   * 맨 위에서 시작해 가격 글자와 같은 줄에 나란히 선다.
+   *
+   * 상자 크기·글자 크기는 지역 select(`.region-quick-select select`,
+   * 0.75rem·`padding: 2px 4px`)와 맞춘다 — 높이를 `auto`로 두고 같은
+   * 패딩·글자 크기를 주면 SEED 기본값(32px·15px)보다 select 쪽에
+   * 훨씬 가까운 크기가 된다.
+   */
+  .result-topbar-item--cash .money-input label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  .result-topbar-item--cash .money-input .seed-text-input__root {
+    height: auto;
+    min-height: 0;
+  }
+
+  .result-topbar-item--cash .money-input .seed-text-input__value {
+    height: auto;
+    padding: 2px 4px;
+    font-size: 0.75rem;
+    /*
+     * SEED 벤더 레시피가 이 입력의 line-height를 `--seed-line-height-t5`
+     * (22px 고정값)로 박아 둔다 — 글자 크기를 줄여도 그 줄 높이는
+     * 그대로라 상자가 28px로 남아, 지역 select(줄 높이가 폰트에 따라
+     * 자연스럽게 잡히는 `normal`, 22.5px)보다 여전히 컸다(실측). 여기서
+     * `1.3`으로 다시 잡아 select와 같은 크기대로 맞춘다.
+     */
     line-height: 1.3;
   }
 
