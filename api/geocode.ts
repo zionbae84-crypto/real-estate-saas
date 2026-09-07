@@ -1,5 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
-import { createGeocodeDeps } from "./_lib/deps.js";
+import { defaultWait } from "../scripts/pipeline/fetch.js";
+import { fetchComplexAddresses } from "../scripts/pipeline/geocode-addresses.js";
+import { geocodeAddress } from "./_lib/naverGeocode.js";
+import { createUpstashGeocodeCache } from "./_lib/geocodeCache.js";
+import { createUpstashResponseCache } from "./_lib/responseCache.js";
+import { createUpstashTradeCache } from "./_lib/tradeCache.js";
 import { handleGeocodeRequest } from "./_lib/handleGeocode.js";
 import { sendAndSettle } from "./_lib/sendAndSettle.js";
 
@@ -16,9 +21,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
+  const cache = createUpstashGeocodeCache();
+  const tradeCache = createUpstashTradeCache();
+
   const result = await handleGeocodeRequest(
     { regionCode, dong },
-    createGeocodeDeps(dataKey, clientId, clientSecret),
+    {
+      fetchAddresses: (rc, d) => fetchComplexAddresses(rc, d, new Date(), dataKey, defaultWait, tradeCache),
+      cache,
+      responseCache: createUpstashResponseCache(),
+      geocode: (address) => geocodeAddress(address, clientId, clientSecret),
+      // 502 경로에서 실제로 새어나갈 수 있는 키는 국토부 키다 —
+      // fetchComplexAddresses가 키를 쿼리 파라미터에 담아 요청하므로
+      // 그 URL이 네트워크 오류 메시지에 실려 온다(api/complexes.ts와 같다).
+      dataKey,
+      key: clientId,
+      secret: clientSecret,
+    },
   );
 
   // 응답을 보낸 뒤, 뒤에서 도는 캐시 갱신을 마저 기다린다.
