@@ -6,6 +6,7 @@ import { createUpstashGeocodeCache } from "./_lib/geocodeCache.js";
 import { createUpstashResponseCache } from "./_lib/responseCache.js";
 import { createUpstashTradeCache } from "./_lib/tradeCache.js";
 import { handleGeocodeRequest } from "./_lib/handleGeocode.js";
+import { sendAndSettle } from "./_lib/sendAndSettle.js";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const regionCode = typeof req.query.regionCode === "string" ? req.query.regionCode : null;
@@ -39,5 +40,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     },
   );
 
-  res.status(result.status).json(result.body);
+  // 응답을 보낸 뒤, 뒤에서 도는 캐시 갱신을 마저 기다린다.
+  await sendAndSettle(res, result);
 }

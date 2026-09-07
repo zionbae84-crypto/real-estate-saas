@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { GEOCODE_CONCURRENCY, handleGeocodeRequest } from "./handleGeocode";
-import { createNoopResponseCache } from "./responseCache";
+import { createNoopResponseCache, type ResponseCache } from "./responseCache";
 
 /**
  * 전부 미스인 캐시. `getMany`는 물어본 주소 수만큼 `null`을 돌려준다 —
@@ -356,6 +356,52 @@ describe("handleGeocodeRequest", () => {
     // 그렇다고 주소마다 저장하지도 않는다 — 그게 이 최적화가 없앤 것이다.
     expect(cache.setMany.mock.calls.length).toBeLessThan(total);
     expect(geocodedAtSave.length).toBeGreaterThan(1);
+  });
+
+  it("응답 캐시가 뒤에서 갱신 중이면 그 프라미스를 호출부로 넘긴다", async () => {
+    // 넘기지 않으면 엔트리(api/geocode.ts)가 기다릴 방법이 없고, 서버리스가
+    // 핸들러 종료와 함께 얼려 갱신이 죽는다 — 캐시는 영영 낡은 채로 남는다.
+    const revalidating = Promise.resolve();
+    const responseCache: ResponseCache = {
+      resolve: vi.fn(async () => ({
+        value: [["11680-1", "서울특별시 강남구 역삼동 719-3"]],
+        stale: false,
+        fetchedAt: 1,
+        revalidating,
+      })) as ResponseCache["resolve"],
+    };
+
+    const result = await handleGeocodeRequest(
+      { regionCode: "11680", dong: null },
+      {
+        fetchAddresses: vi.fn(),
+        cache: emptyCache(),
+        geocode: vi.fn().mockResolvedValue({ lat: 1, lon: 1 }),
+        responseCache,
+        dataKey: "molit-key",
+        key: "id",
+        secret: "s",
+      },
+    );
+
+    expect(result.status).toBe(200);
+    expect(result.pending).toBe(revalidating);
+  });
+
+  it("갱신 중이 아니면 기다릴 것을 만들지 않는다", async () => {
+    const result = await handleGeocodeRequest(
+      { regionCode: "11680", dong: null },
+      {
+        fetchAddresses: vi.fn().mockResolvedValue(new Map([["11680-1", "주소"]])),
+        cache: emptyCache(),
+        geocode: vi.fn().mockResolvedValue({ lat: 1, lon: 1 }),
+        responseCache: createNoopResponseCache(),
+        dataKey: "molit-key",
+        key: "id",
+        secret: "s",
+      },
+    );
+    expect(result.pending).toBeUndefined();
   });
 
   it("캐시 조회가 실패해도 캐시 미스처럼 지오코딩으로 넘어가 결과를 담는다", async () => {

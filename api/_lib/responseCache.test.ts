@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import {
   FRESH_SECONDS,
   LIVE_TIMEOUT_SECONDS,
+  REVALIDATE_SECONDS,
   STALE_SECONDS,
   createNoopResponseCache,
   createResponseCache,
@@ -46,7 +47,7 @@ describe("createResponseCache", () => {
     const got = await cache.resolve("k", live);
 
     expect(live).toHaveBeenCalledTimes(1);
-    expect(got).toEqual({ value: { units: ["a"] }, stale: false, fetchedAt: 1_000_000 });
+    expect(got).toEqual({ value: { units: ["a"] }, stale: false, fetchedAt: 1_000_000, revalidating: null });
     expect(redis.store.get("resp:k")).toEqual({ value: { units: ["a"] }, fetchedAt: 1_000_000 });
   });
 
@@ -61,21 +62,21 @@ describe("createResponseCache", () => {
     const got = await cache.resolve("k", live);
 
     expect(live).toHaveBeenCalledTimes(1);
-    expect(got).toEqual({ value: "첫값", stale: false, fetchedAt: 1_000_000 });
+    expect(got).toEqual({ value: "첫값", stale: false, fetchedAt: 1_000_000, revalidating: null });
   });
 
-  it("신선 창을 지나면 다시 부르고, 성공하면 새 값으로 갈아 끼운다", async () => {
+  it("갱신 창까지 지나면 기다렸다가 새 값을 낸다", async () => {
     const redis = fakeRedis();
     let t = 1_000_000;
     const cache = createResponseCache(redis, () => t);
     const live = vi.fn().mockResolvedValueOnce("첫값").mockResolvedValueOnce("새값");
 
     await cache.resolve("k", live);
-    t += (FRESH_SECONDS + 1) * 1000;
+    t += (REVALIDATE_SECONDS + 1) * 1000;
     const got = await cache.resolve("k", live);
 
     expect(live).toHaveBeenCalledTimes(2);
-    expect(got).toEqual({ value: "새값", stale: false, fetchedAt: t });
+    expect(got).toEqual({ value: "새값", stale: false, fetchedAt: t, revalidating: null });
   });
 
   /** 이 파일이 존재하는 이유. */
@@ -89,7 +90,7 @@ describe("createResponseCache", () => {
       .mockRejectedValue(new Error("fetch failed"));
 
     await cache.resolve("k", live);
-    t += (FRESH_SECONDS + 1) * 1000;
+    t += (REVALIDATE_SECONDS + 1) * 1000;
     const got = await cache.resolve("k", live);
 
     expect(got.value).toBe("어제값");
@@ -112,6 +113,99 @@ describe("createResponseCache", () => {
     await expect(cache.resolve("k", live)).rejects.toBe(boom);
   });
 
+  /*
+   * ── 뒤에서 갱신하기 ────────────────────────────────────────────
+   *
+   * 신선 창이 지나는 순간마다 **누군가 한 명은** 국토부 조회를 온전히
+   * 기다렸다(프로덕션 실측 7.2초). 아래가 그 기다림을 없앤다.
+   */
+  describe("갱신 창", () => {
+    it("신선 창이 지나도 기다리지 않고 캐시 값을 즉시 낸다", async () => {
+      const redis = fakeRedis();
+      let t = 1_000_000;
+      const cache = createResponseCache(redis, () => t);
+
+      await cache.resolve("k", vi.fn().mockResolvedValue("어제값"));
+      t += (FRESH_SECONDS + 1) * 1000;
+
+      // 영원히 안 끝나는 라이브 — 그래도 이 요청은 즉시 끝나야 한다.
+      const hung = vi.fn(() => new Promise(() => {}));
+      const got = await cache.resolve("k", hung);
+
+      expect(got.value).toBe("어제값");
+      expect(got.fetchedAt).toBe(1_000_000);
+      // 갱신은 떠 있다 — 부르긴 부른다.
+      expect(hung).toHaveBeenCalledTimes(1);
+      expect(got.revalidating).not.toBeNull();
+    });
+
+    /** 이 검사가 이 describe에서 가장 중요하다. */
+    it("장애가 아니므로 낡음 표시를 붙이지 않는다", async () => {
+      const redis = fakeRedis();
+      let t = 1_000_000;
+      const cache = createResponseCache(redis, () => t);
+
+      await cache.resolve("k", vi.fn().mockResolvedValue("어제값"));
+      t += (FRESH_SECONDS + 1) * 1000;
+      const got = await cache.resolve("k", vi.fn(() => new Promise(() => {})));
+
+      // `stale`은 화면에 "지금 국토교통부 서버가 응답하지 않아…"를 띄운다.
+      // 여기는 정상적인 갱신 중이다 — 참으로 두면 멀쩡한 날에 장애를
+      // 알리게 된다.
+      expect(got.stale).toBe(false);
+    });
+
+    it("뒤에서 돈 갱신이 끝나면 다음 요청이 새 값을 받는다", async () => {
+      const redis = fakeRedis();
+      let t = 1_000_000;
+      const cache = createResponseCache(redis, () => t);
+
+      await cache.resolve("k", vi.fn().mockResolvedValue("어제값"));
+      t += (FRESH_SECONDS + 1) * 1000;
+
+      const got = await cache.resolve("k", vi.fn().mockResolvedValue("새값"));
+      expect(got.value).toBe("어제값"); // 이 요청은 아직 옛 값으로 답했고…
+      await got.revalidating; // 호출부가 응답을 보낸 뒤 기다린다
+
+      // …다음 요청은 새 값을 받는다. 갱신 시각도 갈아 끼워졌다.
+      const next = await cache.resolve("k", vi.fn());
+      expect(next.value).toBe("새값");
+      expect(next.fetchedAt).toBe(t);
+      expect(next.revalidating).toBeNull(); // 이제 신선하니 갱신도 안 건다
+    });
+
+    it("갱신이 실패해도 이 요청은 멀쩡하고, 거부로 새어 나오지 않는다", async () => {
+      const redis = fakeRedis();
+      let t = 1_000_000;
+      const cache = createResponseCache(redis, () => t);
+
+      await cache.resolve("k", vi.fn().mockResolvedValue("어제값"));
+      t += (FRESH_SECONDS + 1) * 1000;
+
+      const got = await cache.resolve("k", vi.fn().mockRejectedValue(new Error("국토부 down")));
+      expect(got.value).toBe("어제값");
+      expect(got.stale).toBe(false);
+      // 호출부는 이것을 그냥 await한다 — 던지면 응답을 보낸 **뒤** 핸들러가
+      // 죽어 함수 오류로 잡힌다.
+      await expect(got.revalidating).resolves.toBeUndefined();
+
+      // 캐시는 옛 값 그대로다 — 실패한 갱신이 값을 망가뜨리지 않았다.
+      expect((await cache.resolve("k", vi.fn(() => new Promise(() => {})))).value).toBe("어제값");
+    });
+
+    it("캐시 저장이 실패해도 갱신 프라미스는 조용히 끝난다", async () => {
+      const redis: RedisLike = {
+        get: (async () => ({ value: "어제값", fetchedAt: 0 })) as RedisLike["get"],
+        async set() {
+          throw new Error("redis down");
+        },
+      };
+      const cache = createResponseCache(redis, () => (FRESH_SECONDS + 1) * 1000);
+      const got = await cache.resolve("k", vi.fn().mockResolvedValue("새값"));
+      await expect(got.revalidating).resolves.toBeUndefined();
+    });
+  });
+
   it("캐시가 아예 없는데 라이브가 실패하면 그 오류를 그대로 던진다 — 값을 지어내지 않는다", async () => {
     const cache = createResponseCache(fakeRedis(), () => 0);
     const boom = new Error("fetch failed");
@@ -125,7 +219,7 @@ describe("createResponseCache", () => {
 
     await cache.resolve("강남", vi.fn().mockResolvedValue("강남값"));
     await cache.resolve("서초", vi.fn().mockResolvedValue("서초값"));
-    t += (FRESH_SECONDS + 1) * 1000;
+    t += (REVALIDATE_SECONDS + 1) * 1000;
 
     const failing = vi.fn().mockRejectedValue(new Error("fetch failed"));
     expect((await cache.resolve("강남", failing)).value).toBe("강남값");
@@ -178,7 +272,7 @@ describe("createResponseCache", () => {
         const cache = createResponseCache(redis, () => t);
 
         await cache.resolve("k", vi.fn().mockResolvedValue("어제값"));
-        t += (FRESH_SECONDS + 1) * 1000;
+        t += (REVALIDATE_SECONDS + 1) * 1000;
 
         // 영원히 안 끝나는 라이브 — 지금 국토부가 딱 이 모양이다.
         const hung = vi.fn(() => new Promise(() => {}));
@@ -202,7 +296,7 @@ describe("createResponseCache", () => {
         const cache = createResponseCache(redis, () => t);
 
         await cache.resolve("k", vi.fn().mockResolvedValue("어제값"));
-        t += (FRESH_SECONDS + 1) * 1000;
+        t += (REVALIDATE_SECONDS + 1) * 1000;
 
         const slowButOk = vi.fn(
           () =>
@@ -251,7 +345,7 @@ describe("createResponseCache", () => {
         const cache = createResponseCache(redis, () => t);
 
         await cache.resolve("k", vi.fn().mockResolvedValue("어제값"));
-        t += (FRESH_SECONDS + 1) * 1000;
+        t += (REVALIDATE_SECONDS + 1) * 1000;
 
         const late = vi.fn(
           () =>
@@ -274,9 +368,11 @@ describe("createResponseCache", () => {
     });
   });
 
-  it("두 창의 값이 뒤집혀 있지 않다(전제)", () => {
-    // 신선 창이 허용 기간보다 길면 "낡은 값으로 버티는" 구간 자체가 없다.
-    expect(FRESH_SECONDS).toBeLessThan(STALE_SECONDS);
+  it("세 창의 순서가 뒤집혀 있지 않다(전제)", () => {
+    // 순서가 어긋나면 중간 구간이 통째로 사라진다 — 예컨대 갱신 창이
+    // 신선 창보다 짧으면 "뒤에서 갱신"이 한 번도 안 일어난다.
+    expect(FRESH_SECONDS).toBeLessThan(REVALIDATE_SECONDS);
+    expect(REVALIDATE_SECONDS).toBeLessThan(STALE_SECONDS);
   });
 });
 
@@ -287,6 +383,7 @@ describe("createNoopResponseCache", () => {
       value: "값",
       stale: false,
       fetchedAt: null,
+      revalidating: null,
     });
     const boom = new Error("fetch failed");
     await expect(cache.resolve("k", vi.fn().mockRejectedValue(boom))).rejects.toBe(boom);

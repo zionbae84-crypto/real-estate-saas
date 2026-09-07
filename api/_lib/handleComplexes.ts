@@ -25,6 +25,13 @@ export interface HandleComplexesQuery {
 export interface HandleComplexesResult {
   status: number;
   body: unknown;
+  /**
+   * 뒤에서 도는 캐시 갱신. **응답을 보낸 뒤 기다려야 한다** — 서버리스는
+   * 핸들러가 끝나면 실행을 얼려서, 그냥 두면 갱신이 죽고 캐시가 영영
+   * 낡은 채로 남는다(`responseCache.ts`의 `Resolved.revalidating`).
+   * 사용자가 보는 시간은 늘지 않는다 — 응답은 이미 나갔다.
+   */
+  pending?: Promise<void>;
 }
 
 const REGION_CODE_PATTERN = /^\d{5}$/;
@@ -69,6 +76,7 @@ export async function handleComplexesRequest(
     const { units, dataAsOf } = resolved.value;
     return {
       status: 200,
+      pending: resolved.revalidating ?? undefined,
       body: {
         units,
         isRegulatedArea: resolveIsRegulated(regionCode, deps.regions),

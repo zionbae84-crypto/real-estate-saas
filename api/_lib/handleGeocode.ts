@@ -40,6 +40,13 @@ export interface HandleGeocodeQuery {
 export interface HandleGeocodeResult {
   status: number;
   body: unknown;
+  /**
+   * 뒤에서 도는 캐시 갱신. **응답을 보낸 뒤 기다려야 한다** — 서버리스는
+   * 핸들러가 끝나면 실행을 얼려서, 그냥 두면 갱신이 죽고 캐시가 영영
+   * 낡은 채로 남는다(`responseCache.ts`의 `Resolved.revalidating`).
+   * 사용자가 보는 시간은 늘지 않는다 — 응답은 이미 나갔다.
+   */
+  pending?: Promise<void>;
 }
 
 const REGION_CODE_PATTERN = /^\d{5}$/;
@@ -188,6 +195,7 @@ export async function handleGeocodeRequest(
   }
 
   let addresses: Map<string, string>;
+  let pending: Promise<void> | undefined;
   try {
     // 캐시를 거쳐 부른다 — 신선하면 국토부를 아예 안 부르고, 라이브가
     // 실패하면 마지막 성공값으로 버틴다(`responseCache.ts`).
@@ -196,6 +204,7 @@ export async function handleGeocodeRequest(
       async () => [...(await deps.fetchAddresses(regionCode, dong))],
     );
     addresses = new Map(resolved.value);
+    pending = resolved.revalidating ?? undefined;
   } catch (e) {
     return { status: 502, body: { error: redactAllKeys(e, deps) } };
   }
@@ -267,5 +276,5 @@ export async function handleGeocodeRequest(
     }
   }
 
-  return { status: 200, body: { units, partialFailureCount } };
+  return { status: 200, body: { units, partialFailureCount }, pending };
 }

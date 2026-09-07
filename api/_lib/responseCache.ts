@@ -20,14 +20,21 @@ import { Redis } from "@upstash/redis";
  * 이 모듈은 그 간극을 **가장 작은 변경으로** 메운다: 마지막으로 성공한
  * 응답을 그대로 들고 있다가, 라이브 조회가 실패하면 그것을 대신 낸다.
  *
- * ── 두 개의 창 ────────────────────────────────────────────────────
+ * ── 세 개의 창 ────────────────────────────────────────────────────
  *
- *   |<-- 신선(6시간) -->|<---------- 낡음(7일까지) ---------->| 만료
- *   그냥 낸다           라이브 실패했을 때만 낸다              아무것도 없다
+ *   |<- 신선(6h) ->|<- 뒤에서 갱신(24h) ->|<-- 낡음(7일까지) -->| 만료
+ *   그냥 낸다      즉시 내고 뒤에서 갱신   라이브 실패 때만 낸다  없다
  *
  * `FRESH_SECONDS` 안이면 라이브를 아예 부르지 않는다(그만큼 국토부 호출도
- * 준다). 지나면 라이브를 부르고, **성공하면** 새 값으로 갈아 끼운다.
- * 실패하면 그때 비로소 낡은 값을 꺼내되 `STALE_SECONDS`까지만이다.
+ * 준다).
+ *
+ * `REVALIDATE_SECONDS` 안이면 **캐시 값을 즉시 내주고 갱신은 뒤에서**
+ * 한다 — 사용자는 기다리지 않는다. 이게 없으면 6시간이 지나는 순간마다
+ * 누군가 한 명은 국토부 조회를 온전히 기다린다(실측 7.2초).
+ *
+ * 그보다 낡았으면 예전처럼 라이브를 기다리고, **성공하면** 새 값으로
+ * 갈아 끼운다. 실패하면 그때 비로소 낡은 값을 꺼내되 `STALE_SECONDS`
+ * 까지만이다.
  *
  * ── 왜 7일인가(사용자 결정) ───────────────────────────────────────
  *
@@ -66,6 +73,22 @@ interface CacheEntry<T> {
 /** 이 안이면 라이브를 부르지 않는다 */
 export const FRESH_SECONDS = 6 * 60 * 60;
 
+/**
+ * 신선 창을 지났어도 이 안이면 **그 값을 즉시 내주고 갱신은 뒤에서** 한다.
+ *
+ * ── 왜 24시간인가(사용자 결정) ────────────────────────────────────
+ *
+ * 이 창을 두면 사용자는 기다리지 않는 대신, **아무 안내 없이** 최대
+ * 이만큼 지난 값을 볼 수 있다(`stale` 표시는 장애 때만 붙는다 — 여기는
+ * 장애가 아니다). 그 선을 하루로 잡았다: 실거래 신고 자체가 계약 후
+ * 한 달쯤 늦게 들어오므로(화면의 신선도 문구가 이미 그렇게 말한다)
+ * 하루 차이는 그 지연에 묻힌다.
+ *
+ * 더 길게 잡으면 며칠 전 값이 조용히 보이고, 더 짧게 잡으면 그만큼
+ * 자주 누군가가 7초를 기다린다.
+ */
+export const REVALIDATE_SECONDS = 24 * 60 * 60;
+
 /** 라이브가 실패했을 때 낡은 값을 내줄 수 있는 한계 */
 export const STALE_SECONDS = 7 * 24 * 60 * 60;
 
@@ -97,6 +120,19 @@ export interface Resolved<T> {
   stale: boolean;
   /** 이 값을 실제로 국토부에서 받은 시각(epoch ms). 캐시가 없으면 `null` */
   fetchedAt: number | null;
+  /**
+   * 뒤에서 도는 갱신. **있으면 호출부가 응답을 보낸 뒤 이것을 기다려야
+   * 한다.**
+   *
+   * 서버리스는 핸들러가 끝나는 순간 실행을 얼린다 — 띄워만 두고 가면
+   * 갱신이 중간에 죽고, 그러면 캐시는 영영 낡은 채로 남아 다음 요청도
+   * 또 갱신을 띄우다 또 죽는다. 응답은 `res.json()`에서 이미 나가므로
+   * 그 뒤에 기다려도 **사용자가 보는 시간은 늘지 않는다**(람다가 그만큼
+   * 더 살아 있을 뿐이다).
+   *
+   * 절대 거부하지 않는다 — 갱신 실패는 이미 안에서 삼킨다.
+   */
+  revalidating: Promise<void> | null;
 }
 
 export interface ResponseCache {
@@ -130,18 +166,26 @@ function raceWithTimeout<T>(pending: Promise<T>): Promise<T> {
 }
 
 /**
- * 시계에 진 라이브 조회의 뒤처리. 뒤늦게 성공하면 캐시에 넣어 **다음**
- * 요청이 새 값을 받게 한다. 실패하면 아무것도 하지 않는다 — 이 요청은
- * 이미 낡은 값으로 답했고, 여기서 더 할 일이 없다.
+ * 뒤에서 도는 라이브 조회의 뒤처리. 성공하면 캐시에 넣어 **다음** 요청이
+ * 새 값을 받게 한다. 실패하면 아무것도 하지 않는다 — 이 요청은 이미
+ * 캐시 값으로 답했고, 여기서 더 할 일이 없다(다음 요청이 다시 시도한다).
+ *
+ * **프라미스를 돌려준다.** 띄워만 두면 서버리스가 핸들러 종료와 함께
+ * 얼려 버려 갱신이 끝나지 않는다 — 호출부가 응답을 보낸 뒤 이것을
+ * 기다린다({@link Resolved.revalidating}).
+ *
+ * 절대 거부하지 않는다.
  */
-function settleInBackground<T>(
+function refreshInBackground<T>(
   pending: Promise<T>,
   cacheKey: string,
   redis: RedisLike,
   now: () => number,
-): void {
-  void pending
-    .then((value) => redis.set(cacheKey, { value, fetchedAt: now() }, { ex: STALE_SECONDS }))
+): Promise<void> {
+  return pending
+    .then(async (value) => {
+      await redis.set(cacheKey, { value, fetchedAt: now() }, { ex: STALE_SECONDS });
+    })
     .catch(() => {
       /* 무시 — 위 주석 참고 */
     });
@@ -168,7 +212,25 @@ export function createResponseCache(redis: RedisLike, now: () => number = Date.n
         cached === null ? Number.POSITIVE_INFINITY : (now() - cached.fetchedAt) / 1000;
 
       if (cached !== null && ageSeconds < FRESH_SECONDS) {
-        return { value: cached.value, stale: false, fetchedAt: cached.fetchedAt };
+        return { value: cached.value, stale: false, fetchedAt: cached.fetchedAt, revalidating: null };
+      }
+
+      /*
+       * 신선 창은 지났지만 아직 하루 안이다 — **기다리게 하지 않는다.**
+       * 지금 값을 그대로 내주고 갱신은 뒤에서 돌린다.
+       *
+       * `stale`은 거짓이다. 그 깃발은 "라이브가 실패해 버티는 중"이라는
+       * 뜻이고 화면이 그것으로 장애 문구를 띄운다 — 여기는 장애가 아니라
+       * 정상적인 갱신 중이므로, 참으로 두면 멀쩡한 날에도 국토부가
+       * 멈췄다고 말하게 된다.
+       */
+      if (cached !== null && ageSeconds < REVALIDATE_SECONDS) {
+        return {
+          value: cached.value,
+          stale: false,
+          fetchedAt: cached.fetchedAt,
+          revalidating: refreshInBackground(live(), cacheKey, redis, now),
+        };
       }
 
       /*
@@ -197,11 +259,15 @@ export function createResponseCache(redis: RedisLike, now: () => number = Date.n
         } catch {
           /* 무시 — 위 주석 참고 */
         }
-        return { value, stale: false, fetchedAt };
+        return { value, stale: false, fetchedAt, revalidating: null };
       } catch (e) {
         if (canFallBack && cached !== null) {
-          if (e === TIMED_OUT) settleInBackground(pending, cacheKey, redis, now);
-          return { value: cached.value, stale: true, fetchedAt: cached.fetchedAt };
+          return {
+            value: cached.value,
+            stale: true,
+            fetchedAt: cached.fetchedAt,
+            revalidating: e === TIMED_OUT ? refreshInBackground(pending, cacheKey, redis, now) : null,
+          };
         }
         /*
          * 여기까지 왔다면 `canFallBack`이 거짓이라 경주를 걸지 않았고,
@@ -224,7 +290,7 @@ export function createNoopResponseCache(): ResponseCache {
   return {
     async resolve<T>(_key: string, live: () => Promise<T>): Promise<Resolved<T>> {
       const value = await live();
-      return { value, stale: false, fetchedAt: null };
+      return { value, stale: false, fetchedAt: null, revalidating: null };
     },
   };
 }
