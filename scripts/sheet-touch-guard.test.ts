@@ -102,6 +102,20 @@ describe("좁은 화면 시트의 터치", () => {
   });
 
   /**
+   * 손잡이는 시트보다 **위에** 그려져야 한다. 둘 다 `position: absolute`
+   * 이고 손잡이가 DOM에서 먼저 오므로, `z-index`가 없으면 뒤에 오는
+   * 시트가 손잡이를 덮는다 — 잡는 막대가 시트 뒤에 숨어 "움직이기는
+   * 하는데 잡을 표시가 없는" 상태가 된다. 실제로 그렇게 한 번 나갔다.
+   */
+  it("손잡이가 시트에 가려지지 않는다", () => {
+    const grabber = rules.find((r) => r.selector === ".result-sheet-grabber");
+    expect(grabber).toBeDefined();
+    const zIndex = /z-index\s*:\s*(-?\d+)/.exec(grabber!.body);
+    expect(zIndex).not.toBeNull();
+    expect(Number(zIndex![1])).toBeGreaterThan(0);
+  });
+
+  /**
    * 시트 위쪽 빈 자리에서는 지도가 그대로 조작돼야 한다 — 덮개 층이
    * 손짓을 받으면 지도를 못 민다(`.budget-panel`이 지키는 것과 같은 원칙).
    */
