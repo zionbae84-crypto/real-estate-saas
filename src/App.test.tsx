@@ -2177,6 +2177,48 @@ describe("전체화면 결과 셸", () => {
     expect(container.querySelector(".disclaimer")).not.toBeNull();
   });
 
+  /*
+   * 사용자 지시: "상단 사이드바에는 지역과 예산을 표시해줘서 바로 조건을
+   * 바꿀 수 있도록 해줘." 좁은 화면에서 현금·지역은 늘 서 있고 나머지만
+   * 접히는데, **그 접기는 CSS가 하고 DOM은 한 벌뿐이다** — 여기서 잠그는
+   * 것은 그 "한 벌"이다. 예전에는 압축 줄이 지역·실구매가를 글자로 다시
+   * 적었고, 그렇게 두 자리가 같은 사실을 각자 그리면 언젠가 어긋난다.
+   */
+  describe("조건 더보기 토글", () => {
+    it("현금·연 소득 입력란은 각각 한 벌뿐이다 — 압축 줄이 값을 복제하지 않는다", async () => {
+      await renderResults();
+      // getByLabelText는 둘 이상이면 던진다 — 그것이 이 검사의 핵심이다.
+      expect(screen.getByLabelText("사용가능 현금 예산")).toBeInTheDocument();
+      expect(screen.getByLabelText("연 소득(세전)")).toBeInTheDocument();
+      // 예산 상세 트리거도 하나뿐이어야 한다(압축 줄이 같은 이름을 쓰던 자리).
+      expect(screen.getAllByRole("button", { name: /실구매 가능 가격/ })).toHaveLength(1);
+    });
+
+    it("누르면 aria-expanded가 뒤집히고 요약에 펼침 표시가 붙는다", async () => {
+      const { container } = await renderResults();
+      const toggle = screen.getByRole("button", { name: "조건 더보기" });
+      const summary = container.querySelector("#result-topbar-conditions")!;
+
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      expect(summary.className).not.toContain("result-topbar-summary--open");
+
+      await userEvent.click(toggle);
+
+      expect(
+        screen.getByRole("button", { name: "조건 접기" }),
+      ).toHaveAttribute("aria-expanded", "true");
+      expect(summary.className).toContain("result-topbar-summary--open");
+    });
+
+    it("토글이 가리키는 것이 실제로 그 요약이다", async () => {
+      const { container } = await renderResults();
+      const toggle = screen.getByRole("button", { name: "조건 더보기" });
+      expect(toggle.getAttribute("aria-controls")).toBe(
+        container.querySelector("#result-topbar-conditions")?.id,
+      );
+    });
+  });
+
   it("상단바가 전제와 결과를 요약하고, 조건 다시 넣기가 그 안에 선다", async () => {
     const { container } = await renderResults();
     const topbar = container.querySelector(".result-topbar");

@@ -32,7 +32,7 @@ import {
   type ComplexFilterState,
 } from "./lib/complex-filters";
 import { buildComplexList, burdenTierOf } from "./lib/complex-list";
-import { regionByCode, regionNameByCode } from "./data/regions";
+import { regionNameByCode } from "./data/regions";
 import { formatRuleVersionLabel } from "./format/ruleVersionLabel";
 import { formatWon } from "./format/won";
 import {
@@ -1155,57 +1155,6 @@ export function App() {
                 어긋나 "보이지 않는데 조작되는" 상태가 돌아온다.
               */
               panelOpen={budgetPanelOpen}
-              /*
-                좁은 화면(≤640px)에서 상단바를 대신하는 한 줄
-                (`ResultShell`의 `compactSummary` 문서 참고). 넓은 화면
-                에서는 CSS가 이 줄을 끄고 아래 `summary`가 그대로 선다 —
-                "모바일인가"를 여기서 판정하지 않는다.
-
-                **적는 것은 지역과 실구매 가능 가격 둘뿐이다.** 375px에서
-                이 줄이 쓸 수 있는 폭은 홈 버튼과 "조건 바꾸기" 힌트를
-                빼고 250px 남짓(한글 19자쯤)이라, 현금·연 소득까지 넣으면
-                말줄임에 먹힌다. 그 둘은 줄을 눌러 시트를 열면 **고칠 수
-                있는 입력란**으로 바로 나오므로, 읽기만 하는 압축 줄에
-                다시 적을 값이 아니다.
-
-                **값을 여기서 새로 계산하지 않는다** — 바로 아래
-                `summary`가 쓰는 것과 같은 식·같은 상수를 쓴다. 두 자리가
-                각자 계산하면 언젠가 한 화면이 다른 숫자를 두 번 말한다.
-
-                지역은 **자치구 이름만** 적는다("서울특별시 성동구"가
-                아니라 "성동구"). 좁은 폭에서 광역단체 이름은 거의 늘
-                말줄임에 먹히는데, 그것이 가리키는 것은 바로 옆 시트에
-                그대로 있다. 이름은 `regionByCode`가 준 `sigunguName`을
-                쓴다 — `regionNameByCode`가 만든 한 줄을 공백으로 쪼개면
-                이름에 공백이 든 지역에서 조용히 어긋난다(그 함수의 문서
-                주석이 경고하는 바로 그 실수다).
-
-                라벨("실구매 가능 가격")은 일부러 넣지 않는다: 기존
-                테스트 여럿이 `getByRole("button", { name: /실구매 가능
-                가격/ })`으로 예산 상세 패널의 트리거를 찾는데, 이 줄도
-                버튼이라 같은 문구를 쓰면 그 질의가 두 개를 잡는다.
-                같은 이유로 광역단체까지 적지 않는 편이 낫다 — 상단바의
-                지역 칸이 내는 "서울특별시 성동구"와 글자가 겹쳐, 그
-                문자열로 자리를 찾는 검사가 둘을 잡게 된다.
-              */
-              compactSummary={
-                <>
-                  {currentRegionCode !== null &&
-                    regionByCode(currentRegionCode) !== null && (
-                      <>
-                        <span className="result-compact-bar-region">
-                          {regionByCode(currentRegionCode)!.sigunguName}
-                        </span>
-                        <span aria-hidden="true">·</span>
-                      </>
-                    )}
-                  <span className="result-compact-bar-price">
-                    {affordability.result.affordablePrice > 0
-                      ? formatWon(affordability.result.affordablePrice)
-                      : ZERO_BUDGET_HEADLINE}
-                  </span>
-                </>
-              }
               summary={
                 <>
                   {/*
@@ -1230,7 +1179,7 @@ export function App() {
                     마운트돼 있어(phase는 감추기만 한다) 같은 문구면
                     접근성 질의가 애매해진다.
                   */}
-                  <div className="result-topbar-item result-topbar-item--field">
+                  <div className="result-topbar-item result-topbar-item--field result-topbar-item--cash">
                     <MoneyInput
                       id="topbar-cash"
                       label="사용가능 현금 예산"
@@ -1239,7 +1188,7 @@ export function App() {
                       commitOn="blur"
                     />
                   </div>
-                  <div className="result-topbar-item result-topbar-item--field">
+                  <div className="result-topbar-item result-topbar-item--field result-topbar-item--income">
                     <MoneyInput
                       id="topbar-income"
                       label="연 소득(세전)"
@@ -1314,7 +1263,7 @@ export function App() {
                     `currentRegionName` 주석 참고).
                   */}
                   {currentRegionName !== null && currentRegionCode !== null && (
-                    <div className="result-topbar-item result-topbar-item--field">
+                    <div className="result-topbar-item result-topbar-item--field result-topbar-item--region">
                       <span className="result-topbar-item-label">지역</span>
                       <span className="result-topbar-item-value-row">
                         <span className="result-topbar-item-value">
@@ -1404,7 +1353,7 @@ export function App() {
                   */}
                   <div
                     ref={ownedHomeTooltip.ref}
-                    className="result-topbar-item result-topbar-item--field"
+                    className="result-topbar-item result-topbar-item--field result-topbar-item--household"
                     onMouseEnter={ownedHomeTooltip.show}
                     onMouseLeave={ownedHomeTooltip.hide}
                     onFocus={ownedHomeTooltip.show}
@@ -1447,7 +1396,7 @@ export function App() {
                   </div>
                   <div
                     ref={firstTimeBuyerTooltip.ref}
-                    className="result-topbar-item result-topbar-item--field"
+                    className="result-topbar-item result-topbar-item--field result-topbar-item--firsttime"
                     onMouseEnter={firstTimeBuyerTooltip.show}
                     onMouseLeave={firstTimeBuyerTooltip.hide}
                     onFocus={firstTimeBuyerTooltip.show}

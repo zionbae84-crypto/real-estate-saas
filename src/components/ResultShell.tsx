@@ -11,25 +11,6 @@ import { lockBodyScroll } from "../print/bodyScrollLock";
 export interface ResultShellProps {
   /** 상단바 가운데 요약 항목들(라벨 + 값 쌍). {@link ResultSummaryItem} */
   summary: ReactNode;
-  /**
-   * **좁은 화면(≤640px) 전용 한 줄 요약.** {@link summary}의 값들을
-   * 글자 한 줄로 압축한 것으로, 호출부가 만들어 넘긴다.
-   *
-   * 왜 필요한가: `summary`는 현금·연 소득·지역을 **그 자리에서 고치는**
-   * 입력란들이라(사용자 지시) 줄바꿈되면 세로로 길다. 375×812에서 실측한
-   * 상단바 높이는 366px — 뷰포트의 45%다. 남은 55%를 지도와 목록이
-   * 또 반씩 나눠 쓰니 스크롤 영역 셋이 한 화면에 겹친다.
-   *
-   * 그래서 좁은 화면에서는 이 한 줄만 세워 두고(≈48px), 누르면 원래
-   * `summary`가 시트로 열린다 — 고치는 자리를 없애지 않으면서 세로를
-   * 되찾는다. 넓은 화면에서는 이 줄이 `display: none`이고 `summary`가
-   * 지금까지처럼 상단바에 그대로 선다.
-   *
-   * **여기서 값을 계산하지 않는다** — {@link ResultSummaryItem}과 같은
-   * 이유다. 상단바가 자기 계산을 새로 하면 아래 결과와 다른 숫자를
-   * 말할 수 있다.
-   */
-  compactSummary?: ReactNode;
   /** 상단바 오른쪽 버튼들(인쇄·조건 다시 넣기) */
   actions: ReactNode;
   /** 왼쪽 열 — 목록 ↔ 단지 상세가 전환되는 스크롤 영역 */
@@ -139,7 +120,6 @@ const SHEET_PEEK_PX = 112;
 
 export function ResultShell({
   summary,
-  compactSummary,
   actions,
   sidebar,
   map,
@@ -197,35 +177,29 @@ export function ResultShell({
         */}
         <p className="result-topbar-brand">내 예산으로 살 수 있는 집</p>
         {/*
-          좁은 화면 전용 한 줄 요약 겸 시트 트리거({@link compactSummary}
-          문서 참고). 넓은 화면에서는 `display: none`이라 초점도 가지
-          않는다.
+          좁은 화면(≤640px)에서 나머지 조건을 펼치는 토글.
 
-          접근 가능한 이름에 **"실구매 가능 가격"이 들어가면 안 된다** —
-          기존 테스트 여럿이 `getByRole("button", { name: /실구매 가능
-          가격/ })`으로 예산 상세 패널의 트리거를 찾는다. 그 문구를 여기
-          쓰면 같은 이름의 버튼이 둘이 되어 그 질의가 깨진다.
+          **값을 복제하지 않는다.** 예전에는 이 자리가 "강남구 · 11억
+          5,340만원"을 글자로 다시 적었는데, 같은 사실을 두 자리가 각자
+          그리면 언젠가 어긋난다(이 저장소가 `dataAsOf`·`실구매 가능
+          가격`에서 반복해 지켜 온 원칙이다). 지금은 요약 항목들이 그대로
+          상단바에 남고 — 현금과 지역은 **입력란·셀렉트 그대로** 보인다
+          (사용자 지시: "상단 사이드바에는 지역과 예산을 표시해줘서 바로
+          조건을 바꿀 수 있도록") — 이 버튼은 접힌 나머지(연 소득·무주택·
+          생애최초)를 여닫기만 한다.
 
-          펼침 힌트는 `.fold-more-hint`로 감싼다 — 종이에서는 누를 것이
-          없어 죽은 지시문이 되므로 인쇄에서 지운다. 버튼 자체도
-          `PRINT_HIDDEN_SELECTORS`에 올라 있다(같은 이유).
+          넓은 화면에서는 `display: none`이라 초점도 가지 않는다. 접힘·
+          펼침이 그쪽에서는 뜻이 없기 때문이다(요약이 늘 한 줄에 선다).
         */}
-        {compactSummary !== undefined && (
-          <button
-            type="button"
-            className="result-compact-bar"
-            aria-expanded={conditionsOpen}
-            aria-controls={CONDITIONS_ID}
-            onClick={() => setConditionsOpen((v) => !v)}
-          >
-            <span className="result-compact-bar-value">
-              {compactSummary}
-            </span>
-            <span className="fold-more-hint">
-              {conditionsOpen ? "닫기" : "조건 바꾸기"}
-            </span>
-          </button>
-        )}
+        <button
+          type="button"
+          className="result-conditions-toggle"
+          aria-expanded={conditionsOpen}
+          aria-controls={CONDITIONS_ID}
+          onClick={() => setConditionsOpen((v) => !v)}
+        >
+          {conditionsOpen ? "조건 접기" : "조건 더보기"}
+        </button>
         <div
           id={CONDITIONS_ID}
           className={

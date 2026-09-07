@@ -623,3 +623,105 @@ describe("상세 블록 카드 — 목록 카드와 같은 값을 쓴다", () =>
     );
   });
 });
+
+/*
+ * ══════════════════════════════════════════════════════════════════
+ * 6. 좁은 화면 상단바 — 눈에서만 감추고, 접근성 이름은 남긴다
+ * ══════════════════════════════════════════════════════════════════
+ *
+ * 사용자 지시로 좁은 화면(≤640px)에서는 현금 입력란과 지역 셀렉트가
+ * 상단바에 그대로 선다("상단 사이드바에는 지역과 예산을 표시해줘서 바로
+ * 조건을 바꿀 수 있도록"). 그 자리를 만드느라 라벨 셋을 화면에서 뺐는데,
+ * **빼는 방법이 둘이고 결과가 전혀 다르다:**
+ *
+ *   `display: none`  → 접근성 트리에서도 사라진다
+ *   클립(width:1px + clip-path) → 눈에서만 사라지고 이름은 남는다
+ *
+ * "실구매 가능 가격"은 그 칸의 **버튼 이름**을 만든다. `display: none`으로
+ * 지우면 스크린리더에 "11억 5,340만원" 버튼만 남아 무엇을 여는 버튼인지
+ * 알 수 없게 된다(기존 테스트 여럿도 그 이름으로 이 버튼을 찾는다).
+ * 지역 셀렉트의 "시·도 바꾸기"·"시·군·구 바꾸기"도 마찬가지다 — 그것이
+ * 두 셀렉트를 가르는 유일한 이름이다.
+ *
+ * jsdom은 CSS를 적용하지 않아 이 차이를 렌더로는 잡을 수 없다. 그래서
+ * `printCss.test.ts`와 같은 방식으로 CSS 텍스트를 직접 읽는다.
+ */
+describe("좁은 화면 상단바 — 라벨을 지우지 않고 클립한다", () => {
+  /** `@media screen and (max-width: 640px)` 블록의 몸통 */
+  const MOBILE = (() => {
+    const at = DECLARATIONS.indexOf("@media screen and (max-width: 640px)");
+    if (at === -1) return null;
+    const open = DECLARATIONS.indexOf("{", at);
+    let depth = 0;
+    for (let i = open; i < DECLARATIONS.length; i++) {
+      if (DECLARATIONS[i] === "{") depth++;
+      else if (DECLARATIONS[i] === "}" && --depth === 0) {
+        return DECLARATIONS.slice(open + 1, i);
+      }
+    }
+    return null;
+  })();
+
+  it("그 블록이 실제로 있다(전제)", () => {
+    expect(MOBILE, "@media screen and (max-width: 640px) 블록이 없습니다").not.toBeNull();
+    expect((MOBILE ?? "").length).toBeGreaterThan(0);
+  });
+
+  /** 그 블록 안에서 이 선택자에 걸린 선언부(여럿이면 이어 붙인다) */
+  function bodyFor(selector: string): string {
+    let out = "";
+    for (const m of (MOBILE ?? "").matchAll(/([^{}]+)\{([^{}]*)\}/g)) {
+      const selectors = m[1]!.split(",").map((x) => x.trim().replace(/\s+/g, " "));
+      if (selectors.includes(selector)) out += m[2]!;
+    }
+    return out;
+  }
+
+  const CLIPPED = [
+    ".result-topbar-item--button .result-topbar-item-label",
+    ".result-topbar-item--region .region-quick-select-label",
+  ];
+
+  it.each(CLIPPED)("%s 는 클립으로 감춘다 — display: none이 아니다", (selector) => {
+    const body = bodyFor(selector);
+    expect(body, `${selector} 규칙을 못 찾았다`).not.toBe("");
+    expect(
+      /display\s*:\s*none/.test(body),
+      `${selector}를 display: none으로 지우면 접근 가능한 이름이 함께 사라집니다.`,
+    ).toBe(false);
+    expect(/clip-path\s*:\s*inset\(50%\)/.test(body)).toBe(true);
+    expect(/position\s*:\s*absolute/.test(body)).toBe(true);
+  });
+
+  /*
+   * 반대로 이 둘은 **지워도 되는** 것들이다. 같은 사실을 바로 옆이
+   * 이미 말하고 있어, 남기면 한 화면이 같은 말을 두 번 한다.
+   *   - 지역 이름("서울특별시 강남구") — 두 셀렉트가 그대로 말한다
+   *   - 지역 라벨("지역") — 셀렉트가 곧 라벨이다
+   * 규제 배지는 여기 없다. 셀렉트가 말해 주지 않는 사실이라 남긴다.
+   */
+  it("지역 이름·라벨은 지운다 — 셀렉트가 같은 말을 하고 있다", () => {
+    expect(/display\s*:\s*none/.test(bodyFor(".result-topbar-item--region .result-topbar-item-value"))).toBe(true);
+    expect(/display\s*:\s*none/.test(bodyFor(".result-topbar-item--region .result-topbar-item-label"))).toBe(true);
+  });
+
+  it("규제 배지는 지우지 않는다 — LTV를 가르는 사실이다", () => {
+    const badgeRow = bodyFor(".result-topbar-item--region .result-topbar-item-value-row");
+    expect(badgeRow).not.toBe("");
+    expect(/display\s*:\s*none/.test(badgeRow)).toBe(false);
+  });
+
+  /*
+   * 접히는 것은 연 소득·무주택·생애최초 셋뿐이다. 현금과 지역이 여기
+   * 섞이면 사용자 지시("바로 조건을 바꿀 수 있도록")가 무너진다 —
+   * 그 둘은 접힘과 무관하게 늘 서 있어야 한다.
+   */
+  it("현금과 지역은 접히지 않는다", () => {
+    for (const selector of [".result-topbar-item--cash", ".result-topbar-item--region"]) {
+      expect(
+        /display\s*:\s*none/.test(bodyFor(selector)),
+        `${selector}가 접히면 상단바에서 바로 고칠 수 없게 됩니다.`,
+      ).toBe(false);
+    }
+  });
+});

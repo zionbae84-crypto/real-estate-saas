@@ -78,13 +78,12 @@ export const PRINT_HIDDEN_SELECTORS: readonly string[] = [
   // Task 4가 상단바로 옮기며 바로잡는다). 잃는 정보는 없다: 이 버튼은
   // 값도 문구도 아니고 조작 장치다.
   ".back-to-entry-button",
-  // 좁은 화면(≤640px)에서만 뜨는 상단바 압축 요약 버튼(ResultShell.tsx).
-  // 누르면 조건 입력 시트가 열리는 조작 장치다 — 종이에는 열 시트가
-  // 없다. **잃는 값이 없다**: 이 버튼이 적는 지역·실구매 가능 가격은
-  // 바로 옆 `.result-topbar-summary`(넓은 화면과 인쇄에서 늘 펼쳐져
-  // 있다)와 `PrintSummary`가 같은 출처에서 다시 적는다. 오히려 지우지
-  // 않으면 종이에 같은 값이 한 번 더 나온다.
-  ".result-compact-bar",
+  // 좁은 화면(≤640px)에서만 뜨는 "조건 더보기" 토글(ResultShell.tsx).
+  // 접힌 나머지 조건(연 소득·무주택·생애최초)을 여닫는 조작 장치다 —
+  // 종이에는 열 것이 없다. **잃는 값이 없다**: 그 조건들은 인쇄에서
+  // 늘 펼쳐진 채 `.result-topbar-summary`에 그대로 있고, `PrintSummary`도
+  // 같은 값을 다시 적는다.
+  ".result-conditions-toggle",
   // 목록 각 덩어리의 쪽 넘김(이전/다음). 종이에는 "쪽"이 없다 — 지금
   // 화면에 실제로 그려진 쪽의 행만 DOM에 있고(ComplexList.tsx가 그
   // 쪽만 자른다), 다른 쪽의 행은 애초에 로드돼 있지 않으므로 버튼을

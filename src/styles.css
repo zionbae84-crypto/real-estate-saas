@@ -4341,7 +4341,7 @@ body.body-scroll-locked {
   .dong-narrow,
   .complex-filters,
   .back-to-entry-button,
-  .result-compact-bar,
+  .result-conditions-toggle,
   .complex-pager,
   .complex-detail-back,
   .budget-detail-close,
@@ -5478,7 +5478,7 @@ body.body-scroll-locked {
  * 사이드바 → 지도)를 바꾸지 않고도 좁은 화면에서만 시트가 될 수 있다.
  * 그 순서는 인쇄 순서이기도 하다(`ResultShell`의 `panel` prop 문서).
  */
-.result-compact-bar {
+.result-conditions-toggle {
   display: none;
 }
 
@@ -5492,150 +5492,291 @@ body.body-scroll-locked {
 
 @media screen and (max-width: 640px) {
   /*
-   * ── 상단바 → 한 줄 ────────────────────────────────────────────
+   * ══════════════════════════════════════════════════════════════
+   * 상단바 — 지역과 예산은 **여기서 바로 고친다**
+   * ══════════════════════════════════════════════════════════════
    *
-   * `flex-wrap`을 끈다(넓은 화면에서 그것이 있는 이유는 요약 칸이
-   * 0px까지 눌리는 것을 막기 위함인데, 여기서는 요약 칸 자체가 접혀
-   * 있고 압축 줄은 말줄임으로 줄어든다). `overflow`도 푼다 — 조건
-   * 시트가 이 상단바의 절대 배치 자식이라, `overflow-x: auto`가
-   * 남아 있으면 상단바 높이에서 잘린다(`.budget-panel`을 상단바가
-   * 아니라 무대 안에 둔 것과 같은 이유다).
+   * 사용자 지시: "상단 사이드바에는 지역과 예산을 표시해줘서 바로
+   * 조건을 바꿀 수 있도록 해줘." 그래서 요약을 글자로 압축해 보여주고
+   * 탭해야 열리던 예전 방식을 걷어냈다 — **현금 입력란과 지역 셀렉트가
+   * 상단바에 그대로 선다.** 나머지(연 소득·무주택·생애최초)만 접는다.
+   *
+   *   ┌────────────────────────────────────────────────┐
+   *   │ [6억원    ] [서울특별시▾] [강남구▾]        [🏠] │  ← 늘 보인다
+   *   │ 실구매 11억 5,340만원 🔒규제  자세히  조건 더보기 │  ← 늘 보인다
+   *   ├────────────────────────────────────────────────┤
+   *   │ (펼치면) 연 소득 · 무주택 여부 · 생애최초 구입    │
+   *   └────────────────────────────────────────────────┘
+   *
+   * **값을 복제하지 않는다.** 예전 압축 줄은 지역·실구매가를 글자로 다시
+   * 적었는데, 같은 사실을 두 자리가 각자 그리면 언젠가 어긋난다. 지금은
+   * 원래 요약 항목이 그대로 서고 CSS가 자리만 바꾼다 — 그래서 입력란도
+   * 하나뿐이다(`ResultShell`의 토글 주석 참고).
    */
   .result-topbar {
     position: relative;
-    flex-wrap: nowrap;
-    gap: 0 10px;
+    display: grid;
+    /*
+     * 요약이 남는 폭을 전부 쓰고, 홈 버튼은 자기 폭만 쓴다. 홈은 첫
+     * 줄에 붙어야 하므로(`align-self: start`) 요약이 두 줄이 되어도
+     * 아래로 늘어지지 않는다.
+     */
+    grid-template-columns: minmax(0, 1fr) auto;
+    /*
+     * 영역을 이름으로 못박는다. 자동 배치에 맡기면 DOM 순서(토글 →
+     * 요약 → 홈)대로 흘러 토글이 맨 윗줄을 차지하고 요약이 그 아래로
+     * 밀린다 — 실측으로 잡았다(상단바 193px).
+     */
+    grid-template-areas:
+      "summary actions"
+      "summary toggle";
+    grid-template-rows: auto auto;
+    align-items: start;
+    gap: 2px 8px;
     min-height: 0;
-    padding: 5px 12px;
+    padding: 6px 12px;
+    /*
+     * 조건 시트가 이 상단바의 절대 배치 자식이라 `overflow`를 푼다 —
+     * `overflow-x: auto`가 남아 있으면 시트가 상단바 높이에서 잘린다
+     * (`.budget-panel`을 상단바가 아니라 무대 안에 둔 것과 같은 이유).
+     */
     overflow: visible;
   }
 
-  /* 서비스 이름은 압축 줄에 폭을 내준다. 문서 제목은 화면 1의 h1이다. */
+  /* 서비스 이름은 조건 컨트롤에 폭을 내준다. 문서 제목은 화면 1의 h1이다. */
   .result-topbar-brand {
     display: none;
   }
 
-  .result-compact-bar {
-    display: flex;
-    flex: 1 1 auto;
-    align-items: baseline;
-    gap: 6px;
+  /*
+   * 요약 자체가 상단바의 본문이다 — 예전처럼 떠 있는 시트가 아니다.
+   * 두 열 그리드로 두고, 항목마다 어디에 앉을지는 아래에서 정한다.
+   */
+  /*
+   * 요약 자체가 상단바의 본문이다 — 예전처럼 떠 있는 시트가 아니다.
+   *
+   * 왼쪽 열은 현금 입력란 하나가 두 줄을 다 쓰고(SEED TextField가 라벨+
+   * 입력으로 60px쯤 된다), 오른쪽 열에 실구매 가능 가격과 지역을 위아래로
+   * 얹는다. 그래야 왼쪽 입력란 높이에 딸려 오던 오른쪽 빈자리 36px이
+   * 사라진다 — 그 배치를 안 하면 상단바가 103px, 하면 73px이다(실측).
+   *
+   * 왼쪽을 `auto`로 두는 이유: 현금 입력란은 내용("15억원")이 정하는
+   * 폭이면 충분하고, 남는 폭은 지역 셀렉트 둘이 쓰는 편이 낫다.
+   */
+  .result-topbar-summary {
+    grid-area: summary;
+    display: grid;
+    /*
+     * 왼쪽 열을 **고정 폭**으로 못박는다. `auto`로 두면 현금 입력란이
+     * 186px까지 벌어져 오른쪽에 97px밖에 안 남고, 거기서 "11억
+     * 5,340만원"이 두 줄로 접힌다(실측). 120px이면 "15억원"까지 들어간다.
+     */
+    grid-template-columns: 120px minmax(0, 1fr);
+    align-items: start;
+    gap: 2px 8px;
     min-width: 0;
-    padding: 7px 0;
-    font: inherit;
-    color: inherit;
-    text-align: left;
-    background: none;
-    border: none;
-    cursor: pointer;
+  }
+
+  /* 라벨은 한 단 더 줄인다 — 좁은 화면에서 이 줄들이 높이를 가장 많이 먹는다. */
+  .result-topbar-item {
+    gap: 1px;
+    white-space: normal;
+  }
+
+  .result-topbar-item-label {
+    font-size: 0.625rem;
+    line-height: 1.3;
   }
 
   /*
-   * 값 묶음. 폭이 모자라면 **잘리는 것이 아니라 말줄임**이다 — 375px
-   * 에서 이 줄이 쓸 수 있는 폭은 홈 버튼과 힌트를 빼고 250px 남짓이다.
+   * ── 늘 보이는 것: 현금 · 실구매가 · 규제 배지 · 지역 셀렉트 ──────
+   *
+   *   ┌──────────────┬────────────────────────┐
+   *   │ 사용가능 현금 │ 실구매 11억 5,340만 자세히│  1행
+   *   │ [6억원      ] │ 🔒 규제지역             │  2행
+   *   ├──────────────┴────────────────────────┤
+   *   │ [서울특별시 ▾]      [강남구 ▾]          │  3행
+   *   └───────────────────────────────────────┘
+   *
+   * 셀렉트를 3행 전폭으로 내린 이유: 오른쪽 열에 함께 두면 폭이 97px밖에
+   * 안 남아 "서울특별시"가 한 글자로 잘리고 가격이 두 줄로 접혔다(실측).
+   * 전폭이면 셀렉트 하나에 150px씩 돌아간다.
    */
-  .result-compact-bar-value {
-    display: flex;
-    align-items: baseline;
+
+  /* 현금 입력란이 왼쪽 열의 두 줄을 다 쓴다. */
+  .result-topbar-item--cash {
+    grid-area: 1 / 1 / 3 / 2;
+  }
+
+  /*
+   * 지역 칸은 **상자를 없앤다**(`display: contents`). 그래야 그 안의
+   * 규제 배지와 셀렉트 묶음이 요약 그리드의 칸으로 각각 앉는다 — 배지는
+   * 가격 아래(2행 오른쪽), 셀렉트는 전폭(3행)으로 갈라 놓을 수 있다.
+   * 상자로 두면 셋이 한 칸에 묶여 그 칸이 세로로 길어진다.
+   */
+  .result-topbar-item--region {
+    display: contents;
+  }
+
+  /* 라벨("지역")은 지운다 — 아래 두 셀렉트가 곧 라벨이다. */
+  .result-topbar-item--region .result-topbar-item-label {
+    display: none;
+  }
+
+  /*
+   * 지역 이름 글자도 지운다 — 셀렉트가 이미 "서울특별시 / 강남구"를
+   * 말한다. 규제 배지는 남는다: LTV를 가르는 사실인데 셀렉트가 말해
+   * 주지 않는다.
+   */
+  .result-topbar-item--region .result-topbar-item-value {
+    display: none;
+  }
+
+  .result-topbar-item--region .result-topbar-item-value-row {
+    grid-area: 2 / 2;
+    align-self: end;
+  }
+
+  .result-topbar-item--region .region-quick-select {
+    grid-area: 3 / 1 / 4 / -1;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
     gap: 6px;
-    min-width: 0;
+  }
+
+  /* 셀렉트 위 작은 라벨("시·도 바꾸기")은 자리를 못 낸다 — 값이 곧 라벨이다. */
+  .result-topbar-item--region .region-quick-select-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
     overflow: hidden;
+    clip-path: inset(50%);
     white-space: nowrap;
-    text-overflow: ellipsis;
-    font-size: 0.9375rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-  }
-
-  .result-compact-bar-region {
-    flex: none;
-    color: var(--result-ink);
   }
 
   /*
-   * 금액은 어두운 변형(`--result-signal-ink`, 흰 면 위 5.44:1)이다 —
-   * `--result-signal`은 채움 전용이라 글자에 쓰지 않는다(`.result-shell`
-   * 토큰 주석, `scripts/result-screen-layout.test.ts`가 잠근다).
+   * 실구매 가능 가격 — 오른쪽 열 첫 줄. 라벨과 값을 한 줄에 눕혀
+   * 높이를 아낀다.
    */
-  .result-compact-bar-price {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    color: var(--result-signal-ink);
+  .result-topbar-item--button {
+    grid-area: 1 / 2;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0 6px;
+    padding: 0;
   }
 
-  .result-compact-bar .fold-more-hint {
-    flex: none;
+  .result-topbar-item--button .result-topbar-item-value {
+    font-size: 0.9375rem;
+  }
+
+  /*
+   * 라벨("실구매 가능 가격")은 **눈에서만 감춘다** — `display: none`이
+   * 아니라 클립이다. 이 칸은 예산 상세를 여는 버튼이라 그 문구가
+   * 접근 가능한 이름을 만든다: `display: none`으로 지우면 스크린리더에
+   * 그냥 "11억 5,340만원" 버튼이 되어 무엇을 여는 버튼인지 사라진다.
+   * (기존 테스트 여럿도 그 이름으로 이 버튼을 찾는다.)
+   *
+   * 눈으로는 값과 "자세히"만 남아 한 줄에 든다 — 라벨까지 두면 175px
+   * 열에서 세 줄로 접힌다(실측 79px).
+   */
+  .result-topbar-item--button .result-topbar-item-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /*
+   * ── 접히는 나머지 ─────────────────────────────────────────────
+   * 연 소득·무주택·생애최초. 펼치면 두 열로 나란히 선다.
+   */
+  .result-topbar-item--income,
+  .result-topbar-item--household,
+  .result-topbar-item--firsttime {
+    display: none;
+  }
+
+  .result-topbar-summary--open .result-topbar-item--income {
+    display: grid;
+    grid-area: 4 / 1 / 5 / -1;
+  }
+
+  .result-topbar-summary--open .result-topbar-item--household {
+    display: grid;
+    grid-area: 5 / 1;
+  }
+
+  .result-topbar-summary--open .result-topbar-item--firsttime {
+    display: grid;
+    grid-area: 5 / 2;
+  }
+
+  /*
+   * "조건 더보기" 토글. 홈 버튼 아래, 오른쪽 열에 선다 — 요약과 같은
+   * 줄을 두고 다투지 않는다.
+   */
+  .result-conditions-toggle {
+    display: block;
+    grid-area: toggle;
+    justify-self: end;
+    padding: 2px 0 0;
+    font: inherit;
     font-size: 0.6875rem;
     font-weight: 500;
     letter-spacing: 0.02em;
     color: var(--result-gray);
+    text-align: right;
+    background: none;
+    border: none;
+    cursor: pointer;
+    white-space: nowrap;
   }
 
-  /*
-   * ── 조건 시트 ─────────────────────────────────────────────────
-   * 원래 상단바 요약(현금·연 소득·실구매 가능 가격·지역)을 그대로
-   * 담는다. 담는 상자만 바뀌고 필드도 배선도 그대로다.
-   */
-  .result-topbar-summary {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    /* 목록 시트(110)·예산 상세 패널(120)보다 위 — 위 스크롤 상자 주석 참고 */
-    z-index: 130;
-    box-sizing: border-box;
-    flex-direction: column;
-    align-items: stretch;
-    gap: 16px;
-    max-height: calc(100dvh - 4rem);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: 16px 12px 22px;
-    background: var(--result-paper);
-    border-bottom: 1px solid var(--result-rule);
-    box-shadow: 0 10px 26px rgb(18 41 77 / 14%);
-  }
-
-  .result-topbar-summary--open {
-    display: flex;
-  }
-
-  /*
-   * **조회 상태는 시트가 접혀 있어도 나온다.**
-   *
-   * "새 지역을 불러오는 중이에요…"·"새 지역 조회에 실패했어요"는 이
-   * 요약 묶음 **안**에 있다(App.tsx). 접힘을 그냥 `display: none`으로
-   * 두면 그 두 줄이 함께 사라져, 시트에서 지역을 바꾸고 닫은 사용자는
-   * 실패를 영영 못 본다 — 이 저장소가 가장 경계하는 "조용한 실패"의
-   * 모양이다. 접힌 동안에는 상태 줄만 남기고 나머지를 감춘다.
-   *
-   * `:has()`가 없으면 상태 줄이 없을 때도 빈 상자(패딩·그림자)가 한 줄
-   * 뜬다. 그 조건까지 CSS가 알아야 해서 쓴다 — 지원하지 않는 옛
-   * 브라우저에서는 아래 두 규칙이 통째로 무시되어 지금까지처럼 접힌
-   * 채로 남는다(그쪽에서도 홈 아이콘으로 화면 1에 돌아가 다시 조회할
-   * 수 있다).
-   */
-  .result-topbar-summary:not(.result-topbar-summary--open):has(
-      .result-topbar-status
-    ) {
-    display: flex;
-    padding: 10px 12px;
-  }
-
-  .result-topbar-summary:not(.result-topbar-summary--open)
-    > *:not(.result-topbar-status) {
-    display: none;
-  }
-
-  /* 시트 안에서는 한 줄에 욱여넣을 이유가 없다 — 넘치면 접는다. */
-  .result-topbar-item {
-    white-space: normal;
+  .result-conditions-toggle:focus-visible {
+    outline: 2px solid var(--result-signal);
+    outline-offset: 2px;
   }
 
   .result-topbar-actions {
+    grid-area: actions;
+    align-self: start;
     flex: none;
+  }
+
+  /*
+   * 조회 상태(로딩·실패)는 두 열을 다 쓰고 늘 보인다 — 접힘과 무관하다.
+   * 접혔다고 "새 지역 조회에 실패했어요"까지 삼키면 사용자는 실패를
+   * 영영 못 본다. 이 저장소가 가장 경계하는 "조용한 실패"다.
+   */
+  .result-topbar-status {
+    grid-area: 6 / 1 / 7 / -1;
+  }
+
+  /*
+   * 현금 입력란의 높이를 한 단 줄인다 — SEED TextField의 라벨+입력이
+   * 기본 57px인데, 이 줄이 상단바 높이를 혼자 정한다.
+   */
+  /*
+   * 현금·연 소득 입력란이 상단바 높이를 정한다(SEED TextField가 라벨
+   * 22px + 입력 36px). 라벨 줄만 한 단 줄인다 — 입력 상자는 손대지
+   * 않는다. 36px은 이미 터치 타깃으로 넉넉하지 않은 편이라 여기서 더
+   * 깎으면 누르기 어려워진다.
+   */
+  .result-topbar-item--field .money-input .seed-field__header {
+    margin-bottom: 0;
+  }
+
+  .result-topbar-item--field .money-input label {
+    font-size: 0.625rem;
+    line-height: 1.3;
   }
 
   /*
