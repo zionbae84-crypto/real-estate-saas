@@ -1,23 +1,21 @@
 import { Redis } from "@upstash/redis";
+import { readMany, writeMany, type RedisLike } from "./redisBatch";
 
 export interface Coordinate {
   lat: number;
   lon: number;
 }
 
-/**
- * 이 파일이 실제로 쓰는 Redis 표면만 담은 타입. `@upstash/redis`의
- * `Redis` 클래스는 이 타입을 만족한다 — 테스트는 진짜 Redis 없이 이
- * 인터페이스만 흉내 낸 가짜로 돈다.
- */
-export interface RedisLike {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<unknown>;
-}
+export type { RedisLike };
 
 export interface GeocodeCache {
-  get(address: string): Promise<Coordinate | null>;
-  set(address: string, coordinate: Coordinate): Promise<void>;
+  /**
+   * 주소들의 좌표를 **한 번에** 조회한다. 결과는 입력 순서 그대로이고,
+   * 캐시에 없는 자리는 `null`이다.
+   */
+  getMany(addresses: readonly string[]): Promise<Array<Coordinate | null>>;
+  /** 주소→좌표 쌍을 **한 번에** 저장한다. */
+  setMany(entries: ReadonlyArray<readonly [string, Coordinate]>): Promise<void>;
 }
 
 const CACHE_KEY_PREFIX = "geocode:";
@@ -28,18 +26,14 @@ const CACHE_KEY_PREFIX = "geocode:";
  */
 export function createGeocodeCache(redis: RedisLike): GeocodeCache {
   return {
-    async get(address) {
-      return redis.get<Coordinate>(`${CACHE_KEY_PREFIX}${address}`);
-    },
-    async set(address, coordinate) {
-      await redis.set(`${CACHE_KEY_PREFIX}${address}`, coordinate);
-    },
+    getMany: (addresses) => readMany<Coordinate>(redis, CACHE_KEY_PREFIX, addresses),
+    setMany: (entries) => writeMany(redis, CACHE_KEY_PREFIX, entries),
   };
 }
 
 /**
- * 아무것도 기억하지 않는 캐시. `get`은 언제나 미스, `set`은 아무 데도
- * 쓰지 않는다.
+ * 아무것도 기억하지 않는 캐시. `getMany`는 언제나 전부 미스, `setMany`는
+ * 아무 데도 쓰지 않는다.
  *
  * 캐시가 없으면 매 요청이 지오코딩 API를 다시 부를 뿐 **결과는 똑같다** —
  * 느려지는 것은 결함이지만 틀린 답을 주는 것은 아니다. 그래서 캐시를 못
@@ -48,10 +42,10 @@ export function createGeocodeCache(redis: RedisLike): GeocodeCache {
  */
 export function createNoopGeocodeCache(): GeocodeCache {
   return {
-    async get() {
-      return null;
+    async getMany(addresses) {
+      return addresses.map(() => null);
     },
-    async set() {},
+    async setMany() {},
   };
 }
 
@@ -65,8 +59,8 @@ export function createNoopGeocodeCache(): GeocodeCache {
  *
  * 1. 환경변수가 없으면 **아예 만들지 않는다.** 지금 설치된 버전
  *    (@upstash/redis 1.38.2, nodejs 엔트리)은 이 경우 던지지 않고
- *    `url: undefined`인 클라이언트를 돌려준다 — 만들어 두면 주소마다
- *    get/set이 각각 실패하며 경고를 뿜고, 요청은 그만큼 느려진다.
+ *    `url: undefined`인 클라이언트를 돌려준다 — 만들어 두면 조회마다
+ *    실패하며 경고를 뿜고, 요청은 그만큼 느려진다.
  * 2. 그래도 생성이 던지면 잡는다. 다른 엔트리·다른 버전은 여기서
  *    동기적으로 던지고, 그 예외는 핸들러에 닿기도 전에(형식이 잘못돼
  *    400으로 끝났어야 할 요청까지) 요청을 통째로 죽인다.

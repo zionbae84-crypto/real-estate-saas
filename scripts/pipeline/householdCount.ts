@@ -9,16 +9,23 @@
  * 없음)와 같은 이유로 이 캐시도 TTL을 두지 않는다.
  */
 export interface HouseholdCountCache {
-  get(pnu: string): Promise<number | null>;
-  set(pnu: string, count: number): Promise<void>;
+  /**
+   * PNU들의 세대수를 **한 번에** 조회한다. 결과는 입력 순서 그대로이고,
+   * 캐시에 없는 자리는 `null`이다. 한 건씩 왕복하면 단지 수백 개인 시군구
+   * 하나에 수백 번의 네트워크 왕복이 된다 — `geocodeCache`가 같은 이유로
+   * 같은 모양을 쓴다(`api/_lib/redisBatch.ts`).
+   */
+  getMany(pnus: readonly string[]): Promise<Array<number | null>>;
+  /** PNU→세대수 쌍을 **한 번에** 저장한다. */
+  setMany(entries: ReadonlyArray<readonly [string, number]>): Promise<void>;
 }
 
 /** 아무것도 기억하지 않는 캐시. 기존 호출자(테스트, 오프라인 배치)의 기본값이다. */
 export const noopHouseholdCountCache: HouseholdCountCache = {
-  async get() {
-    return null;
+  async getMany(pnus) {
+    return pnus.map(() => null);
   },
-  async set() {},
+  async setMany() {},
 };
 
 /** PNU 하나로 세대수를 실제로 조회하는 함수의 모양. 진짜 구현(HTTP 호출)은 `api/_lib/`에 둔다. */
@@ -117,9 +124,10 @@ export async function lookupHouseholdCounts(
   const uniquePnus = [...new Set(pnus)];
   const result = new Map<string, number>();
 
-  // ── 1. 캐시부터. 읽기도 배치로 돈다 — 하나씩 기다리면 수백 번의
-  //       왕복이 직렬이 되어, 캐시가 다 찬 지역이 오히려 느려진다.
-  const cached = await inBatches(uniquePnus, concurrency, (pnu) => safeGet(cache, pnu));
+  // ── 1. 캐시부터. 읽기는 **한 번의 묶음 조회**다 — PNU마다 왕복하면
+  //       그 수백 번이 그대로 네트워크 왕복이 되어, 캐시가 다 찬 지역이
+  //       오히려 느려진다.
+  const cached = await safeGetMany(cache, uniquePnus);
   const misses: string[] = [];
   uniquePnus.forEach((pnu, i) => {
     const count = cached[i];
@@ -163,58 +171,67 @@ export async function lookupHouseholdCounts(
         fresh.push([pnu, count]);
       }
     }
-    // 캐시 쓰기도 배치로 — 위 읽기와 같은 이유다.
-    await inBatches(fresh, concurrency, ([pnu, count]) => safeSet(cache, pnu, count));
+    // 캐시 쓰기도 묶음으로 — 위 읽기와 같은 이유다.
+    await safeSetMany(cache, fresh);
   } else {
     bySingle.push(...misses);
   }
 
-  // ── 3. 남은 것은 단건으로.
+  // ── 3. 남은 것은 단건으로. 구한 값은 마지막에 한 번에 저장한다.
   if (bySingle.length > 0) {
-    const resolved = await inBatches(bySingle, concurrency, (pnu) =>
-      resolveOne(pnu, cache, fetchOne),
-    );
+    const resolved = await inBatches(bySingle, concurrency, (pnu) => resolveOne(pnu, fetchOne));
+    const fresh: Array<readonly [string, number]> = [];
     bySingle.forEach((pnu, i) => {
       const count = resolved[i];
-      if (count !== null && count !== undefined) result.set(pnu, count);
+      if (count !== null && count !== undefined) {
+        result.set(pnu, count);
+        fresh.push([pnu, count]);
+      }
     });
+    await safeSetMany(cache, fresh);
   }
 
   return result;
 }
 
-/** 캐시 조회 실패는 미스와 동일하게 취급한다 — 기능은 계속 동작하고 속도 이점만 잃는다. */
-async function safeGet(cache: HouseholdCountCache, pnu: string): Promise<number | null> {
+/**
+ * 캐시 조회 실패는 전부 미스와 동일하게 취급한다 — 기능은 계속 동작하고
+ * 속도 이점만 잃는다. 돌려주는 배열은 언제나 `pnus`와 같은 길이다.
+ */
+async function safeGetMany(
+  cache: HouseholdCountCache,
+  pnus: readonly string[],
+): Promise<Array<number | null>> {
   try {
-    return await cache.get(pnu);
+    const cached = await cache.getMany(pnus);
+    return pnus.map((_, i) => cached[i] ?? null);
   } catch {
-    return null;
+    return pnus.map(() => null);
   }
 }
 
 /** 저장 실패로 이미 구한 값을 버리지 않는다 — 다음 요청이 다시 구할 뿐이다. */
-async function safeSet(cache: HouseholdCountCache, pnu: string, count: number): Promise<void> {
+async function safeSetMany(
+  cache: HouseholdCountCache,
+  entries: ReadonlyArray<readonly [string, number]>,
+): Promise<void> {
+  if (entries.length === 0) return;
   try {
-    await cache.set(pnu, count);
+    await cache.setMany(entries);
   } catch {
     /* 무시 — 위 주석 참고 */
   }
 }
 
-/** 캐시를 이미 확인한 PNU 하나를 단건 API로 구하고, 성공하면 캐시에 남긴다. */
+/** 캐시를 이미 확인한 PNU 하나를 단건 API로 구한다. 저장은 호출부가 묶어서 한다. */
 async function resolveOne(
   pnu: string,
-  cache: HouseholdCountCache,
   fetchOne: FetchHouseholdCount,
 ): Promise<number | null> {
-  let count: number | null;
   try {
-    count = await fetchOne(pnu);
+    return await fetchOne(pnu);
   } catch {
     // 이 PNU 하나의 조회가 실패했다 — 나머지 PNU들의 조회를 막지 않는다.
     return null;
   }
-  if (count === null) return null;
-  await safeSet(cache, pnu, count);
-  return count;
 }

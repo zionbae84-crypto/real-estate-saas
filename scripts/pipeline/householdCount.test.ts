@@ -7,17 +7,32 @@ import {
   type HouseholdCountCache,
 } from "./householdCount";
 
-function fakeCache(): HouseholdCountCache & { store: Map<string, number> } {
+/**
+ * 진짜 캐시와 같은 약속을 지키는 가짜 — `getMany`는 물어본 순서 그대로,
+ * 물어본 개수만큼 돌려준다. 길이나 순서가 어긋나면 호출부가 자리를 잘못
+ * 맞춰 PNU가 남의 세대수를 받는다. `reads`/`writes`로 **왕복 횟수**도
+ * 세어 둔다 — 이 캐시가 묶음 명령만 두는 이유가 그것이다.
+ */
+function fakeCache(): HouseholdCountCache & {
+  store: Map<string, number>;
+  reads: number;
+  writes: number;
+} {
   const store = new Map<string, number>();
-  return {
+  const cache = {
     store,
-    async get(pnu) {
-      return store.get(pnu) ?? null;
+    reads: 0,
+    writes: 0,
+    async getMany(pnus: readonly string[]) {
+      cache.reads += 1;
+      return pnus.map((pnu) => store.get(pnu) ?? null);
     },
-    async set(pnu, count) {
-      store.set(pnu, count);
+    async setMany(entries: ReadonlyArray<readonly [string, number]>) {
+      cache.writes += 1;
+      for (const [pnu, count] of entries) store.set(pnu, count);
     },
   };
+  return cache;
 }
 
 describe("lookupHouseholdCounts", () => {
@@ -64,10 +79,10 @@ describe("lookupHouseholdCounts", () => {
 
   it("캐시 조회가 실패해도 미스로 취급해 계속 동작한다", async () => {
     const cache: HouseholdCountCache = {
-      async get() {
+      async getMany() {
         throw new Error("redis down");
       },
-      async set() {},
+      async setMany() {},
     };
     const fetchOne = vi.fn(async () => 100);
 
@@ -78,10 +93,10 @@ describe("lookupHouseholdCounts", () => {
 
   it("캐시 저장이 실패해도 이미 구한 값은 그대로 돌려준다", async () => {
     const cache: HouseholdCountCache = {
-      async get() {
-        return null;
+      async getMany(pnus) {
+        return pnus.map(() => null);
       },
-      async set() {
+      async setMany() {
         throw new Error("redis down");
       },
     };
@@ -121,8 +136,22 @@ describe("lookupHouseholdCounts", () => {
   });
 
   it("noopHouseholdCountCache는 언제나 미스다", async () => {
-    await noopHouseholdCountCache.set("A", 100);
-    expect(await noopHouseholdCountCache.get("A")).toBeNull();
+    await noopHouseholdCountCache.setMany([["A", 100]]);
+    expect(await noopHouseholdCountCache.getMany(["A", "B"])).toEqual([null, null]);
+  });
+
+  it("PNU가 많아도 캐시 왕복은 손에 꼽는다 — PNU마다 왕복하지 않는다", async () => {
+    // 예전에는 읽기·쓰기가 PNU마다 한 번씩이었다. 단지 수백 개인 시군구
+    // 하나면 그것만으로 수백 번의 네트워크 왕복이 된다.
+    const cache = fakeCache();
+    const pnus = Array.from({ length: 200 }, (_, i) => `P${i}`);
+    const fetchOne = vi.fn(async () => 100);
+
+    await lookupHouseholdCounts(pnus, cache, fetchOne, { concurrency: 8 });
+
+    expect(cache.store.size).toBe(200); // 값은 전부 남았고…
+    expect(cache.reads).toBe(1); // …왕복은 읽기 한 번,
+    expect(cache.writes).toBe(1); // 쓰기 한 번이다.
   });
 });
 

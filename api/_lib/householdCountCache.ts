@@ -1,16 +1,8 @@
 import { Redis } from "@upstash/redis";
 import type { HouseholdCountCache } from "../../scripts/pipeline/householdCount";
+import { readMany, writeMany, type RedisLike } from "./redisBatch";
 
-/**
- * 이 파일이 실제로 쓰는 Redis 표면만 담은 타입. `geocodeCache.ts`의
- * `RedisLike`와 같은 모양이다(만료 없음 — 세대수도 주소→좌표처럼
- * 사실상 영구적이다). `@upstash/redis`의 `Redis` 클래스는 이 타입을
- * 만족한다 — 테스트는 진짜 Redis 없이 이 인터페이스만 흉내 낸 가짜로 돈다.
- */
-export interface RedisLike {
-  get<T>(key: string): Promise<T | null>;
-  set(key: string, value: unknown): Promise<unknown>;
-}
+export type { RedisLike };
 
 const CACHE_KEY_PREFIX = "household-count:";
 
@@ -21,12 +13,8 @@ const CACHE_KEY_PREFIX = "household-count:";
  */
 export function createHouseholdCountCache(redis: RedisLike): HouseholdCountCache {
   return {
-    async get(pnu) {
-      return redis.get<number>(`${CACHE_KEY_PREFIX}${pnu}`);
-    },
-    async set(pnu, count) {
-      await redis.set(`${CACHE_KEY_PREFIX}${pnu}`, count);
-    },
+    getMany: (pnus) => readMany<number>(redis, CACHE_KEY_PREFIX, pnus),
+    setMany: (entries) => writeMany(redis, CACHE_KEY_PREFIX, entries),
   };
 }
 
@@ -36,10 +24,10 @@ export function createHouseholdCountCache(redis: RedisLike): HouseholdCountCache
  */
 export function createNoopHouseholdCountCache(): HouseholdCountCache {
   return {
-    async get() {
-      return null;
+    async getMany(pnus) {
+      return pnus.map(() => null);
     },
-    async set() {},
+    async setMany() {},
   };
 }
 

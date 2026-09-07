@@ -2,11 +2,23 @@ import { describe, expect, it, vi } from "vitest";
 import { GEOCODE_CONCURRENCY, handleGeocodeRequest } from "./handleGeocode";
 import { createNoopResponseCache } from "./responseCache";
 
+/**
+ * 전부 미스인 캐시. `getMany`는 물어본 주소 수만큼 `null`을 돌려준다 —
+ * 길이가 어긋나면 핸들러가 자리를 잘못 맞추게 되므로, 가짜도 진짜와
+ * 같은 약속(입력 순서·입력 길이)을 지킨다.
+ */
+function emptyCache() {
+  return {
+    getMany: vi.fn(async (addresses: readonly string[]) => addresses.map(() => null)),
+    setMany: vi.fn(async () => {}),
+  };
+}
+
 describe("handleGeocodeRequest", () => {
   it("regionCode가 없으면 400을 반환한다", async () => {
     const result = await handleGeocodeRequest(
       { regionCode: null, dong: null },
-      { fetchAddresses: vi.fn(), cache: { get: vi.fn(), set: vi.fn() }, geocode: vi.fn(), responseCache: createNoopResponseCache(), dataKey: "molit-key", key: "id", secret: "s" },
+      { fetchAddresses: vi.fn(), cache: { getMany: vi.fn(), setMany: vi.fn() }, geocode: vi.fn(), responseCache: createNoopResponseCache(), dataKey: "molit-key", key: "id", secret: "s" },
     );
     expect(result.status).toBe(400);
   });
@@ -20,10 +32,12 @@ describe("handleGeocodeRequest", () => {
       ]),
     );
     const cache = {
-      get: vi.fn(async (address: string) =>
-        address === "서울특별시 강남구 역삼동 719-3" ? { lat: 1, lon: 1 } : null,
+      getMany: vi.fn(async (addresses: readonly string[]) =>
+        addresses.map((address) =>
+          address === "서울특별시 강남구 역삼동 719-3" ? { lat: 1, lon: 1 } : null,
+        ),
       ),
-      set: vi.fn(async () => {}),
+      setMany: vi.fn(async () => {}),
     };
     const geocode = vi.fn(async (address: string) =>
       address === "서울특별시 강남구 역삼동 800-1" ? { lat: 2, lon: 2 } : null,
@@ -46,9 +60,19 @@ describe("handleGeocodeRequest", () => {
     });
     // 캐시 히트였던 첫 단지는 지오코딩을 부르지 않았다.
     expect(geocode).toHaveBeenCalledTimes(2);
-    // 새로 구한 좌표만 캐시에 저장했다.
-    expect(cache.set).toHaveBeenCalledTimes(1);
-    expect(cache.set).toHaveBeenCalledWith("서울특별시 강남구 역삼동 800-1", { lat: 2, lon: 2 });
+    // 주소가 셋이어도 캐시 조회는 **한 번**이다 — 주소마다 왕복하면
+    // 시군구 하나에 수백 번이 된다(이 최적화가 없애려던 것이 그것이다).
+    expect(cache.getMany).toHaveBeenCalledTimes(1);
+    expect(cache.getMany).toHaveBeenCalledWith([
+      "서울특별시 강남구 역삼동 719-3",
+      "서울특별시 강남구 역삼동 800-1",
+      "서울특별시 강남구 역삼동 900-1",
+    ]);
+    // 새로 구한 좌표만, 역시 한 번에 저장했다.
+    expect(cache.setMany).toHaveBeenCalledTimes(1);
+    expect(cache.setMany).toHaveBeenCalledWith([
+      ["서울특별시 강남구 역삼동 800-1", { lat: 2, lon: 2 }],
+    ]);
   });
 
   it("응답에 주소가 실리지 않는다", async () => {
@@ -57,7 +81,7 @@ describe("handleGeocodeRequest", () => {
       { regionCode: "11680", dong: null },
       {
         fetchAddresses,
-        cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn() },
+        cache: emptyCache(),
         geocode: vi.fn().mockResolvedValue({ lat: 1, lon: 1 }),
         responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
@@ -85,7 +109,7 @@ describe("handleGeocodeRequest", () => {
       { regionCode: "11680", dong: null },
       {
         fetchAddresses,
-        cache: { get: vi.fn(), set: vi.fn() },
+        cache: { getMany: vi.fn(), setMany: vi.fn() },
         geocode: vi.fn(),
         responseCache: createNoopResponseCache(),
         dataKey: MOLIT_KEY,
@@ -110,7 +134,7 @@ describe("handleGeocodeRequest", () => {
       { regionCode: "11680", dong: null },
       {
         fetchAddresses,
-        cache: { get: vi.fn(), set: vi.fn() },
+        cache: { getMany: vi.fn(), setMany: vi.fn() },
         geocode: vi.fn(),
         responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
@@ -150,7 +174,7 @@ describe("handleGeocodeRequest", () => {
       { regionCode: "11680", dong: null },
       {
         fetchAddresses,
-        cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn(async () => {}) },
+        cache: emptyCache(),
         geocode,
         responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
@@ -193,7 +217,7 @@ describe("handleGeocodeRequest", () => {
       { regionCode: "11680", dong: null },
       {
         fetchAddresses,
-        cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn(async () => {}) },
+        cache: emptyCache(),
         geocode,
         responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
@@ -232,7 +256,7 @@ describe("handleGeocodeRequest", () => {
       { regionCode: "11680", dong: null },
       {
         fetchAddresses,
-        cache: { get: vi.fn().mockResolvedValue(null), set: vi.fn(async () => {}) },
+        cache: emptyCache(),
         geocode,
         responseCache: createNoopResponseCache(),
         dataKey: "molit-key",
@@ -254,11 +278,91 @@ describe("handleGeocodeRequest", () => {
     expect(body.partialFailureCount).toBe(2);
   });
 
+  it("같은 주소를 쓰는 단지가 여럿이어도 조회는 한 번, 좌표는 단지마다 준다", async () => {
+    // 한 주소에 단지가 둘 이상 붙는 일은 흔하다(같은 지번의 여러 동).
+    // 예전에는 같은 묶음에 든 중복 주소를 각각 지오코딩했다 — 네이버를
+    // 공짜로 두 번 부르고, 답은 똑같았다.
+    const fetchAddresses = vi.fn().mockResolvedValue(
+      new Map([
+        ["11680-1", "서울특별시 강남구 역삼동 719-3"],
+        ["11680-2", "서울특별시 강남구 역삼동 719-3"], // 같은 주소
+        ["11680-3", "서울특별시 강남구 역삼동 800-1"],
+      ]),
+    );
+    const cache = emptyCache();
+    const geocode = vi.fn(async () => ({ lat: 1, lon: 1 }));
+
+    const result = await handleGeocodeRequest(
+      { regionCode: "11680", dong: null },
+      { fetchAddresses, cache, geocode, responseCache: createNoopResponseCache(), dataKey: "molit-key", key: "id", secret: "s" },
+    );
+
+    // 조회는 주소 단위로 한 번씩이지만…
+    expect(cache.getMany).toHaveBeenCalledWith([
+      "서울특별시 강남구 역삼동 719-3",
+      "서울특별시 강남구 역삼동 800-1",
+    ]);
+    expect(geocode).toHaveBeenCalledTimes(2);
+    // …답은 단지 단위로, 하나도 빠짐없이 나간다.
+    expect(result.body).toEqual({
+      units: [
+        { complexKey: "11680-1", lat: 1, lon: 1 },
+        { complexKey: "11680-2", lat: 1, lon: 1 },
+        { complexKey: "11680-3", lat: 1, lon: 1 },
+      ],
+      partialFailureCount: 0,
+    });
+  });
+
+  it("지오코딩이 다 끝나기 전에도 그때까지 구한 좌표를 캐시로 흘려보낸다", async () => {
+    // 전부 끝난 뒤 한 번만 저장하면, 함수가 실행 시간 상한에 걸렸을 때
+    // 그때까지 구한 좌표가 통째로 날아간다 — 다음 요청도 처음부터 다시
+    // 하다 같은 상한에 걸려 영영 앞으로 나아가지 못한다. 묶음 단위로
+    // 흘려보내면 재시도가 매번 조금씩 전진한다.
+    const total = GEOCODE_CONCURRENCY * 3;
+    const addresses = new Map(
+      Array.from({ length: total }, (_, i) => [`11680-${i}`, `주소 ${i}`] as const),
+    );
+    let geocoded = 0;
+    const geocode = vi.fn(async () => {
+      geocoded += 1;
+      return { lat: 1, lon: 1 };
+    });
+    // 저장이 시작된 시점에 몇 건이나 지오코딩됐는지를 적어 둔다.
+    const geocodedAtSave: number[] = [];
+    const cache = {
+      getMany: vi.fn(async (a: readonly string[]) => a.map(() => null)),
+      setMany: vi.fn(async () => {
+        geocodedAtSave.push(geocoded);
+      }),
+    };
+
+    const result = await handleGeocodeRequest(
+      { regionCode: "11680", dong: null },
+      {
+        fetchAddresses: vi.fn().mockResolvedValue(addresses),
+        cache,
+        geocode,
+        responseCache: createNoopResponseCache(),
+        dataKey: "molit-key",
+        key: "id",
+        secret: "s",
+      },
+    );
+
+    expect(result.status).toBe(200);
+    // 마지막 주소까지 다 구하기 전에 이미 저장이 일어났다.
+    expect(Math.min(...geocodedAtSave)).toBeLessThan(total);
+    // 그렇다고 주소마다 저장하지도 않는다 — 그게 이 최적화가 없앤 것이다.
+    expect(cache.setMany.mock.calls.length).toBeLessThan(total);
+    expect(geocodedAtSave.length).toBeGreaterThan(1);
+  });
+
   it("캐시 조회가 실패해도 캐시 미스처럼 지오코딩으로 넘어가 결과를 담는다", async () => {
     const fetchAddresses = vi.fn().mockResolvedValue(new Map([["11680-1", "서울특별시 강남구 역삼동 719-3"]]));
     const cache = {
-      get: vi.fn().mockRejectedValue(new Error("Redis 연결 실패")),
-      set: vi.fn(async () => {}),
+      getMany: vi.fn().mockRejectedValue(new Error("Redis 연결 실패")),
+      setMany: vi.fn(async () => {}),
     };
     const geocode = vi.fn().mockResolvedValue({ lat: 1, lon: 1 });
 
@@ -275,8 +379,8 @@ describe("handleGeocodeRequest", () => {
   it("캐시 저장이 실패해도 이미 구한 좌표는 결과에 남는다", async () => {
     const fetchAddresses = vi.fn().mockResolvedValue(new Map([["11680-1", "서울특별시 강남구 역삼동 719-3"]]));
     const cache = {
-      get: vi.fn().mockResolvedValue(null),
-      set: vi.fn().mockRejectedValue(new Error("Redis 쓰기 실패")),
+      ...emptyCache(),
+      setMany: vi.fn().mockRejectedValue(new Error("Redis 쓰기 실패")),
     };
     const geocode = vi.fn().mockResolvedValue({ lat: 1, lon: 1 });
 

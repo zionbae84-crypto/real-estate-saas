@@ -99,7 +99,7 @@ function redactAllKeys(e: unknown, deps: HandleGeocodeDeps): string {
 }
 
 /**
- * 주소 하나의 좌표 조회 결과. "좌표를 구했다"/"조용히 뺀다"의 두 갈래가
+ * 주소 하나의 지오코딩 결과. "좌표를 구했다"/"조용히 뺀다"의 두 갈래가
  * 아니라 세 갈래다 — `deps.geocode`가 **던졌다**(429/5xx/인증 실패/네트워크
  * 오류처럼 "확인하지 못했다")와 **`null`을 돌려줬다**(주소를 진짜로 못
  * 찾았다, "확인했더니 없다")를 구분해야 한다. 두 갈래를 합치면 클라이언트는
@@ -108,59 +108,68 @@ function redactAllKeys(e: unknown, deps: HandleGeocodeDeps): string {
  * 0건/예산 부족, 동 0건/지역 0건, 규제지역 모름/확정 아님, 그리고 이
  * 브랜치의 SDK 로드·좌표 조회 3분기).
  */
-type ResolveCoordinateResult =
-  | { kind: "resolved"; complexKey: string; lat: number; lon: number }
-  | { kind: "notFound" }
-  | { kind: "failed" };
+type GeocodeOneResult =
+  | { kind: "resolved"; address: string; coordinate: Coordinate }
+  | { kind: "notFound"; address: string }
+  | { kind: "failed"; address: string };
 
 /**
- * 주소 하나를 좌표로 옮긴다. 캐시를 먼저 보고, 없을 때만 지오코딩한다.
+ * 주소 하나를 지오코딩한다. **캐시는 보지 않는다** — 캐시 조회는 이미
+ * 위에서 통째로 끝났고(`getMany`), 여기 오는 것은 미스뿐이다.
  *
  * 절대 던지지 않는다 — 병렬로 도는 자리라 여기서 던지면 같은 묶음의
- * 멀쩡한 주소들까지 함께 무너진다(순차 루프의 `continue`가 하던 일을 그대로
- * 유지한다). 대신 실패("failed")와 정말 없음("notFound")을 결과값으로
- * 구분해 돌려준다 — 위 {@link ResolveCoordinateResult} 참고.
+ * 멀쩡한 주소들까지 함께 무너진다.
  */
-async function resolveCoordinate(
-  complexKey: string,
-  address: string,
-  deps: HandleGeocodeDeps,
-): Promise<ResolveCoordinateResult> {
+async function geocodeOne(address: string, deps: HandleGeocodeDeps): Promise<GeocodeOneResult> {
   let coordinate: Coordinate | null;
   try {
-    coordinate = await deps.cache.get(address);
+    coordinate = await deps.geocode(address);
   } catch {
-    // 캐시 조회 실패는 캐시 미스와 동일하게 취급한다 — Redis가 죽어
-    // 있거나 오류를 내도 지오코딩 API로 바로 조회해 기능은 계속
-    // 동작한다(속도 이점만 잃는다).
-    coordinate = null;
+    // 이 주소 하나의 지오코딩 자체가 실패했다 — 주소가 없다는 뜻이
+    // 아니라 "확인하지 못했다"는 뜻이다(429/5xx/인증 실패/네트워크
+    // 오류). §7의 "좌표 없는 단지는 빠진다"는 원칙대로 이 주소를 쓰는
+    // 단지는 여전히 `units`에서 빠지지만, 전체 요청을 502로 실패시키지도
+    // 않는다 — 대신 이 사실을 `partialFailureCount`로 응답에 남긴다.
+    return { kind: "failed", address };
   }
+  if (coordinate === null) return { kind: "notFound", address };
+  return { kind: "resolved", address, coordinate };
+}
 
-  if (coordinate === null) {
-    try {
-      coordinate = await deps.geocode(address);
-    } catch {
-      // 이 단지 하나의 지오코딩 자체가 실패했다 — 주소가 없다는 뜻이
-      // 아니라 "확인하지 못했다"는 뜻이다(429/5xx/인증 실패/네트워크
-      // 오류). §7의 "좌표 없는 단지는 빠진다"는 원칙대로 이 단지는 여전히
-      // `units`에서 빠지지만, 전체 요청을 502로 실패시키지도 않는다 —
-      // 대신 이 사실을 `partialFailureCount`로 응답에 남긴다(아래
-      // `handleGeocodeRequest` 참고).
-      return { kind: "failed" };
-    }
-    if (coordinate !== null) {
-      try {
-        await deps.cache.set(address, coordinate);
-      } catch {
-        // 캐시 저장 실패로 이 단지의 결과를 버리지 않는다 — 이미
-        // 올바른 좌표를 구했으니 그대로 응답에 담는다. 다음 요청에서
-        // 다시 지오코딩하게 될 뿐이다.
-      }
-    }
+/**
+ * 캐시에 담긴 좌표를 한 번에 읽는다. 절대 던지지 않는다 — 캐시 조회
+ * 실패는 캐시 미스와 동일하게 취급한다(Redis가 죽어 있어도 지오코딩
+ * API로 바로 조회해 기능은 계속 동작하고, 속도 이점만 잃는다).
+ *
+ * 돌려주는 배열은 언제나 `addresses`와 같은 길이다.
+ */
+async function readCache(
+  addresses: readonly string[],
+  deps: HandleGeocodeDeps,
+): Promise<Array<Coordinate | null>> {
+  try {
+    const cached = await deps.cache.getMany(addresses);
+    return addresses.map((_, i) => cached[i] ?? null);
+  } catch {
+    return addresses.map(() => null);
   }
+}
 
-  if (coordinate === null) return { kind: "notFound" };
-  return { kind: "resolved", complexKey, lat: coordinate.lat, lon: coordinate.lon };
+/**
+ * 새로 구한 좌표를 한 번에 저장한다. 절대 던지지 않는다 — 저장에
+ * 실패했다고 이미 올바르게 구한 좌표를 버리지 않는다(다음 요청에서
+ * 다시 지오코딩하게 될 뿐이다).
+ */
+async function writeCache(
+  entries: ReadonlyArray<readonly [string, Coordinate]>,
+  deps: HandleGeocodeDeps,
+): Promise<void> {
+  if (entries.length === 0) return;
+  try {
+    await deps.cache.setMany(entries);
+  } catch {
+    /* 무시 — 위 주석 참고 */
+  }
 }
 
 /**
@@ -191,28 +200,70 @@ export async function handleGeocodeRequest(
     return { status: 502, body: { error: redactAllKeys(e, deps) } };
   }
 
-  const units: Array<{ complexKey: string; lat: number; lon: number }> = [];
-  // 지오코딩이 **던져서** 확인하지 못한 주소 수 — 진짜로 좌표가 없는
-  // 주소("notFound")는 여기 세지 않는다. 이 값이 0보다 크면 클라이언트는
+  // 같은 주소를 쓰는 단지가 둘 이상일 수 있다. 캐시 조회도 지오코딩도
+  // **주소 단위로 한 번씩만** 한다 — 예전에는 같은 묶음에 든 중복 주소를
+  // 각각 지오코딩했다.
+  const entries = [...addresses];
+  const uniqueAddresses = [...new Set(entries.map(([, address]) => address))];
+
+  // ── 1. 캐시를 통째로 읽는다.
+  //
+  // 예전에는 주소마다 `get → 지오코딩 → set` 세 번의 왕복이 **직렬로**
+  // 붙어 있었다. 동시성 32로 끊어 돌아도 묶음 하나가 `get`을 다 기다린
+  // 뒤에야 네이버를 부르고, 또 `set`을 다 기다린 뒤에야 다음 묶음으로
+  // 갔다 — 주소 289개면 Upstash 왕복만 500회가 넘는다. 이제 읽기는
+  // 지역 전체에 대해 `mget` 한두 번이다.
+  const known = new Map<string, Coordinate>();
+  const misses: string[] = [];
+  const cached = await readCache(uniqueAddresses, deps);
+  uniqueAddresses.forEach((address, i) => {
+    const coordinate = cached[i] ?? null;
+    if (coordinate === null) misses.push(address);
+    else known.set(address, coordinate);
+  });
+
+  // 지오코딩이 **던져서** 확인하지 못한 주소들 — 진짜로 좌표가 없는
+  // 주소("notFound")는 여기 넣지 않는다. 이 값이 0보다 크면 클라이언트는
   // "이 지역엔 지도에 찍을 게 없다"와 "우리가 일부를 확인하지 못했다"를
   // 구분할 수 있다.
-  let partialFailureCount = 0;
+  const failed = new Set<string>();
 
-  // `GEOCODE_CONCURRENCY`개씩 끊어 병렬로 돈다. 묶음 안의 순서는
-  // `Promise.all`이, 묶음 사이의 순서는 이 루프가 지키므로 결과 순서는
-  // 주소 Map의 순서 그대로다(응답 순서가 조회 순서와 어긋나지 않는다).
-  const entries = [...addresses];
-  for (let i = 0; i < entries.length; i += GEOCODE_CONCURRENCY) {
-    const batch = entries.slice(i, i + GEOCODE_CONCURRENCY);
-    const resolved = await Promise.all(
-      batch.map(([complexKey, address]) => resolveCoordinate(complexKey, address, deps)),
-    );
+  // ── 2. 미스만 `GEOCODE_CONCURRENCY`개씩 끊어 병렬로 지오코딩한다.
+  //
+  // 묶음마다의 캐시 저장은 **기다리지 않고 띄워 둔 뒤** 마지막에 한꺼번에
+  // 거둔다. 저장을 기다리면 다음 묶음의 네이버 호출이 그만큼 늦게 시작된다.
+  // 그렇다고 전부 끝난 뒤에 한 번만 저장하면, 함수가 시간 상한에 걸렸을 때
+  // 그때까지 구한 좌표가 통째로 날아가 다음 요청도 똑같이 상한에 걸린다 —
+  // 묶음 단위로 흘려보내면 재시도가 매번 조금씩 앞으로 나아간다.
+  const writes: Array<Promise<void>> = [];
+  for (let i = 0; i < misses.length; i += GEOCODE_CONCURRENCY) {
+    const batch = misses.slice(i, i + GEOCODE_CONCURRENCY);
+    const resolved = await Promise.all(batch.map((address) => geocodeOne(address, deps)));
+    const fresh: Array<readonly [string, Coordinate]> = [];
+    // 주소를 결과에 실어 돌려받는다 — 자리를 맞춰 인덱스로 되찾는 것보다
+    // 어긋날 여지가 없다(예전 코드가 `complexKey`를 실어 나른 것과 같다).
     for (const result of resolved) {
       if (result.kind === "resolved") {
-        units.push({ complexKey: result.complexKey, lat: result.lat, lon: result.lon });
+        known.set(result.address, result.coordinate);
+        fresh.push([result.address, result.coordinate]);
       } else if (result.kind === "failed") {
-        partialFailureCount++;
+        failed.add(result.address);
       }
+    }
+    writes.push(writeCache(fresh, deps));
+  }
+  await Promise.all(writes);
+
+  // ── 3. 단지 순서대로 답을 조립한다. 순서는 주소 Map의 순서 그대로다
+  //       (응답 순서가 조회 순서와 어긋나지 않는다).
+  const units: Array<{ complexKey: string; lat: number; lon: number }> = [];
+  let partialFailureCount = 0;
+  for (const [complexKey, address] of entries) {
+    const coordinate = known.get(address);
+    if (coordinate !== undefined) {
+      units.push({ complexKey, lat: coordinate.lat, lon: coordinate.lon });
+    } else if (failed.has(address)) {
+      partialFailureCount++;
     }
   }
 
