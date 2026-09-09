@@ -257,24 +257,36 @@ describe("입력 밑줄 — 화면 1 전용 토큰을 쓴다", () => {
  * 화살표), 자리도 selects 아래 독립된 줄에서 두 select와 같은 줄의
  * 셋째 열로 옮겨졌다. 이 describe는 그 새 모양을 잠근다.
  */
-describe("조회 버튼 — 원형 아이콘 버튼", () => {
-  it("두 select와 같은 줄, 셋째 열에 원형 테두리로 선다", () => {
-    const btn = ruleBody(".entry-screen .region-select-query");
-    expect(btn).toContain("grid-column: 3");
-    expect(btn).toContain("border-radius: 50%");
-    expect(btn).toContain("border: 1.5px solid var(--brass-lift)");
+/**
+ * 조회 버튼은 지역 카드 안 원형 아이콘이었다가, 사용자 지시로 **질문
+ * 카드가 모두 끝난 자리**의 전폭 버튼이 됐다("실행버튼이 구분이 명확하게
+ * 안 되서 불편하다"). 글자가 없어 장식으로 읽히던 것이 그 이유다.
+ */
+describe("조회 버튼 — 질문 끝의 전폭 버튼", () => {
+  it("카드와 같은 폭으로 선다 — 카드 리듬의 끝이라는 신호다", () => {
+    const btn = ruleBody(".entry-screen .profile-form-action");
+    // 카드 폭(`.entry-screen .profile-form > .region-select`)과 같은 값이다.
+    expect(btn).toContain("width: min(26.5rem, 100%)");
+    expect(btn).toContain("box-sizing: border-box");
   });
 
-  it("호버에서 테두리색으로 채워지고 글자색이 뒤집힌다", () => {
-    const hover = ruleBody(
-      ".entry-screen .region-select-query:not(:disabled):hover",
+  it("면을 채운 1차 버튼이다 — 이 화면에서 채워진 면은 이것뿐이다", () => {
+    const btn = ruleBody(".entry-screen .profile-form-action");
+    expect(btn).toContain("background: var(--brass-lift)");
+    // 황동 위 어두운 글자(약 9:1). 반대로 두면 읽히지 않는다.
+    expect(btn).toContain("color: var(--ink)");
+  });
+
+  it("지역 카드는 두 select만 남는다 — 버튼이 셋째 열에서 빠졌다", () => {
+    expect(ruleBody(".entry-screen .region-select")).toContain(
+      "grid-template-columns: repeat(2, minmax(0, 1fr))",
     );
-    expect(hover).toContain("background: var(--brass-lift)");
-    expect(hover).toContain("color: var(--ink)");
   });
 
-  it("비활성은 화살표 버튼과 같은 --haze다(WCAG 1.4.3 예외지만 읽히는 값)", () => {
-    const disabled = ruleBody(".entry-screen .region-select-query:disabled");
+  it("비활성은 면을 비우고 --haze만 남긴다(WCAG 1.4.3 예외지만 읽히는 값)", () => {
+    const disabled = ruleBody(".entry-screen .profile-form-action:disabled");
+    // 옅은 흰 면을 깔면 --haze가 3.5:1로 떨어진다 — 비워야 4.75:1이다.
+    expect(disabled).toContain("background: none");
     expect(disabled).toContain("border-color: var(--haze)");
     expect(disabled).toContain("color: var(--haze)");
   });

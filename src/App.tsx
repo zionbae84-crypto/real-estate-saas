@@ -363,6 +363,28 @@ export function App() {
    * 앞 지역에서 좁은 평형을 골랐다면 그 오차는 실구매 가능 가격을
    * **올리는** 쪽이다(낙관 편향).
    */
+  /*
+   * 화면 1에서 **고른** 지역. 아직 조회를 건 것은 아니다
+   * (`currentRegionCode`가 실제로 조회 중인 지역이다).
+   *
+   * 조회 버튼이 지역 카드 밖(질문 카드가 모두 끝난 자리)으로 나가면서
+   * 생긴 값이다 — 버튼이 카드 안에 있을 때는 `RegionSelect`가 자기 안에서
+   * 다 알고 있었다. 값이 바뀌는 길은 `RegionSelect`의 두 select뿐이고
+   * 둘 다 `onRegionChange`로 알린다(그 prop 주석 참고).
+   */
+  const [pickedRegionCode, setPickedRegionCode] = useState<string | null>(null);
+
+  /*
+   * 조회를 걸 수 있는가. **지역만으로는 부족하다** — 예산(현금·연 소득·
+   * 주택 수)이나 평형대가 덜 찬 채로 조회가 성공하면 화면 단계가
+   * "결과"로 넘어가는데, 그 결과 셸은 프로필이 없으면 아무것도 그리지
+   * 않는다(사용자가 빠져나올 버튼도 없는 빈 화면에 갇힌다 — 이 저장소가
+   * 여섯 번 반복한 결함, 커밋 `c90babf`와 같은 모양). 그래서 셋이 다
+   * 차야 열린다.
+   */
+  const canQueryPickedRegion =
+    pickedRegionCode !== null && affordability !== null && residentialProfile !== null;
+
   function handleRegionSelect(regionCode: string) {
     setSelectedDong(null);
     // 앞 지역에서 고른 단지는 새 지역 목록에도 지도에도 없다.
@@ -1020,11 +1042,43 @@ export function App() {
         <ProfileForm
           state={state}
           setField={setField}
-          regionSlot={
-            <RegionSelect
-              onSelect={handleRegionSelect}
-              disabled={affordability === null || residentialProfile === null}
-            />
+          regionSlot={<RegionSelect onRegionChange={setPickedRegionCode} />}
+          actionSlot={
+            /*
+              조회 버튼. **질문 카드가 모두 끝난 자리**에 선다(사용자
+              지시) — 예전에는 지역 카드 안 select 옆의 원형 화살표였는데,
+              글자가 없어 다음 단계인지 장식인지 구분되지 않았다.
+
+              카드와 같은 폭·같은 정렬로 마지막에 놓여 "질문이 끝났다"는
+              신호가 된다. 지역 카드는 3번째 자리라 그 아래에 두면 아직
+              답할 질문이 둘 남는다.
+            */
+            <>
+              <button
+                type="button"
+                className="profile-form-action"
+                disabled={!canQueryPickedRegion}
+                onClick={() => {
+                  if (canQueryPickedRegion && pickedRegionCode !== null) {
+                    handleRegionSelect(pickedRegionCode);
+                  }
+                }}
+              >
+                이 조건으로 찾아보기
+              </button>
+              {/*
+                비활성 이유가 "구를 안 골랐다"가 아니라 "예산·평형대 답이
+                덜 찼다"일 때만 이유를 밝힌다 — 구를 안 고른 것은 select
+                자체가 이미 말하고 있으므로("고르세요") 여기서 또 말하면
+                중복이다.
+              */}
+              {pickedRegionCode !== null && !canQueryPickedRegion && (
+                <p className="hint profile-form-action-why">
+                  현금·연 소득·주택 수·평형대를 먼저 정하면 이 지역으로 조회할 수
+                  있어요.
+                </p>
+              )}
+            </>
           }
         />
 

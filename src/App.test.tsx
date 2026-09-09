@@ -88,7 +88,7 @@ async function selectTestRegion(units: ComplexUnit[] = [DETAIL_TEST_UNIT]) {
   await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
   await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
   await userEvent.click(
-    screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
   );
   await screen.findByRole("region", { name: "살 수 있는 단지" });
 }
@@ -142,7 +142,7 @@ describe("App - 지역 선택 위자드", () => {
     expect(screen.getByLabelText("광역단체")).toBeInTheDocument();
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
     expect(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     ).toBeDisabled();
   });
 
@@ -153,7 +153,7 @@ describe("App - 지역 선택 위자드", () => {
     await userEvent.type(screen.getByLabelText(/연 소득은요/), "15000");
     await userEvent.click(screen.getByRole("radio", { name: "무주택이에요" }));
     expect(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     ).not.toBeDisabled();
   });
 
@@ -173,7 +173,7 @@ describe("App - 지역 선택 위자드", () => {
 
     expect(screen.getByLabelText("광역단체")).toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("region", { name: "살 수 있는 단지" }),
@@ -218,7 +218,7 @@ describe("App - 지역 조회의 네 상태", () => {
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
     await userEvent.click(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     );
   }
 
@@ -378,7 +378,7 @@ describe("App - 매매가·면적·입주년차 슬라이더 필터", () => {
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
     await userEvent.click(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     );
   }
 
@@ -523,7 +523,7 @@ describe("App - 행정동으로 좁히기", () => {
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
     await userEvent.click(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     );
   }
 
@@ -857,7 +857,7 @@ describe("App - 상세를 연 채 지역을 다시 조회한다", () => {
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), sigungu);
     await userEvent.click(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     );
   }
 
@@ -1198,7 +1198,7 @@ describe("App - 단지 상세(화면 4)", () => {
       // 지시로 지역 카드가 3번째 자리에 항상 그려지므로).
       await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
       expect(
-        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+        screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
       ).toBeDisabled();
 
       const prompt = screen.getByText(/현금·연 소득·주택 수를 알려주면/);
@@ -1225,7 +1225,7 @@ describe("App - 단지 상세(화면 4)", () => {
         screen.queryByText(/현금·연 소득·주택 수를 알려주면/),
       ).not.toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+        screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
       ).not.toBeDisabled();
     });
 
@@ -1243,7 +1243,7 @@ describe("App - 단지 상세(화면 4)", () => {
         screen.getByText(/현금·연 소득·주택 수를 알려주면/),
       ).toBeInTheDocument();
       expect(
-        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+        screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
       ).toBeDisabled();
     });
 
@@ -1567,7 +1567,7 @@ describe("App - 지도", () => {
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
     await userEvent.click(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     );
   }
 
@@ -2142,7 +2142,7 @@ describe("전체화면 결과 셸", () => {
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
     await userEvent.click(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     );
   }
 
@@ -2577,7 +2577,7 @@ describe("전체화면 결과 셸", () => {
     expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
     // 다시 결과로 돌아와도 유지된다(유형 라디오를 거치지 않는 경로).
     await userEvent.click(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     );
     expect(document.body).toHaveClass(BODY_SCROLL_LOCK_CLASS);
 
@@ -3003,7 +3003,7 @@ describe("전체화면 결과 셸", () => {
       expect(panel(container)).toHaveClass("budget-panel--closed");
 
       await userEvent.click(
-        screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+        screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
       );
       expect(panel(container)).not.toHaveClass("budget-panel--closed");
     });

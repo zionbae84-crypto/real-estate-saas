@@ -2,23 +2,21 @@ import { useState } from "react";
 import { SIDO_NAMES, sigunguBySido } from "../data/regions";
 
 export interface RegionSelectProps {
-  onSelect: (regionCode: string) => void;
   /**
-   * `App.tsx`가 넘긴다 — 예산(현금·연 소득·주택 수)이나 평형대를 아직
-   * 다 안 정했을 때 `true`다. 이 컴포넌트는 이제 화면 1의 3번째 자리
-   * (예산 다음, 주택 수·생애최초·평형대보다 앞)에 항상 그려지므로
-   * (사용자 지시), 지역을 미리 고르는 것 자체는 막지 않는다 — 다만
-   * **조회를 실행하는 것**은 막아야 한다. 그 상태로 조회가 성공하면
-   * 화면 단계가 "결과"로 넘어가는데(`App.tsx`의 phase 전환 effect),
-   * 그 결과 화면은 프로필이 없으면 아무것도 그리지 않는 셸이거나
-   * (사용자가 빠져나올 버튼도 없는 빈 화면에 갇힌다 — 이 저장소가 이미
-   * 겪은 결함, 커밋 `c90babf`와 같은 모양), 평형대가 없으면 매물을 하나도
-   * 못 보여준다(빈 선택을 조용히 "전체"로 읽지 않는다는 원칙과 같은
-   * 축). 그래서 둘 중 하나라도 덜 찼으면 버튼을 계속 비활성 상태로
-   * 묶어 둔다.
+   * 구까지 정해지면 그 `regionCode`를, 아직이면 `null`을 알린다.
+   *
+   * **조회 버튼은 이 카드 안에 없다.** 사용자 지시로 질문 카드들이
+   * 모두 끝난 자리(생애최초 다음)로 옮겼다 — 카드 리듬의 끝에 서야
+   * "질문이 끝났다"는 신호가 된다. 버튼이 밖으로 나가면서 "무엇을
+   * 골랐는가"를 바깥이 알아야 해서 이 콜백이 생겼다.
+   *
+   * 고른 값 자체는 여전히 이 컴포넌트가 들고 있고(아래 `useState`),
+   * 바뀌는 길은 두 select의 `onChange` 둘뿐이다 — 그 둘이 모두 여기로
+   * 알리므로 바깥의 값이 뒤처지지 않는다.
    */
-  disabled?: boolean;
+  onRegionChange: (regionCode: string | null) => void;
 }
+
 
 /**
  * 광역단체 → 자치구 2단 선택.
@@ -36,14 +34,17 @@ export interface RegionSelectProps {
  */
 const DEFAULT_SIDO = "서울특별시";
 
-export function RegionSelect({ onSelect, disabled = false }: RegionSelectProps) {
+export function RegionSelect({ onRegionChange }: RegionSelectProps) {
   const [sido, setSido] = useState<string | null>(DEFAULT_SIDO);
   const [sigungu, setSigungu] = useState<string | null>(null);
 
   const sigunguOptions = sido === null ? [] : sigunguBySido(sido);
-  const selectedRegionCode =
-    sigungu === null ? null : sigunguOptions.find((s) => s.sigunguName === sigungu)?.regionCode ?? null;
-  const canQuery = selectedRegionCode !== null && !disabled;
+
+  /** 시/도와 구 이름을 코드로 옮긴다. 하나라도 비면 `null`이다. */
+  function codeOf(sidoName: string | null, sigunguName: string | null): string | null {
+    if (sidoName === null || sigunguName === null) return null;
+    return sigunguBySido(sidoName).find((s) => s.sigunguName === sigunguName)?.regionCode ?? null;
+  }
 
   return (
     <fieldset className="field region-select">
@@ -54,8 +55,12 @@ export function RegionSelect({ onSelect, disabled = false }: RegionSelectProps) 
           id="sido-select"
           value={sido ?? ""}
           onChange={(e) => {
-            setSido(e.target.value === "" ? null : e.target.value);
+            const next = e.target.value === "" ? null : e.target.value;
+            setSido(next);
+            // 시/도가 바뀌면 그 시/도의 구 목록으로 다시 비운다 — 고른 것이
+            // 없어졌으니 바깥에도 그렇게 알린다.
             setSigungu(null);
+            onRegionChange(null);
           }}
         >
           <option value="">고르세요</option>
@@ -73,7 +78,11 @@ export function RegionSelect({ onSelect, disabled = false }: RegionSelectProps) 
           <select
             id="sigungu-select"
             value={sigungu ?? ""}
-            onChange={(e) => setSigungu(e.target.value === "" ? null : e.target.value)}
+            onChange={(e) => {
+              const next = e.target.value === "" ? null : e.target.value;
+              setSigungu(next);
+              onRegionChange(codeOf(sido, next));
+            }}
           >
             <option value="">고르세요</option>
             {sigunguOptions.map((s) => (
@@ -85,43 +94,6 @@ export function RegionSelect({ onSelect, disabled = false }: RegionSelectProps) 
         </div>
       )}
 
-      {/*
-        사용자 지시로 텍스트+자라는 선 버튼을 아이콘 버튼으로 바꿨다 —
-        글자를 지운 대신 `aria-label`로 접근성 이름("이 지역으로
-        조회하기")을 그대로 유지한다. 기존 테스트가 그 이름으로 버튼을
-        찾으므로 이 값을 바꾸면 안 된다.
-      */}
-      <button
-        type="button"
-        className="region-select-query"
-        aria-label="이 지역으로 조회하기"
-        disabled={!canQuery}
-        onClick={() => {
-          if (canQuery && selectedRegionCode !== null) onSelect(selectedRegionCode);
-        }}
-      >
-        <svg aria-hidden="true" viewBox="0 0 24 24" width="18" height="18">
-          <path
-            d="M5 12h13M13 6l6 6-6 6"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
-        </svg>
-      </button>
-      {/*
-        비활성 이유가 "구를 안 골랐다"가 아니라 "예산·평형대 답이 덜
-        찼다"일 때만 이유를 밝힌다 — 구를 안 고른 것은 select 자체가
-        이미 말하고 있으므로("고르세요") 여기서 또 말하면 중복이다.
-      */}
-      {disabled && selectedRegionCode !== null && (
-        <p className="hint">
-          현금·연 소득·주택 수·평형대를 먼저 정하면 이 지역으로 조회할 수
-          있어요.
-        </p>
-      )}
     </fieldset>
   );
 }

@@ -5292,10 +5292,11 @@ body.body-scroll-locked {
   padding: 0;
   display: grid;
   /*
-   * 사용자 지시로 조회 버튼이 아이콘이 되어 셋째 열로 들어왔다 — 두
-   * select와 같은 줄, 오른쪽 끝(`auto` 폭)에 선다.
+   * 두 select가 반씩. 예전에는 조회 버튼이 셋째 열로 함께 섰는데,
+   * 사용자 지시로 질문 카드가 모두 끝난 자리로 나갔다
+   * (`.entry-screen .profile-form-action`).
    */
-  grid-template-columns: repeat(2, minmax(0, 1fr)) auto;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 0.75rem;
   align-items: end;
   /* 다른 카드의 라디오·칩 줄과 같은 간격(0.25rem) — 제목은 이미 테두리에 뜬다 */
@@ -5336,56 +5337,68 @@ body.body-scroll-locked {
 }
 
 /*
- * "이 지역으로 조회하기" — 사용자 지시로 텍스트+자라는 선 버튼을
- * 원형 아이콘 버튼으로 바꿨다. `.field` 두 칸과 같은 줄, 셋째 열
- * (`auto` 폭)에 선다 — select의 밑줄과 바닥이 맞도록 `align-self:end`
- * (부모의 `align-items:end`를 그대로 물려받는다)를 쓴다.
+ * ── "이 조건으로 찾아보기" ────────────────────────────────────────
+ *
+ * 질문 카드가 **모두 끝난 자리**에 서는 1차 버튼(사용자 지시).
+ *
+ * 예전에는 지역 카드 안 select 옆의 지름 36px 원형 화살표였다. 글자가
+ * 없어 다음 단계인지 장식인지 구분되지 않았고, 비활성일 때는 회색
+ * 테두리만 남아 더 흐려졌다 — 사용자 지적이 정확히 그것이다.
+ *
+ * 카드와 **같은 폭**으로 마지막에 놓는다. 카드 리듬의 끝에 서야
+ * "질문이 끝났다"는 신호가 된다. 지역 카드는 3번째 자리라 그 아래에
+ * 두면 아직 답할 질문이 둘 남는다.
+ *
+ * 면을 채우는 유일한 요소다 — 이 화면에서 카드는 전부 반투명한
+ * 흰 틴트뿐이라, 채워진 황동 하나가 다른 무엇과도 겹치지 않는다.
  */
-.entry-screen .region-select-query {
-  grid-column: 3;
-  align-self: end;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.25rem;
-  height: 2.25rem;
-  /* select 밑줄(`border-bottom`) 두께만큼 내려 바닥선을 맞춘다 */
-  margin-bottom: 1px;
-  background: none;
-  border: 1.5px solid var(--brass-lift);
-  border-radius: 50%;
-  color: var(--brass-lift);
+.entry-screen .profile-form-action {
+  width: min(26.5rem, 100%);
+  box-sizing: border-box;
+  padding: 0.9375rem 1rem;
+  /* 비활성에서 테두리로 바뀐다 — 그때 높이가 흔들리지 않게 자리를 미리 잡는다. */
+  border: 1.5px solid transparent;
+  border-radius: 0.75rem;
+  background: var(--brass-lift);
+  /* 황동 위 어두운 글자 — 대비 약 9:1 */
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
   cursor: pointer;
-  transition:
-    background-color var(--seed-duration-d3) var(--seed-timing-function-easing),
-    color var(--seed-duration-d3) var(--seed-timing-function-easing);
+  transition: background-color var(--seed-duration-d3) var(--seed-timing-function-easing);
 }
 
-.entry-screen .region-select-query:not(:disabled):hover {
-  background: var(--brass-lift);
-  color: var(--ink);
+.entry-screen .profile-form-action:not(:disabled):hover {
+  background: var(--paper);
 }
 
 /*
  * 비활성은 WCAG 1.4.3의 명시적 예외지만, 그래도 읽히는 값을 쓴다 —
- * 이 버튼은 "아직 고르지 않았다"를 말하는 자리라 안 보이면 그 사실도
- * 전달되지 않는다. 프로토타입의 `--haze-dim`(2.75:1) 대신 `--haze`
- * (4.70:1)다.
+ * 이 버튼은 "아직 다 고르지 않았다"를 말하는 자리라 안 보이면 그
+ * 사실도 전달되지 않는다(원형 버튼 시절과 같은 판단, 같은 색).
+ *
+ * **면을 채우지 않고 테두리만 남긴다.** 옅은 흰 면을 깔면 그 위에서
+ * `--haze`가 3.5:1로 떨어진다 — 채우지 않으면 스크림 바닥 위 4.75:1로
+ * 원형 버튼 시절과 같다(계산: `seed-brand.css`의 `--haze` 주석).
  */
-.entry-screen .region-select-query:disabled {
+.entry-screen .profile-form-action:disabled {
+  background: none;
   border-color: var(--haze);
   color: var(--haze);
   cursor: default;
 }
 
-.entry-screen .region-select-query:focus-visible {
+.entry-screen .profile-form-action:focus-visible {
   outline: 2px solid var(--brass-lift);
   outline-offset: 3px;
 }
 
-/* 예산이 덜 찼을 때만 뜨는 이유 문구 — 버튼과 같은 전체 폭에 놓는다 */
-.entry-screen .region-select .hint {
-  grid-column: 1 / -1;
+/* 왜 아직 못 누르는지 — 버튼 바로 아래, 같은 폭 */
+.entry-screen .profile-form-action-why {
+  width: min(26.5rem, 100%);
+  margin: 0;
 }
 
 .entry-screen .region-query-error p {

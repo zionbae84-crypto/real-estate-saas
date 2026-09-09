@@ -69,9 +69,18 @@ export interface ProfileFormProps {
    * 않는다(예: 순수 렌더 검증에서 이 슬롯을 비워 두고 싶을 때).
    */
   regionSlot?: ReactNode;
+  /**
+   * 질문 카드가 **모두 끝난 자리**에 놓는 것(조회 버튼과 그 이유 문구).
+   *
+   * 사용자 지시로 조회 버튼이 지역 카드 안에서 이리로 나왔다 — 카드
+   * 리듬의 끝에 서야 "질문이 끝났다"는 신호가 된다. 지역 카드
+   * (`regionSlot`)는 3번째 자리라 그 아래에 두면 아직 답할 질문이 둘
+   * 남는다.
+   */
+  actionSlot?: ReactNode;
 }
 
-export function ProfileForm({ state, setField, regionSlot }: ProfileFormProps) {
+export function ProfileForm({ state, setField, regionSlot, actionSlot }: ProfileFormProps) {
   return (
     <form className="profile-form" onSubmit={(e) => e.preventDefault()}>
       <MoneyInput
@@ -167,6 +176,8 @@ export function ProfileForm({ state, setField, regionSlot }: ProfileFormProps) {
         </div>
         <p className="hint">{FIRST_TIME_BUYER_HINT_LINES.join(" ")}</p>
       </fieldset>
+
+      {actionSlot}
     </form>
   );
 }

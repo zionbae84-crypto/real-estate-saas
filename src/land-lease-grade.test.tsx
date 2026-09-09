@@ -543,7 +543,7 @@ describe("실제 화면에서 같은 경고가 두 번 뜨지 않는다", () => 
     await userEvent.selectOptions(screen.getByLabelText("광역단체"), "서울특별시");
     await userEvent.selectOptions(screen.getByLabelText("자치구"), "강남구");
     await userEvent.click(
-      screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+      screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
     );
     await screen.findByRole("region", { name: "살 수 있는 단지" });
 

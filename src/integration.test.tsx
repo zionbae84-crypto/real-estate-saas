@@ -29,7 +29,7 @@ async function selectRegion(sido: string, sigungu: string) {
   await userEvent.selectOptions(screen.getByLabelText("광역단체"), sido);
   await userEvent.selectOptions(screen.getByLabelText("자치구"), sigungu);
   await userEvent.click(
-    screen.getByRole("button", { name: "이 지역으로 조회하기" }),
+    screen.getByRole("button", { name: "이 조건으로 찾아보기" }),
   );
 }
 
